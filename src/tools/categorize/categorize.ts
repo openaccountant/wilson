@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
-import { getUncategorizedTransactions, updateCategory, type TransactionRow } from '../../db/queries.js';
+import { getUncategorizedTransactions, updateCategory, matchRule, type TransactionRow } from '../../db/queries.js';
 import { buildCategorizationPrompt, type CategorizationInput } from './prompt.js';
 import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
@@ -68,12 +68,32 @@ export const categorizeTool = defineTool({
 
     let totalCategorized = 0;
     let totalNeedingReview = 0;
+    let ruleMatchCount = 0;
     const categoryCounts: Record<string, number> = {};
     const errors: string[] = [];
 
-    // 2. Process in batches
-    for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
-      const batch = uncategorized.slice(i, i + BATCH_SIZE);
+    // 1b. Pre-categorize using rules engine
+    const needsLlm: TransactionRow[] = [];
+    for (const txn of uncategorized) {
+      try {
+        const match = matchRule(database, txn.description);
+        if (match) {
+          updateCategory(database, txn.id, match.category, 1.0);
+          totalCategorized++;
+          ruleMatchCount++;
+          categoryCounts[match.category] = (categoryCounts[match.category] ?? 0) + 1;
+        } else {
+          needsLlm.push(txn);
+        }
+      } catch {
+        // If rules table doesn't exist yet, fall through to LLM
+        needsLlm.push(txn);
+      }
+    }
+
+    // 2. Process remaining in batches via LLM
+    for (let i = 0; i < needsLlm.length; i += BATCH_SIZE) {
+      const batch = needsLlm.slice(i, i + BATCH_SIZE);
       const inputs: CategorizationInput[] = batch.map((t: TransactionRow) => ({
         id: t.id,
         description: t.description,
@@ -128,12 +148,15 @@ export const categorizeTool = defineTool({
       success: true,
       totalUncategorized: uncategorized.length,
       categorized: totalCategorized,
+      ruleMatched: ruleMatchCount,
+      llmCategorized: totalCategorized - ruleMatchCount,
       categoriesApplied: categoryCounts,
       needingReview: totalNeedingReview,
       errors: errors.length > 0 ? errors : undefined,
       message:
-        `Categorized ${totalCategorized} of ${uncategorized.length} transactions. ` +
-        `${totalNeedingReview} need review (confidence < 0.7).` +
+        `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
+        (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
+        `. ${totalNeedingReview} need review (confidence < 0.7).` +
         (errors.length > 0 ? ` ${errors.length} batch errors occurred.` : ''),
     });
   },

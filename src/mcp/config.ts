@@ -12,13 +12,13 @@ export interface McpServerConfig {
 }
 
 /**
- * Top-level MCP configuration (loaded from ~/.openspend/mcp.json).
+ * Top-level MCP configuration (loaded from ~/.agentwilson/mcp.json).
  */
 export interface McpConfig {
   servers: Record<string, McpServerConfig>;
 }
 
-const CONFIG_PATH = join(homedir(), '.openspend', 'mcp.json');
+const CONFIG_PATH = join(homedir(), '.agentwilson', 'mcp.json');
 
 /**
  * Load and parse the MCP config file.

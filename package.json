@@ -2,6 +2,10 @@
   "name": "wilson",
   "version": "0.1.0",
   "description": "Wilson - Privacy-first AI bookkeeper CLI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agentwilson-dev/agent-wilson.git"
+  },
   "type": "module",
   "main": "src/index.tsx",
   "bin": {

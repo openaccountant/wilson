@@ -4,8 +4,8 @@ import { homedir } from 'os';
 import { getLicenseInfo } from '../licensing/license.js';
 import type { ChainStep } from '../orchestration/types.js';
 
-const CONTENT_API = process.env.OPENSPEND_API_URL ?? 'https://us-central1-openspend.cloudfunctions.net';
-const CACHE_DIR = join(homedir(), '.openspend', 'content-cache');
+const CONTENT_API = process.env.WILSON_API_URL ?? 'https://agentwilson-api.workers.dev';
+const CACHE_DIR = join(homedir(), '.agentwilson', 'content-cache');
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function getCachePath(type: 'skills' | 'chains', name: string): string {

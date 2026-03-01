@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
-const SETTINGS_FILE = '.openspend/settings.json';
+const SETTINGS_FILE = '.agentwilson/settings.json';
 
 // Map legacy model IDs to provider IDs for migration
 const MODEL_TO_PROVIDER_MAP: Record<string, string> = {

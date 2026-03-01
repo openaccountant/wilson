@@ -51,6 +51,14 @@ import { initBudgetCheckTool } from './tools/budget/budget-check.js';
 import { setBudget, clearBudget, getBudgetVsActual } from './db/queries.js';
 import { initBudgetPrompt } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
+import { initProfitLossTool } from './tools/query/profit-loss.js';
+import { initProfitDiffTool } from './tools/query/profit-diff.js';
+import { initRuleManageTool } from './tools/rules/rule-manage.js';
+import { initTaxFlagTool } from './tools/tax/tax-flag.js';
+import { initSavingsRateTool } from './tools/query/savings-rate.js';
+import { initAlertCheckTool } from './tools/query/alert-check.js';
+import { initGenerateReportTool } from './tools/export/generate-report.js';
+import { initAlertPrompt } from './agent/prompts.js';
 import { getPlaidItems, removePlaidItem } from './plaid/store.js';
 import { startPlaidLinkServer } from './plaid/link-server.js';
 import { initMcpClients } from './mcp/client.js';
@@ -246,6 +254,14 @@ export async function runCli() {
   initBudgetCheckTool(db);
   initBudgetPrompt(db);
   initPlaidSyncTool(db);
+  initProfitLossTool(db);
+  initProfitDiffTool(db);
+  initRuleManageTool(db);
+  initTaxFlagTool(db);
+  initSavingsRateTool(db);
+  initAlertCheckTool(db);
+  initGenerateReportTool(db);
+  initAlertPrompt(db);
 
   // Initialize MCP client connections (non-blocking — failures are logged, not fatal)
   await initMcpClients();
@@ -294,6 +310,7 @@ export async function runCli() {
     { name: 'budget', description: 'View and set spending budgets' },
     { name: 'connect', description: 'Link a bank account via Plaid' },
     { name: 'sync', description: 'Pull latest transactions from linked banks' },
+    { name: 'dashboard', description: 'Open browser dashboard' },
     { name: 'schedule', description: 'Manage scheduled tasks (add/remove/pause/resume)' },
     { name: 'help', description: 'Show available commands' },
     ...RECOMMENDED_OLLAMA_MODELS.map((m) => ({
@@ -371,14 +388,15 @@ export async function runCli() {
     if (query === '/help') {
       chatLog.addQuery(query);
       const commands = [
-        '  /model    — Switch LLM provider and model',
-        '  /pull     — Download an Ollama model (e.g. /pull granite3-dense:2b)',
-        '  /connect  — Link a bank account via Plaid (Pro)',
-        '  /sync     — Pull latest transactions from linked banks (Pro)',
-        '  /budget   — View budget vs actual (set/clear with /budget set|clear)',
-        '  /license  — Manage your license key',
-        '  /schedule — Manage scheduled tasks',
-        '  /help     — Show this help message',
+        '  /model     — Switch LLM provider and model',
+        '  /pull      — Download an Ollama model (e.g. /pull granite3-dense:2b)',
+        '  /connect   — Link a bank account via Plaid (Pro)',
+        '  /sync      — Pull latest transactions from linked banks (Pro)',
+        '  /budget    — View budget vs actual (set/clear with /budget set|clear)',
+        '  /dashboard — Open browser dashboard with charts and chat',
+        '  /license   — Manage your license key',
+        '  /schedule  — Manage scheduled tasks',
+        '  /help      — Show this help message',
         ...discoverSkills().map((s) => `  /skill ${s.name}  — ${s.description}`),
       ];
       chatLog.finalizeAnswer(`**Available commands:**\n\n${commands.join('\n')}`);
@@ -417,7 +435,7 @@ export async function runCli() {
           '**Bank sync is a Pro feature.**\n\n' +
           'Connect your bank for automatic transaction imports — no more CSV downloads.\n\n' +
           'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: openspend.com/pricing'
+          'Get Pro at: agentwilson.dev/pricing'
         );
         tui.requestRender();
         return;
@@ -484,7 +502,7 @@ export async function runCli() {
           '**Bank sync is a Pro feature.**\n\n' +
           'Automatically pull transactions from your linked bank accounts.\n\n' +
           'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: openspend.com/pricing'
+          'Get Pro at: agentwilson.dev/pricing'
         );
         tui.requestRender();
         return;
@@ -604,7 +622,7 @@ export async function runCli() {
           chatLog.finalizeAnswer(
             `No license active.\n\n` +
             `Activate with: \`/license activate <key>\`\n` +
-            `Get a key at: openspend.com/pricing`
+            `Get a key at: agentwilson.dev/pricing`
           );
         }
       }
@@ -721,6 +739,37 @@ export async function runCli() {
           }
           result += '\n**Commands:** `/schedule add` · `/schedule remove <id>` · `/schedule pause <id>` · `/schedule resume <id>`';
           chatLog.finalizeAnswer(result);
+        }
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/dashboard' || query === '/dashboard stop') {
+      chatLog.addQuery(query);
+      if (query === '/dashboard stop') {
+        if ((globalThis as any).__wilsonDashboard) {
+          const { stopDashboardServer } = await import('./dashboard/server.js');
+          stopDashboardServer((globalThis as any).__wilsonDashboard);
+          (globalThis as any).__wilsonDashboard = null;
+          chatLog.finalizeAnswer('Dashboard stopped.');
+        } else {
+          chatLog.finalizeAnswer('No dashboard running.');
+        }
+      } else {
+        if ((globalThis as any).__wilsonDashboard) {
+          chatLog.finalizeAnswer('Dashboard already running. Type `/dashboard stop` to close it.');
+        } else {
+          const { startDashboardServer } = await import('./dashboard/server.js');
+          const { server, url } = startDashboardServer(db);
+          (globalThis as any).__wilsonDashboard = server;
+          // Open in default browser
+          try {
+            Bun.spawn(['open', url]);
+          } catch {
+            // open may not be available on all platforms
+          }
+          chatLog.finalizeAnswer(`Dashboard at ${url} — type \`/dashboard stop\` to close`);
         }
       }
       tui.requestRender();

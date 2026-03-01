@@ -26,7 +26,7 @@ interface PlaidStore {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const STORE_DIR = join(homedir(), '.openspend');
+const STORE_DIR = join(homedir(), '.agentwilson');
 const STORE_FILE = join(STORE_DIR, 'plaid.json');
 
 // ── Store I/O ────────────────────────────────────────────────────────────────

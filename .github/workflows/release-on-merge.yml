@@ -1,0 +1,135 @@
+name: Release on Merge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for version bump
+        id: version
+        run: |
+          CURRENT=$(jq -r .version package.json)
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1 || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing tags — first release"
+            echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "previous_tag=" >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$LATEST_TAG" = "v$CURRENT" ]; then
+            echo "Version $CURRENT matches latest tag $LATEST_TAG — skipping"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version bump detected: $LATEST_TAG → v$CURRENT"
+            echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "previous_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate changelog entry
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.current }}"
+          PREV_TAG="${{ steps.version.outputs.previous_tag }}"
+          DATE=$(date +%Y-%m-%d)
+
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD")
+          fi
+
+          # Write changelog section to file (used by later steps)
+          printf "## [v%s] — %s\n\n%s\n" "$VERSION" "$DATE" "$COMMITS" > /tmp/changelog-entry.md
+
+          # Write release notes file for gh release create
+          cp /tmp/changelog-entry.md /tmp/release-notes.md
+
+      - name: Update CHANGELOG.md
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          # Prepend new entry after the "# Changelog" header
+          {
+            head -n 1 CHANGELOG.md
+            echo ""
+            cat /tmp/changelog-entry.md
+            echo ""
+            tail -n +2 CHANGELOG.md
+          } > CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+
+      - name: Commit changelog
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet && echo "No changelog changes" || \
+            git commit -m "chore: update CHANGELOG for v${{ steps.version.outputs.current }}"
+          git push
+
+      - name: Create tag and GitHub Release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.current }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release-notes.md
+
+      - name: Build docs issue body
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.current }}
+        run: |
+          cat > /tmp/docs-issue-body.md <<'HEADER'
+          Wilson CLI has been released with a new version.
+
+          ## Changelog
+
+          HEADER
+          cat /tmp/changelog-entry.md >> /tmp/docs-issue-body.md
+          cat >> /tmp/docs-issue-body.md <<'FOOTER'
+
+          ## Docs checklist
+
+          - [ ] Review changelog for user-facing changes
+          - [ ] Update CLI command reference if needed
+          - [ ] Update skill/workflow docs if new features added
+          - [ ] Update installation/upgrade instructions
+          FOOTER
+
+      - name: File docs issue
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_ISSUE_TOKEN }}
+          VERSION: ${{ steps.version.outputs.current }}
+        run: |
+          # Replace OWNER/APP_REPO with your docs site repo
+          DOCS_REPO="agent-wilson/app"
+
+          gh issue create \
+            --repo "$DOCS_REPO" \
+            --title "docs: update for Wilson CLI v${VERSION}" \
+            --body-file /tmp/docs-issue-body.md \
+          || echo "::warning::Could not create docs issue — is DOCS_ISSUE_TOKEN configured?"

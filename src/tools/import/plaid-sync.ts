@@ -21,7 +21,7 @@ export const plaidSyncTool = defineTool({
     // Pro license gate
     if (!hasLicense('pro')) {
       return formatToolResult({
-        error: 'Bank sync is a Pro feature. Run `/license` for details or visit openspend.com/pricing.',
+        error: 'Bank sync is a Pro feature. Run `/license` for details or visit agentwilson.dev/pricing.',
       });
     }
 
@@ -70,6 +70,10 @@ export const plaidSyncTool = defineTool({
           continue;
         }
 
+        // Map Plaid personal_finance_category to category_detailed
+        const pfcDetailed = txn.personalFinanceCategory?.detailed ?? undefined;
+        const pfcPrimary = txn.personalFinanceCategory?.primary ?? undefined;
+
         newTxns.push({
           date: txn.date,
           description: txn.name,
@@ -79,22 +83,28 @@ export const plaidSyncTool = defineTool({
           source_file: `plaid:${item.institutionName}`,
           bank: item.institutionName,
           account_last4: item.accounts.find((a) => a.id === txn.accountId)?.mask ?? undefined,
+          // New columns from schema migration
+          merchant_name: txn.merchantName ?? undefined,
+          category_detailed: pfcDetailed ?? pfcPrimary ?? undefined,
+          external_id: txn.transactionId,
+          payment_channel: txn.paymentChannel ?? undefined,
+          pending: txn.pending ? 1 : 0,
+          authorized_date: txn.authorizedDate ?? undefined,
         });
       }
 
       if (newTxns.length > 0) {
-        // Insert with plaid_transaction_id for dedup
+        // Insert with plaid_transaction_id + new columns for dedup and enrichment
         const stmt = db.prepare(`
-          INSERT INTO transactions (date, description, amount, category, source_file, bank, account_last4, plaid_transaction_id)
-          VALUES (@date, @description, @amount, @category, @source_file, @bank, @account_last4, @plaid_transaction_id)
+          INSERT INTO transactions (date, description, amount, category, source_file, bank, account_last4,
+            plaid_transaction_id, merchant_name, category_detailed, external_id, payment_channel, pending, authorized_date)
+          VALUES (@date, @description, @amount, @category, @source_file, @bank, @account_last4,
+            @plaid_transaction_id, @merchant_name, @category_detailed, @external_id, @payment_channel, @pending, @authorized_date)
         `);
 
         const insertAll = db.transaction(() => {
           for (let i = 0; i < newTxns.length; i++) {
             const txn = newTxns[i];
-            const plaidTxnId = added.find(
-              (a) => a.name === txn.description && a.date === txn.date && !existingIds.has(a.transactionId)
-            )?.transactionId;
 
             stmt.run({
               date: txn.date,
@@ -104,7 +114,13 @@ export const plaidSyncTool = defineTool({
               source_file: txn.source_file ?? null,
               bank: txn.bank ?? null,
               account_last4: txn.account_last4 ?? null,
-              plaid_transaction_id: plaidTxnId ?? null,
+              plaid_transaction_id: txn.external_id ?? null,
+              merchant_name: txn.merchant_name ?? null,
+              category_detailed: txn.category_detailed ?? null,
+              external_id: txn.external_id ?? null,
+              payment_channel: txn.payment_channel ?? null,
+              pending: txn.pending ?? 0,
+              authorized_date: txn.authorized_date ?? null,
             });
           }
         });

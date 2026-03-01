@@ -4,7 +4,7 @@ import { homedir } from 'os';
 import { getSchedules } from './store.js';
 
 const CRON_TAG = '# wilson-managed';
-const LOG_FILE = join(homedir(), '.openspend', 'schedule.log');
+const LOG_FILE = join(homedir(), '.agentwilson', 'schedule.log');
 
 /**
  * Get the absolute path to the wilson binary.

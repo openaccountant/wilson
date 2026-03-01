@@ -65,7 +65,7 @@ export const monarchImportTool = defineTool({
     // Pro license gate
     if (!hasLicense('pro')) {
       return formatToolResult({
-        error: 'Monarch import is a Pro feature. Run `/license` for details or visit openspend.com/pricing.',
+        error: 'Monarch import is a Pro feature. Run `/license` for details or visit agentwilson.dev/pricing.',
       });
     }
 

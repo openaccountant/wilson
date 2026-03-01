@@ -10,6 +10,13 @@ import { initBudgetSetTool } from './tools/budget/budget-set.js';
 import { initBudgetCheckTool } from './tools/budget/budget-check.js';
 import { initBudgetPrompt } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
+import { initProfitLossTool } from './tools/query/profit-loss.js';
+import { initProfitDiffTool } from './tools/query/profit-diff.js';
+import { initRuleManageTool } from './tools/rules/rule-manage.js';
+import { initTaxFlagTool } from './tools/tax/tax-flag.js';
+import { initSavingsRateTool } from './tools/query/savings-rate.js';
+import { initAlertCheckTool } from './tools/query/alert-check.js';
+import { initGenerateReportTool } from './tools/export/generate-report.js';
 import { initMcpClients, closeMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
 import { AgentRunnerController } from './controllers/index.js';
@@ -34,6 +41,13 @@ export async function runHeadless(query: string): Promise<void> {
     initBudgetCheckTool(db);
     initBudgetPrompt(db);
     initPlaidSyncTool(db);
+    initProfitLossTool(db);
+    initProfitDiffTool(db);
+    initRuleManageTool(db);
+    initTaxFlagTool(db);
+    initSavingsRateTool(db);
+    initAlertCheckTool(db);
+    initGenerateReportTool(db);
 
     await initMcpClients();
     await loadMcpTools();

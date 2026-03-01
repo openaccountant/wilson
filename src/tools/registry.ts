@@ -225,6 +225,199 @@ Export transactions to CSV or XLSX files.
 - Exported columns: date, description, amount, category
 `.trim();
 
+const PROFIT_LOSS_DESCRIPTION = `
+Generate a profit & loss report showing income vs expenses by category.
+
+## When to Use
+
+- When the user asks about their P&L, profit and loss, income vs expenses
+- When the user says "am I making money", "what's my net income", "show my P&L"
+- When the user wants to see their financial position for a period
+
+## When NOT to Use
+
+- When the user only wants spending breakdown without income (use spending_summary)
+- When the user wants to compare two periods (use profit_diff instead)
+
+## Usage Notes
+
+- Shows income by category, expenses by category, and net profit/loss
+- Supports month, quarter, and year periods with offset
+- Positive net = profit, negative net = loss
+`.trim();
+
+const PROFIT_DIFF_DESCRIPTION = `
+Compare profit & loss between two periods to identify changes.
+
+## When to Use
+
+- When the user wants to compare spending/income between periods
+- When the user asks "how did my finances change", "month over month comparison"
+- When the user wants to see what categories grew or shrank
+
+## When NOT to Use
+
+- When the user just wants a single period P&L (use profit_loss)
+- When the user wants a simple spending comparison (use spending_summary with compareWithPrevious)
+
+## Usage Notes
+
+- Shows per-category deltas and percent changes
+- Highlights top 3 biggest movers
+- Identifies new and dropped categories
+`.trim();
+
+const RULE_MANAGE_DESCRIPTION = `
+Manage categorization rules for automatic transaction classification.
+
+## When to Use
+
+- When the user wants to create rules for auto-categorizing transactions
+- When the user says "always categorize X as Y", "set up a rule", "manage rules"
+- When the user wants to list, add, update, or delete categorization rules
+
+## When NOT to Use
+
+- When the user wants to manually categorize specific transactions (use categorize)
+- When the user is asking about existing categories without wanting to create rules
+
+## Usage Notes
+
+- Rules are matched before the LLM runs during categorization
+- Supports glob patterns (e.g., "*AMAZON*") and regex
+- Higher priority rules match first
+- Actions: add, update, delete, list
+`.trim();
+
+const TAX_FLAG_DESCRIPTION = `
+**Requires Pro license.** Track tax-deductible transactions with IRS Schedule C categories.
+
+## When to Use
+
+- When the user wants to flag a transaction as tax-deductible
+- When the user asks about tax deductions, Schedule C, or business expenses
+- When the user wants a tax summary or list of flagged deductions
+
+## When NOT to Use
+
+- When the user is just asking about spending (use spending_summary)
+- When the user wants general categorization (use categorize)
+
+## Usage Notes
+
+- Uses official IRS Schedule C categories (22 categories)
+- Actions: flag, unflag, summary, list
+- Summary shows total deductions by IRS category
+`.trim();
+
+const SAVINGS_RATE_DESCRIPTION = `
+Calculate and track savings rate over time with income vs expense trend.
+
+## When to Use
+
+- When the user asks about their savings rate, how much they're saving
+- When the user wants to see income vs expenses over time
+- When the user asks about the 50/30/20 rule or savings benchmarks
+
+## When NOT to Use
+
+- When the user wants a P&L for a single period (use profit_loss)
+- When the user wants detailed spending categories (use spending_summary)
+
+## Usage Notes
+
+- Shows monthly income, expenses, savings, and savings rate
+- Includes 50/30/20 benchmark comparison for the latest month
+- Default: last 6 months
+`.trim();
+
+const ALERT_CHECK_DESCRIPTION = `
+Check for active spending alerts and warnings.
+
+## When to Use
+
+- When the user asks "any alerts", "anything I should know about", "check my finances"
+- When the user wants to see budget warnings or unusual activity
+- As part of a financial health check
+
+## When NOT to Use
+
+- When the user wants detailed anomaly analysis (use anomaly_detect)
+- When the user is asking about a specific transaction
+
+## Usage Notes
+
+- Checks: budget warnings (>=80%), budget exceeded (>=100%), spending spikes (>2.5x average), new recurring charges
+- All computed in real-time from existing data
+- Severity levels: info, warning, critical
+`.trim();
+
+const GENERATE_REPORT_DESCRIPTION = `
+Generate a comprehensive Markdown financial report and save to a file.
+
+## When to Use
+
+- When the user asks to "generate a report", "export a report", "create a financial summary"
+- When the user wants a printable/shareable overview of their finances
+- When the user specifies a file path for report output
+
+## When NOT to Use
+
+- When the user just wants to see data in the terminal (use specific query tools)
+- When the user wants CSV/XLSX export (use export_transactions)
+
+## Usage Notes
+
+- Sections: summary, spending, budget, anomalies, savings, transactions
+- Output is Markdown, suitable for viewing in any Markdown renderer
+- Supports filtering by month and section selection
+`.trim();
+
+const PLAID_BALANCES_DESCRIPTION = `
+**Requires Pro license.** Show current account balances for all linked bank accounts.
+
+## When to Use
+
+- When the user asks "what's my balance", "how much do I have", "account balances"
+- When the user wants to see their current financial position across accounts
+- When checking net worth or liquidity
+
+## When NOT to Use
+
+- When the user wants to see transactions (use plaid_sync or transaction_search)
+- When no bank accounts are linked (direct user to /connect first)
+
+## Usage Notes
+
+- Requires linked Plaid accounts (set up via /connect)
+- Shows current and available balances for each account
+- Includes account type (checking, savings, credit, etc.)
+- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
+`.trim();
+
+const PLAID_RECURRING_DESCRIPTION = `
+**Requires Pro license.** Show recurring transactions (subscriptions, bills, income) for linked accounts.
+
+## When to Use
+
+- When the user asks about subscriptions, recurring charges, or bills
+- When the user says "what subscriptions do I have", "show my recurring expenses"
+- When analyzing fixed vs variable spending
+- When looking for subscriptions to cancel
+
+## When NOT to Use
+
+- When the user wants one-time transaction analysis (use spending_summary or anomaly_detect)
+- When no bank accounts are linked (direct user to /connect first)
+
+## Usage Notes
+
+- Uses Plaid's recurring transaction detection algorithm
+- Shows both inflows (recurring income) and outflows (subscriptions/bills)
+- Includes frequency, amount, merchant, and active/inactive status
+- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
+`.trim();
+
 const PLAID_SYNC_DESCRIPTION = `
 **Requires Pro license.** Sync transactions from linked bank accounts via Plaid.
 
@@ -392,7 +585,66 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  // MCP tools (loaded at startup from ~/.openspend/mcp.json)
+  const plaidBalMod = safeRequire<{ plaidBalancesTool: ToolDef }>('./import/plaid-balances.js');
+  if (plaidBalMod?.plaidBalancesTool) {
+    tools.push({
+      name: 'plaid_balances',
+      tool: plaidBalMod.plaidBalancesTool,
+      description: PLAID_BALANCES_DESCRIPTION,
+    });
+  }
+
+  const plaidRecMod = safeRequire<{ plaidRecurringTool: ToolDef }>('./import/plaid-recurring.js');
+  if (plaidRecMod?.plaidRecurringTool) {
+    tools.push({
+      name: 'plaid_recurring',
+      tool: plaidRecMod.plaidRecurringTool,
+      description: PLAID_RECURRING_DESCRIPTION,
+    });
+  }
+
+  // P&L tools
+  const pnlMod = safeRequire<{ profitLossTool: ToolDef }>('./query/profit-loss.js');
+  if (pnlMod?.profitLossTool) {
+    tools.push({ name: 'profit_loss', tool: pnlMod.profitLossTool, description: PROFIT_LOSS_DESCRIPTION });
+  }
+
+  const diffMod = safeRequire<{ profitDiffTool: ToolDef }>('./query/profit-diff.js');
+  if (diffMod?.profitDiffTool) {
+    tools.push({ name: 'profit_diff', tool: diffMod.profitDiffTool, description: PROFIT_DIFF_DESCRIPTION });
+  }
+
+  // Rules engine
+  const ruleMod = safeRequire<{ ruleManageTool: ToolDef }>('./rules/rule-manage.js');
+  if (ruleMod?.ruleManageTool) {
+    tools.push({ name: 'rule_manage', tool: ruleMod.ruleManageTool, description: RULE_MANAGE_DESCRIPTION });
+  }
+
+  // Tax tracking
+  const taxMod = safeRequire<{ taxFlagTool: ToolDef }>('./tax/tax-flag.js');
+  if (taxMod?.taxFlagTool) {
+    tools.push({ name: 'tax_flag', tool: taxMod.taxFlagTool, description: TAX_FLAG_DESCRIPTION });
+  }
+
+  // Savings rate
+  const savingsMod = safeRequire<{ savingsRateTool: ToolDef }>('./query/savings-rate.js');
+  if (savingsMod?.savingsRateTool) {
+    tools.push({ name: 'savings_rate', tool: savingsMod.savingsRateTool, description: SAVINGS_RATE_DESCRIPTION });
+  }
+
+  // Alerts
+  const alertMod = safeRequire<{ alertCheckTool: ToolDef }>('./query/alert-check.js');
+  if (alertMod?.alertCheckTool) {
+    tools.push({ name: 'alert_check', tool: alertMod.alertCheckTool, description: ALERT_CHECK_DESCRIPTION });
+  }
+
+  // Report generation
+  const reportMod = safeRequire<{ generateReportTool: ToolDef }>('./export/generate-report.js');
+  if (reportMod?.generateReportTool) {
+    tools.push({ name: 'generate_report', tool: reportMod.generateReportTool, description: GENERATE_REPORT_DESCRIPTION });
+  }
+
+  // MCP tools (loaded at startup from ~/.agentwilson/mcp.json)
   for (const mcpTool of getCachedMcpTools()) {
     tools.push({
       name: mcpTool.name,

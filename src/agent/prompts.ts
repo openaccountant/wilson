@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Database } from '../db/compat-sqlite.js';
 import { getBudgetVsActual } from '../db/queries.js';
+import { checkAlerts } from '../alerts/engine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -31,7 +32,7 @@ export function getCurrentDate(): string {
  * Load SOUL.md content from user override or bundled file.
  */
 export async function loadSoulDocument(): Promise<string | null> {
-  const userSoulPath = join(homedir(), '.openspend', 'SOUL.md');
+  const userSoulPath = join(homedir(), '.agentwilson', 'SOUL.md');
   try {
     return await readFile(userSoulPath, 'utf-8');
   } catch {
@@ -248,6 +249,41 @@ let budgetDb: Database | null = null;
  */
 export function initBudgetPrompt(db: Database): void {
   budgetDb = db;
+}
+
+// ============================================================================
+// Alert Context
+// ============================================================================
+
+let alertDb: Database | null = null;
+
+/**
+ * Inject the database reference for alert context generation.
+ */
+export function initAlertPrompt(db: Database): void {
+  alertDb = db;
+}
+
+/**
+ * Build an alert summary for system prompt injection.
+ * Returns null if no active alerts.
+ */
+export function buildAlertContext(): string | null {
+  if (!alertDb) return null;
+
+  try {
+    const alerts = checkAlerts(alertDb);
+    if (alerts.length === 0) return null;
+
+    const lines = alerts.map((a) => {
+      const icon = a.severity === 'critical' ? '🔴' : a.severity === 'warning' ? '🟡' : 'ℹ️';
+      return `- ${icon} ${a.message}`;
+    });
+
+    return `## Active Alerts\n\n${lines.join('\n')}\n\nProactively mention relevant alerts when they relate to the user's query.`;
+  } catch {
+    return null;
+  }
 }
 
 /**

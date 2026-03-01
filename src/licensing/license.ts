@@ -18,7 +18,7 @@ export interface LicenseCache {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const LICENSE_DIR = join(homedir(), '.openspend');
+const LICENSE_DIR = join(homedir(), '.agentwilson');
 const LICENSE_FILE = join(LICENSE_DIR, 'license.json');
 /** Re-validate online after this many milliseconds (24 hours) */
 const REVALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;

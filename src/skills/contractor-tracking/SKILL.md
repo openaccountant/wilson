@@ -8,4 +8,4 @@ description: >
   or freelancer payments.
 ---
 
-This workflow requires a license. Visit openspend.com/pricing for details.
+This workflow requires a license. Visit agentwilson.dev/pricing for details.

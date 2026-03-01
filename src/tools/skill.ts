@@ -54,7 +54,7 @@ export const skillTool = defineTool({
     if (metadata?.tier === 'paid') {
       const { hasLicense } = await import('../licensing/license.js');
       if (!hasLicense(skill)) {
-        return `The **${skillDef.name}** workflow requires a license. Run \`/license\` for details or visit openspend.com/pricing.`;
+        return `The **${skillDef.name}** workflow requires a license. Run \`/license\` for details or visit agentwilson.dev/pricing.`;
       }
     }
 

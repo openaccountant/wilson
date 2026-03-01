@@ -7,4 +7,4 @@ description: >
   user asks about cash flow, projections, "will I run out of money", or forecasting.
 ---
 
-This workflow requires a license. Visit openspend.com/pricing for details.
+This workflow requires a license. Visit agentwilson.dev/pricing for details.

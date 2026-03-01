@@ -7,4 +7,4 @@ description: >
   for P&L, income statement, profit/loss, or business financial summary.
 ---
 
-This workflow requires a license. Visit openspend.com/pricing for details.
+This workflow requires a license. Visit agentwilson.dev/pricing for details.

@@ -16,8 +16,8 @@ const __dirname = dirname(__filename);
  */
 const SKILL_DIRECTORIES: { path: string; source: SkillSource }[] = [
   { path: __dirname, source: 'builtin' },
-  { path: join(homedir(), '.openspend', 'skills'), source: 'user' },
-  { path: join(process.cwd(), '.openspend', 'skills'), source: 'project' },
+  { path: join(homedir(), '.agentwilson', 'skills'), source: 'user' },
+  { path: join(process.cwd(), '.agentwilson', 'skills'), source: 'project' },
 ];
 
 // Cache for discovered skills (metadata only)
@@ -104,7 +104,7 @@ export async function getSkill(name: string): Promise<Skill | undefined> {
     if (!hasLicense(metadata.name)) {
       return {
         ...metadata,
-        instructions: `This skill requires a license. Run \`/license\` for details or visit openspend.com/pricing.`,
+        instructions: `This skill requires a license. Run \`/license\` for details or visit agentwilson.dev/pricing.`,
       };
     }
 
@@ -120,7 +120,7 @@ export async function getSkill(name: string): Promise<Skill | undefined> {
     // Server fetch failed — return stub
     return {
       ...metadata,
-      instructions: `This skill requires a license. Run \`/license\` for details or visit openspend.com/pricing.`,
+      instructions: `This skill requires a license. Run \`/license\` for details or visit agentwilson.dev/pricing.`,
     };
   }
 

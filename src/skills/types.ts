@@ -1,8 +1,8 @@
 /**
  * Source of a skill definition.
  * - builtin: Shipped with Wilson (src/skills/builtin/)
- * - user: User-level skills (~/.openspend/skills/)
- * - project: Project-level skills (.openspend/skills/)
+ * - user: User-level skills (~/.agentwilson/skills/)
+ * - project: Project-level skills (.agentwilson/skills/)
  */
 export type SkillSource = 'builtin' | 'user' | 'project';
 

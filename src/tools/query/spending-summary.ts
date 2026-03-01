@@ -27,7 +27,7 @@ function getDb(): Database {
 /**
  * Compute the start and end dates for a period.
  */
-function getPeriodDates(
+export function getPeriodDates(
   period: 'month' | 'quarter' | 'year',
   offset: number = 0
 ): { start: string; end: string; label: string } {

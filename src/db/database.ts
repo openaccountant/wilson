@@ -1,8 +1,8 @@
 import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
-import { ALL_SCHEMA, SAFE_MIGRATIONS } from './schema.js';
+import { ALL_SCHEMA, SAFE_MIGRATIONS, ALL_INDEXES } from './schema.js';
 
-const DB_DIR = '.openspend';
+const DB_DIR = '.agentwilson';
 const DB_FILE = 'data.db';
 
 export function initDatabase(): Database {
@@ -28,6 +28,11 @@ export function initDatabase(): Database {
         throw err;
       }
     }
+  }
+
+  // Create indexes AFTER migrations so columns like plaid_transaction_id exist
+  for (const sql of ALL_INDEXES) {
+    db.exec(sql);
   }
 
   return db;

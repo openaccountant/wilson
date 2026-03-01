@@ -54,7 +54,7 @@ const DEFAULT_LIMIT_CONFIG: ToolLimitConfig = {
 /**
  * Append-only scratchpad for tracking agent work on a query.
  * Uses JSONL format (newline-delimited JSON) for resilient appending.
- * Files are persisted in .openspend/scratchpad/ for debugging/history.
+ * Files are persisted in .agentwilson/scratchpad/ for debugging/history.
  *
  * This is the single source of truth for all agent work on a query.
  *
@@ -63,7 +63,7 @@ const DEFAULT_LIMIT_CONFIG: ToolLimitConfig = {
  * - Query similarity detection to help prevent retry loops
  */
 export class Scratchpad {
-  private readonly scratchpadDir = '.openspend/scratchpad';
+  private readonly scratchpadDir = '.agentwilson/scratchpad';
   private readonly filepath: string;
   private readonly limitConfig: ToolLimitConfig;
 

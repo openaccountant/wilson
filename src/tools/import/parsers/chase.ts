@@ -1,10 +1,21 @@
 import { parse } from 'csv-parse/sync';
 
+export type BankType = 'chase' | 'amex' | 'generic' | 'bofa' | 'bofa-cc' | 'ofx' | 'qif' | 'monarch' | 'plaid';
+
 export interface ParsedTransaction {
-  date: string;
+  date: string;           // YYYY-MM-DD
   description: string;
   amount: number;
-  bank: 'chase' | 'amex' | 'generic';
+  bank: BankType;
+  external_id?: string;        // OFX FITID, CSV hash, Plaid txn ID, etc.
+  merchant_name?: string;      // Cleaned merchant name
+  check_number?: string;       // Check number
+  transaction_type?: string;   // OFX TRNTYPE or similar
+  category?: string;           // Pre-existing category (from QIF L field)
+  category_detailed?: string;  // PFC code if known
+  payment_channel?: string;    // online, in_store, other
+  pending?: boolean;           // Pending status
+  authorized_date?: string;    // YYYY-MM-DD
 }
 
 /**

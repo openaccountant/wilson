@@ -4,7 +4,64 @@ import {
   PlaidEnvironments,
   Products,
   CountryCode,
+  type AccountBase,
+  type RecurringTransactionFrequency,
 } from 'plaid';
+
+// ── Errors ───────────────────────────────────────────────────────────────────
+
+export class PlaidError extends Error {
+  constructor(
+    message: string,
+    public readonly errorType: string,
+    public readonly errorCode: string,
+    public readonly statusCode: number,
+  ) {
+    super(message);
+    this.name = 'PlaidError';
+  }
+}
+
+function isPlaidApiError(err: unknown): err is { response: { data: { error_type: string; error_code: string; error_message: string }; status: number } } {
+  return typeof err === 'object' && err !== null && 'response' in err;
+}
+
+function wrapPlaidError(err: unknown): never {
+  if (isPlaidApiError(err)) {
+    const d = err.response.data;
+    throw new PlaidError(d.error_message, d.error_type, d.error_code, err.response.status);
+  }
+  throw err;
+}
+
+// ── Retry ────────────────────────────────────────────────────────────────────
+
+const RETRYABLE_CODES = new Set(['INTERNAL_SERVER_ERROR', 'PLANNED_MAINTENANCE']);
+
+function isRetryable(err: unknown): boolean {
+  if (isPlaidApiError(err)) {
+    return RETRYABLE_CODES.has(err.response.data.error_code) || err.response.status >= 500;
+  }
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isRetryable(err) || attempt === maxRetries) {
+        wrapPlaidError(err);
+      }
+      await sleep(Math.pow(2, attempt) * 1000);
+    }
+  }
+  throw new Error('unreachable');
+}
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -54,17 +111,25 @@ function getClient(): PlaidApi {
 
 /**
  * Create a Plaid Link token for initializing the Link flow.
+ * Pro-licensed users get access to investments and recurring transaction detection.
  */
-export async function createLinkToken(): Promise<string> {
+export async function createLinkToken(proLicensed = false): Promise<string> {
   const plaid = getClient();
 
-  const response = await plaid.linkTokenCreate({
-    user: { client_user_id: 'wilson-cli-user' },
-    client_name: 'Wilson',
-    products: [Products.Transactions],
-    country_codes: [CountryCode.Us],
-    language: 'en',
-  });
+  const products: Products[] = [Products.Transactions];
+  if (proLicensed) {
+    products.push(Products.Investments, Products.RecurringTransactions);
+  }
+
+  const response = await withRetry(() =>
+    plaid.linkTokenCreate({
+      user: { client_user_id: 'wilson-cli-user' },
+      client_name: 'Wilson',
+      products,
+      country_codes: [CountryCode.Us],
+      language: 'en',
+    }),
+  );
 
   return response.data.link_token;
 }
@@ -78,9 +143,11 @@ export async function exchangePublicToken(publicToken: string): Promise<{
 }> {
   const plaid = getClient();
 
-  const response = await plaid.itemPublicTokenExchange({
-    public_token: publicToken,
-  });
+  const response = await withRetry(() =>
+    plaid.itemPublicTokenExchange({
+      public_token: publicToken,
+    }),
+  );
 
   return {
     accessToken: response.data.access_token,
@@ -97,7 +164,7 @@ export async function getItemInfo(accessToken: string): Promise<{
 }> {
   const plaid = getClient();
 
-  const accountsRes = await plaid.accountsGet({ access_token: accessToken });
+  const accountsRes = await withRetry(() => plaid.accountsGet({ access_token: accessToken }));
   const accounts = accountsRes.data.accounts.map((a: { account_id: string; name: string; mask: string | null }) => ({
     id: a.account_id,
     name: a.name,
@@ -108,10 +175,10 @@ export async function getItemInfo(accessToken: string): Promise<{
   const instId = accountsRes.data.item.institution_id;
   if (instId) {
     try {
-      const instRes = await plaid.institutionsGetById({
+      const instRes = await withRetry(() => plaid.institutionsGetById({
         institution_id: instId,
         country_codes: [CountryCode.Us],
-      });
+      }));
       institutionName = instRes.data.institution.name;
     } catch {
       // Fall back to "Unknown Institution"
@@ -125,40 +192,43 @@ export async function getItemInfo(accessToken: string): Promise<{
  * Sync transactions using the incremental /transactions/sync endpoint.
  * Returns added transactions and the updated cursor.
  */
+export interface SyncedTransaction {
+  transactionId: string;
+  date: string;
+  name: string;
+  amount: number;
+  category: string[];
+  accountId: string;
+  merchantName?: string;
+  personalFinanceCategory?: { primary: string; detailed: string };
+  paymentChannel?: string;
+  pending: boolean;
+  authorizedDate?: string;
+}
+
 export async function syncTransactions(
   accessToken: string,
   cursor: string | null
 ): Promise<{
-  added: Array<{
-    transactionId: string;
-    date: string;
-    name: string;
-    amount: number;
-    category: string[];
-    accountId: string;
-  }>;
+  added: SyncedTransaction[];
   nextCursor: string;
 }> {
   const plaid = getClient();
-  const added: Array<{
-    transactionId: string;
-    date: string;
-    name: string;
-    amount: number;
-    category: string[];
-    accountId: string;
-  }> = [];
+  const added: SyncedTransaction[] = [];
 
   let currentCursor = cursor ?? '';
   let hasMore = true;
 
   while (hasMore) {
-    const response = await plaid.transactionsSync({
-      access_token: accessToken,
-      cursor: currentCursor || undefined,
-    });
+    const response = await withRetry(() =>
+      plaid.transactionsSync({
+        access_token: accessToken,
+        cursor: currentCursor || undefined,
+      }),
+    );
 
     for (const txn of response.data.added) {
+      const pfc = txn.personal_finance_category;
       added.push({
         transactionId: txn.transaction_id,
         date: txn.date,
@@ -166,6 +236,11 @@ export async function syncTransactions(
         amount: txn.amount,
         category: txn.category ?? [],
         accountId: txn.account_id,
+        merchantName: txn.merchant_name ?? undefined,
+        personalFinanceCategory: pfc ? { primary: pfc.primary, detailed: pfc.detailed } : undefined,
+        paymentChannel: txn.payment_channel ?? undefined,
+        pending: txn.pending,
+        authorizedDate: txn.authorized_date ?? undefined,
       });
     }
 
@@ -174,4 +249,99 @@ export async function syncTransactions(
   }
 
   return { added, nextCursor: currentCursor };
+}
+
+// ── Balances ─────────────────────────────────────────────────────────────────
+
+export interface AccountBalance {
+  accountId: string;
+  name: string;
+  mask: string;
+  type: string;
+  subtype: string;
+  balanceCurrent: number | null;
+  balanceAvailable: number | null;
+  isoCurrencyCode: string | null;
+}
+
+/**
+ * Get current balances for all accounts on an access token.
+ */
+export async function getBalances(accessToken: string): Promise<AccountBalance[]> {
+  const plaid = getClient();
+
+  const response = await withRetry(() =>
+    plaid.accountsGet({ access_token: accessToken }),
+  );
+
+  return response.data.accounts.map((a: AccountBase) => ({
+    accountId: a.account_id,
+    name: a.name,
+    mask: a.mask ?? '',
+    type: a.type,
+    subtype: a.subtype ?? '',
+    balanceCurrent: a.balances.current,
+    balanceAvailable: a.balances.available,
+    isoCurrencyCode: a.balances.iso_currency_code,
+  }));
+}
+
+// ── Recurring Transactions ───────────────────────────────────────────────────
+
+export interface RecurringStream {
+  streamId: string;
+  description: string;
+  merchantName: string | null;
+  amount: number;
+  frequency: string;
+  category: string[];
+  isActive: boolean;
+  firstDate: string;
+  lastDate: string;
+}
+
+/**
+ * Get recurring transaction streams (subscriptions, bills, income).
+ */
+export async function getRecurringTransactions(accessToken: string): Promise<{
+  inflow: RecurringStream[];
+  outflow: RecurringStream[];
+}> {
+  const plaid = getClient();
+
+  const response = await withRetry(() =>
+    plaid.transactionsRecurringGet({
+      access_token: accessToken,
+      account_ids: [],
+    }),
+  );
+
+  function mapStream(s: {
+    stream_id: string;
+    description: string;
+    merchant_name: string | null;
+    last_amount: { amount?: number };
+    frequency: RecurringTransactionFrequency;
+    category: string[] | null;
+    is_active: boolean;
+    first_date: string;
+    last_date: string;
+  }): RecurringStream {
+    return {
+      streamId: s.stream_id,
+      description: s.description,
+      merchantName: s.merchant_name,
+      amount: s.last_amount.amount ?? 0,
+      frequency: s.frequency,
+      category: s.category ?? [],
+      isActive: s.is_active,
+      firstDate: s.first_date,
+      lastDate: s.last_date,
+    };
+  }
+
+  return {
+    inflow: response.data.inflow_streams.map(mapStream),
+    outflow: response.data.outflow_streams.map(mapStream),
+  };
 }

@@ -10,7 +10,7 @@ interface McpClientEntry {
 const clients = new Map<string, McpClientEntry>();
 
 /**
- * Initialize all MCP clients from ~/.openspend/mcp.json.
+ * Initialize all MCP clients from ~/.agentwilson/mcp.json.
  * Spawns each server process, connects via stdio, and calls tools/list to verify.
  * Returns the list of server names that connected successfully.
  */

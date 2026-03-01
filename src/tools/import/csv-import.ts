@@ -4,14 +4,18 @@ import { createHash } from 'crypto';
 import { parse } from 'csv-parse/sync';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
-import { detectBank, type BankType } from './detect-bank.js';
+import { detectBank, detectFormat, type BankType } from './detect-bank.js';
 import { parseChaseCSV } from './parsers/chase.js';
 import { parseAmexCSV } from './parsers/amex.js';
 import { parseGenericCSV } from './parsers/generic.js';
+import { parseOfx } from './parsers/ofx.js';
+import { parseQif } from './parsers/qif.js';
+import { parseBofA } from './parsers/bofa.js';
 import type { ParsedTransaction } from './parsers/chase.js';
 import {
   insertTransactions,
   checkImported,
+  checkExternalId,
   recordImport,
   type TransactionInsert,
 } from '../../db/queries.js';
@@ -21,7 +25,7 @@ import { formatToolResult } from '../types.js';
 let db: Database | null = null;
 
 /**
- * Initialize the csv_import tool with a database connection.
+ * Initialize the file_import tool with a database connection.
  * Must be called before the agent starts.
  */
 export function initImportTool(database: Database): void {
@@ -30,24 +34,53 @@ export function initImportTool(database: Database): void {
 
 function getDb(): Database {
   if (!db) {
-    throw new Error('csv_import tool not initialized. Call initImportTool(database) first.');
+    throw new Error('file_import tool not initialized. Call initImportTool(database) first.');
   }
   return db;
 }
 
 /**
- * CSV Import tool — reads a bank CSV, detects the bank format, parses transactions,
- * and bulk-inserts them into the database. Deduplicates by file hash.
+ * Compute a per-row external_id for CSV transactions that don't have one.
+ * Uses SHA-256 of date+description+amount to enable per-transaction dedup.
+ */
+function computeExternalId(t: ParsedTransaction): string {
+  return `csv-${createHash('sha256').update(`${t.date}|${t.description}|${t.amount}`).digest('hex').slice(0, 16)}`;
+}
+
+/**
+ * Convert a ParsedTransaction to a TransactionInsert, mapping all available fields.
+ */
+function toInsert(t: ParsedTransaction, filePath: string): TransactionInsert {
+  return {
+    date: t.date,
+    description: t.description,
+    amount: t.amount,
+    bank: t.bank,
+    source_file: filePath,
+    merchant_name: t.merchant_name ?? undefined,
+    category: t.category ?? undefined,
+    category_detailed: t.category_detailed ?? undefined,
+    external_id: t.external_id ?? undefined,
+    payment_channel: t.payment_channel ?? undefined,
+    pending: t.pending ? 1 : 0,
+    authorized_date: t.authorized_date ?? undefined,
+  };
+}
+
+/**
+ * File Import tool — reads a bank file (CSV, OFX, or QIF), detects the format
+ * and bank, parses transactions, and bulk-inserts them into the database.
+ * Deduplicates by file hash and per-transaction external_id.
  */
 export const csvImportTool = defineTool({
   name: 'csv_import',
   description:
-    'Import transactions from a bank CSV file. Auto-detects Chase, Amex, or generic CSV format. ' +
-    'Prevents duplicate imports by tracking file hashes.',
+    'Import transactions from a bank file (CSV, OFX, or QIF). Auto-detects file format ' +
+    'and bank (Chase, Amex, BofA, generic). Prevents duplicates by file hash and per-transaction ID.',
   schema: z.object({
-    filePath: z.string().describe('Path to bank CSV file'),
+    filePath: z.string().describe('Path to bank file (CSV, OFX, or QIF)'),
     bank: z
-      .enum(['chase', 'amex', 'auto'])
+      .enum(['chase', 'amex', 'bofa', 'auto'])
       .optional()
       .describe('Bank name (auto-detects if omitted)'),
   }),
@@ -66,7 +99,7 @@ export const csvImportTool = defineTool({
 
     const fileHash = createHash('sha256').update(content).digest('hex');
 
-    // 2. Check if already imported
+    // 2. Check if already imported (file-level dedup)
     const existing = checkImported(database, fileHash);
     if (existing) {
       return formatToolResult({
@@ -77,37 +110,41 @@ export const csvImportTool = defineTool({
       });
     }
 
-    // 3. Detect bank from CSV headers
-    let detectedBank: BankType;
-    if (bank && bank !== 'auto') {
+    // 3. Detect file format and bank
+    const detected = detectFormat(content);
+    let detectedBank: BankType = detected.bank ?? 'generic';
+
+    // Override bank if explicitly specified (only for CSV)
+    if (bank && bank !== 'auto' && detected.format === 'csv') {
       detectedBank = bank;
-    } else {
-      // Parse just the header row to detect bank
-      const headerRecords = parse(content, {
-        columns: true,
-        to: 1,
-        skip_empty_lines: true,
-        trim: true,
-        relax_column_count: true,
-      }) as Record<string, string>[];
-
-      if (headerRecords.length === 0) {
-        return formatToolResult({ error: 'CSV file appears to be empty or has no valid rows.' });
-      }
-
-      const headers = Object.keys(headerRecords[0]);
-      detectedBank = detectBank(headers);
     }
 
     // 4. Parse with appropriate parser
     let parsed: ParsedTransaction[];
     try {
-      switch (detectedBank) {
-        case 'chase':
-          parsed = parseChaseCSV(content);
+      switch (detected.format) {
+        case 'ofx':
+          parsed = parseOfx(content);
           break;
-        case 'amex':
-          parsed = parseAmexCSV(content);
+        case 'qif':
+          parsed = parseQif(content);
+          break;
+        case 'csv':
+          switch (detectedBank) {
+            case 'chase':
+              parsed = parseChaseCSV(content);
+              break;
+            case 'amex':
+              parsed = parseAmexCSV(content);
+              break;
+            case 'bofa':
+            case 'bofa-cc':
+              parsed = parseBofA(content);
+              break;
+            default:
+              parsed = parseGenericCSV(content);
+              break;
+          }
           break;
         default:
           parsed = parseGenericCSV(content);
@@ -115,32 +152,53 @@ export const csvImportTool = defineTool({
       }
     } catch (err) {
       return formatToolResult({
-        error: `Failed to parse CSV: ${err instanceof Error ? err.message : String(err)}`,
+        error: `Failed to parse file: ${err instanceof Error ? err.message : String(err)}`,
       });
     }
 
     if (parsed.length === 0) {
-      return formatToolResult({ error: 'No valid transactions found in the CSV file.' });
+      return formatToolResult({ error: 'No valid transactions found in the file.' });
     }
 
-    // 5. Convert to insert format
-    const txns: TransactionInsert[] = parsed.map((t) => ({
-      date: t.date,
-      description: t.description,
-      amount: t.amount,
-      bank: t.bank,
-      source_file: filePath,
-    }));
+    // 5. Assign external_id to CSV transactions that don't have one
+    for (const t of parsed) {
+      if (!t.external_id) {
+        t.external_id = computeExternalId(t);
+      }
+    }
 
-    // 6. Bulk insert
+    // 6. Per-transaction dedup via external_id
+    const newParsed: ParsedTransaction[] = [];
+    let skipped = 0;
+    for (const t of parsed) {
+      if (t.external_id && checkExternalId(database, t.external_id)) {
+        skipped++;
+      } else {
+        newParsed.push(t);
+      }
+    }
+
+    if (newParsed.length === 0) {
+      return formatToolResult({
+        alreadyImported: true,
+        transactionCount: parsed.length,
+        skipped,
+        message: `All ${parsed.length} transactions already exist (skipped as duplicates).`,
+      });
+    }
+
+    // 7. Convert to insert format with all new fields
+    const txns: TransactionInsert[] = newParsed.map((t) => toInsert(t, filePath));
+
+    // 8. Bulk insert
     const count = insertTransactions(database, txns);
 
-    // 7. Compute date range
-    const dates = parsed.map((t) => t.date).sort();
+    // 9. Compute date range
+    const dates = newParsed.map((t) => t.date).sort();
     const dateRangeStart = dates[0];
     const dateRangeEnd = dates[dates.length - 1];
 
-    // 8. Record the import
+    // 10. Record the import
     recordImport(database, {
       file_path: filePath,
       file_hash: fileHash,
@@ -150,12 +208,16 @@ export const csvImportTool = defineTool({
       date_range_end: dateRangeEnd,
     });
 
+    const formatLabel = detected.format === 'csv' ? `${detectedBank} CSV` : detected.format.toUpperCase();
+
     return formatToolResult({
       success: true,
       transactionsImported: count,
+      transactionsSkipped: skipped,
+      formatDetected: detected.format,
       bankDetected: detectedBank,
       dateRange: { start: dateRangeStart, end: dateRangeEnd },
-      message: `Imported ${count} transactions from ${detectedBank} CSV (${dateRangeStart} to ${dateRangeEnd}).`,
+      message: `Imported ${count} transactions from ${formatLabel} (${dateRangeStart} to ${dateRangeEnd}).${skipped > 0 ? ` ${skipped} duplicates skipped.` : ''}`,
     });
   },
 });
