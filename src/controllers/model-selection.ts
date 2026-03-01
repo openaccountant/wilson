@@ -17,8 +17,10 @@ import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 function tagOllamaModel(id: string): ModelTag[] {
   const tags: ModelTag[] = ['open', 'local'];
   const lower = id.toLowerCase();
-  if (/\b(0\.5b|1b|1\.5b|2b|3b|4b)\b/.test(lower)) tags.push('small');
-  if (/\b(70b|72b|405b)\b/.test(lower)) tags.push('large');
+  // Size heuristics from model naming conventions (covers 0.5b–4b, 350m, 270m, tiny, mini, nano)
+  if (/\b(0\.5b|0\.6b|1b|1\.5b|1\.7b|2b|3b|3\.8b|4b|350m|270m|135m)\b/.test(lower)) tags.push('small');
+  if (/\b(tiny|mini|nano|micro)\b/.test(lower)) tags.push('small');
+  if (/\b(70b|72b|405b|235b|480b)\b/.test(lower)) tags.push('large');
   if (/reason|think|r1|qwq/.test(lower)) tags.push('reasoning');
   return tags;
 }

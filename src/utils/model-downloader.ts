@@ -9,14 +9,23 @@ export interface RecommendedModel {
   desc: string;
 }
 
+// Curated models — prioritizes tool-calling support (critical for Wilson's agent loop),
+// small size, and current-generation quality. Updated 2026-03.
+// Sources: ollama.com/search?c=tools, HuggingFace SLM research, NVIDIA SLM-Agents paper.
 export const RECOMMENDED_OLLAMA_MODELS: RecommendedModel[] = [
-  { name: 'granite3-dense:2b', size: '1.6 GB', tags: ['open', 'local', 'small'], desc: 'IBM — fast categorization' },
-  { name: 'granite3-dense:8b', size: '4.9 GB', tags: ['open', 'local'], desc: 'IBM — balanced quality' },
-  { name: 'qwen3:4b', size: '2.6 GB', tags: ['open', 'local', 'small'], desc: 'Alibaba — multilingual' },
-  { name: 'llama3.1:8b', size: '4.7 GB', tags: ['open', 'local'], desc: 'Meta — general purpose' },
-  { name: 'mistral:7b', size: '4.1 GB', tags: ['open', 'local'], desc: 'Mistral — strong reasoning' },
-  { name: 'deepseek-r1:8b', size: '4.9 GB', tags: ['open', 'local', 'reasoning'], desc: 'DeepSeek — chain-of-thought' },
-  { name: 'phi4-mini:3.8b', size: '2.4 GB', tags: ['open', 'local', 'small'], desc: 'Microsoft — efficient' },
+  // ── Tool-calling models (work with Wilson's agent tool system) ──────────
+  { name: 'qwen3:0.6b',      size: '523 MB', tags: ['open', 'local', 'small'], desc: 'Alibaba — smallest tool-calling model' },
+  { name: 'qwen3:4b',        size: '2.5 GB', tags: ['open', 'local', 'small'], desc: 'Alibaba — rivals 72B quality, tool-calling' },
+  { name: 'qwen3:8b',        size: '5.2 GB', tags: ['open', 'local'],          desc: 'Alibaba — best balance, tool-calling' },
+  { name: 'granite4:3b',     size: '2.1 GB', tags: ['open', 'local', 'small'], desc: 'IBM Granite 4 — tool-calling, 128K ctx' },
+  { name: 'granite4:tiny-h', size: '4.2 GB', tags: ['open', 'local', 'small'], desc: 'IBM Granite 4 MoE — 7B, tool-calling' },
+  { name: 'ministral-3:3b',  size: '2.1 GB', tags: ['open', 'local', 'small'], desc: 'Mistral — vision + tool-calling, 256K ctx' },
+
+  // ── General-purpose small models ───────────────────────────────────────
+  { name: 'gemma3:4b',       size: '3.3 GB', tags: ['open', 'local', 'small'], desc: 'Google — multimodal, 140+ languages' },
+  { name: 'smollm2:1.7b',    size: '1.8 GB', tags: ['open', 'local', 'small'], desc: 'HuggingFace — tiny but capable' },
+  { name: 'gemma3:1b',       size: '815 MB', tags: ['open', 'local', 'small'], desc: 'Google — ultralight, 32K ctx' },
+  { name: 'granite4:350m',   size: '708 MB', tags: ['open', 'local', 'small'], desc: 'IBM — smallest Granite, edge-ready' },
 ];
 
 export async function pullOllamaModel(
