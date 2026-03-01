@@ -1,0 +1,9 @@
+name: import-and-categorize
+description: Import a CSV file, categorize transactions, and show spending summary
+steps:
+  - id: import
+    tools: [csv_import]
+  - id: categorize
+    tools: [categorize]
+  - id: summarize
+    tools: [spending_summary]

@@ -1,0 +1,38 @@
+{
+  "name": "wilson",
+  "version": "0.1.0",
+  "description": "Wilson - Privacy-first AI bookkeeper CLI",
+  "type": "module",
+  "main": "src/index.tsx",
+  "bin": {
+    "wilson": "./src/index.tsx"
+  },
+  "scripts": {
+    "start": "bun run src/index.tsx",
+    "dev": "bun --watch run src/index.tsx",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@google/generative-ai": "^0.24.0",
+    "@mariozechner/pi-tui": "^0.52.9",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "chalk": "^5.4.1",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^17.2.3",
+    "exa-js": "^2.2.0",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
+    "monarch-money-api": "^0.0.6",
+    "openai": "^5.8.0",
+    "xlsx": "^0.18.5",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.9.3"
+  }
+}

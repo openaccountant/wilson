@@ -1,0 +1,11 @@
+name: full-audit
+description: Run anomaly detection, subscription audit, and spending analysis
+steps:
+  - id: anomalies
+    tools: [anomaly_detect]
+  - id: subscriptions
+    tools: [anomaly_detect, spending_summary]
+    systemPrompt: Focus on recurring charges and subscription costs.
+  - id: summary
+    tools: [spending_summary]
+    systemPrompt: Synthesize findings into actionable recommendations.

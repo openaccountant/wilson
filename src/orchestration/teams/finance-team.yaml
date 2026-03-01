@@ -1,0 +1,14 @@
+name: finance-team
+description: Parallel financial analysis team
+dispatcher:
+  systemPrompt: You coordinate financial analysis specialists. Assign clear, specific subtasks to the most relevant members.
+members:
+  - id: categorizer
+    tools: [categorize]
+    systemPrompt: You specialize in categorizing financial transactions accurately.
+  - id: analyst
+    tools: [spending_summary, anomaly_detect]
+    systemPrompt: You analyze spending patterns and detect anomalies.
+  - id: researcher
+    tools: [web_search]
+    systemPrompt: You research financial topics, merchants, and services on the web.
