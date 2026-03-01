@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Database } from '../db/compat-sqlite.js';
+import { getBudgetVsActual } from '../db/queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -124,8 +126,8 @@ Keep tables compact:
  * Build the system prompt for the agent.
  * @param model - The model name (used to get appropriate tool descriptions)
  */
-export function buildSystemPrompt(model: string, soulContent?: string | null): string {
-  const toolDescriptions = buildToolDescriptions(model);
+export async function buildSystemPrompt(model: string, soulContent?: string | null): Promise<string> {
+  const toolDescriptions = await buildToolDescriptions(model);
 
   return `You are Wilson, a CLI assistant for personal finance bookkeeping.
 
@@ -233,4 +235,42 @@ ${fullToolResults}`;
 Continue working toward answering the query. When you have gathered sufficient data to answer, write your complete answer directly and do not call more tools.`;
 
   return prompt;
+}
+
+// ============================================================================
+// Budget Context
+// ============================================================================
+
+let budgetDb: Database | null = null;
+
+/**
+ * Inject the database reference for budget context generation.
+ */
+export function initBudgetPrompt(db: Database): void {
+  budgetDb = db;
+}
+
+/**
+ * Build a budget summary for system prompt injection.
+ * Returns null if no budgets are configured.
+ */
+export function buildBudgetContext(): string | null {
+  if (!budgetDb) return null;
+
+  try {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const results = getBudgetVsActual(budgetDb, currentMonth);
+    if (results.length === 0) return null;
+
+    const lines = results.map((r) => {
+      if (r.over) {
+        return `${r.category} $${r.monthly_limit} (${r.percent_used}% — OVER by $${Math.abs(r.remaining).toFixed(0)})`;
+      }
+      return `${r.category} $${r.monthly_limit} (${r.percent_used}% used, $${r.remaining.toFixed(0)} remaining)`;
+    });
+
+    return `## Current Budgets\n\n${lines.join(', ')}\n\nProactively warn the user if they are near or over budget in any category.`;
+  } catch {
+    return null;
+  }
 }

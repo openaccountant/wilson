@@ -2,7 +2,7 @@ import type { LlmResponse } from '../model/types.js';
 import type { ToolDef } from '../model/types.js';
 import { callLlm } from '../model/llm.js';
 import { getTools } from '../tools/registry.js';
-import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument } from '../agent/prompts.js';
+import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext } from '../agent/prompts.js';
 import { extractTextContent, hasToolCalls } from '../utils/ai-message.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { buildHistoryContext } from '../utils/history-context.js';
@@ -49,9 +49,16 @@ export class Agent {
    */
   static async create(config: AgentConfig = {}): Promise<Agent> {
     const model = config.model ?? DEFAULT_MODEL;
-    const tools = getTools(model);
+    const tools = await getTools(model);
     const soulContent = await loadSoulDocument();
-    const systemPrompt = buildSystemPrompt(model, soulContent);
+    let systemPrompt = await buildSystemPrompt(model, soulContent);
+
+    // Inject budget context if budgets are configured
+    const budgetContext = buildBudgetContext();
+    if (budgetContext) {
+      systemPrompt += `\n\n${budgetContext}`;
+    }
+
     return new Agent(config, tools, systemPrompt);
   }
 
