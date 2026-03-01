@@ -1,0 +1,4 @@
+name: profit-loss
+description: Generate profit and loss (income statement) report with revenue and expense breakdown
+tier: paid
+steps: []   # Fetched from server at runtime

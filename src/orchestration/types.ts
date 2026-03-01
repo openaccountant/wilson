@@ -19,6 +19,8 @@ export interface ChainDef {
   name: string;
   description: string;
   steps: ChainStep[];
+  /** Content tier — defaults to 'free' */
+  tier?: 'free' | 'paid';
 }
 
 export interface ChainRunOptions {

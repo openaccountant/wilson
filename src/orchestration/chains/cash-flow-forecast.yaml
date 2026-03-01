@@ -1,0 +1,4 @@
+name: cash-flow-forecast
+description: Forecast cash flow by analyzing income/expense trends and projecting future balances
+tier: paid
+steps: []   # Fetched from server at runtime

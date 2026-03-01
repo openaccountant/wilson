@@ -1,0 +1,4 @@
+name: quarterly-taxes
+description: Calculate quarterly estimated tax payments for self-employed individuals
+tier: paid
+steps: []   # Fetched from server at runtime

@@ -1,0 +1,4 @@
+name: contractor-tracking
+description: Track payments to contractors and freelancers for 1099-NEC filing
+tier: paid
+steps: []   # Fetched from server at runtime

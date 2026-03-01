@@ -83,7 +83,7 @@ export async function runChain(
   let currentInput = input;
 
   for (const step of chain.steps) {
-    const tools = step.tools ? getToolsByNames(step.tools) : [];
+    const tools = step.tools ? await getToolsByNames(step.tools) : [];
     const model = step.model ?? options.model;
     const maxIterations = step.maxIterations ?? DEFAULT_MAX_STEP_ITERATIONS;
 

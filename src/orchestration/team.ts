@@ -125,7 +125,7 @@ Assign a specific subtask to each relevant member. Not all members need to be us
     .filter((a) => memberMap.has(a.memberId))
     .map(async (assignment) => {
       const member = memberMap.get(assignment.memberId)!;
-      const tools = member.tools ? getToolsByNames(member.tools) : [];
+      const tools = member.tools ? await getToolsByNames(member.tools) : [];
       const model = member.model ?? options.model;
       const maxIterations = member.maxIterations ?? DEFAULT_MAX_MEMBER_ITERATIONS;
 

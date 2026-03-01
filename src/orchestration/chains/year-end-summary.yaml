@@ -1,0 +1,16 @@
+name: year-end-summary
+description: Generate a comprehensive annual financial summary with trends and highlights
+tier: free
+steps:
+  - id: monthly-breakdown
+    tools: [spending_summary]
+    systemPrompt: Generate month-by-month spending totals for the year. Include total per month.
+  - id: category-analysis
+    tools: [spending_summary, transaction_search]
+    systemPrompt: Break down annual spending by category. Show totals and identify trends.
+  - id: highlights
+    tools: [anomaly_detect, transaction_search]
+    systemPrompt: Identify biggest purchases, subscription changes, and notable spending trends for the year.
+  - id: report
+    tools: [spending_summary, export_transactions]
+    systemPrompt: Synthesize all prior steps into a clean annual financial summary with key takeaways. Offer to export if desired.

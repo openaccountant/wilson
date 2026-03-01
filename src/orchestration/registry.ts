@@ -4,7 +4,8 @@ import type { ToolDef } from '../model/types.js';
 import type { ChainDef, TeamDef } from './types.js';
 import { runChain } from './chain.js';
 import { runTeam } from './team.js';
-import { discoverChains, discoverTeams } from './loader.js';
+import { discoverChains, discoverTeams, loadPaidChainSteps } from './loader.js';
+import { hasLicense } from '../licensing/license.js';
 
 /**
  * Convert a chain definition into a tool that the main agent can invoke.
@@ -50,11 +51,28 @@ export function teamToTool(team: TeamDef): ToolDef {
 
 /**
  * Discover all chains and teams, convert them to tools.
+ * Skips paid chains/teams that the user doesn't have a license for.
+ * For paid chains with a valid license, fetches steps from the server.
  */
-export function getOrchestrationTools(): ToolDef[] {
+export async function getOrchestrationTools(): Promise<ToolDef[]> {
   const tools: ToolDef[] = [];
 
   for (const chain of discoverChains()) {
+    // Skip unlicensed paid chains
+    if (chain.tier === 'paid' && !hasLicense(chain.name)) {
+      continue;
+    }
+
+    // For paid chains with license, fetch steps from server
+    if (chain.tier === 'paid' && chain.steps.length === 0) {
+      const steps = await loadPaidChainSteps(chain.name);
+      if (steps && steps.length > 0) {
+        chain.steps = steps;
+      } else {
+        continue; // Can't run without steps
+      }
+    }
+
     tools.push(chainToTool(chain));
   }
 

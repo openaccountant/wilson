@@ -1,0 +1,4 @@
+name: rental-property
+description: Track rental income and expenses per property, generate Schedule E summary
+tier: paid
+steps: []   # Fetched from server at runtime

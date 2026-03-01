@@ -1,0 +1,4 @@
+name: tax-prep
+description: Analyze transactions for tax-deductible expenses and generate Schedule C summary
+tier: paid
+steps: []   # Fetched from server at runtime

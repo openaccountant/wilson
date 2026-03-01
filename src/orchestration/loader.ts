@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import yaml from 'js-yaml';
-import type { ChainDef, TeamDef } from './types.js';
+import type { ChainDef, ChainStep, TeamDef } from './types.js';
+import { fetchPaidChainSteps } from '../content/fetcher.js';
 
 /**
  * Directories to search for chain/team YAML definitions (in priority order).
@@ -73,4 +74,12 @@ export function discoverTeams(): TeamDef[] {
   }
 
   return Array.from(teams.values());
+}
+
+/**
+ * Fetch paid chain steps from the content server.
+ * Returns the chain steps array, or null if unauthorized/unavailable.
+ */
+export async function loadPaidChainSteps(chainName: string): Promise<ChainStep[] | null> {
+  return fetchPaidChainSteps(chainName);
 }
