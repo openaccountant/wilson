@@ -3,6 +3,7 @@ import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { insertTransactions, recordImport, type TransactionInsert } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
+import { hasLicense } from '../../licensing/license.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -61,6 +62,13 @@ export const monarchImportTool = defineTool({
       .describe('End date filter (YYYY-MM-DD)'),
   }),
   func: async ({ limit = 500, startDate, endDate }) => {
+    // Pro license gate
+    if (!hasLicense('pro')) {
+      return formatToolResult({
+        error: 'Monarch import is a Pro feature. Run `/license` for details or visit openspend.com/pricing.',
+      });
+    }
+
     const database = getDb();
 
     // 1. Authenticate with Monarch

@@ -24,7 +24,7 @@ export interface RegisteredTool {
 // ============================================================================
 
 const MONARCH_IMPORT_DESCRIPTION = `
-Import transactions from Monarch Money into the local database.
+**Requires Pro license.** Import transactions from Monarch Money into the local database.
 
 ## When to Use
 
@@ -162,6 +162,47 @@ Detect unusual transactions, duplicate charges, and subscription issues.
 - For subscription analysis, identifies recurring charges and estimates monthly/annual cost
 `.trim();
 
+const BUDGET_SET_DESCRIPTION = `
+Set or update a monthly spending budget for a category.
+
+## When to Use
+
+- When the user wants to set a spending limit for a category
+- When the user says "set budget", "limit my spending", or "I want to spend no more than..."
+- When updating an existing budget amount
+
+## When NOT to Use
+
+- When the user wants to check budget status (use budget_check instead)
+- When the user is asking about spending without setting limits
+
+## Usage Notes
+
+- One budget per category — setting a new amount overwrites the old one
+- Category names should match the categorization system (e.g., Dining, Groceries, Shopping)
+`.trim();
+
+const BUDGET_CHECK_DESCRIPTION = `
+Compare actual spending vs budget limits for a month.
+
+## When to Use
+
+- When the user asks "am I over budget", "how's my budget", or "budget status"
+- When the user wants to see remaining spending capacity
+- When the user asks about spending relative to limits
+
+## When NOT to Use
+
+- When the user wants to set or change budget limits (use budget_set instead)
+- When the user wants spending summaries without budget context (use spending_summary)
+
+## Usage Notes
+
+- Shows per-category breakdown: budget, actual, remaining, % used, over/under status
+- Defaults to current month if no month specified
+- Can filter to a single category
+`.trim();
+
 const EXPORT_TRANSACTIONS_DESCRIPTION = `
 Export transactions to CSV or XLSX files.
 
@@ -182,6 +223,28 @@ Export transactions to CSV or XLSX files.
 - Can filter by date range, category, and merchant/description
 - Resolves ~ in file paths to home directory
 - Exported columns: date, description, amount, category
+`.trim();
+
+const PLAID_SYNC_DESCRIPTION = `
+**Requires Pro license.** Sync transactions from linked bank accounts via Plaid.
+
+## When to Use
+
+- When the user says "sync", "pull transactions", or "update from bank"
+- When the user wants to import latest transactions from linked accounts
+- After the user has connected a bank account with /connect
+
+## When NOT to Use
+
+- When the user wants to import from a CSV file (use csv_import instead)
+- When no bank accounts are linked (direct user to /connect first)
+
+## Usage Notes
+
+- Requires linked Plaid accounts (set up via /connect)
+- Uses incremental sync — only fetches new transactions since last sync
+- Deduplicates against previously synced transactions via plaid_transaction_id
+- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
 `.trim();
 
 const WEB_SEARCH_DESCRIPTION = `
@@ -233,7 +296,7 @@ function safeRequire<T>(modulePath: string): T | null {
  * @param model - The model name (needed for tools that require model-specific configuration)
  * @returns Array of registered tools
  */
-export function getToolRegistry(model: string): RegisteredTool[] {
+export async function getToolRegistry(model: string): Promise<RegisteredTool[]> {
   const tools: RegisteredTool[] = [];
 
   // Always-available tools (gracefully skip if not yet implemented)
@@ -247,16 +310,13 @@ export function getToolRegistry(model: string): RegisteredTool[] {
     });
   }
 
-  // Conditional: monarch_import (if Monarch credentials are configured)
-  if (process.env.MONARCH_TOKEN || (process.env.MONARCH_EMAIL && process.env.MONARCH_PASSWORD)) {
-    const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>('./import/monarch.js');
-    if (monarchMod?.monarchImportTool) {
-      tools.push({
-        name: 'monarch_import',
-        tool: monarchMod.monarchImportTool,
-        description: MONARCH_IMPORT_DESCRIPTION,
-      });
-    }
+  const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>('./import/monarch.js');
+  if (monarchMod?.monarchImportTool) {
+    tools.push({
+      name: 'monarch_import',
+      tool: monarchMod.monarchImportTool,
+      description: MONARCH_IMPORT_DESCRIPTION,
+    });
   }
 
   const catMod = safeRequire<{ categorizeTool: ToolDef }>('./categorize/categorize.js');
@@ -301,6 +361,34 @@ export function getToolRegistry(model: string): RegisteredTool[] {
       name: 'export_transactions',
       tool: exportMod.exportTransactionsTool,
       description: EXPORT_TRANSACTIONS_DESCRIPTION,
+    });
+  }
+
+  // Budget tools (always available)
+  const budgetSetMod = safeRequire<{ budgetSetTool: ToolDef }>('./budget/budget-set.js');
+  if (budgetSetMod?.budgetSetTool) {
+    tools.push({
+      name: 'budget_set',
+      tool: budgetSetMod.budgetSetTool,
+      description: BUDGET_SET_DESCRIPTION,
+    });
+  }
+
+  const budgetCheckMod = safeRequire<{ budgetCheckTool: ToolDef }>('./budget/budget-check.js');
+  if (budgetCheckMod?.budgetCheckTool) {
+    tools.push({
+      name: 'budget_check',
+      tool: budgetCheckMod.budgetCheckTool,
+      description: BUDGET_CHECK_DESCRIPTION,
+    });
+  }
+
+  const plaidMod = safeRequire<{ plaidSyncTool: ToolDef }>('./import/plaid-sync.js');
+  if (plaidMod?.plaidSyncTool) {
+    tools.push({
+      name: 'plaid_sync',
+      tool: plaidMod.plaidSyncTool,
+      description: PLAID_SYNC_DESCRIPTION,
     });
   }
 
@@ -363,7 +451,7 @@ export function getToolRegistry(model: string): RegisteredTool[] {
   }
 
   // Orchestration: chains + teams registered as tools
-  for (const orchTool of getOrchestrationTools()) {
+  for (const orchTool of await getOrchestrationTools()) {
     tools.push({
       name: orchTool.name,
       tool: orchTool,
@@ -380,8 +468,8 @@ export function getToolRegistry(model: string): RegisteredTool[] {
  * @param model - The model name
  * @returns Array of tool instances
  */
-export function getTools(model: string): ToolDef[] {
-  return getToolRegistry(model).map((t) => t.tool);
+export async function getTools(model: string): Promise<ToolDef[]> {
+  return (await getToolRegistry(model)).map((t) => t.tool);
 }
 
 /**
@@ -390,9 +478,9 @@ export function getTools(model: string): ToolDef[] {
  * @param names - Array of tool names to resolve
  * @returns Array of matching tool instances
  */
-export function getToolsByNames(names: string[]): ToolDef[] {
+export async function getToolsByNames(names: string[]): Promise<ToolDef[]> {
   // Use a default model since tool availability is mostly API-key based
-  const registry = getToolRegistry('gpt-5.2');
+  const registry = await getToolRegistry('gpt-5.2');
   const nameSet = new Set(names);
   return registry.filter((t) => nameSet.has(t.name)).map((t) => t.tool);
 }
@@ -404,8 +492,8 @@ export function getToolsByNames(names: string[]): ToolDef[] {
  * @param model - The model name
  * @returns Formatted string with all tool descriptions
  */
-export function buildToolDescriptions(model: string): string {
-  return getToolRegistry(model)
+export async function buildToolDescriptions(model: string): Promise<string> {
+  return (await getToolRegistry(model))
     .map((t) => `### ${t.name}\n\n${t.description}`)
     .join('\n\n');
 }

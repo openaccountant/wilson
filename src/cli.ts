@@ -46,10 +46,20 @@ import { initSpendingSummaryTool } from './tools/query/spending-summary.js';
 import { initAnomalyDetectTool } from './tools/query/anomaly-detect.js';
 import { initMonarchTool } from './tools/import/monarch.js';
 import { initExportTool } from './tools/export/export-transactions.js';
+import { initBudgetSetTool } from './tools/budget/budget-set.js';
+import { initBudgetCheckTool } from './tools/budget/budget-check.js';
+import { setBudget, clearBudget, getBudgetVsActual } from './db/queries.js';
+import { initBudgetPrompt } from './agent/prompts.js';
+import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
+import { getPlaidItems, removePlaidItem } from './plaid/store.js';
+import { startPlaidLinkServer } from './plaid/link-server.js';
 import { initMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
 import { pullOllamaModel, RECOMMENDED_OLLAMA_MODELS } from './utils/model-downloader.js';
 import { discoverSkills } from './skills/registry.js';
+import { validateLicense, getLicenseInfo, deactivateLicense, hasLicense } from './licensing/license.js';
+import { getSchedules, addSchedule, removeSchedule, toggleSchedule } from './schedule/store.js';
+import { syncCrontab } from './schedule/cron.js';
 
 function truncateAtWord(str: string, maxLength: number): string {
   if (str.length <= maxLength) {
@@ -232,6 +242,10 @@ export async function runCli() {
   initAnomalyDetectTool(db);
   initMonarchTool(db);
   initExportTool(db);
+  initBudgetSetTool(db);
+  initBudgetCheckTool(db);
+  initBudgetPrompt(db);
+  initPlaidSyncTool(db);
 
   // Initialize MCP client connections (non-blocking — failures are logged, not fatal)
   await initMcpClients();
@@ -276,6 +290,11 @@ export async function runCli() {
   const slashCommands: SlashCommand[] = [
     { name: 'model', description: 'Switch LLM provider and model' },
     { name: 'pull', description: 'Download an Ollama model' },
+    { name: 'license', description: 'Manage your license key' },
+    { name: 'budget', description: 'View and set spending budgets' },
+    { name: 'connect', description: 'Link a bank account via Plaid' },
+    { name: 'sync', description: 'Pull latest transactions from linked banks' },
+    { name: 'schedule', description: 'Manage scheduled tasks (add/remove/pause/resume)' },
     { name: 'help', description: 'Show available commands' },
     ...RECOMMENDED_OLLAMA_MODELS.map((m) => ({
       name: `pull ${m.name}`,
@@ -352,9 +371,14 @@ export async function runCli() {
     if (query === '/help') {
       chatLog.addQuery(query);
       const commands = [
-        '  /model  — Switch LLM provider and model',
-        '  /pull   — Download an Ollama model (e.g. /pull granite3-dense:2b)',
-        '  /help   — Show this help message',
+        '  /model    — Switch LLM provider and model',
+        '  /pull     — Download an Ollama model (e.g. /pull granite3-dense:2b)',
+        '  /connect  — Link a bank account via Plaid (Pro)',
+        '  /sync     — Pull latest transactions from linked banks (Pro)',
+        '  /budget   — View budget vs actual (set/clear with /budget set|clear)',
+        '  /license  — Manage your license key',
+        '  /schedule — Manage scheduled tasks',
+        '  /help     — Show this help message',
         ...discoverSkills().map((s) => `  /skill ${s.name}  — ${s.description}`),
       ];
       chatLog.finalizeAnswer(`**Available commands:**\n\n${commands.join('\n')}`);
@@ -381,6 +405,323 @@ export async function runCli() {
         chatLog.finalizeAnswer(`**${modelName}** downloaded successfully. Use \`/model\` to select it.`);
       } catch (err) {
         chatLog.finalizeAnswer(`Failed to pull **${modelName}**: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/connect' || query.startsWith('/connect ')) {
+      chatLog.addQuery(query);
+      if (!hasLicense('pro')) {
+        chatLog.finalizeAnswer(
+          '**Bank sync is a Pro feature.**\n\n' +
+          'Connect your bank for automatic transaction imports — no more CSV downloads.\n\n' +
+          'Activate with: `/license activate <key>`\n' +
+          'Get Pro at: openspend.com/pricing'
+        );
+        tui.requestRender();
+        return;
+      }
+      const subcommand = query.slice(8).trim();
+
+      if (subcommand === 'list') {
+        const items = getPlaidItems();
+        if (items.length === 0) {
+          chatLog.finalizeAnswer('No bank accounts linked. Use `/connect` to link one.');
+        } else {
+          let result = '**Linked Accounts**\n\n';
+          for (const item of items) {
+            const accounts = item.accounts.map((a) => `${a.name} (****${a.mask})`).join(', ');
+            result += `  **${item.institutionName}** — ${accounts}\n`;
+            result += `  Linked: ${new Date(item.linkedAt).toLocaleDateString()}\n\n`;
+          }
+          chatLog.finalizeAnswer(result);
+        }
+      } else if (subcommand.startsWith('remove ')) {
+        const institution = subcommand.slice(7).trim();
+        if (!institution) {
+          chatLog.finalizeAnswer('Usage: `/connect remove <institution name>`');
+        } else {
+          const removed = removePlaidItem(institution);
+          chatLog.finalizeAnswer(removed
+            ? `Unlinked **${institution}**.`
+            : `No linked account found for "${institution}".`);
+        }
+      } else {
+        // Launch Plaid Link
+        if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+          chatLog.finalizeAnswer(
+            'Plaid not configured. Set `PLAID_CLIENT_ID` and `PLAID_SECRET` environment variables.\n\n' +
+            'Get free sandbox credentials at: https://dashboard.plaid.com'
+          );
+        } else {
+          chatLog.finalizeAnswer('Opening Plaid Link in your browser...');
+          tui.requestRender();
+          try {
+            const item = await startPlaidLinkServer();
+            if (item) {
+              const accounts = item.accounts.map((a) => `${a.name} (****${a.mask})`).join(', ');
+              chatLog.finalizeAnswer(
+                `Bank linked! **${item.institutionName}** — ${accounts}\n\n` +
+                `Use \`/sync\` to pull transactions.`
+              );
+            } else {
+              chatLog.finalizeAnswer('Bank linking was cancelled or timed out.');
+            }
+          } catch (err) {
+            chatLog.finalizeAnswer(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/sync') {
+      chatLog.addQuery(query);
+      if (!hasLicense('pro')) {
+        chatLog.finalizeAnswer(
+          '**Bank sync is a Pro feature.**\n\n' +
+          'Automatically pull transactions from your linked bank accounts.\n\n' +
+          'Activate with: `/license activate <key>`\n' +
+          'Get Pro at: openspend.com/pricing'
+        );
+        tui.requestRender();
+        return;
+      }
+      const items = getPlaidItems();
+      if (items.length === 0) {
+        chatLog.finalizeAnswer('No bank accounts linked. Use `/connect` to link one first.');
+      } else {
+        chatLog.finalizeAnswer('Syncing transactions...');
+        tui.requestRender();
+        // Route through agent so it uses the plaid_sync tool
+        await inputHistory.saveMessage(query);
+        inputHistory.resetNavigation();
+        const result = await agentRunner.runQuery('Sync my bank transactions using the plaid_sync tool');
+        if (result?.answer) {
+          await inputHistory.updateAgentResponse(result.answer);
+        }
+        refreshError();
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/budget' || query.startsWith('/budget ')) {
+      chatLog.addQuery(query);
+      const subcommand = query.slice(7).trim();
+
+      if (subcommand.startsWith('set ')) {
+        // /budget set <category> <amount>
+        const parts = subcommand.slice(4).trim();
+        const lastSpace = parts.lastIndexOf(' ');
+        if (lastSpace === -1) {
+          chatLog.finalizeAnswer('Usage: `/budget set <category> <amount>`\nExample: `/budget set Dining 400`');
+        } else {
+          const category = parts.slice(0, lastSpace).trim();
+          const amount = parseFloat(parts.slice(lastSpace + 1));
+          if (isNaN(amount) || amount <= 0) {
+            chatLog.finalizeAnswer('Invalid amount. Usage: `/budget set <category> <amount>`');
+          } else {
+            setBudget(db, category, amount);
+            chatLog.finalizeAnswer(`Budget set: **${category}** → $${amount}/month`);
+          }
+        }
+      } else if (subcommand.startsWith('clear ')) {
+        const category = subcommand.slice(6).trim();
+        if (!category) {
+          chatLog.finalizeAnswer('Usage: `/budget clear <category>`');
+        } else {
+          const removed = clearBudget(db, category);
+          chatLog.finalizeAnswer(removed
+            ? `Budget removed for **${category}**.`
+            : `No budget found for "${category}".`);
+        }
+      } else {
+        // Show current month budget vs actual
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const results = getBudgetVsActual(db, currentMonth);
+        if (results.length === 0) {
+          chatLog.finalizeAnswer('No budgets set. Use `/budget set <category> <amount>` to create one.');
+        } else {
+          let table = `**Budget vs Actual — ${currentMonth}**\n\n`;
+          table += '| Category | Budget | Actual | Remaining | Used |\n';
+          table += '|----------|--------|--------|-----------|------|\n';
+          for (const r of results) {
+            const status = r.over ? `**${r.percent_used}% OVER**` : `${r.percent_used}%`;
+            const rem = r.over ? `-$${Math.abs(r.remaining).toFixed(0)}` : `$${r.remaining.toFixed(0)}`;
+            table += `| ${r.category} | $${r.monthly_limit.toFixed(0)} | $${r.actual.toFixed(0)} | ${rem} | ${status} |\n`;
+          }
+          chatLog.finalizeAnswer(table);
+        }
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/license' || query.startsWith('/license ')) {
+      chatLog.addQuery(query);
+      const subcommand = query.slice(8).trim();
+
+      if (subcommand.startsWith('activate ')) {
+        const key = subcommand.slice(9).trim();
+        if (!key) {
+          chatLog.finalizeAnswer('Usage: `/license activate <key>`');
+        } else {
+          chatLog.finalizeAnswer('Validating license key...');
+          tui.requestRender();
+          try {
+            const result = await validateLicense(key);
+            const products = result.products.length > 0 ? result.products.join(', ') : 'all products';
+            chatLog.finalizeAnswer(
+              `License activated!\n\n` +
+              `  **Email:** ${result.email || '(none)'}\n` +
+              `  **Products:** ${products}\n` +
+              `  **Valid until:** ${new Date(result.validUntil).toLocaleDateString()}`
+            );
+          } catch (err) {
+            chatLog.finalizeAnswer(`License activation failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      } else if (subcommand === 'deactivate') {
+        deactivateLicense();
+        chatLog.finalizeAnswer('License deactivated. Paid features are now locked.');
+      } else {
+        // Show current license status
+        const info = getLicenseInfo();
+        if (info) {
+          const products = info.products.length > 0 ? info.products.join(', ') : 'all products';
+          chatLog.finalizeAnswer(
+            `**License Status**\n\n` +
+            `  **Email:** ${info.email || '(none)'}\n` +
+            `  **Products:** ${products}\n` +
+            `  **Valid until:** ${new Date(info.validUntil).toLocaleDateString()}\n` +
+            `  **Last validated:** ${new Date(info.validatedAt).toLocaleDateString()}\n\n` +
+            `Commands: \`/license activate <key>\` · \`/license deactivate\``
+          );
+        } else {
+          chatLog.finalizeAnswer(
+            `No license active.\n\n` +
+            `Activate with: \`/license activate <key>\`\n` +
+            `Get a key at: openspend.com/pricing`
+          );
+        }
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/schedule' || query.startsWith('/schedule ')) {
+      chatLog.addQuery(query);
+      const subcommand = query.slice(9).trim();
+
+      if (subcommand.startsWith('add ')) {
+        // /schedule add "0 8 * * *" Sync my bank transactions
+        const rest = subcommand.slice(4).trim();
+        // Parse cron expression (in quotes) and query
+        const cronMatch = rest.match(/^"([^"]+)"\s+(.+)$/);
+        if (!cronMatch) {
+          chatLog.finalizeAnswer(
+            'Usage: `/schedule add "<cron>" <query>`\n' +
+            'Example: `/schedule add "0 8 * * *" Sync my bank transactions`'
+          );
+        } else {
+          const [, cron, scheduleQuery] = cronMatch;
+          const schedule = addSchedule({
+            query: scheduleQuery,
+            cron,
+            label: scheduleQuery,
+            enabled: true,
+          });
+          try {
+            syncCrontab();
+            chatLog.finalizeAnswer(
+              `Schedule added!\n\n` +
+              `  **ID:** ${schedule.id.slice(0, 8)}...\n` +
+              `  **Cron:** ${cron}\n` +
+              `  **Query:** ${scheduleQuery}\n` +
+              `  **Status:** enabled`
+            );
+          } catch (err) {
+            chatLog.finalizeAnswer(
+              `Schedule saved but crontab update failed: ${err instanceof Error ? err.message : String(err)}\n\n` +
+              `The schedule is stored but won't run automatically until crontab is fixed.`
+            );
+          }
+        }
+      } else if (subcommand.startsWith('remove ')) {
+        const id = subcommand.slice(7).trim();
+        // Support partial ID matching
+        const schedules = getSchedules();
+        const match = schedules.find((s) => s.id === id || s.id.startsWith(id));
+        if (!match) {
+          chatLog.finalizeAnswer(`No schedule found matching "${id}".`);
+        } else {
+          removeSchedule(match.id);
+          try {
+            syncCrontab();
+          } catch {
+            // Best effort crontab sync
+          }
+          chatLog.finalizeAnswer(`Schedule removed: **${match.label}**`);
+        }
+      } else if (subcommand.startsWith('pause ')) {
+        const id = subcommand.slice(6).trim();
+        const schedules = getSchedules();
+        const match = schedules.find((s) => s.id === id || s.id.startsWith(id));
+        if (!match) {
+          chatLog.finalizeAnswer(`No schedule found matching "${id}".`);
+        } else if (!match.enabled) {
+          chatLog.finalizeAnswer(`Schedule **${match.label}** is already paused.`);
+        } else {
+          toggleSchedule(match.id);
+          try {
+            syncCrontab();
+          } catch {
+            // Best effort
+          }
+          chatLog.finalizeAnswer(`Schedule paused: **${match.label}**`);
+        }
+      } else if (subcommand.startsWith('resume ')) {
+        const id = subcommand.slice(7).trim();
+        const schedules = getSchedules();
+        const match = schedules.find((s) => s.id === id || s.id.startsWith(id));
+        if (!match) {
+          chatLog.finalizeAnswer(`No schedule found matching "${id}".`);
+        } else if (match.enabled) {
+          chatLog.finalizeAnswer(`Schedule **${match.label}** is already running.`);
+        } else {
+          toggleSchedule(match.id);
+          try {
+            syncCrontab();
+          } catch {
+            // Best effort
+          }
+          chatLog.finalizeAnswer(`Schedule resumed: **${match.label}**`);
+        }
+      } else {
+        // List all schedules
+        const schedules = getSchedules();
+        if (schedules.length === 0) {
+          chatLog.finalizeAnswer(
+            'No schedules configured.\n\n' +
+            'Add one with: `/schedule add "<cron>" <query>`\n' +
+            'Example: `/schedule add "0 8 * * *" Sync my bank transactions`'
+          );
+        } else {
+          let result = '**Scheduled Tasks**\n\n';
+          result += '| Status | Cron | Query | Last Run | ID |\n';
+          result += '|--------|------|-------|----------|----|\n';
+          for (const s of schedules) {
+            const status = s.enabled ? 'active' : 'paused';
+            const lastRun = s.lastRunAt ? new Date(s.lastRunAt).toLocaleDateString() : 'never';
+            const shortId = s.id.slice(0, 8);
+            result += `| ${status} | \`${s.cron}\` | ${s.label} | ${lastRun} | ${shortId}... |\n`;
+          }
+          result += '\n**Commands:** `/schedule add` · `/schedule remove <id>` · `/schedule pause <id>` · `/schedule resume <id>`';
+          chatLog.finalizeAnswer(result);
+        }
       }
       tui.requestRender();
       return;
