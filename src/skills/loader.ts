@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import matter from 'gray-matter';
-import type { Skill, SkillSource } from './types.js';
+import type { Skill, SkillSource, SkillTier } from './types.js';
 
 /**
  * Parse a SKILL.md file content into a Skill object.
@@ -28,6 +28,7 @@ export function parseSkillFile(content: string, path: string, source: SkillSourc
     description: data.description,
     path,
     source,
+    tier: (data.tier as 'free' | 'paid') ?? 'free',
     instructions: instructions.trim(),
   };
 }
@@ -53,7 +54,7 @@ export function loadSkillFromPath(path: string, source: SkillSource): Skill {
  * @param source - Where this skill came from
  * @returns Skill metadata (name, description, path, source)
  */
-export function extractSkillMetadata(path: string, source: SkillSource): { name: string; description: string; path: string; source: SkillSource } {
+export function extractSkillMetadata(path: string, source: SkillSource): { name: string; description: string; path: string; source: SkillSource; tier: SkillTier } {
   const content = readFileSync(path, 'utf-8');
   const { data } = matter(content);
 
@@ -69,5 +70,6 @@ export function extractSkillMetadata(path: string, source: SkillSource): { name:
     description: data.description,
     path,
     source,
+    tier: (data.tier as 'free' | 'paid') ?? 'free',
   };
 }

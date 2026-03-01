@@ -7,6 +7,13 @@
 export type SkillSource = 'builtin' | 'user' | 'project';
 
 /**
+ * Tier for gating paid content.
+ * - free: Available to everyone
+ * - paid: Requires a valid license key
+ */
+export type SkillTier = 'free' | 'paid';
+
+/**
  * Skill metadata - lightweight info loaded at startup for system prompt injection.
  * Only contains the name and description from YAML frontmatter.
  */
@@ -19,6 +26,8 @@ export interface SkillMetadata {
   path: string;
   /** Where this skill was discovered from */
   source: SkillSource;
+  /** Content tier — defaults to 'free' */
+  tier: SkillTier;
 }
 
 /**

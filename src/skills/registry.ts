@@ -4,6 +4,8 @@ import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import type { SkillMetadata, Skill, SkillSource } from './types.js';
 import { extractSkillMetadata, loadSkillFromPath } from './loader.js';
+import { hasLicense } from '../licensing/license.js';
+import { fetchPaidSkillContent } from '../content/fetcher.js';
 
 // Get the directory of this file to locate builtin skills
 const __filename = fileURLToPath(import.meta.url);
@@ -80,11 +82,13 @@ export function discoverSkills(): SkillMetadata[] {
 
 /**
  * Get a skill by name, loading full instructions.
+ * For paid skills, checks license — returns a stub with upgrade message if unlicensed.
+ * For paid skills with a valid license, fetches content from the server.
  *
  * @param name - Name of the skill to load
- * @returns Full skill definition or undefined if not found
+ * @returns Full skill definition, gated stub, or undefined if not found
  */
-export function getSkill(name: string): Skill | undefined {
+export async function getSkill(name: string): Promise<Skill | undefined> {
   // Ensure cache is populated
   if (!skillMetadataCache) {
     discoverSkills();
@@ -95,7 +99,32 @@ export function getSkill(name: string): Skill | undefined {
     return undefined;
   }
 
-  // Load full skill with instructions
+  // Gate paid skills behind license check
+  if (metadata.tier === 'paid') {
+    if (!hasLicense(metadata.name)) {
+      return {
+        ...metadata,
+        instructions: `This skill requires a license. Run \`/license\` for details or visit openspend.com/pricing.`,
+      };
+    }
+
+    // Fetch full content from server
+    const serverContent = await fetchPaidSkillContent(name);
+    if (serverContent) {
+      return {
+        ...metadata,
+        instructions: serverContent,
+      };
+    }
+
+    // Server fetch failed — return stub
+    return {
+      ...metadata,
+      instructions: `This skill requires a license. Run \`/license\` for details or visit openspend.com/pricing.`,
+    };
+  }
+
+  // Load full skill with instructions (free skills — local)
   return loadSkillFromPath(metadata.path, metadata.source);
 }
 
@@ -113,7 +142,10 @@ export function buildSkillMetadataSection(): string {
   }
 
   return skills
-    .map((s) => `- **${s.name}**: ${s.description}`)
+    .map((s) => {
+      const tierLabel = s.tier === 'paid' ? ' *(paid)*' : '';
+      return `- **${s.name}**${tierLabel}: ${s.description}`;
+    })
     .join('\n');
 }
 

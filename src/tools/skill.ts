@@ -42,11 +42,20 @@ export const skillTool = defineTool({
     args: z.string().optional().describe('Optional arguments for the skill (e.g., date range)'),
   }),
   func: async ({ skill, args }) => {
-    const skillDef = getSkill(skill);
+    const skillDef = await getSkill(skill);
 
     if (!skillDef) {
       const available = discoverSkills().map((s) => s.name).join(', ');
       return `Error: Skill "${skill}" not found. Available skills: ${available || 'none'}`;
+    }
+
+    // Check if this is a gated paid skill (stub has no real instructions)
+    const metadata = discoverSkills().find((s) => s.name === skill);
+    if (metadata?.tier === 'paid') {
+      const { hasLicense } = await import('../licensing/license.js');
+      if (!hasLicense(skill)) {
+        return `The **${skillDef.name}** workflow requires a license. Run \`/license\` for details or visit openspend.com/pricing.`;
+      }
     }
 
     // Return instructions with optional args context
