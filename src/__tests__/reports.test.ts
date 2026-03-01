@@ -109,7 +109,7 @@ describe('reports', () => {
 
   describe('runExport', () => {
     test('CSV file written and non-empty', async () => {
-      const tmpFile = path.join(os.tmpdir(), `wilson-test-${Date.now()}.csv`);
+      const tmpFile = path.join(os.tmpdir(), `oa-test-${Date.now()}.csv`);
       await runExport(['--export', tmpFile], db);
       expect(fs.existsSync(tmpFile)).toBe(true);
       const content = fs.readFileSync(tmpFile, 'utf-8');
@@ -118,7 +118,7 @@ describe('reports', () => {
     });
 
     test('XLSX file written', async () => {
-      const tmpFile = path.join(os.tmpdir(), `wilson-test-${Date.now()}.xlsx`);
+      const tmpFile = path.join(os.tmpdir(), `oa-test-${Date.now()}.xlsx`);
       await runExport(['--export', tmpFile, '--format', 'xlsx'], db);
       expect(fs.existsSync(tmpFile)).toBe(true);
       const stats = fs.statSync(tmpFile);
@@ -127,8 +127,8 @@ describe('reports', () => {
     });
 
     test('category filter reduces output', async () => {
-      const allFile = path.join(os.tmpdir(), `wilson-test-all-${Date.now()}.csv`);
-      const filteredFile = path.join(os.tmpdir(), `wilson-test-filtered-${Date.now()}.csv`);
+      const allFile = path.join(os.tmpdir(), `oa-test-all-${Date.now()}.csv`);
+      const filteredFile = path.join(os.tmpdir(), `oa-test-filtered-${Date.now()}.csv`);
 
       await runExport(['--export', allFile], db);
       await runExport(['--export', filteredFile, '--category', 'Groceries'], db);

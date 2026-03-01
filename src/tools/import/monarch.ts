@@ -39,7 +39,7 @@ interface MonarchTransaction {
 
 /**
  * Monarch Money import tool — authenticates with the Monarch API,
- * fetches transactions, maps to Wilson's schema, and bulk-inserts.
+ * fetches transactions, maps to OA's schema, and bulk-inserts.
  * Deduplicates by checking for existing monarch transactions with same date/amount/description.
  */
 export const monarchImportTool = defineTool({
@@ -65,7 +65,7 @@ export const monarchImportTool = defineTool({
     // Pro license gate
     if (!hasLicense('pro')) {
       return formatToolResult({
-        error: 'Monarch import is a Pro feature. Run `/license` for details or visit agentwilson.dev/pricing.',
+        error: 'Monarch import is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
       });
     }
 
@@ -128,7 +128,7 @@ export const monarchImportTool = defineTool({
       existing.add(`${row.date}|${row.description}|${row.amount}`);
     }
 
-    // 4. Map to Wilson's schema and deduplicate
+    // 4. Map to OA's schema and deduplicate
     const txns: TransactionInsert[] = [];
     let skipped = 0;
     for (const t of rawTransactions) {
@@ -139,7 +139,7 @@ export const monarchImportTool = defineTool({
 
       const description = t.merchant?.name || t.plaidName || 'Unknown';
       const date = t.date; // Already YYYY-MM-DD from Monarch
-      // Monarch uses positive = expense, negative = income. Wilson uses negative = expense.
+      // Monarch uses positive = expense, negative = income. OA uses negative = expense.
       const amount = -t.amount;
 
       const key = `${date}|${description}|${amount}`;

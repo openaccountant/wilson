@@ -103,7 +103,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.current }}
         run: |
           cat > /tmp/docs-issue-body.md <<'HEADER'
-          Wilson CLI has been released with a new version.
+          Open Accountant CLI has been released with a new version.
 
           ## Changelog
 
@@ -126,10 +126,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.current }}
         run: |
           # Replace OWNER/APP_REPO with your docs site repo
-          DOCS_REPO="agent-wilson/app"
+          DOCS_REPO="open-accountant/app"
 
           gh issue create \
             --repo "$DOCS_REPO" \
-            --title "docs: update for Wilson CLI v${VERSION}" \
+            --title "docs: update for Open Accountant CLI v${VERSION}" \
             --body-file /tmp/docs-issue-body.md \
           || echo "::warning::Could not create docs issue — is DOCS_ISSUE_TOKEN configured?"

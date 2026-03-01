@@ -13,7 +13,7 @@ function buildLinkPage(linkToken: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Wilson — Connect Bank</title>
+  <title>Open Accountant — Connect Bank</title>
   <meta charset="utf-8" />
   <style>
     body {
@@ -31,7 +31,7 @@ function buildLinkPage(linkToken: string): string {
 </head>
 <body>
   <div class="container">
-    <h1>Wilson — Connect Bank</h1>
+    <h1>Open Accountant — Connect Bank</h1>
     <p>Plaid Link will open automatically...</p>
     <div id="status"></div>
   </div>
@@ -50,7 +50,7 @@ function buildLinkPage(linkToken: string): string {
           const data = await res.json();
           document.getElementById('status').className = 'success';
           document.getElementById('status').textContent =
-            'Connected! You can close this window and return to Wilson.';
+            'Connected! You can close this window and return to Open Accountant.';
         } catch (err) {
           document.getElementById('status').className = 'error';
           document.getElementById('status').textContent = 'Error: ' + err.message;

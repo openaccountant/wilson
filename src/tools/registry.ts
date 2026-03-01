@@ -644,7 +644,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     tools.push({ name: 'generate_report', tool: reportMod.generateReportTool, description: GENERATE_REPORT_DESCRIPTION });
   }
 
-  // MCP tools (loaded at startup from ~/.agentwilson/mcp.json)
+  // MCP tools (loaded at startup from ~/.openaccountant/mcp.json)
   for (const mcpTool of getCachedMcpTools()) {
     tools.push({
       name: mcpTool.name,

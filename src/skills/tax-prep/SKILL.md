@@ -7,4 +7,4 @@ description: >
   user asks about taxes, deductions, Schedule C, business expenses, or tax prep.
 ---
 
-This workflow requires a license. Visit agentwilson.dev/pricing for details.
+This workflow requires a license. Visit openaccountant.ai/pricing for details.

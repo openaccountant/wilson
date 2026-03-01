@@ -9,11 +9,11 @@ export interface RecommendedModel {
   desc: string;
 }
 
-// Curated models — prioritizes tool-calling support (critical for Wilson's agent loop),
+// Curated models — prioritizes tool-calling support (critical for Open Accountant's agent loop),
 // small size, and current-generation quality. Updated 2026-03.
 // Sources: ollama.com/search?c=tools, HuggingFace SLM research, NVIDIA SLM-Agents paper.
 export const RECOMMENDED_OLLAMA_MODELS: RecommendedModel[] = [
-  // ── Tool-calling models (work with Wilson's agent tool system) ──────────
+  // ── Tool-calling models (work with Open Accountant's agent tool system) ──────────
   { name: 'qwen3:0.6b',      size: '523 MB', tags: ['open', 'local', 'small'], desc: 'Alibaba — smallest tool-calling model' },
   { name: 'qwen3:4b',        size: '2.5 GB', tags: ['open', 'local', 'small'], desc: 'Alibaba — rivals 72B quality, tool-calling' },
   { name: 'qwen3:8b',        size: '5.2 GB', tags: ['open', 'local'],          desc: 'Alibaba — best balance, tool-calling' },

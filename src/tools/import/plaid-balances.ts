@@ -12,7 +12,7 @@ export const plaidBalancesTool = defineTool({
   func: async () => {
     if (!hasLicense('pro')) {
       return formatToolResult({
-        error: 'Account balances is a Pro feature. Run `/license` for details or visit agentwilson.dev/pricing.',
+        error: 'Account balances is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
       });
     }
 

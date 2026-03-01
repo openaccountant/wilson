@@ -1,8 +1,8 @@
 /**
  * Source of a skill definition.
- * - builtin: Shipped with Wilson (src/skills/builtin/)
- * - user: User-level skills (~/.agentwilson/skills/)
- * - project: Project-level skills (.agentwilson/skills/)
+ * - builtin: Shipped with Open Accountant (src/skills/builtin/)
+ * - user: User-level skills (~/.openaccountant/skills/)
+ * - project: Project-level skills (.openaccountant/skills/)
  */
 export type SkillSource = 'builtin' | 'user' | 'project';
 

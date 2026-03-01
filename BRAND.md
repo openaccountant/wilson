@@ -1,4 +1,4 @@
-# Wilson / OpenSpend — Brand Guide
+# Open Accountant — Brand Guide
 
 **Style: Forensic Noir**
 
@@ -17,7 +17,7 @@ Named after Frank J. Wilson, the forensic accountant who followed the money to c
 
 ### What It Is Not
 
-- **Not Swiss/International** — Too neutral, too corporate. Wilson has a point of view.
+- **Not Swiss/International** — Too neutral, too corporate. Open Accountant has a point of view.
 - **Not cyberpunk/hacker** — Chaos undermines trust. People's money is on the line.
 - **Not fintech-pastel** — No rounded-corner cards with gradient backgrounds. That's the competition.
 - **Not brutalist** — We're direct, not hostile.
@@ -117,8 +117,8 @@ All monospace. The terminal is the medium.
 
 | Symbol | Unicode | Meaning |
 |---|---|---|
-| `$` | U+0024 | Wilson's signature. Money. The brand. |
-| `⏺` | U+23FA | Wilson is speaking (answer marker) |
+| `$` | U+0024 | Open Accountant's signature. Money. The brand. |
+| `⏺` | U+23FA | Open Accountant is speaking (answer marker) |
 | `⏺` | U+23FA | Tool execution |
 | `⎿` | U+23BF | Continuation / nested detail |
 | `❯` | U+276F | User prompt |
@@ -157,7 +157,7 @@ From `SOUL.md`, codified for all surfaces:
 2. **CTAs**: Short verb phrases. "Get started." "Import transactions." "See the breakdown."
 3. **Error messages**: Say what happened, then what to do. "Import failed — the CSV has no date column. Check the file format."
 4. **Empty states**: Brief, useful. "No transactions yet. Import a CSV or connect Monarch to get started."
-5. **Marketing copy**: Lead with the pain. "Every finance app stops at charts. Wilson tells you what to do."
+5. **Marketing copy**: Lead with the pain. "Every finance app stops at charts. Open Accountant tells you what to do."
 
 ---
 
@@ -187,10 +187,10 @@ From `SOUL.md`, codified for all surfaces:
 
 ### x402 Protocol
 
-Wilson's marketplace supports [x402](https://www.x402.org/) — the HTTP-native payment standard built on the `402 Payment Required` status code. This enables:
+Open Accountant's marketplace supports [x402](https://www.x402.org/) — the HTTP-native payment standard built on the `402 Payment Required` status code. This enables:
 
 - **Per-skill pricing** — Individual skills (tax prep, subscription audit, rental property) purchasable via single HTTP request
-- **Agent-to-agent payments** — Wilson can pay for external services (data providers, APIs) autonomously
+- **Agent-to-agent payments** — Open Accountant can pay for external services (data providers, APIs) autonomously
 - **Micro-transactions** — Charges as low as $0.001 per request for granular usage-based pricing
 - **No payment forms** — Payment is in the protocol. The `$` in the ASCII art isn't just branding, it's functional.
 
@@ -206,7 +206,7 @@ Wilson's marketplace supports [x402](https://www.x402.org/) — the HTTP-native 
 The marketplace is designed for [Web 4.0](https://web4.ai/) — the AI-agent layer of the internet where autonomous agents transact on behalf of users.
 
 **Design implications:**
-- **Agent activity indicators** — Show when Wilson is transacting autonomously. Use the tool event pattern (`⏺` + `⎿`) adapted for the web.
+- **Agent activity indicators** — Show when Open Accountant is transacting autonomously. Use the tool event pattern (`⏺` + `⎿`) adapted for the web.
 - **Trust through transparency** — Every agent action should be visible and auditable. No black boxes.
 - **Machine-readable, human-reviewable** — Interfaces serve both agents (structured data, APIs) and humans (rendered, styled). Same data, two presentations.
 - **Skill marketplace cards** — Each skill is a purchasable unit. Card design: `slate` background, `money` green price badge, description in `ledger`, metadata in `ink`.
@@ -253,9 +253,9 @@ The marketplace is designed for [Web 4.0](https://web4.ai/) — the AI-agent lay
 
 ## Brand Mark
 
-The `$` is the brand. The ASCII block-letter "Wilson" with `$` characters is the primary mark for the CLI. For the web:
+The `$` is the brand. The ASCII block-letter "Open Accountant" with `$` characters is the primary mark for the CLI. For the web:
 
-- **Wordmark**: "Wilson" in Space Grotesk 700, with the period from "Wilson." rendered in `money` green.
+- **Wordmark**: "Open Accountant" in Space Grotesk 700, with the period from "Open Accountant." rendered in `money` green.
 - **Icon**: A single `$` in JetBrains Mono Bold, `money` green on `void` background. Used for favicons, app icons, social.
 - **Tagline**: "Follow the money." — Always with the period.
 
@@ -271,7 +271,7 @@ The `$` is the brand. The ASCII block-letter "Wilson" with `$` characters is the
 
 | File | Purpose |
 |---|---|
-| `SOUL.md` | Wilson's personality, values, anti-patterns |
+| `SOUL.md` | Open Accountant's personality, values, anti-patterns |
 | `BRAND.md` | This file. Visual identity and design system |
 | `src/theme.ts` | CLI color tokens and chalk theme implementation |
 | `src/components/` | TUI component library |

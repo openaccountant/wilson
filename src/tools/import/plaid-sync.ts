@@ -21,7 +21,7 @@ export const plaidSyncTool = defineTool({
     // Pro license gate
     if (!hasLicense('pro')) {
       return formatToolResult({
-        error: 'Bank sync is a Pro feature. Run `/license` for details or visit agentwilson.dev/pricing.',
+        error: 'Bank sync is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
       });
     }
 
@@ -77,7 +77,7 @@ export const plaidSyncTool = defineTool({
         newTxns.push({
           date: txn.date,
           description: txn.name,
-          // Plaid uses positive for debits, negative for credits — flip for Wilson convention
+          // Plaid uses positive for debits, negative for credits — flip for OA convention
           amount: -txn.amount,
           category: txn.category.length > 0 ? txn.category[txn.category.length - 1] : undefined,
           source_file: `plaid:${item.institutionName}`,

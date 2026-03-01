@@ -5,7 +5,7 @@
  * Callers opt in by passing `{ cacheable: true }` to API calls;
  * the cache module unconditionally stores and retrieves keyed JSON.
  *
- * Cache files live in .agentwilson/cache/ (already gitignored via .agentwilson/*).
+ * Cache files live in .openaccountant/cache/ (already gitignored via .openaccountant/*).
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
@@ -28,7 +28,7 @@ interface CacheEntry {
   cachedAt: string;
 }
 
-const CACHE_DIR = '.agentwilson/cache';
+const CACHE_DIR = '.openaccountant/cache';
 
 // ============================================================================
 // Helpers

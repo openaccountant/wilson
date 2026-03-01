@@ -435,7 +435,7 @@ export async function runCli() {
           '**Bank sync is a Pro feature.**\n\n' +
           'Connect your bank for automatic transaction imports — no more CSV downloads.\n\n' +
           'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: agentwilson.dev/pricing'
+          'Get Pro at: openaccountant.ai/pricing'
         );
         tui.requestRender();
         return;
@@ -502,7 +502,7 @@ export async function runCli() {
           '**Bank sync is a Pro feature.**\n\n' +
           'Automatically pull transactions from your linked bank accounts.\n\n' +
           'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: agentwilson.dev/pricing'
+          'Get Pro at: openaccountant.ai/pricing'
         );
         tui.requestRender();
         return;
@@ -622,7 +622,7 @@ export async function runCli() {
           chatLog.finalizeAnswer(
             `No license active.\n\n` +
             `Activate with: \`/license activate <key>\`\n` +
-            `Get a key at: agentwilson.dev/pricing`
+            `Get a key at: openaccountant.ai/pricing`
           );
         }
       }
@@ -748,21 +748,21 @@ export async function runCli() {
     if (query === '/dashboard' || query === '/dashboard stop') {
       chatLog.addQuery(query);
       if (query === '/dashboard stop') {
-        if ((globalThis as any).__wilsonDashboard) {
+        if ((globalThis as any).__oaDashboard) {
           const { stopDashboardServer } = await import('./dashboard/server.js');
-          stopDashboardServer((globalThis as any).__wilsonDashboard);
-          (globalThis as any).__wilsonDashboard = null;
+          stopDashboardServer((globalThis as any).__oaDashboard);
+          (globalThis as any).__oaDashboard = null;
           chatLog.finalizeAnswer('Dashboard stopped.');
         } else {
           chatLog.finalizeAnswer('No dashboard running.');
         }
       } else {
-        if ((globalThis as any).__wilsonDashboard) {
+        if ((globalThis as any).__oaDashboard) {
           chatLog.finalizeAnswer('Dashboard already running. Type `/dashboard stop` to close it.');
         } else {
           const { startDashboardServer } = await import('./dashboard/server.js');
           const { server, url } = startDashboardServer(db);
-          (globalThis as any).__wilsonDashboard = server;
+          (globalThis as any).__oaDashboard = server;
           // Open in default browser
           try {
             Bun.spawn(['open', url]);

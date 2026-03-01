@@ -73,7 +73,7 @@ export function getCachedMcpTools(): ToolDef[] {
 }
 
 /**
- * Get all MCP server tools as Wilson ToolDef[] instances.
+ * Get all MCP server tools as Open Accountant ToolDef[] instances.
  * Each MCP tool is wrapped in defineTool() so it integrates seamlessly
  * with the existing tool registry and agent executor.
  */

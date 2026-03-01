@@ -7,4 +7,4 @@ description: >
   income, investment properties, landlord expenses, or Schedule E.
 ---
 
-This workflow requires a license. Visit agentwilson.dev/pricing for details.
+This workflow requires a license. Visit openaccountant.ai/pricing for details.

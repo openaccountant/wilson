@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Wilson's own LLM response type — replaces LangChain's AIMessage.
+ * Open Accountant's own LLM response type — replaces LangChain's AIMessage.
  * Every provider adapter returns this, eliminating all `typeof response === 'string'` branching.
  */
 export interface LlmResponse {
@@ -25,7 +25,7 @@ export interface TokenUsage {
 }
 
 /**
- * Wilson's tool definition — replaces LangChain's DynamicStructuredTool / StructuredToolInterface.
+ * Open Accountant's tool definition — replaces LangChain's DynamicStructuredTool / StructuredToolInterface.
  */
 export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
   name: string;

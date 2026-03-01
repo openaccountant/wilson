@@ -123,8 +123,8 @@ export async function createLinkToken(proLicensed = false): Promise<string> {
 
   const response = await withRetry(() =>
     plaid.linkTokenCreate({
-      user: { client_user_id: 'wilson-cli-user' },
-      client_name: 'Wilson',
+      user: { client_user_id: 'oa-user' },
+      client_name: 'Open Accountant',
       products,
       country_codes: [CountryCode.Us],
       language: 'en',

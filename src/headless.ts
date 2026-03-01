@@ -23,7 +23,7 @@ import { AgentRunnerController } from './controllers/index.js';
 import { InMemoryChatHistory } from './utils/in-memory-chat-history.js';
 
 /**
- * Run Wilson in headless mode — single query, no TUI, stdout output.
+ * Run Open Accountant in headless mode — single query, no TUI, stdout output.
  * Used for cron jobs and scripted invocations.
  */
 export async function runHeadless(query: string): Promise<void> {

@@ -3,16 +3,16 @@ import packageJson from '../../package.json';
 import { getModelDisplayName } from '../utils/model.js';
 import { theme } from '../theme.js';
 
-// "$"-themed block-letter WILSON — W i l s o n (6 letters)
-const WILSON_ART = `
- /$$      /$$  /$$  /$$
-| $$  /$ | $$ |__/ | $$
-| $$ /$$$| $$  /$$ | $$  /$$$$$$$  /$$$$$$  /$$$$$$$
-| $$/$$ $$ $$ | $$ | $$ /$$_____//$$__  $$| $$__  $$
-| $$$$_  $$$$ | $$ | $$|  $$$$$$| $$  \\ $$| $$  \\ $$
-| $$$/ \\  $$$ | $$ | $$ \\____  $| $$  | $$| $$  | $$
-| $$/   \\  $$ | $$ | $$ /$$$$$$$|  $$$$$$/ | $$  | $$
-|__/     \\__/ |__/ |__/|_______/ \\______/ |__/  |__/`;
+// "$"-themed block-letter OA — O p e n  A c c o u n t a n t
+const OA_ART = `
+  /$$$$$$
+ /$$__  $$
+| $$  \\ $$  /$$$$$$
+| $$  | $$ |____  $$
+| $$  | $$  /$$$$$$$
+| $$  | $$ /$$__  $$
+|  $$$$$$/ |  $$$$$$$
+ \\______/   \\_______/`;
 
 /** Color $ chars in green, everything else (frame chars) in white. */
 function colorizeArt(art: string): string {
@@ -47,7 +47,7 @@ export class IntroComponent extends Container {
 
     // Top border with centered version info
     const version = `v${packageJson.version}`;
-    const label = ` Welcome to Wilson ${version} `;
+    const label = ` Welcome to Open Accountant ${version} `;
     const borderChar = '\u2550';
     const totalWidth = 72;
     const sideLen = Math.max(0, Math.floor((totalWidth - label.length) / 2));
@@ -55,7 +55,7 @@ export class IntroComponent extends Container {
     this.addChild(new Text(theme.primary(topBorder), 0, 0));
 
     // ASCII art — $ in green, frame in white
-    this.addChild(new Text(colorizeArt(WILSON_ART), 0, 0));
+    this.addChild(new Text(colorizeArt(OA_ART), 0, 0));
 
     this.addChild(new Spacer(1));
 

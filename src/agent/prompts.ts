@@ -32,7 +32,7 @@ export function getCurrentDate(): string {
  * Load SOUL.md content from user override or bundled file.
  */
 export async function loadSoulDocument(): Promise<string | null> {
-  const userSoulPath = join(homedir(), '.agentwilson', 'SOUL.md');
+  const userSoulPath = join(homedir(), '.openaccountant', 'SOUL.md');
   try {
     return await readFile(userSoulPath, 'utf-8');
   } catch {
@@ -81,7 +81,7 @@ ${skillList}
 /**
  * Default system prompt used when no specific prompt is provided.
  */
-export const DEFAULT_SYSTEM_PROMPT = `You are Wilson, a privacy-first AI bookkeeper.
+export const DEFAULT_SYSTEM_PROMPT = `You are Open Accountant, a privacy-first AI bookkeeper.
 
 Current date: ${getCurrentDate()}
 
@@ -130,7 +130,7 @@ Keep tables compact:
 export async function buildSystemPrompt(model: string, soulContent?: string | null): Promise<string> {
   const toolDescriptions = await buildToolDescriptions(model);
 
-  return `You are Wilson, a CLI assistant for personal finance bookkeeping.
+  return `You are Open Accountant, a CLI assistant for personal finance bookkeeping.
 
 Current date: ${getCurrentDate()}
 

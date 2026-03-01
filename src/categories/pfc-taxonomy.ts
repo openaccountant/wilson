@@ -2,7 +2,7 @@
  * Plaid Financial Categories (PFC) v2 taxonomy.
  *
  * Industry-standard category codes used by Plaid's transaction enrichment API.
- * Agent Wilson adopts PFC as its canonical taxonomy so that bank-synced
+ * Open Accountant adopts PFC as its canonical taxonomy so that bank-synced
  * transactions (Pro tier) arrive pre-categorised and CSV-imported
  * transactions use the same codes for consistency.
  */
@@ -233,7 +233,7 @@ export function getDisplayName(detailed: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Maps legacy Agent Wilson freeform category strings (from categories.ts)
+ * Maps legacy Open Accountant freeform category strings (from categories.ts)
  * to their closest PFC detailed code.
  */
 export const FREEFORM_TO_PFC: Record<string, PfcDetailed> = {

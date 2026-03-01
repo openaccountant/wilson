@@ -8,20 +8,20 @@ const args = process.argv.slice(2);
 const runIndex = args.indexOf('--run');
 
 if (args.includes('--help')) {
-  console.log(`Wilson — AI-powered personal finance CLI
+  console.log(`Open Accountant — AI-powered personal finance CLI
 
 Usage:
-  wilson                           Start interactive mode
-  wilson --run "<query>"           Run a single AI query (headless)
-  wilson --status                  Show database overview
-  wilson --summary [period]        Spending breakdown (month|quarter|year, --offset N)
-  wilson --pnl [period]            Profit & loss report (--offset N)
-  wilson --savings [--months N]    Savings rate trend
-  wilson --budget [--month M]      Budget vs actual
-  wilson --tax-summary [year]      Tax deduction summary by IRS category
-  wilson --report <path>           Generate Markdown report (--month M)
-  wilson --export <path>           Export transactions (--format csv|xlsx)
-  wilson --help                    Show this help`);
+  oa                           Start interactive mode
+  oa --run "<query>"           Run a single AI query (headless)
+  oa --status                  Show database overview
+  oa --summary [period]        Spending breakdown (month|quarter|year, --offset N)
+  oa --pnl [period]            Profit & loss report (--offset N)
+  oa --savings [--months N]    Savings rate trend
+  oa --budget [--month M]      Budget vs actual
+  oa --tax-summary [year]      Tax deduction summary by IRS category
+  oa --report <path>           Generate Markdown report (--month M)
+  oa --export <path>           Export transactions (--format csv|xlsx)
+  oa --help                    Show this help`);
 } else if (args.includes('--status')) {
   const { printStatus } = await import('./reports.js');
   await printStatus();
@@ -49,7 +49,7 @@ Usage:
 } else if (runIndex !== -1) {
   const query = args.slice(runIndex + 1).join(' ');
   if (!query) {
-    console.error('Error: --run requires a query. Example: wilson --run "How much did I spend on dining?"');
+    console.error('Error: --run requires a query. Example: oa --run "How much did I spend on dining?"');
     process.exit(1);
   }
   const { runHeadless } = await import('./headless.js');

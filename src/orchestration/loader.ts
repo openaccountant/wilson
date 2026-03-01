@@ -13,9 +13,9 @@ function getSearchDirs(kind: 'chains' | 'teams'): string[] {
     // Built-in
     join(import.meta.dir ?? '.', kind),
     // User-level
-    join(homedir(), '.agentwilson', kind),
+    join(homedir(), '.openaccountant', kind),
     // Project-level
-    join(process.cwd(), '.agentwilson', kind),
+    join(process.cwd(), '.openaccountant', kind),
   ];
 }
 

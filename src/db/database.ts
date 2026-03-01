@@ -2,7 +2,7 @@ import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
 import { ALL_SCHEMA, SAFE_MIGRATIONS, ALL_INDEXES } from './schema.js';
 
-const DB_DIR = '.agentwilson';
+const DB_DIR = '.openaccountant';
 const DB_FILE = 'data.db';
 
 export function initDatabase(): Database {

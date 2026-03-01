@@ -17,14 +17,14 @@ interface MessagesFile {
   messages: ConversationEntry[];
 }
 
-const AGENTWILSON_DIR = '.agentwilson';
+const OA_DIR = '.openaccountant';
 const MESSAGES_DIR = 'messages';
 const MESSAGES_FILE = 'chat_history.json';
 
 /**
  * Manages persistent storage of conversation history for input history navigation.
  * Uses stack ordering (most recent first) for O(1) access to latest entries.
- * Stores messages in .agentwilson/messages/chat_history.json
+ * Stores messages in .openaccountant/messages/chat_history.json
  */
 export class LongTermChatHistory {
   private filePath: string;
@@ -32,7 +32,7 @@ export class LongTermChatHistory {
   private loaded = false;
 
   constructor(baseDir: string = process.cwd()) {
-    this.filePath = join(baseDir, AGENTWILSON_DIR, MESSAGES_DIR, MESSAGES_FILE);
+    this.filePath = join(baseDir, OA_DIR, MESSAGES_DIR, MESSAGES_FILE);
   }
 
   /**

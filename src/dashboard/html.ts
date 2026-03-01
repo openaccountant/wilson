@@ -12,7 +12,7 @@ export function getDashboardHtml(port: number): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wilson Dashboard</title>
+<title>Open Accountant Dashboard</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#0f1117; color:#e1e4e8; }
@@ -68,7 +68,7 @@ export function getDashboardHtml(port: number): string {
 </head>
 <body>
 <div class="header">
-  <h1>Wilson Dashboard</h1>
+  <h1>Open Accountant Dashboard</h1>
   <div>
     <select id="monthPicker"></select>
   </div>
@@ -100,10 +100,10 @@ export function getDashboardHtml(port: number): string {
     <div id="txnContent"><p class="loading">Loading...</p></div>
   </div>
   <div class="card chat-container">
-    <h3>Chat with Wilson</h3>
+    <h3>Chat with Open Accountant</h3>
     <div class="chat-messages" id="chatMessages"></div>
     <div class="chat-input-row">
-      <input type="text" id="chatInput" placeholder="Ask Wilson anything..." />
+      <input type="text" id="chatInput" placeholder="Ask Open Accountant anything..." />
       <button id="chatSend">Send</button>
     </div>
   </div>
@@ -273,7 +273,7 @@ export function getDashboardHtml(port: number): string {
     chatInput.value = '';
     chatSend.disabled = true;
     addChatMsg('You', q);
-    var pending = addChatMsg('Wilson', 'Thinking...');
+    var pending = addChatMsg('Open Accountant', 'Thinking...');
     try {
       var res = await fetch(BASE+'/api/chat', {
         method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q})

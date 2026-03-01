@@ -7,4 +7,4 @@ description: >
   about quarterly taxes, estimated payments, 1040-ES, or self-employment tax.
 ---
 
-This workflow requires a license. Visit agentwilson.dev/pricing for details.
+This workflow requires a license. Visit openaccountant.ai/pricing for details.

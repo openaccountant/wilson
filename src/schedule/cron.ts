@@ -3,13 +3,13 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { getSchedules } from './store.js';
 
-const CRON_TAG = '# wilson-managed';
-const LOG_FILE = join(homedir(), '.agentwilson', 'schedule.log');
+const CRON_TAG = '# oa-managed';
+const LOG_FILE = join(homedir(), '.openaccountant', 'schedule.log');
 
 /**
- * Get the absolute path to the wilson binary.
+ * Get the absolute path to the oa binary.
  */
-function getWilsonPath(): string {
+function getOaPath(): string {
   return process.argv[0];
 }
 
@@ -33,20 +33,20 @@ function writeCrontab(content: string): void {
 
 /**
  * Sync enabled schedules to the system crontab.
- * Removes all previous wilson-managed entries and writes current ones.
+ * Removes all previous oa-managed entries and writes current ones.
  */
 export function syncCrontab(): void {
   const existing = readCrontab();
 
-  // Remove all wilson-managed lines
+  // Remove all oa-managed lines
   const lines = existing.split('\n').filter((line) => !line.includes(CRON_TAG));
 
   // Add entries for enabled schedules
   const schedules = getSchedules().filter((s) => s.enabled);
-  const wilsonPath = getWilsonPath();
+  const oaPath = getOaPath();
 
   for (const schedule of schedules) {
-    const entry = `${schedule.cron} ${wilsonPath} --run "${schedule.query.replace(/"/g, '\\"')}" >> ${LOG_FILE} 2>&1 ${CRON_TAG}`;
+    const entry = `${schedule.cron} ${oaPath} --run "${schedule.query.replace(/"/g, '\\"')}" >> ${LOG_FILE} 2>&1 ${CRON_TAG}`;
     lines.push(entry);
   }
 
@@ -61,7 +61,7 @@ export function syncCrontab(): void {
 }
 
 /**
- * Remove all Wilson-managed entries from the crontab.
+ * Remove all OA-managed entries from the crontab.
  */
 export function clearCrontab(): void {
   const existing = readCrontab();

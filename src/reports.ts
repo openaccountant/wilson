@@ -50,7 +50,7 @@ export async function printStatus(injectedDb?: Database): Promise<void> {
 
     const importCount = (db.prepare('SELECT COUNT(*) AS c FROM imports').get() as { c: number }).c;
 
-    console.log('Wilson Database Status');
+    console.log('Open Accountant Database Status');
     console.log('='.repeat(40));
     console.log(`Transactions:    ${totalCount}`);
     if (dateRange.min_date) {
@@ -320,7 +320,7 @@ export async function runReport(args: string[], injectedDb?: Database): Promise<
   try {
     const filePath = getArgValue(args, '--report');
     if (!filePath) {
-      console.error('Error: --report requires a file path. Example: wilson --report ~/report.md');
+      console.error('Error: --report requires a file path. Example: oa --report ~/report.md');
       process.exit(1);
     }
 
@@ -346,7 +346,7 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
   try {
     const filePath = getArgValue(args, '--export');
     if (!filePath) {
-      console.error('Error: --export requires a file path. Example: wilson --export ~/transactions.csv');
+      console.error('Error: --export requires a file path. Example: oa --export ~/transactions.csv');
       process.exit(1);
     }
 

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src=".github/assets/wilson-hero.png" alt="Wilson CLI" width="600">
+  <img src=".github/assets/oa-hero.png" alt="Open Accountant CLI" width="600">
 </p>
 
-<h1 align="center">Wilson</h1>
+<h1 align="center">Open Accountant</h1>
 
 <p align="center">
   <strong>Your AI bookkeeper. Follow the money.</strong><br>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/openspend/wilson/actions/workflows/ci.yml"><img src="https://github.com/openspend/wilson/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/open-accountant/open-accountant/actions/workflows/ci.yml"><img src="https://github.com/open-accountant/open-accountant/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
@@ -44,8 +44,8 @@ Named after [Frank J. Wilson](https://en.wikipedia.org/wiki/Frank_J._Wilson), th
 ### Install & Run
 
 ```bash
-git clone https://github.com/openspend/wilson.git
-cd wilson
+git clone https://github.com/open-accountant/open-accountant.git
+cd open-accountant
 bun install
 cp env.example .env   # edit with your API key(s)
 bun start
@@ -93,7 +93,7 @@ Copy `env.example` to `.env` and set at least one provider API key. See the file
 
 ### MCP Servers
 
-Add external tool servers in `~/.openspend/mcp.json`:
+Add external tool servers in `~/.openaccountant/mcp.json`:
 
 ```json
 {
@@ -107,7 +107,7 @@ Add external tool servers in `~/.openspend/mcp.json`:
 }
 ```
 
-MCP tools appear automatically in Wilson's tool registry.
+MCP tools appear automatically in Open Accountant's tool registry.
 
 ### Custom Skills
 
@@ -116,8 +116,8 @@ Drop a folder with a `SKILL.md` file into any of these directories:
 | Location | Purpose |
 |---|---|
 | `src/skills/` | Built-in skills |
-| `~/.openspend/skills/` | User-wide skills |
-| `.openspend/skills/` | Project-specific skills |
+| `~/.openaccountant/skills/` | User-wide skills |
+| `.openaccountant/skills/` | Project-specific skills |
 
 Skills defined later in this list override earlier ones with the same name.
 
@@ -142,7 +142,7 @@ src/
   utils/          # Shared utilities
 ```
 
-All data is stored locally in `~/.openspend/data.db` (SQLite).
+All data is stored locally in `~/.openaccountant/data.db` (SQLite).
 
 ## Contributing
 

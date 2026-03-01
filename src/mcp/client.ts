@@ -10,7 +10,7 @@ interface McpClientEntry {
 const clients = new Map<string, McpClientEntry>();
 
 /**
- * Initialize all MCP clients from ~/.agentwilson/mcp.json.
+ * Initialize all MCP clients from ~/.openaccountant/mcp.json.
  * Spawns each server process, connects via stdio, and calls tools/list to verify.
  * Returns the list of server names that connected successfully.
  */
@@ -44,7 +44,7 @@ async function connectServer(name: string, config: McpServerConfig): Promise<voi
   });
 
   const client = new Client({
-    name: 'wilson',
+    name: 'open-accountant',
     version: '0.1.0',
   });
 

@@ -21,7 +21,7 @@ interface ScheduleStore {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const STORE_DIR = join(homedir(), '.agentwilson');
+const STORE_DIR = join(homedir(), '.openaccountant');
 const STORE_FILE = join(STORE_DIR, 'schedules.json');
 
 // ── Store I/O ────────────────────────────────────────────────────────────────

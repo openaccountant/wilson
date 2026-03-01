@@ -1,5 +1,5 @@
 /**
- * Standard spending categories for Wilson transaction classification.
+ * Standard spending categories for Open Accountant transaction classification.
  */
 export const CATEGORIES: string[] = [
   'Dining',
