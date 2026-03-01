@@ -3,4 +3,4 @@ dist/
 .env
 .openspend/
 *.db
-bun.lock
+firebase-debug.log
