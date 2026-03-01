@@ -251,3 +251,98 @@ export function getUncategorizedTransactions(
 
   return db.prepare(sql).all(limit ? { limit } : {}) as TransactionRow[];
 }
+
+// ── Budget queries ───────────────────────────────────────────────────────────
+
+export interface BudgetRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetVsActualRow {
+  category: string;
+  monthly_limit: number;
+  actual: number;
+  remaining: number;
+  percent_used: number;
+  over: boolean;
+}
+
+/**
+ * Set or update a budget limit for a category.
+ */
+export function setBudget(
+  db: Database,
+  category: string,
+  monthlyLimit: number
+): void {
+  db.prepare(`
+    INSERT INTO budgets (category, monthly_limit)
+    VALUES (@category, @monthlyLimit)
+    ON CONFLICT(category) DO UPDATE SET
+      monthly_limit = @monthlyLimit,
+      updated_at = datetime('now')
+  `).run({ category, monthlyLimit });
+}
+
+/**
+ * Remove a budget limit for a category.
+ */
+export function clearBudget(db: Database, category: string): boolean {
+  const result = db.prepare('DELETE FROM budgets WHERE category = @category').run({ category });
+  return (result as { changes: number }).changes > 0;
+}
+
+/**
+ * Get all budget limits.
+ */
+export function getBudgets(db: Database): BudgetRow[] {
+  return db.prepare('SELECT * FROM budgets ORDER BY category').all() as BudgetRow[];
+}
+
+/**
+ * Compare budgets vs actual spending for a given month (YYYY-MM).
+ */
+export function getBudgetVsActual(
+  db: Database,
+  month: string
+): BudgetVsActualRow[] {
+  const startDate = `${month}-01`;
+  // Compute end of month
+  const [year, mon] = month.split('-').map(Number);
+  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
+
+  const budgets = getBudgets(db);
+  if (budgets.length === 0) return [];
+
+  const results: BudgetVsActualRow[] = [];
+
+  for (const budget of budgets) {
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(ABS(amount)), 0) AS actual
+      FROM transactions
+      WHERE category = @category
+        AND date >= @startDate
+        AND date <= @endDate
+        AND amount < 0
+    `).get({ category: budget.category, startDate, endDate }) as { actual: number };
+
+    const actual = row.actual;
+    const remaining = budget.monthly_limit - actual;
+    const percentUsed = budget.monthly_limit > 0 ? Math.round((actual / budget.monthly_limit) * 100) : 0;
+
+    results.push({
+      category: budget.category,
+      monthly_limit: budget.monthly_limit,
+      actual,
+      remaining,
+      percent_used: percentUsed,
+      over: actual > budget.monthly_limit,
+    });
+  }
+
+  return results;
+}

@@ -1,6 +1,6 @@
 import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
-import { ALL_SCHEMA } from './schema.js';
+import { ALL_SCHEMA, SAFE_MIGRATIONS } from './schema.js';
 
 const DB_DIR = '.openspend';
 const DB_FILE = 'data.db';
@@ -16,6 +16,18 @@ export function initDatabase(): Database {
 
   for (const sql of ALL_SCHEMA) {
     db.exec(sql);
+  }
+
+  // Run safe migrations (ALTER TABLE) — ignore "duplicate column" errors
+  for (const sql of SAFE_MIGRATIONS) {
+    try {
+      db.exec(sql);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('duplicate column')) {
+        throw err;
+      }
+    }
   }
 
   return db;
