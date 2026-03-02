@@ -438,6 +438,111 @@ Generate a comprehensive Markdown financial report and save to a file.
 - Supports filtering by month and section selection
 `.trim();
 
+const ACCOUNT_MANAGE_DESCRIPTION = `
+Add, update, remove, or list financial accounts for net worth tracking.
+
+## When to Use
+
+- When the user says "add my house", "track my 401k", "I have a car loan", "what accounts do I have"
+- When the user wants to set up accounts for net worth tracking
+- When the user mentions bank accounts, investment accounts, real estate, vehicles, or loans
+
+## When NOT to Use
+
+- When the user wants to import transactions (use csv_import)
+- When the user is asking about transaction-level data
+
+## Usage Notes
+
+- Supports asset types: checking, savings, investment, real_estate, vehicle, cash, crypto
+- Supports liability types: mortgage, auto_loan, student_loan, personal_loan, credit_card, heloc, medical_debt
+- Remove is a soft delete (deactivate) — data is preserved
+`.trim();
+
+const BALANCE_UPDATE_DESCRIPTION = `
+Update the current balance of a financial account and record a point-in-time snapshot.
+
+## When to Use
+
+- When the user says "my 401k is now worth $215k", "house appraised at $425k"
+- When the user wants to update an account balance
+- When the user provides a new balance for any tracked account
+
+## When NOT to Use
+
+- When the user wants to add a new account (use account_manage)
+- When the user is talking about transactions, not balances
+
+## Usage Notes
+
+- Updates current_balance and records a snapshot for trend tracking
+- Snapshots are stored per date — updating twice on the same day overwrites
+`.trim();
+
+const NET_WORTH_DESCRIPTION = `
+Calculate and display net worth summary, trend over time, or full balance sheet.
+
+## When to Use
+
+- When the user asks "what's my net worth", "show my balance sheet", "am I building wealth"
+- When the user wants to see their overall financial position
+- When the user asks about assets vs liabilities
+
+## When NOT to Use
+
+- When the user is asking about spending or transactions (use spending_summary or transaction_search)
+- When the user wants to manage individual accounts (use account_manage)
+
+## Usage Notes
+
+- summary: current net worth with asset/liability breakdown by subtype (Free)
+- trend: monthly net worth change over N months — requires balance snapshots (Pro)
+- balance_sheet: full account listing with equity calculations for financed assets (Free)
+`.trim();
+
+const MORTGAGE_MANAGE_DESCRIPTION = `
+**Requires Pro license.** Manage loans and view amortization schedules, payoff simulations.
+
+## When to Use
+
+- When the user asks "show my mortgage schedule", "when will my loan be paid off"
+- When the user says "what if I pay $200 extra per month"
+- When the user wants to add or update loan details
+
+## When NOT to Use
+
+- When the user wants to add a liability account (use account_manage first, then mortgage_manage)
+- When the user is asking about spending, not debt
+
+## Usage Notes
+
+- Interest rate is entered as percentage (6.5, not 0.065)
+- add: creates loan record linked to a liability account, optionally links to asset
+- schedule: shows full/partial amortization table
+- payoff: simulates early payoff with extra monthly payments
+`.trim();
+
+const LINK_TRANSACTIONS_DESCRIPTION = `
+Link unlinked transactions to an account by matching account_last4, bank, or account_name.
+
+## When to Use
+
+- When the user says "these Chase transactions are from my checking"
+- When the user wants to associate existing transactions with a tracked account
+- After importing transactions and setting up accounts
+
+## When NOT to Use
+
+- When the user wants to import new transactions (use csv_import)
+- When the user wants to add accounts (use account_manage)
+
+## Usage Notes
+
+- Only links transactions where account_id is currently NULL
+- Supports dry run to preview matches before committing
+- Matches on account_last4, bank name, or account_name
+`.trim();
+
 const PLAID_BALANCES_DESCRIPTION = `
 **Requires Pro license.** Show current account balances for all linked bank accounts.
 
@@ -730,6 +835,32 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   const reportMod = safeRequire<{ generateReportTool: ToolDef }>('./export/generate-report.js');
   if (reportMod?.generateReportTool) {
     tools.push({ name: 'generate_report', tool: reportMod.generateReportTool, description: GENERATE_REPORT_DESCRIPTION });
+  }
+
+  // Net worth tools
+  const acctMod = safeRequire<{ accountManageTool: ToolDef }>('./net-worth/account-manage.js');
+  if (acctMod?.accountManageTool) {
+    tools.push({ name: 'account_manage', tool: acctMod.accountManageTool, description: ACCOUNT_MANAGE_DESCRIPTION });
+  }
+
+  const balMod = safeRequire<{ balanceUpdateTool: ToolDef }>('./net-worth/balance-update.js');
+  if (balMod?.balanceUpdateTool) {
+    tools.push({ name: 'balance_update', tool: balMod.balanceUpdateTool, description: BALANCE_UPDATE_DESCRIPTION });
+  }
+
+  const nwMod = safeRequire<{ netWorthTool: ToolDef }>('./net-worth/net-worth.js');
+  if (nwMod?.netWorthTool) {
+    tools.push({ name: 'net_worth', tool: nwMod.netWorthTool, description: NET_WORTH_DESCRIPTION });
+  }
+
+  const mortMod = safeRequire<{ mortgageManageTool: ToolDef }>('./net-worth/mortgage-manage.js');
+  if (mortMod?.mortgageManageTool) {
+    tools.push({ name: 'mortgage_manage', tool: mortMod.mortgageManageTool, description: MORTGAGE_MANAGE_DESCRIPTION });
+  }
+
+  const linkMod = safeRequire<{ linkTransactionsTool: ToolDef }>('./net-worth/link-transactions.js');
+  if (linkMod?.linkTransactionsTool) {
+    tools.push({ name: 'link_transactions', tool: linkMod.linkTransactionsTool, description: LINK_TRANSACTIONS_DESCRIPTION });
   }
 
   // MCP tools (loaded at startup from ~/.openaccountant/mcp.json)

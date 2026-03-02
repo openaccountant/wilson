@@ -66,6 +66,8 @@ Usage:
   wilson --savings [--months N]    Savings rate trend
   wilson --budget [--month M]      Budget vs actual
   wilson --tax-summary [year]      Tax deduction summary by IRS category
+  wilson --net-worth               Net worth summary
+  wilson --balance-sheet           Full balance sheet with equity
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
@@ -88,6 +90,12 @@ Usage:
 } else if (args.includes("--tax-summary")) {
   const { printTaxSummary } = await import("./reports.js");
   await printTaxSummary(args);
+} else if (args.includes("--net-worth")) {
+  const { printNetWorth } = await import("./reports.js");
+  await printNetWorth(args);
+} else if (args.includes("--balance-sheet")) {
+  const { printBalanceSheet } = await import("./reports.js");
+  await printBalanceSheet(args);
 } else if (args.includes("--report")) {
   const { runReport } = await import("./reports.js");
   await runReport(args);

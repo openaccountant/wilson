@@ -1,9 +1,11 @@
+// ── Core Tables ──────────────────────────────────────────────────────────────
+
 export const TRANSACTIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date TEXT NOT NULL,                      -- YYYY-MM-DD
+  date TEXT NOT NULL,
   description TEXT NOT NULL,
-  amount REAL NOT NULL,                    -- negative = expense, positive = income/credit
+  amount REAL NOT NULL,
   category TEXT,
   category_confidence REAL,
   user_verified INTEGER DEFAULT 0,
@@ -11,8 +13,17 @@ CREATE TABLE IF NOT EXISTS transactions (
   bank TEXT,
   account_last4 TEXT,
   is_recurring INTEGER DEFAULT 0,
-  tags TEXT,                               -- JSON array
+  tags TEXT,
   notes TEXT,
+  plaid_transaction_id TEXT,
+  account_name TEXT,
+  merchant_name TEXT,
+  category_detailed TEXT,
+  external_id TEXT,
+  payment_channel TEXT,
+  pending INTEGER DEFAULT 0,
+  authorized_date TEXT,
+  account_id INTEGER REFERENCES accounts(id),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -33,31 +44,12 @@ CREATE TABLE IF NOT EXISTS imports (
 
 export const BUDGETS_TABLE = `
 CREATE TABLE IF NOT EXISTS budgets (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  category    TEXT NOT NULL UNIQUE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category TEXT NOT NULL UNIQUE,
   monthly_limit REAL NOT NULL,
-  created_at  TEXT DEFAULT (datetime('now')),
-  updated_at  TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 );
-`;
-
-/** Safe ALTER TABLE additions for Plaid support (idempotent). */
-export const PLAID_COLUMNS = `
--- Add plaid_transaction_id for dedup (ignore error if already exists)
-ALTER TABLE transactions ADD COLUMN plaid_transaction_id TEXT;
-`;
-
-/** Add account_name column for multi-account display */
-export const ACCOUNT_NAME_COLUMN = `
-ALTER TABLE transactions ADD COLUMN account_name TEXT;
-`;
-
-export const INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
-CREATE INDEX IF NOT EXISTS idx_transactions_recurring ON transactions(is_recurring);
-CREATE INDEX IF NOT EXISTS idx_transactions_plaid_id ON transactions(plaid_transaction_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_external_id ON transactions(external_id) WHERE external_id IS NOT NULL;
 `;
 
 export const CATEGORIZATION_RULES_TABLE = `
@@ -84,15 +76,6 @@ CREATE TABLE IF NOT EXISTS tax_deductions (
 );
 `;
 
-export const RULES_INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_rules_priority ON categorization_rules(priority DESC);
-`;
-
-export const TAX_INDEXES = `
-CREATE INDEX IF NOT EXISTS idx_tax_deductions_year ON tax_deductions(tax_year);
-CREATE INDEX IF NOT EXISTS idx_tax_deductions_category ON tax_deductions(irs_category);
-`;
-
 export const CHAT_SESSIONS_TABLE = `
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id TEXT PRIMARY KEY,
@@ -112,70 +95,73 @@ CREATE TABLE IF NOT EXISTS chat_history (
 );
 `;
 
-export const ALL_SCHEMA: string[] = [
-  TRANSACTIONS_TABLE,
-  IMPORTS_TABLE,
-  BUDGETS_TABLE,
-  CATEGORIZATION_RULES_TABLE,
-  TAX_DEDUCTIONS_TABLE,
-  CHAT_SESSIONS_TABLE,
-  CHAT_HISTORY_TABLE,
-];
+// ── Net Worth Tables ─────────────────────────────────────────────────────────
 
-/** Indexes that depend on columns added by SAFE_MIGRATIONS — must run AFTER migrations. */
-export const ALL_INDEXES: string[] = [
-  INDEXES,
-  RULES_INDEXES,
-  TAX_INDEXES,
-];
-
-/** Add merchant_name column for enriched merchant data */
-export const MERCHANT_NAME_COLUMN = `
-ALTER TABLE transactions ADD COLUMN merchant_name TEXT;
+export const ACCOUNTS_TABLE = `
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  account_type TEXT NOT NULL,
+  account_subtype TEXT NOT NULL,
+  institution TEXT,
+  account_number_last4 TEXT,
+  current_balance REAL NOT NULL DEFAULT 0,
+  currency TEXT DEFAULT 'USD',
+  is_active INTEGER DEFAULT 1,
+  notes TEXT,
+  plaid_account_id TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
 `;
 
-/** Add category_detailed column for fine-grained categorization */
-export const CATEGORY_DETAILED_COLUMN = `
-ALTER TABLE transactions ADD COLUMN category_detailed TEXT;
+export const BALANCE_SNAPSHOTS_TABLE = `
+CREATE TABLE IF NOT EXISTS balance_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL,
+  balance REAL NOT NULL,
+  snapshot_date TEXT NOT NULL,
+  source TEXT DEFAULT 'manual',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
 `;
 
-/** Add external_id column for dedup across data sources */
-export const EXTERNAL_ID_COLUMN = `
-ALTER TABLE transactions ADD COLUMN external_id TEXT;
+export const LOANS_TABLE = `
+CREATE TABLE IF NOT EXISTS loans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL UNIQUE,
+  original_principal REAL NOT NULL,
+  interest_rate REAL NOT NULL,
+  term_months INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
+  extra_payment REAL DEFAULT 0,
+  linked_asset_id INTEGER,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (linked_asset_id) REFERENCES accounts(id) ON DELETE SET NULL
+);
 `;
 
-/** Add payment_channel column (online, in store, etc.) */
-export const PAYMENT_CHANNEL_COLUMN = `
-ALTER TABLE transactions ADD COLUMN payment_channel TEXT;
-`;
+// ── Indexes ──────────────────────────────────────────────────────────────────
 
-/** Add pending column to track pending vs posted */
-export const PENDING_COLUMN = `
-ALTER TABLE transactions ADD COLUMN pending INTEGER DEFAULT 0;
+export const ALL_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_recurring ON transactions(is_recurring);
+CREATE INDEX IF NOT EXISTS idx_transactions_plaid_id ON transactions(plaid_transaction_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_external_id ON transactions(external_id) WHERE external_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX IF NOT EXISTS idx_rules_priority ON categorization_rules(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_tax_deductions_year ON tax_deductions(tax_year);
+CREATE INDEX IF NOT EXISTS idx_tax_deductions_category ON tax_deductions(irs_category);
+CREATE INDEX IF NOT EXISTS idx_accounts_type ON accounts(account_type);
+CREATE INDEX IF NOT EXISTS idx_accounts_subtype ON accounts(account_subtype);
+CREATE INDEX IF NOT EXISTS idx_accounts_last4 ON accounts(account_number_last4);
+CREATE INDEX IF NOT EXISTS idx_accounts_plaid_id ON accounts(plaid_account_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_account_date ON balance_snapshots(account_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_snapshots_date ON balance_snapshots(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_loans_linked_asset ON loans(linked_asset_id);
 `;
-
-/** Add authorized_date column for authorization date */
-export const AUTHORIZED_DATE_COLUMN = `
-ALTER TABLE transactions ADD COLUMN authorized_date TEXT;
-`;
-
-/** Add session_id column to chat_history for session grouping */
-export const CHAT_SESSION_ID_COLUMN = `
-ALTER TABLE chat_history ADD COLUMN session_id TEXT;
-`;
-
-/**
- * Safe ALTER TABLE statements that may fail if columns already exist.
- * These should be run with error handling (ignore "duplicate column" errors).
- */
-export const SAFE_MIGRATIONS: string[] = [
-  PLAID_COLUMNS,
-  ACCOUNT_NAME_COLUMN,
-  MERCHANT_NAME_COLUMN,
-  CATEGORY_DETAILED_COLUMN,
-  EXTERNAL_ID_COLUMN,
-  PAYMENT_CHANNEL_COLUMN,
-  PENDING_COLUMN,
-  AUTHORIZED_DATE_COLUMN,
-  CHAT_SESSION_ID_COLUMN,
-];

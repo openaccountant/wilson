@@ -1,6 +1,6 @@
 node_modules/
 dist/
 .env
-.openaccountant/
+.openaccountant*/
 *.db
 firebase-debug.log

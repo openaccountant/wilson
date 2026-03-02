@@ -61,7 +61,12 @@ import { initTaxFlagTool } from './tools/tax/tax-flag.js';
 import { initSavingsRateTool } from './tools/query/savings-rate.js';
 import { initAlertCheckTool } from './tools/query/alert-check.js';
 import { initGenerateReportTool } from './tools/export/generate-report.js';
-import { initAlertPrompt } from './agent/prompts.js';
+import { initAccountManageTool } from './tools/net-worth/account-manage.js';
+import { initBalanceUpdateTool } from './tools/net-worth/balance-update.js';
+import { initNetWorthTool } from './tools/net-worth/net-worth.js';
+import { initMortgageManageTool } from './tools/net-worth/mortgage-manage.js';
+import { initLinkTransactionsTool } from './tools/net-worth/link-transactions.js';
+import { initAlertPrompt, initNetWorthContext } from './agent/prompts.js';
 import { getPlaidItems, removePlaidItem } from './plaid/store.js';
 import { startPlaidLinkServer } from './plaid/link-server.js';
 import { initMcpClients } from './mcp/client.js';
@@ -269,7 +274,13 @@ export async function runCli() {
   initSavingsRateTool(db);
   initAlertCheckTool(db);
   initGenerateReportTool(db);
+  initAccountManageTool(db);
+  initBalanceUpdateTool(db);
+  initNetWorthTool(db);
+  initMortgageManageTool(db);
+  initLinkTransactionsTool(db);
   initAlertPrompt(db);
+  initNetWorthContext(db);
 
   // Initialize MCP client connections (non-blocking — failures are logged, not fatal)
   await initMcpClients();

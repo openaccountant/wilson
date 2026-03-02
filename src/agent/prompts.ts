@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import type { Database } from '../db/compat-sqlite.js';
 import { getBudgetVsActual } from '../db/queries.js';
 import { checkAlerts } from '../alerts/engine.js';
+import { getNetWorthSummary } from '../db/net-worth-queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -348,6 +349,51 @@ export function buildBudgetContext(): string | null {
     });
 
     return `## Current Budgets\n\n${lines.join(', ')}\n\nProactively warn the user if they are near or over budget in any category.`;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Net Worth Context
+// ============================================================================
+
+let netWorthDb: Database | null = null;
+
+export function initNetWorthContext(db: Database): void {
+  netWorthDb = db;
+}
+
+/**
+ * Build a net worth summary for system prompt injection.
+ * Returns null if no accounts are configured.
+ */
+export function buildNetWorthContext(): string | null {
+  if (!netWorthDb) return null;
+
+  try {
+    const summary = getNetWorthSummary(netWorthDb);
+    if (summary.accounts.length === 0) return null;
+
+    const fmt = (n: number) => `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+    const topAssets = summary.accounts
+      .filter((a) => a.account_type === 'asset')
+      .sort((a, b) => b.current_balance - a.current_balance)
+      .slice(0, 5)
+      .map((a) => `${a.name}: ${fmt(a.current_balance)}`);
+
+    const topLiabilities = summary.accounts
+      .filter((a) => a.account_type === 'liability')
+      .sort((a, b) => b.current_balance - a.current_balance)
+      .slice(0, 5)
+      .map((a) => `${a.name}: ${fmt(a.current_balance)}`);
+
+    const parts = [`Net worth: ${fmt(summary.netWorth)} (${fmt(summary.totalAssets)} assets, ${fmt(summary.totalLiabilities)} liabilities)`];
+    if (topAssets.length > 0) parts.push(`Top assets: ${topAssets.join(', ')}`);
+    if (topLiabilities.length > 0) parts.push(`Top liabilities: ${topLiabilities.join(', ')}`);
+
+    return `## Balance Sheet\n\n${parts.join('\n')}\n\nReference net worth and account balances when relevant to cash flow questions.`;
   } catch {
     return null;
   }

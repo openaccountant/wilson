@@ -16,6 +16,8 @@ import {
 import { getPeriodDates } from './tools/query/spending-summary.js';
 import { checkAlerts } from './alerts/engine.js';
 import { generateReport } from './report/generator.js';
+import { getNetWorthSummary, getEquitySummary } from './db/net-worth-queries.js';
+import { SUBTYPE_LABELS, type AccountSubtype } from './tools/net-worth/account-types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -392,6 +394,120 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
       console.error(`Failed to write file: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
+  } finally {
+    if (!injectedDb) db.close();
+  }
+}
+
+// ── --net-worth ──────────────────────────────────────────────────────────────
+
+export async function printNetWorth(_args: string[], injectedDb?: Database): Promise<void> {
+  const db = injectedDb ?? initDatabase();
+
+  try {
+    const summary = getNetWorthSummary(db);
+
+    if (summary.accounts.length === 0) {
+      console.log('No accounts configured. Use interactive mode to add accounts.');
+      return;
+    }
+
+    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    console.log('Net Worth Summary');
+    console.log('='.repeat(40));
+    console.log('');
+
+    if (summary.assetsBySubtype.length > 0) {
+      console.log('ASSETS');
+      for (const a of summary.assetsBySubtype) {
+        const label = SUBTYPE_LABELS[a.subtype as AccountSubtype] ?? a.subtype;
+        console.log(`  ${label.padEnd(20)} ${fmt(a.total).padStart(14)}  (${a.count})`);
+      }
+      console.log(`  ${'TOTAL'.padEnd(20)} ${fmt(summary.totalAssets).padStart(14)}`);
+      console.log('');
+    }
+
+    if (summary.liabilitiesBySubtype.length > 0) {
+      console.log('LIABILITIES');
+      for (const l of summary.liabilitiesBySubtype) {
+        const label = SUBTYPE_LABELS[l.subtype as AccountSubtype] ?? l.subtype;
+        console.log(`  ${label.padEnd(20)} ${fmt(l.total).padStart(14)}  (${l.count})`);
+      }
+      console.log(`  ${'TOTAL'.padEnd(20)} ${fmt(summary.totalLiabilities).padStart(14)}`);
+      console.log('');
+    }
+
+    console.log('-'.repeat(40));
+    const nw = summary.netWorth;
+    console.log(`NET WORTH:`.padEnd(22) + `${fmt(nw)}`);
+  } finally {
+    if (!injectedDb) db.close();
+  }
+}
+
+// ── --balance-sheet ──────────────────────────────────────────────────────────
+
+export async function printBalanceSheet(_args: string[], injectedDb?: Database): Promise<void> {
+  const db = injectedDb ?? initDatabase();
+
+  try {
+    const summary = getNetWorthSummary(db);
+
+    if (summary.accounts.length === 0) {
+      console.log('No accounts configured. Use interactive mode to add accounts.');
+      return;
+    }
+
+    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    console.log('Balance Sheet');
+    console.log('='.repeat(60));
+    console.log('');
+
+    const assets = summary.accounts.filter((a) => a.account_type === 'asset');
+    const liabilities = summary.accounts.filter((a) => a.account_type === 'liability');
+
+    if (assets.length > 0) {
+      console.log('ASSETS');
+      console.log('  ' + 'Account'.padEnd(24) + 'Type'.padEnd(16) + 'Balance'.padStart(14));
+      console.log('  ' + '-'.repeat(54));
+      for (const a of assets) {
+        const label = SUBTYPE_LABELS[a.account_subtype as AccountSubtype] ?? a.account_subtype;
+        console.log(`  ${a.name.padEnd(24)}${label.padEnd(16)}${fmt(a.current_balance).padStart(14)}`);
+      }
+      console.log(`  ${'TOTAL ASSETS'.padEnd(40)}${fmt(summary.totalAssets).padStart(14)}`);
+      console.log('');
+    }
+
+    if (liabilities.length > 0) {
+      console.log('LIABILITIES');
+      console.log('  ' + 'Account'.padEnd(24) + 'Type'.padEnd(16) + 'Balance'.padStart(14));
+      console.log('  ' + '-'.repeat(54));
+      for (const a of liabilities) {
+        const label = SUBTYPE_LABELS[a.account_subtype as AccountSubtype] ?? a.account_subtype;
+        console.log(`  ${a.name.padEnd(24)}${label.padEnd(16)}${fmt(a.current_balance).padStart(14)}`);
+      }
+      console.log(`  ${'TOTAL LIABILITIES'.padEnd(40)}${fmt(summary.totalLiabilities).padStart(14)}`);
+      console.log('');
+    }
+
+    // Equity summary for financed assets
+    const equity = getEquitySummary(db);
+    if (equity.length > 0) {
+      console.log('EQUITY (Financed Assets)');
+      console.log('  ' + 'Asset'.padEnd(20) + 'Value'.padStart(12) + 'Loan'.padStart(12) + 'Equity'.padStart(12) + '  %'.padStart(6));
+      console.log('  ' + '-'.repeat(62));
+      for (const e of equity) {
+        console.log(
+          `  ${e.assetName.padEnd(20)}${fmt(e.assetValue).padStart(12)}${fmt(e.loanBalance).padStart(12)}${fmt(e.equity).padStart(12)}${(e.equityPercent + '%').padStart(6)}`
+        );
+      }
+      console.log('');
+    }
+
+    console.log('='.repeat(60));
+    console.log(`NET WORTH:`.padEnd(42) + fmt(summary.netWorth));
   } finally {
     if (!injectedDb) db.close();
   }
