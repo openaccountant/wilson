@@ -15,6 +15,7 @@ import { initBudgetSetTool } from './tools/budget/budget-set.js';
 import { initBudgetCheckTool } from './tools/budget/budget-check.js';
 import { initBudgetPrompt, initDataContext, initNetWorthContext } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
+import { initPlaidBalancesTool } from './tools/import/plaid-balances.js';
 import { initProfitLossTool } from './tools/query/profit-loss.js';
 import { initProfitDiffTool } from './tools/query/profit-diff.js';
 import { initRuleManageTool } from './tools/rules/rule-manage.js';
@@ -59,6 +60,7 @@ export async function runHeadless(query: string): Promise<void> {
     initDataContext(db);
     initNetWorthContext(db);
     initPlaidSyncTool(db);
+    initPlaidBalancesTool(db);
     initProfitLossTool(db);
     initProfitDiffTool(db);
     initRuleManageTool(db);

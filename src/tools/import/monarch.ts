@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { insertTransactions, recordImport, type TransactionInsert } from '../../db/queries.js';
+import { getAccounts, linkTransactionsToAccount } from '../../db/net-worth-queries.js';
 import { formatToolResult } from '../types.js';
 import { hasLicense } from '../../licensing/license.js';
 
@@ -157,6 +158,7 @@ export const monarchImportTool = defineTool({
         source_file: 'monarch-sync',
         is_recurring: t.isRecurring ? 1 : 0,
         notes: t.notes ?? undefined,
+        account_name: t.account?.displayName ?? undefined,
       });
     }
 
@@ -170,6 +172,18 @@ export const monarchImportTool = defineTool({
 
     // 5. Bulk insert
     const count = insertTransactions(database, txns);
+
+    // 5b. Auto-link transactions to accounts by account_name
+    let autoLinked = 0;
+    const accountNames = new Set(txns.map((t) => t.account_name).filter(Boolean));
+    if (accountNames.size > 0) {
+      const accounts = getAccounts(database, { active: true });
+      for (const acct of accounts) {
+        if (accountNames.has(acct.name)) {
+          autoLinked += linkTransactionsToAccount(database, acct.id, { accountName: acct.name });
+        }
+      }
+    }
 
     // 6. Compute date range
     const dates = txns.map((t) => t.date).sort();
@@ -190,10 +204,11 @@ export const monarchImportTool = defineTool({
     return formatToolResult({
       success: true,
       transactionsImported: count,
+      autoLinked,
       skipped,
       totalFetched: rawTransactions.length,
       dateRange: { start: dateRangeStart, end: dateRangeEnd },
-      message: `Imported ${count} transactions from Monarch Money (${dateRangeStart} to ${dateRangeEnd}). Skipped ${skipped} (duplicates or pending).`,
+      message: `Imported ${count} transactions from Monarch Money (${dateRangeStart} to ${dateRangeEnd}). Skipped ${skipped} (duplicates or pending).${autoLinked > 0 ? ` Auto-linked ${autoLinked} to accounts.` : ''}`,
     });
   },
 });

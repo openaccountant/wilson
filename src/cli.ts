@@ -55,6 +55,7 @@ import { initBudgetCheckTool } from './tools/budget/budget-check.js';
 import { setBudget, clearBudget, getBudgetVsActual } from './db/queries.js';
 import { initBudgetPrompt, initDataContext } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
+import { initPlaidBalancesTool } from './tools/import/plaid-balances.js';
 import { initProfitLossTool } from './tools/query/profit-loss.js';
 import { initProfitDiffTool } from './tools/query/profit-diff.js';
 import { initRuleManageTool } from './tools/rules/rule-manage.js';
@@ -270,6 +271,7 @@ export async function runCli() {
   initBudgetPrompt(db);
   initDataContext(db);
   initPlaidSyncTool(db);
+  initPlaidBalancesTool(db);
   initProfitLossTool(db);
   initProfitDiffTool(db);
   initRuleManageTool(db);

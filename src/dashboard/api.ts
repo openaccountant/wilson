@@ -13,50 +13,215 @@ import {
   type TransactionFilters,
   type TransactionUpdate,
 } from '../db/queries.js';
+import {
+  getAccounts,
+  getNetWorthSummary,
+  getNetWorthTrend,
+  getAccountTransactionSummary,
+} from '../db/net-worth-queries.js';
 import { checkAlerts } from '../alerts/engine.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 
-/**
- * JSON API handlers that query SQLite directly.
- * Each returns a plain object to be JSON-serialized.
- */
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-export function apiSummary(db: Database, params: URLSearchParams) {
+function parseAccountId(params: URLSearchParams): number | undefined {
+  const val = params.get('accountId');
+  return val ? parseInt(val, 10) : undefined;
+}
+
+function parseDateRange(params: URLSearchParams) {
   const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
   const [year, mon] = month.split('-').map(Number);
   const startDate = `${month}-01`;
   const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
-  return getSpendingSummary(db, startDate, endDate);
+  return { month, startDate, endDate };
+}
+
+function escapeCsv(v: string): string {
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+  return v;
+}
+
+// ── Overview APIs ───────────────────────────────────────────────────────────
+
+export function apiSummary(db: Database, params: URLSearchParams) {
+  const { startDate, endDate } = parseDateRange(params);
+  const accountId = parseAccountId(params);
+  return getSpendingSummary(db, startDate, endDate, accountId);
 }
 
 export function apiPnl(db: Database, params: URLSearchParams) {
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
-  const [year, mon] = month.split('-').map(Number);
-  const startDate = `${month}-01`;
-  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
-  return getProfitLoss(db, startDate, endDate);
+  const { startDate, endDate } = parseDateRange(params);
+  const accountId = parseAccountId(params);
+  return getProfitLoss(db, startDate, endDate, accountId);
 }
 
 export function apiBudgets(db: Database, params: URLSearchParams) {
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
-  return getBudgetVsActual(db, month);
+  const { month } = parseDateRange(params);
+  const accountId = parseAccountId(params);
+  return getBudgetVsActual(db, month, accountId);
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
   const months = parseInt(params.get('months') ?? '6', 10);
-  return getMonthlySavingsData(db, undefined, months);
+  const accountId = parseAccountId(params);
+  return getMonthlySavingsData(db, undefined, months, accountId);
 }
 
 export function apiAlerts(db: Database) {
   return checkAlerts(db);
 }
 
+// ── Transactions ────────────────────────────────────────────────────────────
+
+export function apiTransactions(db: Database, params: URLSearchParams) {
+  const filters: TransactionFilters = {};
+  const start = params.get('start');
+  const end = params.get('end');
+  const category = params.get('category');
+  const merchant = params.get('merchant');
+  const accountId = parseAccountId(params);
+  if (start) filters.dateStart = start;
+  if (end) filters.dateEnd = end;
+  if (category) filters.category = category;
+  if (merchant) filters.merchant = merchant;
+  if (accountId !== undefined) filters.accountId = accountId;
+  const txns = getTransactions(db, filters);
+  const limit = parseInt(params.get('limit') ?? '100', 10);
+  return txns.slice(0, limit);
+}
+
+export function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
+  const success = updateTransaction(db, id, updates);
+  return { success, id };
+}
+
+export function apiDeleteTransaction(db: Database, id: number) {
+  const success = deleteTransaction(db, id);
+  return { success, id };
+}
+
+// ── Export ───────────────────────────────────────────────────────────────────
+
+export function apiExportCsv(db: Database, params: URLSearchParams): string {
+  const filters: TransactionFilters = {};
+  const start = params.get('start');
+  const end = params.get('end');
+  const category = params.get('category');
+  const accountId = parseAccountId(params);
+  if (start) filters.dateStart = start;
+  if (end) filters.dateEnd = end;
+  if (category) filters.category = category;
+  if (accountId !== undefined) filters.accountId = accountId;
+  const txns = getTransactions(db, filters);
+
+  const header = 'Date,Description,Amount,Category';
+  const rows = txns.map((t) =>
+    [t.date, escapeCsv(t.description), String(t.amount), escapeCsv(t.category ?? '')].join(',')
+  );
+  return [header, ...rows].join('\n');
+}
+
+export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
+  // Dynamic import since xlsx is optional
+  const XLSX = require('xlsx');
+  const filters: TransactionFilters = {};
+  const start = params.get('start');
+  const end = params.get('end');
+  const category = params.get('category');
+  const accountId = parseAccountId(params);
+  if (start) filters.dateStart = start;
+  if (end) filters.dateEnd = end;
+  if (category) filters.category = category;
+  if (accountId !== undefined) filters.accountId = accountId;
+  const txns = getTransactions(db, filters);
+
+  const data = txns.map((t) => ({
+    Date: t.date,
+    Description: t.description,
+    Amount: t.amount,
+    Category: t.category ?? '',
+    Bank: t.bank ?? '',
+    'Account Last4': t.account_last4 ?? '',
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {
+  const { startDate, endDate } = parseDateRange(params);
+  const accountId = parseAccountId(params);
+  const pnl = getProfitLoss(db, startDate, endDate, accountId);
+
+  const lines = ['Type,Category,Amount,Count'];
+  for (const r of pnl.incomeByCategory) {
+    lines.push(['Income', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+  }
+  for (const r of pnl.expensesByCategory) {
+    lines.push(['Expense', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+  }
+  lines.push(['','Total Income', String(pnl.totalIncome), ''].join(','));
+  lines.push(['','Total Expenses', String(pnl.totalExpenses), ''].join(','));
+  lines.push(['','Net P&L', String(pnl.netProfitLoss), ''].join(','));
+  return lines.join('\n');
+}
+
+export function apiExportNetWorthCsv(db: Database): string {
+  const nw = getNetWorthSummary(db);
+  const lines = ['Name,Type,Subtype,Institution,Balance'];
+  for (const a of nw.accounts) {
+    lines.push([
+      escapeCsv(a.name),
+      a.account_type,
+      a.account_subtype,
+      escapeCsv(a.institution ?? ''),
+      String(a.current_balance),
+    ].join(','));
+  }
+  lines.push(['','','','Total Assets', String(nw.totalAssets)].join(','));
+  lines.push(['','','','Total Liabilities', String(nw.totalLiabilities)].join(','));
+  lines.push(['','','','Net Worth', String(nw.netWorth)].join(','));
+  return lines.join('\n');
+}
+
+// ── Accounts / Net Worth ────────────────────────────────────────────────────
+
+export function apiAccounts(db: Database) {
+  return getAccounts(db, { active: true });
+}
+
+export function apiNetWorth(db: Database) {
+  return getNetWorthSummary(db);
+}
+
+export function apiNetWorthTrend(db: Database, params: URLSearchParams) {
+  const months = parseInt(params.get('months') ?? '12', 10);
+  return getNetWorthTrend(db, months);
+}
+
+export function apiAccountTransactions(db: Database, accountId: number, params: URLSearchParams) {
+  const filters: TransactionFilters = { accountId };
+  const start = params.get('start');
+  const end = params.get('end');
+  if (start) filters.dateStart = start;
+  if (end) filters.dateEnd = end;
+  const txns = getTransactions(db, filters);
+  const limit = parseInt(params.get('limit') ?? '100', 10);
+  return txns.slice(0, limit);
+}
+
+// ── Logs ────────────────────────────────────────────────────────────────────
+
 export function apiLogs(db: Database, params: URLSearchParams) {
   const limit = parseInt(params.get('limit') ?? '100', 10);
   const levelFilter = params.get('level');
 
-  // Read from SQLite (persisted, cross-session)
   try {
     let sql = 'SELECT level, message AS msg, data, created_at AS ts FROM logs';
     const conditions: string[] = [];
@@ -77,7 +242,6 @@ export function apiLogs(db: Database, params: URLSearchParams) {
     }
   } catch { /* fall through to in-memory */ }
 
-  // Fallback: in-memory buffer (pre-DB or if table doesn't exist yet)
   let entries = logger.getRecentLogs().map((e) => ({
     ts: e.timestamp.toISOString(),
     level: e.level,
@@ -90,49 +254,11 @@ export function apiLogs(db: Database, params: URLSearchParams) {
   return entries.slice(-limit);
 }
 
-export function apiTransactions(db: Database, params: URLSearchParams) {
-  const filters: TransactionFilters = {};
-  const start = params.get('start');
-  const end = params.get('end');
-  const category = params.get('category');
-  const merchant = params.get('merchant');
-  if (start) filters.dateStart = start;
-  if (end) filters.dateEnd = end;
-  if (category) filters.category = category;
-  if (merchant) filters.merchant = merchant;
-  const txns = getTransactions(db, filters);
-  const limit = parseInt(params.get('limit') ?? '100', 10);
-  return txns.slice(0, limit);
-}
-
-export function apiExportCsv(db: Database, params: URLSearchParams): string {
-  const filters: TransactionFilters = {};
-  const start = params.get('start');
-  const end = params.get('end');
-  const category = params.get('category');
-  if (start) filters.dateStart = start;
-  if (end) filters.dateEnd = end;
-  if (category) filters.category = category;
-  const txns = getTransactions(db, filters);
-
-  const escape = (v: string) => {
-    if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-      return '"' + v.replace(/"/g, '""') + '"';
-    }
-    return v;
-  };
-
-  const header = 'Date,Description,Amount,Category';
-  const rows = txns.map((t) =>
-    [t.date, escape(t.description), String(t.amount), escape(t.category ?? '')].join(',')
-  );
-  return [header, ...rows].join('\n');
-}
+// ── Chat ────────────────────────────────────────────────────────────────────
 
 export function apiChatHistory(db: Database) {
   try {
     const rows = getRecentChatHistory(db, 50);
-    // Return in chronological order (newest-first from DB → reverse)
     return rows.reverse();
   } catch {
     return [];
@@ -155,15 +281,7 @@ export function apiChatSessionHistory(db: Database, sessionId: string) {
   }
 }
 
-export function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
-  const success = updateTransaction(db, id, updates);
-  return { success, id };
-}
-
-export function apiDeleteTransaction(db: Database, id: number) {
-  const success = deleteTransaction(db, id);
-  return { success, id };
-}
+// ── Traces ──────────────────────────────────────────────────────────────────
 
 export function apiTraces(db: Database, params: URLSearchParams) {
   const limit = parseInt(params.get('limit') ?? '100', 10);
@@ -196,7 +314,6 @@ export function apiTraceStats(db: Database) {
       FROM llm_traces
     `).get() as Record<string, number> | undefined;
     if (row && row.totalCalls > 0) {
-      // Build byModel from DB
       const modelRows = db.prepare(`
         SELECT model, COUNT(*) AS calls,
           SUM(total_tokens) AS tokens,

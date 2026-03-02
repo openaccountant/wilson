@@ -19,6 +19,7 @@ import {
   recordImport,
   type TransactionInsert,
 } from '../../db/queries.js';
+import { linkTransactionsToAccount } from '../../db/net-worth-queries.js';
 import { formatToolResult } from '../types.js';
 
 // Module-level database reference
@@ -208,16 +209,32 @@ export const csvImportTool = defineTool({
       date_range_end: dateRangeEnd,
     });
 
+    // Auto-link newly imported transactions to accounts by account_last4
+    let autoLinked = 0;
+    const last4Values = [...new Set(txns.map((t) => t.account_last4 ?? null).filter(Boolean))] as string[];
+    for (const last4 of last4Values) {
+      const account = database.prepare(
+        'SELECT id FROM accounts WHERE account_number_last4 = @last4 AND is_active = 1'
+      ).get({ last4 }) as { id: number } | undefined;
+      if (account) {
+        autoLinked += linkTransactionsToAccount(database, account.id, { accountLast4: last4 });
+      }
+    }
+
     const formatLabel = detected.format === 'csv' ? `${detectedBank} CSV` : detected.format.toUpperCase();
+    let message = `Imported ${count} transactions from ${formatLabel} (${dateRangeStart} to ${dateRangeEnd}).`;
+    if (skipped > 0) message += ` ${skipped} duplicates skipped.`;
+    if (autoLinked > 0) message += ` ${autoLinked} transactions auto-linked to accounts.`;
 
     return formatToolResult({
       success: true,
       transactionsImported: count,
       transactionsSkipped: skipped,
+      transactionsLinked: autoLinked,
       formatDetected: detected.format,
       bankDetected: detectedBank,
       dateRange: { start: dateRangeStart, end: dateRangeEnd },
-      message: `Imported ${count} transactions from ${formatLabel} (${dateRangeStart} to ${dateRangeEnd}).${skipped > 0 ? ` ${skipped} duplicates skipped.` : ''}`,
+      message,
     });
   },
 });

@@ -20,6 +20,7 @@ export interface TransactionInsert {
   payment_channel?: string;
   pending?: number;
   authorized_date?: string;
+  account_name?: string;
 }
 
 export interface TransactionRow {
@@ -54,6 +55,7 @@ export interface TransactionFilters {
   maxAmount?: number;
   merchant?: string;
   isRecurring?: boolean;
+  accountId?: number;
 }
 
 export interface SpendingSummaryRow {
@@ -94,10 +96,10 @@ export function insertTransactions(
   const stmt = db.prepare(`
     INSERT INTO transactions (date, description, amount, category, category_confidence,
       source_file, bank, account_last4, is_recurring, tags, notes,
-      merchant_name, category_detailed, external_id, payment_channel, pending, authorized_date)
+      merchant_name, category_detailed, external_id, payment_channel, pending, authorized_date, account_name)
     VALUES (@date, @description, @amount, @category, @category_confidence,
       @source_file, @bank, @account_last4, @is_recurring, @tags, @notes,
-      @merchant_name, @category_detailed, @external_id, @payment_channel, @pending, @authorized_date)
+      @merchant_name, @category_detailed, @external_id, @payment_channel, @pending, @authorized_date, @account_name)
   `);
 
   const insertMany = db.transaction((items: TransactionInsert[]) => {
@@ -121,6 +123,7 @@ export function insertTransactions(
         payment_channel: txn.payment_channel ?? null,
         pending: txn.pending ?? 0,
         authorized_date: txn.authorized_date ?? null,
+        account_name: txn.account_name ?? null,
       });
       count++;
     }
@@ -168,6 +171,10 @@ export function getTransactions(
     conditions.push('is_recurring = @isRecurring');
     params.isRecurring = filters.isRecurring ? 1 : 0;
   }
+  if (filters.accountId !== undefined) {
+    conditions.push('account_id = @accountId');
+    params.accountId = filters.accountId;
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sql = `SELECT * FROM transactions ${where} ORDER BY date DESC`;
@@ -199,18 +206,25 @@ export function updateCategory(
 export function getSpendingSummary(
   db: Database,
   startDate: string,
-  endDate: string
+  endDate: string,
+  accountId?: number
 ): SpendingSummaryRow[] {
+  const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
+  const params: Record<string, unknown> = { startDate, endDate };
+  if (accountId !== undefined) {
+    conditions.push('account_id = @accountId');
+    params.accountId = accountId;
+  }
   return db.prepare(`
     SELECT
       COALESCE(category, 'Uncategorized') AS category,
       SUM(amount) AS total,
       COUNT(*) AS count
     FROM transactions
-    WHERE date >= @startDate AND date <= @endDate AND amount < 0
+    WHERE ${conditions.join(' AND ')}
     GROUP BY category
     ORDER BY total ASC
-  `).all({ startDate, endDate }) as SpendingSummaryRow[];
+  `).all(params) as SpendingSummaryRow[];
 }
 
 /**
@@ -301,22 +315,27 @@ export interface ProfitLossRow {
 export function getProfitLoss(
   db: Database,
   startDate: string,
-  endDate: string
+  endDate: string,
+  accountId?: number
 ): ProfitLossRow {
+  const baseParams: Record<string, unknown> = { startDate, endDate };
+  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
+  if (accountId !== undefined) baseParams.accountId = accountId;
+
   const incomeByCategory = db.prepare(`
     SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
     FROM transactions
-    WHERE date >= @startDate AND date <= @endDate AND (amount > 0 OR category = 'Income')
+    WHERE date >= @startDate AND date <= @endDate AND (amount > 0 OR category = 'Income')${acctFilter}
     GROUP BY category ORDER BY total DESC
-  `).all({ startDate, endDate }) as SpendingSummaryRow[];
+  `).all(baseParams) as SpendingSummaryRow[];
 
   const expensesByCategory = db.prepare(`
     SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
     FROM transactions
     WHERE date >= @startDate AND date <= @endDate AND amount < 0
-      AND COALESCE(category, '') NOT IN ('Income', 'Transfer')
+      AND COALESCE(category, '') NOT IN ('Income', 'Transfer')${acctFilter}
     GROUP BY category ORDER BY total ASC
-  `).all({ startDate, endDate }) as SpendingSummaryRow[];
+  `).all(baseParams) as SpendingSummaryRow[];
 
   const totalIncome = incomeByCategory.reduce((sum, r) => sum + r.total, 0);
   const totalExpenses = expensesByCategory.reduce((sum, r) => sum + r.total, 0);
@@ -346,7 +365,8 @@ export interface MonthlyIncomeExpense {
 export function getMonthlySavingsData(
   db: Database,
   endMonth?: string,
-  months: number = 6
+  months: number = 6,
+  accountId?: number
 ): MonthlyIncomeExpense[] {
   const end = endMonth ?? new Date().toISOString().slice(0, 7);
   const [endYear, endMon] = end.split('-').map(Number);
@@ -357,13 +377,17 @@ export function getMonthlySavingsData(
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   })();
 
+  const params: Record<string, unknown> = { startDate, endDate };
+  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
+  if (accountId !== undefined) params.accountId = accountId;
+
   const rows = db.prepare(`
     SELECT strftime('%Y-%m', date) AS month,
       COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income,
       COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS expenses
-    FROM transactions WHERE date >= @startDate AND date <= @endDate
+    FROM transactions WHERE date >= @startDate AND date <= @endDate${acctFilter}
     GROUP BY strftime('%Y-%m', date) ORDER BY month
-  `).all({ startDate, endDate }) as { month: string; income: number; expenses: number }[];
+  `).all(params) as { month: string; income: number; expenses: number }[];
 
   return rows.map((r) => {
     const savings = r.income - r.expenses;
@@ -576,7 +600,8 @@ export function getBudgets(db: Database): BudgetRow[] {
  */
 export function getBudgetVsActual(
   db: Database,
-  month: string
+  month: string,
+  accountId?: number
 ): BudgetVsActualRow[] {
   const startDate = `${month}-01`;
   // Compute end of month
@@ -586,17 +611,20 @@ export function getBudgetVsActual(
   const budgets = getBudgets(db);
   if (budgets.length === 0) return [];
 
+  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
   const results: BudgetVsActualRow[] = [];
 
   for (const budget of budgets) {
+    const params: Record<string, unknown> = { category: budget.category, startDate, endDate };
+    if (accountId !== undefined) params.accountId = accountId;
     const row = db.prepare(`
       SELECT COALESCE(SUM(ABS(amount)), 0) AS actual
       FROM transactions
       WHERE category = @category
         AND date >= @startDate
         AND date <= @endDate
-        AND amount < 0
-    `).get({ category: budget.category, startDate, endDate }) as { actual: number };
+        AND amount < 0${acctFilter}
+    `).get(params) as { actual: number };
 
     const actual = row.actual;
     const remaining = budget.monthly_limit - actual;

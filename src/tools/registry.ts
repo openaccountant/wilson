@@ -544,7 +544,7 @@ Link unlinked transactions to an account by matching account_last4, bank, or acc
 `.trim();
 
 const PLAID_BALANCES_DESCRIPTION = `
-**Requires Pro license.** Show current account balances for all linked bank accounts.
+**Requires Pro license.** Show current account balances for all linked bank accounts. Also updates account records and balance snapshots for net worth tracking.
 
 ## When to Use
 
@@ -562,6 +562,8 @@ const PLAID_BALANCES_DESCRIPTION = `
 - Requires linked Plaid accounts (set up via /connect)
 - Shows current and available balances for each account
 - Includes account type (checking, savings, credit, etc.)
+- Automatically creates/updates accounts in the net worth tracker
+- Records balance snapshots for trend tracking
 - Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
 `.trim();
 

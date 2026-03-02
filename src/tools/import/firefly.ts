@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { insertTransactions, recordImport, type TransactionInsert } from '../../db/queries.js';
+import { getAccounts, linkTransactionsToAccount } from '../../db/net-worth-queries.js';
 import { formatToolResult } from '../types.js';
 import { hasLicense } from '../../licensing/license.js';
 
@@ -251,6 +252,12 @@ export const fireflyImportTool = defineTool({
       // Tags
       const tags = split.tags && split.tags.length > 0 ? split.tags.join(', ') : undefined;
 
+      // For withdrawals, source_name is the user's account; for deposits, destination_name
+      const accountName =
+        split.type === 'withdrawal' ? split.source_name
+        : split.type === 'deposit' ? split.destination_name
+        : undefined;
+
       txns.push({
         date,
         description,
@@ -263,6 +270,7 @@ export const fireflyImportTool = defineTool({
         tags,
         external_id: externalId,
         merchant_name: description,
+        account_name: accountName ?? undefined,
       });
     }
 
@@ -276,6 +284,18 @@ export const fireflyImportTool = defineTool({
 
     // 4. Bulk insert
     const count = insertTransactions(database, txns);
+
+    // 4b. Auto-link transactions to accounts by account_name
+    let autoLinked = 0;
+    const accountNames = new Set(txns.map((t) => t.account_name).filter(Boolean));
+    if (accountNames.size > 0) {
+      const accounts = getAccounts(database, { active: true });
+      for (const acct of accounts) {
+        if (accountNames.has(acct.name)) {
+          autoLinked += linkTransactionsToAccount(database, acct.id, { accountName: acct.name });
+        }
+      }
+    }
 
     // 5. Compute date range
     const dates = txns.map((t) => t.date).sort();
@@ -296,10 +316,11 @@ export const fireflyImportTool = defineTool({
     return formatToolResult({
       success: true,
       transactionsImported: count,
+      autoLinked,
       skipped,
       totalFetched: rawSplits.length,
       dateRange: { start: dateRangeStart, end: dateRangeEnd },
-      message: `Imported ${count} transactions from Firefly III (${dateRangeStart} to ${dateRangeEnd}). Skipped ${skipped} (duplicates, transfers, or filtered).`,
+      message: `Imported ${count} transactions from Firefly III (${dateRangeStart} to ${dateRangeEnd}). Skipped ${skipped} (duplicates, transfers, or filtered).${autoLinked > 0 ? ` Auto-linked ${autoLinked} to accounts.` : ''}`,
     });
   },
 });

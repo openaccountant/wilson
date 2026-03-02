@@ -1,5 +1,7 @@
 import type { Database } from './compat-sqlite.js';
 import type { AccountType, AccountSubtype } from '../tools/net-worth/account-types.js';
+import { getAccountTypeForSubtype } from '../tools/net-worth/account-types.js';
+import { mapPlaidTypeToSubtype } from '../plaid/account-mapping.js';
 
 // ── Row Types ────────────────────────────────────────────────────────────────
 
@@ -172,6 +174,59 @@ export function getAccountById(db: Database, id: number): AccountRow | undefined
 
 export function getAccountByPlaidId(db: Database, plaidId: string): AccountRow | undefined {
   return db.prepare('SELECT * FROM accounts WHERE plaid_account_id = @plaidId').get({ plaidId }) as AccountRow | undefined;
+}
+
+// ── Plaid Account Upsert ─────────────────────────────────────────────────────
+
+export interface PlaidAccountUpsertData {
+  plaidAccountId: string;
+  name: string;
+  mask: string;
+  plaidType: string;
+  plaidSubtype: string;
+  balance: number;
+  currency: string;
+  institution: string;
+}
+
+/**
+ * Upsert an account from Plaid balance data.
+ * If an account with the given plaid_account_id exists, update its balance.
+ * Otherwise, create a new account with mapped type/subtype.
+ */
+export function upsertAccountFromPlaid(
+  db: Database,
+  data: PlaidAccountUpsertData,
+): { accountId: number; created: boolean } {
+  const existing = getAccountByPlaidId(db, data.plaidAccountId);
+
+  if (existing) {
+    updateAccountBalance(db, existing.id, data.balance, 'plaid');
+    return { accountId: existing.id, created: false };
+  }
+
+  const subtype = mapPlaidTypeToSubtype(data.plaidType, data.plaidSubtype);
+  const accountType = getAccountTypeForSubtype(subtype);
+  const id = insertAccount(db, {
+    name: data.name,
+    account_type: accountType,
+    account_subtype: subtype,
+    institution: data.institution,
+    account_number_last4: data.mask,
+    current_balance: data.balance,
+    currency: data.currency || 'USD',
+    plaid_account_id: data.plaidAccountId,
+  });
+
+  // Record initial balance snapshot
+  insertBalanceSnapshot(db, {
+    account_id: id,
+    balance: data.balance,
+    snapshot_date: new Date().toISOString().slice(0, 10),
+    source: 'plaid',
+  });
+
+  return { accountId: id, created: true };
 }
 
 // ── Balance Management ───────────────────────────────────────────────────────

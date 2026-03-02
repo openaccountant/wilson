@@ -63,6 +63,6 @@ export const selectListTheme: SelectListTheme = {
 };
 
 export const editorTheme: EditorTheme = {
-  borderColor: (text) => theme.primary(text),
+  borderColor: (text) => theme.primaryLight(text),
   selectList: selectListTheme,
 };

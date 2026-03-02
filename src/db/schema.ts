@@ -145,6 +145,38 @@ CREATE TABLE IF NOT EXISTS loans (
 );
 `;
 
+// ── Dashboard Auth Tables ─────────────────────────────────────────────────
+
+export const DASHBOARD_USERS_TABLE = `
+CREATE TABLE IF NOT EXISTS dashboard_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin', 'viewer')),
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
+export const DASHBOARD_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS dashboard_sessions (
+  token TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES dashboard_users(id) ON DELETE CASCADE
+);
+`;
+
+export const DASHBOARD_CONFIG_TABLE = `
+CREATE TABLE IF NOT EXISTS dashboard_config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+INSERT OR IGNORE INTO dashboard_config (key, value) VALUES ('auth_enabled', 'false');
+`;
+
 // ── Observability Tables ───────────────────────────────────────────────────
 
 export const LOGS_TABLE = `

@@ -1,13 +1,21 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
 import { formatToolResult } from '../types.js';
+import type { Database } from '../../db/compat-sqlite.js';
+import { upsertAccountFromPlaid } from '../../db/net-worth-queries.js';
 import { getPlaidItems } from '../../plaid/store.js';
 import { getBalances } from '../../plaid/client.js';
 import { hasLicense } from '../../licensing/license.js';
 
+let db: Database;
+
+export function initPlaidBalancesTool(database: Database) {
+  db = database;
+}
+
 export const plaidBalancesTool = defineTool({
   name: 'plaid_balances',
-  description: 'Show current account balances for all linked bank accounts via Plaid.',
+  description: 'Show current account balances for all linked bank accounts via Plaid. Also updates account records and balance snapshots.',
   schema: z.object({}),
   func: async () => {
     if (!hasLicense('pro')) {
@@ -41,8 +49,32 @@ export const plaidBalancesTool = defineTool({
       }>;
     }> = [];
 
+    let accountsCreated = 0;
+    let accountsUpdated = 0;
+
     for (const item of items) {
       const balances = await getBalances(item.accessToken);
+
+      // Upsert accounts into the accounts table for net worth tracking
+      if (db) {
+        for (const b of balances) {
+          if (b.balanceCurrent !== null) {
+            const { created } = upsertAccountFromPlaid(db, {
+              plaidAccountId: b.accountId,
+              name: b.name,
+              mask: b.mask,
+              plaidType: b.type,
+              plaidSubtype: b.subtype,
+              balance: b.balanceCurrent,
+              currency: b.isoCurrencyCode ?? 'USD',
+              institution: item.institutionName,
+            });
+            if (created) accountsCreated++;
+            else accountsUpdated++;
+          }
+        }
+      }
+
       allBalances.push({
         institution: item.institutionName,
         accounts: balances.map((b) => ({
@@ -56,9 +88,16 @@ export const plaidBalancesTool = defineTool({
       });
     }
 
+    const totalAccounts = allBalances.reduce((n, i) => n + i.accounts.length, 0);
+    let message = `Retrieved balances for ${totalAccounts} accounts across ${allBalances.length} institution(s).`;
+    if (accountsCreated > 0) message += ` ${accountsCreated} new account(s) added.`;
+    if (accountsUpdated > 0) message += ` ${accountsUpdated} balance(s) updated.`;
+
     return formatToolResult({
       balances: allBalances,
-      message: `Retrieved balances for ${allBalances.reduce((n, i) => n + i.accounts.length, 0)} accounts across ${allBalances.length} institution(s).`,
+      accountsCreated,
+      accountsUpdated,
+      message,
     });
   },
 });

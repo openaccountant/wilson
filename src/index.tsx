@@ -68,6 +68,8 @@ Usage:
   wilson --tax-summary [year]      Tax deduction summary by IRS category
   wilson --net-worth               Net worth summary
   wilson --balance-sheet           Full balance sheet with equity
+  wilson --dashboard [--port N]     Run standalone dashboard server
+  wilson --sync                    Sync all linked bank accounts (Plaid)
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
@@ -102,6 +104,14 @@ Usage:
 } else if (args.includes("--export")) {
   const { runExport } = await import("./reports.js");
   await runExport(args);
+} else if (args.includes("--dashboard")) {
+  const portIdx = args.indexOf("--port");
+  const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : undefined;
+  const { runStandalone } = await import("./dashboard/standalone.js");
+  await runStandalone(port);
+} else if (args.includes("--sync")) {
+  const { runSync } = await import("./sync.js");
+  await runSync();
 } else if (runIndex !== -1) {
   const query = args.slice(runIndex + 1).join(" ");
   if (!query) {
