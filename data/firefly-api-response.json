@@ -1,0 +1,230 @@
+{
+  "_comment": "Example Firefly III API v1 response (GET /api/v1/transactions?type=default). Not a file import — fetched via REST API. See src/tools/import/firefly.ts for the importer.",
+  "data": [
+    {
+      "type": "transactions",
+      "id": "1",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "101",
+            "type": "withdrawal",
+            "date": "2026-01-03T00:00:00+00:00",
+            "amount": "42.67",
+            "description": "Weekly groceries",
+            "source_name": "Main Checking",
+            "destination_name": "Corner Market",
+            "category_name": "Groceries",
+            "budget_name": "Food",
+            "bill_name": null,
+            "tags": ["essentials"],
+            "notes": null,
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "2",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "102",
+            "type": "deposit",
+            "date": "2026-01-05T12:00:00+00:00",
+            "amount": "3200.00",
+            "description": "Monthly payroll",
+            "source_name": "Acme Corp",
+            "destination_name": "Main Checking",
+            "category_name": "Income",
+            "budget_name": null,
+            "bill_name": null,
+            "tags": [],
+            "notes": "Monthly payroll deposit",
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "3",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "103",
+            "type": "withdrawal",
+            "date": "2026-01-07T00:00:00+00:00",
+            "amount": "14.99",
+            "description": "Monthly streaming subscription",
+            "source_name": "Main Checking",
+            "destination_name": "StreamCo",
+            "category_name": "Entertainment",
+            "budget_name": null,
+            "bill_name": "StreamCo Subscription",
+            "tags": ["subscription", "entertainment"],
+            "notes": null,
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "4",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "104",
+            "type": "transfer",
+            "date": "2026-01-10T00:00:00+00:00",
+            "amount": "500.00",
+            "description": "Savings transfer",
+            "source_name": "Main Checking",
+            "destination_name": "Savings Account",
+            "category_name": null,
+            "budget_name": null,
+            "bill_name": null,
+            "tags": [],
+            "notes": "Monthly savings",
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "5",
+      "attributes": {
+        "group_title": "Office supplies split",
+        "transactions": [
+          {
+            "transaction_journal_id": "105",
+            "type": "withdrawal",
+            "date": "2026-01-12T00:00:00+00:00",
+            "amount": "89.50",
+            "description": "Printer paper and ink",
+            "source_name": "Business Checking",
+            "destination_name": "Office Depot",
+            "category_name": "Office Supplies",
+            "budget_name": "Business",
+            "bill_name": null,
+            "tags": ["business", "tax-deductible"],
+            "notes": "Restocking office supplies",
+            "internal_reference": null,
+            "external_url": null
+          },
+          {
+            "transaction_journal_id": "106",
+            "type": "withdrawal",
+            "date": "2026-01-12T00:00:00+00:00",
+            "amount": "34.99",
+            "description": "USB cables and adapters",
+            "source_name": "Business Checking",
+            "destination_name": "Office Depot",
+            "category_name": "Office Supplies",
+            "budget_name": "Business",
+            "bill_name": null,
+            "tags": ["business"],
+            "notes": null,
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "6",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "107",
+            "type": "withdrawal",
+            "date": "2026-01-15T00:00:00+00:00",
+            "amount": "65.00",
+            "description": "Electric bill",
+            "source_name": "Main Checking",
+            "destination_name": "City Power Co",
+            "category_name": "Utilities",
+            "budget_name": "Bills",
+            "bill_name": "Electric Bill",
+            "tags": [],
+            "notes": null,
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "7",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "108",
+            "type": "deposit",
+            "date": "2026-01-18T00:00:00+00:00",
+            "amount": "150.00",
+            "description": "Freelance payment",
+            "source_name": "Client ABC",
+            "destination_name": "Business Checking",
+            "category_name": "Freelance Income",
+            "budget_name": null,
+            "bill_name": null,
+            "tags": ["freelance", "income"],
+            "notes": "Invoice #2026-003",
+            "internal_reference": "INV-2026-003",
+            "external_url": null
+          }
+        ]
+      }
+    },
+    {
+      "type": "transactions",
+      "id": "8",
+      "attributes": {
+        "group_title": null,
+        "transactions": [
+          {
+            "transaction_journal_id": "109",
+            "type": "withdrawal",
+            "date": "2026-01-20T00:00:00+00:00",
+            "amount": "22.50",
+            "description": "Lunch with client",
+            "source_name": "Main Checking",
+            "destination_name": "Downtown Cafe",
+            "category_name": "Dining",
+            "budget_name": "Food",
+            "bill_name": null,
+            "tags": [],
+            "notes": "Business lunch",
+            "internal_reference": null,
+            "external_url": null
+          }
+        ]
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 8,
+      "count": 8,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 1
+    }
+  }
+}
