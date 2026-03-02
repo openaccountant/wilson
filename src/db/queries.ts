@@ -767,6 +767,11 @@ export function getTransactionById(db: Database, id: number): TransactionRow | u
 
 // ── Count helpers (for context hints) ────────────────────────────────────────
 
+export function getLastImportDate(db: Database): string | null {
+  const row = db.prepare('SELECT MAX(imported_at) AS last_import FROM imports').get() as { last_import: string | null };
+  return row.last_import;
+}
+
 export function getTransactionCount(db: Database): number {
   const row = db.prepare('SELECT COUNT(*) AS cnt FROM transactions').get() as { cnt: number };
   return row.cnt;
