@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/open-accountant/open-accountant/actions/workflows/ci.yml"><img src="https://github.com/open-accountant/open-accountant/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/openaccountant/wilson/actions/workflows/ci.yml"><img src="https://github.com/openaccountant/wilson/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
 </p>
 
@@ -44,7 +44,7 @@ Named after [Frank J. Wilson](https://en.wikipedia.org/wiki/Frank_J._Wilson), th
 ### Install & Run
 
 ```bash
-git clone https://github.com/open-accountant/open-accountant.git
+git clone https://github.com/openaccountant/wilson.git
 cd open-accountant
 bun install
 cp env.example .env   # edit with your API key(s)

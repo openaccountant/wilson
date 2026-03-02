@@ -4,7 +4,7 @@
   "description": "Open Accountant - Privacy-first AI bookkeeper CLI",
   "repository": {
     "type": "git",
-    "url": "https://github.com/open-accountant/open-accountant.git"
+    "url": "https://github.com/openaccountant/wilson.git"
   },
   "type": "module",
   "main": "src/index.tsx",
