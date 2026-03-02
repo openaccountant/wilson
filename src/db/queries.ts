@@ -764,3 +764,20 @@ export function deleteTransaction(db: Database, id: number): boolean {
 export function getTransactionById(db: Database, id: number): TransactionRow | undefined {
   return db.prepare('SELECT * FROM transactions WHERE id = @id').get({ id }) as TransactionRow | undefined;
 }
+
+// ── Count helpers (for context hints) ────────────────────────────────────────
+
+export function getTransactionCount(db: Database): number {
+  const row = db.prepare('SELECT COUNT(*) AS cnt FROM transactions').get() as { cnt: number };
+  return row.cnt;
+}
+
+export function getUncategorizedCount(db: Database): number {
+  const row = db.prepare('SELECT COUNT(*) AS cnt FROM transactions WHERE category IS NULL').get() as { cnt: number };
+  return row.cnt;
+}
+
+export function getBudgetCount(db: Database): number {
+  const row = db.prepare('SELECT COUNT(*) AS cnt FROM budgets').get() as { cnt: number };
+  return row.cnt;
+}

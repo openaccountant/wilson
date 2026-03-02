@@ -30,6 +30,7 @@ import {
   ApiKeyInputComponent,
   ApprovalPromptComponent,
   ChatLogComponent,
+  ContextHintsComponent,
   CustomEditor,
   DebugPanelComponent,
   IntroComponent,
@@ -328,6 +329,7 @@ export async function runCli() {
   const errorText = new Text('', 0, 0);
   const workingIndicator = new WorkingIndicatorComponent(tui);
   const editor = new CustomEditor(tui, editorTheme);
+  const contextHints = new ContextHintsComponent();
   const debugPanel = new DebugPanelComponent(8, true);
 
   // Set up slash command autocomplete with @ file search
@@ -1008,6 +1010,8 @@ export async function runCli() {
     }
     root.addChild(new Spacer(1));
     root.addChild(editor);
+    contextHints.refresh(db);
+    root.addChild(contextHints);
     root.addChild(debugPanel);
     tui.setFocus(editor);
   };

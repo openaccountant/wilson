@@ -1,6 +1,7 @@
 export { AnswerBoxComponent } from './answer-box.js';
 export { ApprovalPromptComponent } from './approval-prompt.js';
 export { ChatLogComponent } from './chat-log.js';
+export { ContextHintsComponent } from './context-hints.js';
 export { DebugPanelComponent } from './debug-panel.js';
 export { CustomEditor } from './custom-editor.js';
 export { IntroComponent } from './intro.js';
