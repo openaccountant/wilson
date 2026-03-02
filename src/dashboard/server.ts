@@ -7,7 +7,10 @@ import {
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions,
+  apiInteractions, apiInteractionDetail, apiRunInteractions,
+  apiAnnotateInteraction, apiAnnotationStats,
 } from './api.js';
+import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
   isAuthEnabled, enableAuth, disableAuth,
@@ -43,7 +46,7 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
   const port = preferredPort ?? DEFAULT_PORT;
 
   // Set up initial DB in manager and chat session
-  setInitialProfile(getCurrentProfileName());
+  setInitialProfile(getCurrentProfileName(), db);
   initChatSession(db);
 
   // Clean expired sessions on startup
@@ -347,6 +350,73 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
           }
           const result = await handleChatMessage(body.query, body.sessionId);
           return Response.json(result, { headers });
+        }
+
+        // ── Interactions (Training Data) ─────────────────────────────
+
+        if (path === '/api/interactions') {
+          return Response.json(apiInteractions(activeDb, url.searchParams), { headers });
+        }
+
+        const interactionMatch = path.match(/^\/api\/interactions\/(\d+)$/);
+        if (interactionMatch) {
+          const id = parseInt(interactionMatch[1], 10);
+          if (req.method === 'GET') {
+            const detail = apiInteractionDetail(activeDb, id);
+            if (!detail) return Response.json({ error: 'Not found' }, { status: 404, headers });
+            return Response.json(detail, { headers });
+          }
+        }
+
+        const annotateMatch = path.match(/^\/api\/interactions\/(\d+)\/annotate$/);
+        if (annotateMatch && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const id = parseInt(annotateMatch[1], 10);
+          const body = await req.json() as Record<string, unknown>;
+          return Response.json(apiAnnotateInteraction(activeDb, id, body), { headers });
+        }
+
+        const runMatch = path.match(/^\/api\/runs\/(.+)$/);
+        if (runMatch) {
+          return Response.json(apiRunInteractions(activeDb, runMatch[1]), { headers });
+        }
+
+        if (path === '/api/annotations/stats') {
+          return Response.json(apiAnnotationStats(activeDb), { headers });
+        }
+
+        // ── Training Export ──────────────────────────────────────────
+
+        if (path === '/api/export/training/sft') {
+          const minRating = parseInt(url.searchParams.get('minRating') ?? '4', 10);
+          const callTypesParam = url.searchParams.get('callTypes');
+          const callTypes = callTypesParam ? callTypesParam.split(',') : ['agent'];
+          const model = url.searchParams.get('model') ?? undefined;
+          const jsonl = exportSftJsonl(activeDb, { minRating, callTypes, model });
+          return new Response(jsonl, {
+            headers: {
+              ...headers,
+              'Content-Type': 'application/x-ndjson',
+              'Content-Disposition': 'attachment; filename="wilson-sft.jsonl"',
+            },
+          });
+        }
+
+        if (path === '/api/export/training/dpo') {
+          const jsonl = exportDpoJsonl(activeDb);
+          return new Response(jsonl, {
+            headers: {
+              ...headers,
+              'Content-Type': 'application/x-ndjson',
+              'Content-Disposition': 'attachment; filename="wilson-dpo.jsonl"',
+            },
+          });
+        }
+
+        if (path === '/api/export/training/stats') {
+          return Response.json(getTrainingStats(activeDb), { headers });
         }
 
         return new Response('Not Found', { status: 404, headers });

@@ -337,3 +337,125 @@ export function apiTraceStats(db: Database) {
   } catch { /* fall through */ }
   return traceStore.getStats();
 }
+
+// ── Interactions (Training Data) ─────────────────────────────────────────────
+
+export function apiInteractions(db: Database, params: URLSearchParams) {
+  const limit = parseInt(params.get('limit') ?? '100', 10);
+  const offset = parseInt(params.get('offset') ?? '0', 10);
+  const callType = params.get('callType');
+  const model = params.get('model');
+  const rating = params.get('rating');
+  const annotated = params.get('annotated');
+
+  let sql = `
+    SELECT i.id, i.run_id, i.sequence_num, i.call_type, i.model, i.provider,
+      i.input_tokens, i.output_tokens, i.total_tokens, i.duration_ms,
+      i.status, i.created_at,
+      a.rating, a.preference
+    FROM llm_interactions i
+    LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+  `;
+  const conditions: string[] = [];
+  const sqlParams: Record<string, unknown> = {};
+
+  if (callType) { conditions.push('i.call_type = @callType'); sqlParams.callType = callType; }
+  if (model) { conditions.push('i.model = @model'); sqlParams.model = model; }
+  if (rating) { conditions.push('a.rating = @rating'); sqlParams.rating = parseInt(rating, 10); }
+  if (annotated === 'true') { conditions.push('a.id IS NOT NULL'); }
+  if (annotated === 'false') { conditions.push('a.id IS NULL'); }
+
+  if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+  sql += ' ORDER BY i.id DESC LIMIT @limit OFFSET @offset';
+  sqlParams.limit = limit;
+  sqlParams.offset = offset;
+
+  try {
+    return db.prepare(sql).all(sqlParams);
+  } catch {
+    return [];
+  }
+}
+
+export function apiInteractionDetail(db: Database, id: number) {
+  try {
+    const interaction = db.prepare(`
+      SELECT * FROM llm_interactions WHERE id = @id
+    `).get({ id }) as Record<string, unknown> | undefined;
+    if (!interaction) return null;
+
+    const toolResults = db.prepare(`
+      SELECT * FROM llm_tool_results WHERE interaction_id = @id ORDER BY id
+    `).all({ id });
+
+    const annotations = db.prepare(`
+      SELECT * FROM interaction_annotations WHERE interaction_id = @id ORDER BY id DESC LIMIT 1
+    `).all({ id });
+
+    return { ...interaction, toolResults, annotations };
+  } catch {
+    return null;
+  }
+}
+
+export function apiRunInteractions(db: Database, runId: string) {
+  try {
+    return db.prepare(`
+      SELECT i.*, a.rating, a.preference, a.pair_id
+      FROM llm_interactions i
+      LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+      WHERE i.run_id = @runId
+      ORDER BY i.sequence_num
+    `).all({ runId });
+  } catch {
+    return [];
+  }
+}
+
+export function apiAnnotateInteraction(db: Database, id: number, annotation: {
+  rating?: number;
+  preference?: 'chosen' | 'rejected' | 'neutral';
+  pairId?: string;
+  tags?: string[];
+  notes?: string;
+}) {
+  try {
+    // Upsert: delete existing annotation for this interaction, then insert
+    db.prepare('DELETE FROM interaction_annotations WHERE interaction_id = @id').run({ id });
+    db.prepare(`
+      INSERT INTO interaction_annotations (interaction_id, rating, preference, pair_id, tags, notes)
+      VALUES (@interaction_id, @rating, @preference, @pair_id, @tags, @notes)
+    `).run({
+      interaction_id: id,
+      rating: annotation.rating ?? null,
+      preference: annotation.preference ?? null,
+      pair_id: annotation.pairId ?? null,
+      tags: annotation.tags ? JSON.stringify(annotation.tags) : null,
+      notes: annotation.notes ?? null,
+    });
+    return { success: true, id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export function apiAnnotationStats(db: Database) {
+  try {
+    const total = (db.prepare('SELECT COUNT(*) AS c FROM llm_interactions').get() as { c: number })?.c ?? 0;
+    const annotated = (db.prepare('SELECT COUNT(DISTINCT interaction_id) AS c FROM interaction_annotations').get() as { c: number })?.c ?? 0;
+    const ratingCounts = db.prepare(`
+      SELECT rating, COUNT(*) AS count FROM interaction_annotations
+      WHERE rating IS NOT NULL GROUP BY rating ORDER BY rating
+    `).all() as { rating: number; count: number }[];
+    const dpoPairs = (db.prepare(`
+      SELECT COUNT(DISTINCT pair_id) AS c FROM interaction_annotations WHERE pair_id IS NOT NULL
+    `).get() as { c: number })?.c ?? 0;
+    const sftReady = (db.prepare(`
+      SELECT COUNT(*) AS c FROM interaction_annotations WHERE rating >= 4
+    `).get() as { c: number })?.c ?? 0;
+
+    return { total, annotated, ratingCounts, dpoPairs, sftReady };
+  } catch {
+    return { total: 0, annotated: 0, ratingCounts: [], dpoPairs: 0, sftReady: 0 };
+  }
+}

@@ -17,6 +17,10 @@ import {
   DASHBOARD_USERS_TABLE,
   DASHBOARD_SESSIONS_TABLE,
   DASHBOARD_CONFIG_TABLE,
+  LLM_INTERACTIONS_TABLE,
+  LLM_TOOL_RESULTS_TABLE,
+  INTERACTION_ANNOTATIONS_TABLE,
+  INTERACTION_INDEXES,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -43,6 +47,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 11, name: 'create_observability_tables', up: LOGS_TABLE + LLM_TRACES_TABLE },
   { version: 12, name: 'create_observability_indexes', up: OBSERVABILITY_INDEXES },
   { version: 13, name: 'create_dashboard_auth', up: DASHBOARD_USERS_TABLE + DASHBOARD_SESSIONS_TABLE + DASHBOARD_CONFIG_TABLE },
+  { version: 14, name: 'create_interaction_tables', up: LLM_INTERACTIONS_TABLE + LLM_TOOL_RESULTS_TABLE + INTERACTION_ANNOTATIONS_TABLE },
+  { version: 15, name: 'create_interaction_indexes', up: INTERACTION_INDEXES },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

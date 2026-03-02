@@ -16,19 +16,21 @@ export function getDashboardHtml(port: number): string {
 <title>Open Accountant Dashboard</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#0f1117; color:#e1e4e8; }
-  .header { padding:16px 24px; background:#161b22; border-bottom:1px solid #30363d; display:flex; justify-content:space-between; align-items:center; }
+  #appRoot { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+  .header { padding:16px 24px; background:#161b22; border-bottom:1px solid #30363d; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
   .header h1 { font-size:18px; font-weight:600; }
   .header-controls { display:flex; gap:12px; align-items:center; }
   .header select { background:#21262d; color:#e1e4e8; border:1px solid #30363d; padding:6px 10px; border-radius:6px; }
 
   /* Tabs */
-  .tab-bar { display:flex; gap:0; background:#161b22; border-bottom:1px solid #30363d; padding:0 24px; }
+  .tab-bar { display:flex; gap:0; background:#161b22; border-bottom:1px solid #30363d; padding:0 24px; flex-shrink:0; }
   .tab-btn { padding:10px 20px; background:none; border:none; color:#8b949e; cursor:pointer; font-size:14px; font-weight:500; border-bottom:2px solid transparent; transition:all 0.15s; }
   .tab-btn:hover { color:#e1e4e8; }
   .tab-btn.active { color:#e1e4e8; border-bottom-color:#22c55e; }
-  .tab-panel { display:none; }
-  .tab-panel.active { display:block; }
+  .tab-panel { display:none; flex:1; overflow:hidden; min-height:0; }
+  .tab-panel.active { display:flex; flex-direction:column; }
 
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px 24px; }
   .card { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:16px; }
@@ -68,7 +70,7 @@ export function getDashboardHtml(port: number): string {
   .btn-save:hover { background:#3fb95033; }
   td input, td select { background:#21262d; color:#e1e4e8; border:1px solid #30363d; padding:4px 6px; border-radius:4px; font-size:12px; width:100%; }
 
-  .chat-layout { display:flex; height:calc(100vh - 120px); }
+  .chat-layout { display:flex; flex:1; min-height:0; }
   .chat-sidebar { width:260px; border-right:1px solid #30363d; overflow-y:auto; padding:12px; flex-shrink:0; }
   .chat-sidebar h4 { font-size:12px; color:#8b949e; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
   .session-item { padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:4px; font-size:13px; }
@@ -106,7 +108,7 @@ export function getDashboardHtml(port: number): string {
   .chat-input-row button:hover { background:#2ea043; }
   .chat-input-row button:disabled { opacity:0.5; cursor:not-allowed; }
 
-  .log-panel { padding:16px 24px; }
+  .log-panel { padding:16px 24px; flex:1; display:flex; flex-direction:column; min-height:0; }
   .log-entry { padding:3px 0; border-bottom:1px solid #21262d; display:flex; gap:8px; font-family:monospace; font-size:12px; }
   .log-entry:last-child { border-bottom:none; }
   .log-ts { color:#8b949e; flex-shrink:0; }
@@ -116,7 +118,7 @@ export function getDashboardHtml(port: number): string {
   .log-level-warn { color:#d29922; }
   .log-level-error { color:#f85149; }
   .log-msg { flex:1; }
-  .log-container { max-height:500px; overflow-y:auto; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:12px; }
+  .log-container { overflow-y:auto; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:12px; }
 
   .traces-panel { padding:16px 24px; }
   .trace-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
@@ -132,7 +134,7 @@ export function getDashboardHtml(port: number): string {
   .trace-provider { color:#8b949e; }
   .trace-duration { color:#d29922; }
   .trace-tokens { color:#58a6ff; }
-  .trace-container { max-height:500px; overflow-y:auto; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:0; }
+  .trace-container { overflow-y:auto; background:#161b22; border:1px solid #30363d; border-radius:6px; padding:0; }
 
   .spending-layout { display:flex; gap:24px; align-items:center; }
   .donut-chart { flex-shrink:0; width:160px; height:160px; }
@@ -164,6 +166,41 @@ export function getDashboardHtml(port: number): string {
   .loading { color:#8b949e; font-style:italic; }
   .empty { color:#8b949e; }
   .hidden { display:none !important; }
+
+  /* Tablet / small laptop */
+  @media (max-width: 768px) {
+    .header { flex-wrap:wrap; padding:12px 16px; }
+    .header h1 { width:100%; }
+    .header-controls { flex-wrap:wrap; gap:8px; }
+    .tab-bar { overflow-x:auto; -webkit-overflow-scrolling:touch; padding:0 16px; }
+    .tab-btn { padding:10px 14px; font-size:13px; white-space:nowrap; flex-shrink:0; }
+    .grid { grid-template-columns:1fr; padding:12px 16px; }
+    .spending-layout { flex-direction:column; }
+    .donut-chart { width:140px; height:140px; }
+    .trace-stats { grid-template-columns:repeat(2,1fr); }
+    .nw-stats { grid-template-columns:repeat(2,1fr); }
+    .chat-sidebar { display:none; }
+    .chat-main { padding:12px 16px; }
+    .log-panel { padding:16px; }
+    .traces-panel { padding:16px; }
+    table { display:block; overflow-x:auto; }
+    .savings-row { flex-wrap:wrap; gap:4px; }
+    .auth-box { width:90vw; max-width:360px; }
+  }
+
+  /* Phone */
+  @media (max-width: 480px) {
+    .header { padding:10px 12px; }
+    .header h1 { font-size:16px; }
+    .header select { font-size:12px; padding:4px 6px; }
+    .pnl-grid { grid-template-columns:1fr; }
+    .pnl-item .value { font-size:20px; }
+    .trace-stats, .nw-stats { grid-template-columns:1fr; }
+    .auth-box { padding:20px; }
+    .chat-input-row { flex-wrap:wrap; }
+    .chat-input-row button { width:100%; }
+    .card { padding:12px; }
+  }
 </style>
 </head>
 <body>
@@ -180,6 +217,9 @@ export function getDashboardHtml(port: number): string {
     <select id="accountFilter" title="Filter by account">
       <option value="">All Accounts</option>
     </select>
+    <select id="categoryFilter" title="Filter by category">
+      <option value="">All Categories</option>
+    </select>
     <select id="monthPicker"></select>
     <button id="authSettingsBtn" class="btn-sm hidden" title="Auth Settings">Settings</button>
     <span id="userBadge" class="hidden" style="font-size:12px;color:#8b949e;"></span>
@@ -194,10 +234,11 @@ export function getDashboardHtml(port: number): string {
   <button class="tab-btn" data-tab="chat">Chat</button>
   <button class="tab-btn" data-tab="traces">Traces</button>
   <button class="tab-btn" data-tab="logs">Logs</button>
+  <button class="tab-btn" data-tab="training">Training</button>
 </div>
 
 <div class="tab-panel active" id="tab-overview">
-  <div class="grid">
+  <div class="grid" style="overflow-y:auto;flex:1;min-height:0;">
     <div class="card"><h3>Profit &amp; Loss</h3><div class="pnl-grid" id="pnlContent"><p class="loading">Loading...</p></div></div>
     <div class="card"><h3>Budgets</h3><div id="budgetContent"><p class="loading">Loading...</p></div></div>
     <div class="card"><h3>Spending by Category</h3><div id="spendingContent"><p class="loading">Loading...</p></div></div>
@@ -207,22 +248,20 @@ export function getDashboardHtml(port: number): string {
 </div>
 
 <div class="tab-panel" id="tab-transactions">
-  <div style="padding:16px 24px;">
-    <div class="card full-width">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h3 style="margin:0;">Transactions</h3>
-        <div style="display:flex;gap:8px;">
-          <select id="exportFormat" class="btn-sm" style="padding:4px 8px;"><option value="csv">CSV</option><option value="xlsx">XLSX</option></select>
-          <button id="exportBtn" class="btn-sm" style="padding:4px 12px;">Export</button>
-        </div>
+  <div style="padding:16px 24px 0;flex-shrink:0;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;">Transactions</h3>
+      <div style="display:flex;gap:8px;">
+        <select id="exportFormat" class="btn-sm" style="padding:4px 8px;"><option value="csv">CSV</option><option value="xlsx">XLSX</option></select>
+        <button id="exportBtn" class="btn-sm" style="padding:4px 12px;">Export</button>
       </div>
-      <div id="txnContent"><p class="loading">Loading...</p></div>
     </div>
   </div>
+  <div id="txnContent" style="flex:1;overflow-y:auto;padding:0 24px 16px;min-height:0;"><p class="loading">Loading...</p></div>
 </div>
 
 <div class="tab-panel" id="tab-accounts">
-  <div style="padding:16px 24px;">
+  <div style="padding:16px 24px;flex:1;overflow-y:auto;min-height:0;">
     <div class="nw-stats" id="nwStats"><p class="loading">Loading...</p></div>
     <div class="card full-width" style="margin-bottom:16px;"><h3>Accounts</h3><div id="accountsTable"><p class="loading">Loading...</p></div></div>
     <div class="card full-width"><h3>Net Worth Trend</h3><div id="nwTrend"><p class="loading">Loading...</p></div></div>
@@ -249,19 +288,65 @@ export function getDashboardHtml(port: number): string {
 </div>
 
 <div class="tab-panel" id="tab-traces">
-  <div class="traces-panel">
+  <div style="padding:16px 24px 0;flex-shrink:0;">
     <div class="trace-stats" id="traceStats"></div>
-    <div class="trace-container">
-      <table class="trace-table">
-        <thead><tr><th>Time</th><th>Model</th><th>Provider</th><th>Duration</th><th>In Tokens</th><th>Out Tokens</th><th>Prompt</th><th>Response</th><th>Status</th></tr></thead>
-        <tbody id="traceTableBody"><tr><td colspan="9" class="loading">Loading...</td></tr></tbody>
-      </table>
-    </div>
+  </div>
+  <div class="trace-container" style="flex:1;max-height:none;margin:0 24px 16px;min-height:0;">
+    <table class="trace-table">
+      <thead><tr><th>Time</th><th>Model</th><th>Provider</th><th>Duration</th><th>In Tokens</th><th>Out Tokens</th><th>Prompt</th><th>Response</th><th>Status</th></tr></thead>
+      <tbody id="traceTableBody"><tr><td colspan="9" class="loading">Loading...</td></tr></tbody>
+    </table>
   </div>
 </div>
 
 <div class="tab-panel" id="tab-logs">
-  <div class="log-panel"><div class="log-container" id="logContent"><p class="loading">Loading...</p></div></div>
+  <div class="log-container" id="logContent" style="flex:1;max-height:none;margin:16px 24px;min-height:0;"><p class="loading">Loading...</p></div>
+</div>
+
+<div class="tab-panel" id="tab-training">
+  <div style="padding:16px 24px;flex:1;overflow-y:auto;min-height:0;">
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div class="card" style="flex:1;"><h3>Training Stats</h3><div id="trainingStats"><p class="loading">Loading...</p></div></div>
+      <div class="card" style="flex:0 0 auto;">
+        <h3>Export</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <button class="btn-sm btn-save" id="exportSft" style="padding:6px 16px;">Export SFT JSONL</button>
+          <button class="btn-sm btn-save" id="exportDpo" style="padding:6px 16px;">Export DPO JSONL</button>
+        </div>
+      </div>
+    </div>
+    <div class="card full-width" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 style="margin:0;">Interactions</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="trainFilterType" class="btn-sm"><option value="">All Types</option><option value="agent">Agent</option><option value="summarize">Summarize</option><option value="relevance">Relevance</option></select>
+          <select id="trainFilterAnnotated" class="btn-sm"><option value="">All</option><option value="true">Annotated</option><option value="false">Unannotated</option></select>
+          <select id="trainFilterRating" class="btn-sm"><option value="">Any Rating</option><option value="5">5 Stars</option><option value="4">4+ Stars</option><option value="3">3+ Stars</option></select>
+        </div>
+      </div>
+      <table id="interactionTable"><thead><tr><th>ID</th><th>Run</th><th>Type</th><th>Model</th><th>Tokens</th><th>Rating</th><th>Time</th><th></th></tr></thead><tbody id="interactionBody"></tbody></table>
+    </div>
+    <div class="card full-width" id="interactionDetailCard" style="display:none;">
+      <h3>Interaction Detail</h3>
+      <div id="interactionDetail"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
+        <h3>Annotate</h3>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+          <div><label style="font-size:12px;color:#8b949e;">Rating</label><div id="ratingStars" style="display:flex;gap:4px;margin-top:4px;"></div></div>
+          <div><label style="font-size:12px;color:#8b949e;">Preference</label>
+            <select id="prefSelect" class="btn-sm" style="margin-top:4px;display:block;"><option value="">—</option><option value="chosen">Chosen</option><option value="rejected">Rejected</option><option value="neutral">Neutral</option></select>
+          </div>
+          <div><label style="font-size:12px;color:#8b949e;">Pair ID</label>
+            <input id="pairIdInput" class="btn-sm" style="margin-top:4px;display:block;width:120px;" placeholder="DPO pair ID">
+          </div>
+          <div><label style="font-size:12px;color:#8b949e;">Notes</label>
+            <input id="annotNotes" class="btn-sm" style="margin-top:4px;display:block;width:200px;" placeholder="Optional notes">
+          </div>
+          <button id="saveAnnotation" class="btn-sm btn-save" style="padding:6px 16px;margin-top:18px;">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -271,6 +356,7 @@ export function getDashboardHtml(port: number): string {
   var BASE = 'http://localhost:${port}';
   var currentMonth = new Date().toISOString().slice(0,7);
   var currentAccountId = '';
+  var currentCategory = '';
   var authToken = localStorage.getItem('oa_token') || '';
   var currentUser = null;
 
@@ -285,6 +371,7 @@ export function getDashboardHtml(port: number): string {
     return n >= 0 ? '$' + abs : '-$' + abs;
   }
   function acctParam() { return currentAccountId ? '&accountId=' + currentAccountId : ''; }
+  function catParam() { return currentCategory ? '&category=' + encodeURIComponent(currentCategory) : ''; }
 
   function authFetch(url, opts) {
     opts = opts || {};
@@ -302,6 +389,23 @@ export function getDashboardHtml(port: number): string {
     authBox.replaceChildren();
     authBox.appendChild(el('h2', null, 'Login'));
     var form = el('div');
+    var profileSelect = null;
+    (async function() {
+      try {
+        var pdata = await (await fetch(BASE+'/api/profiles')).json();
+        if (pdata.profiles && pdata.profiles.length > 1) {
+          form.insertBefore(el('label', null, 'Profile'), form.firstChild);
+          profileSelect = document.createElement('select');
+          profileSelect.style.cssText = 'width:100%;background:#21262d;color:#e1e4e8;border:1px solid #30363d;padding:8px 12px;border-radius:6px;font-size:14px;margin-bottom:4px;';
+          pdata.profiles.forEach(function(p) {
+            var opt = document.createElement('option'); opt.value = p; opt.textContent = p;
+            if (p === pdata.active) opt.selected = true;
+            profileSelect.appendChild(opt);
+          });
+          form.insertBefore(profileSelect, form.children[1]);
+        }
+      } catch(e) {}
+    })();
     form.appendChild(el('label', null, 'Username'));
     var userIn = document.createElement('input'); userIn.type = 'text';
     form.appendChild(userIn);
@@ -318,6 +422,9 @@ export function getDashboardHtml(port: number): string {
         if (!res.ok) { errDiv.textContent = data.error||'Login failed'; return; }
         authToken = data.token; currentUser = data.user;
         localStorage.setItem('oa_token', authToken);
+        if (profileSelect && profileSelect.value) {
+          await authFetch(BASE+'/api/profiles/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:profileSelect.value}) });
+        }
         authOverlay.classList.add('hidden'); onAuthReady();
       } catch(e) { errDiv.textContent = e.message; }
     });
@@ -331,6 +438,23 @@ export function getDashboardHtml(port: number): string {
     authBox.appendChild(el('h2', null, 'Create Admin Account'));
     authBox.appendChild(el('p', null, 'Set up your first admin account to secure the dashboard.'));
     var form = el('div');
+    var setupProfileSelect = null;
+    (async function() {
+      try {
+        var pdata = await (await fetch(BASE+'/api/profiles')).json();
+        if (pdata.profiles && pdata.profiles.length > 1) {
+          form.insertBefore(el('label', null, 'Profile'), form.firstChild);
+          setupProfileSelect = document.createElement('select');
+          setupProfileSelect.style.cssText = 'width:100%;background:#21262d;color:#e1e4e8;border:1px solid #30363d;padding:8px 12px;border-radius:6px;font-size:14px;margin-bottom:4px;';
+          pdata.profiles.forEach(function(p) {
+            var opt = document.createElement('option'); opt.value = p; opt.textContent = p;
+            if (p === pdata.active) opt.selected = true;
+            setupProfileSelect.appendChild(opt);
+          });
+          form.insertBefore(setupProfileSelect, form.children[1]);
+        }
+      } catch(e) {}
+    })();
     form.appendChild(el('label', null, 'Username'));
     var userIn = document.createElement('input'); userIn.type = 'text';
     form.appendChild(userIn);
@@ -342,6 +466,9 @@ export function getDashboardHtml(port: number): string {
     btn.addEventListener('click', async function() {
       errDiv.textContent = '';
       try {
+        if (setupProfileSelect && setupProfileSelect.value) {
+          await fetch(BASE+'/api/profiles/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:setupProfileSelect.value}) });
+        }
         var res = await fetch(BASE+'/api/auth/setup', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:userIn.value,password:passIn.value}) });
         var data = await res.json();
         if (!res.ok) { errDiv.textContent = data.error||'Setup failed'; return; }
@@ -378,7 +505,7 @@ export function getDashboardHtml(port: number): string {
       badge.classList.remove('hidden'); logoutBtn.classList.remove('hidden');
       if (currentUser.role === 'admin') settingsBtn.classList.remove('hidden');
     }
-    loadProfiles(); loadAccountOptions(); initRouter();
+    loadProfiles(); loadAccountOptions(); loadCategoryOptions(); initRouter();
   }
 
   document.getElementById('logoutBtn').addEventListener('click', async function() {
@@ -391,7 +518,7 @@ export function getDashboardHtml(port: number): string {
   async function loadProfiles() {
     try {
       var data = await (await authFetch(BASE+'/api/profiles')).json();
-      if (data.profiles && data.profiles.length > 1) {
+      if (data.profiles && data.profiles.length) {
         profilePicker.classList.remove('hidden');
         profilePicker.replaceChildren();
         data.profiles.forEach(function(p) {
@@ -424,8 +551,26 @@ export function getDashboardHtml(port: number): string {
     currentAccountId = accountFilter.value; loadOverview(); loadTransactions();
   });
 
+  // ── Category filter ──────────────────────────────────────────────────
+  var categoryFilter = document.getElementById('categoryFilter');
+  async function loadCategoryOptions() {
+    try {
+      var data = await (await authFetch(BASE+'/api/summary?month='+currentMonth+acctParam())).json();
+      while (categoryFilter.options.length > 1) categoryFilter.remove(1);
+      if (data && data.length) data.forEach(function(r) {
+        if (!r.category) return;
+        var opt = document.createElement('option'); opt.value = r.category; opt.textContent = r.category;
+        categoryFilter.appendChild(opt);
+      });
+      if (currentCategory) categoryFilter.value = currentCategory;
+    } catch(e) {}
+  }
+  categoryFilter.addEventListener('change', function() {
+    currentCategory = categoryFilter.value; loadOverview(); loadTransactions();
+  });
+
   // ── Hash routing ────────────────────────────────────────────────────────
-  var TABS = ['overview','transactions','accounts','chat','traces','logs'];
+  var TABS = ['overview','transactions','accounts','chat','traces','logs','training'];
   var tabBtns = document.querySelectorAll('.tab-btn');
 
   function activateTab(tabName) {
@@ -441,11 +586,14 @@ export function getDashboardHtml(port: number): string {
     var panel = document.getElementById('tab-' + tabName);
     if (panel) panel.classList.add('active');
     if (params.accountId) { currentAccountId = params.accountId; accountFilter.value = params.accountId; }
+    if (params.category) { currentCategory = decodeURIComponent(params.category); categoryFilter.value = currentCategory; }
     if (tabName === 'overview') loadOverview();
     if (tabName === 'transactions') loadTransactions();
     if (tabName === 'accounts') loadAccountsTab();
+    if (tabName === 'chat') loadSessions();
     if (tabName === 'traces') loadTraces();
     if (tabName === 'logs') loadLogs();
+    if (tabName === 'training') { loadTrainingStats(); loadInteractions(); }
   }
   function navigateTo(tab) { location.hash = '#/' + tab; }
   function initRouter() {
@@ -462,30 +610,33 @@ export function getDashboardHtml(port: number): string {
     opt.textContent = d.toLocaleString('en-US', {month:'long',year:'numeric'});
     picker.appendChild(opt);
   }
-  picker.addEventListener('change', function() { currentMonth = picker.value; loadOverview(); });
+  picker.addEventListener('change', function() { currentMonth = picker.value; loadCategoryOptions(); loadOverview(); });
 
   // ── Overview ────────────────────────────────────────────────────────────
   async function loadPnl() {
-    var data = await (await authFetch(BASE+'/api/pnl?month='+currentMonth+acctParam())).json();
+    var data = await (await authFetch(BASE+'/api/pnl?month='+currentMonth+acctParam()+catParam())).json();
     var c = document.getElementById('pnlContent'); c.replaceChildren();
     [{label:'Income',value:data.totalIncome,cls:'income'},{label:'Expenses',value:data.totalExpenses,cls:'expense'},{label:'Net',value:data.netProfitLoss,cls:data.netProfitLoss>=0?'income':'expense'}].forEach(function(it) {
       var div = el('div','pnl-item'); div.appendChild(el('div','label',it.label)); div.appendChild(el('div','value '+it.cls,fmt(it.value))); c.appendChild(div);
     });
   }
   async function loadBudgets() {
-    var data = await (await authFetch(BASE+'/api/budgets?month='+currentMonth+acctParam())).json();
+    var data = await (await authFetch(BASE+'/api/budgets?month='+currentMonth+acctParam()+catParam())).json();
     var c = document.getElementById('budgetContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No budgets set.')); return; }
     data.forEach(function(b) {
       var bar = el('div','budget-bar'), lr = el('div','bar-label');
-      lr.appendChild(el('span',null,b.category)); lr.appendChild(el('span',null,b.percent_used+'%'+(b.over?' OVER':''))); bar.appendChild(lr);
+      lr.appendChild(el('span',null,b.category)); lr.appendChild(el('span',null,fmt(b.actual)+' of '+fmt(b.monthly_limit)+'  ('+b.percent_used+'%'+(b.over?' OVER':'')+')')); bar.appendChild(lr);
       var track = el('div','bar-track'), cls = b.over?'bar-over':b.percent_used>=80?'bar-warn':'bar-ok';
-      var fill = el('div','bar-fill '+cls); fill.style.width = Math.min(b.percent_used,100)+'%'; track.appendChild(fill); bar.appendChild(track); c.appendChild(bar);
+      var fill = el('div','bar-fill '+cls); fill.style.width = Math.min(b.percent_used,100)+'%'; track.appendChild(fill); bar.appendChild(track);
+      bar.style.cursor = 'pointer';
+      (function(cat){ bar.addEventListener('click',function(){ currentCategory=cat; categoryFilter.value=cat; navigateTo('transactions'); }); })(b.category);
+      c.appendChild(bar);
     });
   }
   var COLORS = ['#3fb950','#58a6ff','#d29922','#f85149','#bc8cff','#79c0ff','#f0883e','#56d364','#db61a2','#8b949e'];
   async function loadSpending() {
-    var data = await (await authFetch(BASE+'/api/summary?month='+currentMonth+acctParam())).json();
+    var data = await (await authFetch(BASE+'/api/summary?month='+currentMonth+acctParam()+catParam())).json();
     var c = document.getElementById('spendingContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No spending data.')); return; }
     var total = data.reduce(function(s,r){return s+Math.abs(r.total);},0);
@@ -498,7 +649,11 @@ export function getDashboardHtml(port: number): string {
       var circ = document.createElementNS(NS,'circle'); circ.setAttribute('cx',CX); circ.setAttribute('cy',CY); circ.setAttribute('r',R);
       circ.setAttribute('fill','none'); circ.setAttribute('stroke',COLORS[i%COLORS.length]); circ.setAttribute('stroke-width','30');
       circ.setAttribute('stroke-dasharray',CIRC); circ.setAttribute('stroke-dashoffset',CIRC*(1-pct));
-      circ.setAttribute('transform','rotate('+(cum*360-90)+' '+CX+' '+CY+')'); svg.appendChild(circ); cum+=pct;
+      circ.setAttribute('transform','rotate('+(cum*360-90)+' '+CX+' '+CY+')');
+      circ.style.cursor = 'pointer';
+      var title = document.createElementNS(NS,'title'); title.textContent = r.category+': '+fmt(r.total); circ.appendChild(title);
+      (function(cat){ circ.addEventListener('click',function(){ currentCategory=cat; categoryFilter.value=cat; navigateTo('transactions'); }); })(r.category);
+      svg.appendChild(circ); cum+=pct;
     });
     var tt = document.createElementNS(NS,'text'); tt.setAttribute('x',CX); tt.setAttribute('y',CY-4); tt.setAttribute('text-anchor','middle');
     tt.setAttribute('fill','#e1e4e8'); tt.setAttribute('font-size','16'); tt.setAttribute('font-weight','700'); tt.textContent = fmt(total*-1); svg.appendChild(tt);
@@ -508,13 +663,16 @@ export function getDashboardHtml(port: number): string {
     data.forEach(function(r,i) {
       var pct = total>0?(Math.abs(r.total)/total*100).toFixed(0):0;
       var item = el('div','legend-item'), sw = el('span','legend-swatch'); sw.style.backgroundColor = COLORS[i%COLORS.length];
+      item.style.cursor = 'pointer';
       item.appendChild(sw); item.appendChild(el('span',null,r.category));
-      var vs = el('span',null,fmt(r.total)+' ('+pct+'%)'); vs.style.marginLeft='auto'; vs.style.color='#8b949e'; item.appendChild(vs); legend.appendChild(item);
+      var vs = el('span',null,fmt(r.total)+' ('+pct+'%)'); vs.style.marginLeft='auto'; vs.style.color='#8b949e'; item.appendChild(vs);
+      (function(cat){ item.addEventListener('click',function(){ currentCategory=cat; categoryFilter.value=cat; navigateTo('transactions'); }); })(r.category);
+      legend.appendChild(item);
     });
     layout.appendChild(legend); c.appendChild(layout);
   }
   async function loadSavings() {
-    var data = await (await authFetch(BASE+'/api/savings?months=6'+acctParam())).json();
+    var data = await (await authFetch(BASE+'/api/savings?months=6'+acctParam()+catParam())).json();
     var c = document.getElementById('savingsContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No data.')); return; }
     data.forEach(function(m) {
@@ -534,7 +692,7 @@ export function getDashboardHtml(port: number): string {
   // ── Transactions ────────────────────────────────────────────────────────
   var isAdmin = function() { return !currentUser || currentUser.role === 'admin'; };
   async function loadTransactions() {
-    var data = await (await authFetch(BASE+'/api/transactions?limit=100'+acctParam())).json();
+    var data = await (await authFetch(BASE+'/api/transactions?limit=100'+acctParam()+catParam())).json();
     var c = document.getElementById('txnContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No transactions.')); return; }
     var table = document.createElement('table'), thead = document.createElement('thead'), hr = document.createElement('tr');
@@ -757,7 +915,153 @@ export function getDashboardHtml(port: number): string {
   chatInput.addEventListener('keydown',function(e){if(e.key==='Enter')sendChat();});
   document.getElementById('newChatBtn').addEventListener('click',function(){activeSessionId=null;isLiveSession=true;chatMessages.replaceChildren();loadSessions();});
 
-  function loadAll() { loadAccountOptions(); activateTab(location.hash.replace('#/','')||'overview'); loadSessions(); }
+  // ── Training ──────────────────────────────────────────────────────────────
+  var selectedInteractionId = null;
+  var currentAnnotation = { rating: 0, preference: '', pairId: '', notes: '' };
+
+  async function loadTrainingStats() {
+    try {
+      var stats = await (await authFetch(BASE+'/api/annotations/stats')).json();
+      var c = document.getElementById('trainingStats');
+      c.replaceChildren();
+      var grid = el('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;';
+      function statBox(label, value) {
+        var d = el('div'); d.style.textAlign = 'center';
+        d.appendChild(el('div','',value.toString())); d.lastChild.style.cssText = 'font-size:24px;font-weight:700;color:#22c55e;';
+        d.appendChild(el('div','',label)); d.lastChild.style.cssText = 'font-size:12px;color:#8b949e;margin-top:4px;';
+        return d;
+      }
+      grid.appendChild(statBox('Total', stats.total));
+      grid.appendChild(statBox('Annotated', stats.annotated));
+      grid.appendChild(statBox('SFT Ready', stats.sftReady));
+      grid.appendChild(statBox('DPO Pairs', stats.dpoPairs));
+      c.appendChild(grid);
+    } catch(e) {}
+  }
+
+  async function loadInteractions() {
+    var callType = document.getElementById('trainFilterType').value;
+    var annotated = document.getElementById('trainFilterAnnotated').value;
+    var ratingFilter = document.getElementById('trainFilterRating').value;
+    var params = '?limit=100';
+    if (callType) params += '&callType='+callType;
+    if (annotated) params += '&annotated='+annotated;
+    if (ratingFilter) params += '&rating='+ratingFilter;
+    try {
+      var rows = await (await authFetch(BASE+'/api/interactions'+params)).json();
+      var tbody = document.getElementById('interactionBody');
+      tbody.replaceChildren();
+      if (!rows.length) { var tr = el('tr'); var td = el('td','','No interactions found.'); td.colSpan = 8; tr.appendChild(td); tbody.appendChild(tr); return; }
+      rows.forEach(function(r) {
+        var tr = el('tr'); tr.style.cursor = 'pointer';
+        tr.appendChild(el('td','',String(r.id)));
+        var runShort = (r.run_id||'').slice(0,8); tr.appendChild(el('td','',runShort));
+        tr.appendChild(el('td','',r.call_type));
+        tr.appendChild(el('td','',r.model));
+        tr.appendChild(el('td','',String(r.total_tokens||0)));
+        var ratingTd = el('td','',r.rating ? '★'.repeat(r.rating) : '—');
+        if (r.rating) ratingTd.style.color = '#d29922';
+        tr.appendChild(ratingTd);
+        var d = new Date(r.created_at+'Z');
+        tr.appendChild(el('td','',d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})));
+        var actionTd = el('td');
+        var viewBtn = el('button','btn-sm','View');
+        viewBtn.addEventListener('click',function(e){e.stopPropagation();loadInteractionDetail(r.id);});
+        actionTd.appendChild(viewBtn);
+        tr.appendChild(actionTd);
+        tr.addEventListener('click',function(){loadInteractionDetail(r.id);});
+        tbody.appendChild(tr);
+      });
+    } catch(e) {}
+  }
+
+  async function loadInteractionDetail(id) {
+    selectedInteractionId = id;
+    try {
+      var data = await (await authFetch(BASE+'/api/interactions/'+id)).json();
+      if (!data) return;
+      var card = document.getElementById('interactionDetailCard');
+      card.style.display = 'block';
+      var detail = document.getElementById('interactionDetail');
+      detail.replaceChildren();
+
+      function addSection(title, content, mono) {
+        var h = el('div','',title); h.style.cssText = 'font-size:11px;color:#8b949e;text-transform:uppercase;margin:12px 0 4px;';
+        detail.appendChild(h);
+        var pre = el('pre'); pre.style.cssText = 'background:#0f1117;border:1px solid #30363d;border-radius:6px;padding:10px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-word;';
+        pre.textContent = content || '(empty)';
+        detail.appendChild(pre);
+      }
+
+      addSection('System Prompt', data.system_prompt);
+      addSection('User Prompt', data.user_prompt);
+      addSection('Response', data.response_content);
+      if (data.tool_calls_json) {
+        try { addSection('Tool Calls', JSON.stringify(JSON.parse(data.tool_calls_json),null,2)); } catch(e) { addSection('Tool Calls', data.tool_calls_json); }
+      }
+      if (data.toolResults && data.toolResults.length) {
+        data.toolResults.forEach(function(tr) {
+          addSection('Tool: '+tr.tool_name, (tr.tool_result||'').slice(0,2000));
+        });
+      }
+
+      // Populate annotation controls
+      var annotation = data.annotations && data.annotations[0];
+      currentAnnotation.rating = annotation ? (annotation.rating||0) : 0;
+      currentAnnotation.preference = annotation ? (annotation.preference||'') : '';
+      currentAnnotation.pairId = annotation ? (annotation.pair_id||'') : '';
+      currentAnnotation.notes = annotation ? (annotation.notes||'') : '';
+      renderRatingStars();
+      document.getElementById('prefSelect').value = currentAnnotation.preference;
+      document.getElementById('pairIdInput').value = currentAnnotation.pairId;
+      document.getElementById('annotNotes').value = currentAnnotation.notes;
+
+      card.scrollIntoView({behavior:'smooth'});
+    } catch(e) {}
+  }
+
+  function renderRatingStars() {
+    var container = document.getElementById('ratingStars');
+    container.replaceChildren();
+    for (var i = 1; i <= 5; i++) {
+      (function(n) {
+        var star = el('span','',n <= currentAnnotation.rating ? '★' : '☆');
+        star.style.cssText = 'cursor:pointer;font-size:20px;color:'+(n<=currentAnnotation.rating?'#d29922':'#8b949e')+';';
+        star.addEventListener('click',function(){currentAnnotation.rating=n;renderRatingStars();});
+        container.appendChild(star);
+      })(i);
+    }
+  }
+
+  document.getElementById('saveAnnotation').addEventListener('click', async function() {
+    if (!selectedInteractionId) return;
+    var body = {};
+    if (currentAnnotation.rating > 0) body.rating = currentAnnotation.rating;
+    var pref = document.getElementById('prefSelect').value;
+    if (pref) body.preference = pref;
+    var pairId = document.getElementById('pairIdInput').value.trim();
+    if (pairId) body.pairId = pairId;
+    var notes = document.getElementById('annotNotes').value.trim();
+    if (notes) body.notes = notes;
+    try {
+      await authFetch(BASE+'/api/interactions/'+selectedInteractionId+'/annotate',{
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+      loadInteractions(); loadTrainingStats();
+    } catch(e) {}
+  });
+
+  document.getElementById('exportSft').addEventListener('click',function(){
+    window.location = BASE+'/api/export/training/sft?token='+authToken;
+  });
+  document.getElementById('exportDpo').addEventListener('click',function(){
+    window.location = BASE+'/api/export/training/dpo?token='+authToken;
+  });
+  ['trainFilterType','trainFilterAnnotated','trainFilterRating'].forEach(function(id){
+    document.getElementById(id).addEventListener('change',loadInteractions);
+  });
+
+  function loadAll() { loadAccountOptions(); loadCategoryOptions(); activateTab(location.hash.replace('#/','')||'overview'); loadSessions(); }
   checkAuth();
 })();
 </script>

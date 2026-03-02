@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { classifyError, isNonRetryableError } from '../utils/errors.js';
 import { resolveProvider, getProviderById } from '../providers.js';
 import { traceStore } from '../utils/trace-store.js';
+import { interactionStore } from '../utils/interaction-store.js';
 
 export const DEFAULT_PROVIDER = 'openai';
 export const DEFAULT_MODEL = 'gpt-5.2';
@@ -47,11 +48,15 @@ export interface CallLlmOptions {
   outputSchema?: z.ZodType<unknown>;
   tools?: ToolDef[];
   signal?: AbortSignal;
+  runId?: string;
+  sequenceNum?: number;
+  callType?: string;
 }
 
 export interface LlmResult {
   response: LlmResponse;
   usage?: LlmResponse['usage'];
+  interactionId?: number | null;
 }
 
 /**
@@ -60,7 +65,7 @@ export interface LlmResult {
  * Always returns LlmResponse — no string | AIMessage branching downstream.
  */
 export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<LlmResult> {
-  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal } = options;
+  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal, runId, sequenceNum, callType } = options;
   const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   const provider = resolveProvider(model);
@@ -116,6 +121,22 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       status: 'ok',
     });
 
+    const interactionId = interactionStore.recordInteraction({
+      runId: runId ?? 'standalone',
+      sequenceNum: sequenceNum ?? 0,
+      callType: callType ?? 'standalone',
+      model: apiModel,
+      provider: provider.id,
+      systemPrompt: finalSystemPrompt,
+      userPrompt: prompt,
+      responseContent: response.content,
+      toolCalls: response.toolCalls ?? [],
+      toolDefs: (tools ?? []).map(t => t.name),
+      usage: { inputTokens, outputTokens, totalTokens },
+      durationMs,
+      status: 'ok',
+    });
+
     logger.info(`LLM call completed`, {
       model: apiModel,
       provider: provider.id,
@@ -127,7 +148,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       toolCalls: toolCallCount,
     });
 
-    return { response, usage: response.usage };
+    return { response, usage: response.usage, interactionId };
   } catch (error) {
     const durationMs = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);

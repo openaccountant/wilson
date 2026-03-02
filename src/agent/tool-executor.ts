@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 import type { RunContext } from './run-context.js';
 import { logger } from '../utils/logger.js';
+import { interactionStore } from '../utils/interaction-store.js';
 
 type ToolExecutionEvent =
   | ToolStartEvent
@@ -44,7 +45,8 @@ export class AgentToolExecutor {
 
   async *executeAll(
     response: LlmResponse,
-    ctx: RunContext
+    ctx: RunContext,
+    parentInteractionId?: number,
   ): AsyncGenerator<ToolExecutionEvent, void> {
     for (const toolCall of response.toolCalls) {
       const toolName = toolCall.name;
@@ -56,14 +58,16 @@ export class AgentToolExecutor {
         if (ctx.scratchpad.hasExecutedSkill(skillName)) continue;
       }
 
-      yield* this.executeSingle(toolName, toolArgs, ctx);
+      yield* this.executeSingle(toolName, toolArgs, toolCall.id, ctx, parentInteractionId);
     }
   }
 
   private async *executeSingle(
     toolName: string,
     toolArgs: Record<string, unknown>,
-    ctx: RunContext
+    toolCallId: string,
+    ctx: RunContext,
+    parentInteractionId?: number,
   ): AsyncGenerator<ToolExecutionEvent, void> {
     const toolQuery = this.extractQueryFromArgs(toolArgs);
 
@@ -146,6 +150,18 @@ export class AgentToolExecutor {
       });
       yield { type: 'tool_end', tool: toolName, args: toolArgs, result, duration };
 
+      // Record tool result for interaction capture
+      if (parentInteractionId) {
+        interactionStore.recordToolResult({
+          interactionId: parentInteractionId,
+          toolCallId,
+          toolName,
+          toolArgs,
+          toolResult: result,
+          durationMs: duration,
+        });
+      }
+
       // Record the tool call for limit tracking
       ctx.scratchpad.recordToolCall(toolName, toolQuery);
 
@@ -156,6 +172,18 @@ export class AgentToolExecutor {
       const duration = Date.now() - toolStartTime;
       logger.error(`Tool failed: ${toolName}`, { tool: toolName, durationMs: duration, error: errorMessage });
       yield { type: 'tool_error', tool: toolName, error: errorMessage };
+
+      // Record error tool result for interaction capture
+      if (parentInteractionId) {
+        interactionStore.recordToolResult({
+          interactionId: parentInteractionId,
+          toolCallId,
+          toolName,
+          toolArgs,
+          toolResult: `Error: ${errorMessage}`,
+          durationMs: duration,
+        });
+      }
 
       // Still record the call even on error (counts toward limit)
       ctx.scratchpad.recordToolCall(toolName, toolQuery);

@@ -21,6 +21,7 @@ import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
 import { traceStore } from './utils/trace-store.js';
+import { interactionStore } from './utils/interaction-store.js';
 import {
   AgentRunnerController,
   InputHistoryController,
@@ -257,6 +258,7 @@ export async function runCli() {
   const db = initDatabase();
   logger.setDatabase(db);
   traceStore.setDatabase(db);
+  interactionStore.setDatabase(db);
   initImportTool(db);
   initCategorizeTool(db);
   initTransactionSearchTool(db);

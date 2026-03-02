@@ -207,6 +207,70 @@ CREATE TABLE IF NOT EXISTS llm_traces (
 );
 `;
 
+// ── LLM Interaction Capture Tables ───────────────────────────────────────────
+
+export const LLM_INTERACTIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS llm_interactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  sequence_num INTEGER NOT NULL,
+  call_type TEXT NOT NULL DEFAULT 'agent',
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  system_prompt TEXT,
+  user_prompt TEXT NOT NULL,
+  response_content TEXT,
+  tool_calls_json TEXT,
+  tool_defs_json TEXT,
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  total_tokens INTEGER DEFAULT 0,
+  duration_ms INTEGER DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ok',
+  error TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
+export const LLM_TOOL_RESULTS_TABLE = `
+CREATE TABLE IF NOT EXISTS llm_tool_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  interaction_id INTEGER NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  tool_args_json TEXT,
+  tool_result TEXT,
+  duration_ms INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (interaction_id) REFERENCES llm_interactions(id) ON DELETE CASCADE
+);
+`;
+
+export const INTERACTION_ANNOTATIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS interaction_annotations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  interaction_id INTEGER NOT NULL,
+  rating INTEGER CHECK(rating BETWEEN 1 AND 5),
+  preference TEXT CHECK(preference IN ('chosen', 'rejected', 'neutral')),
+  pair_id TEXT,
+  tags TEXT,
+  notes TEXT,
+  annotated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (interaction_id) REFERENCES llm_interactions(id) ON DELETE CASCADE
+);
+`;
+
+export const INTERACTION_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_interactions_run_id ON llm_interactions(run_id);
+CREATE INDEX IF NOT EXISTS idx_interactions_call_type ON llm_interactions(call_type);
+CREATE INDEX IF NOT EXISTS idx_interactions_model ON llm_interactions(model);
+CREATE INDEX IF NOT EXISTS idx_interactions_created_at ON llm_interactions(created_at);
+CREATE INDEX IF NOT EXISTS idx_tool_results_interaction ON llm_tool_results(interaction_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_interaction ON interaction_annotations(interaction_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_pair_id ON interaction_annotations(pair_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_rating ON interaction_annotations(rating);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

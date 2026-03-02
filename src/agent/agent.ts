@@ -1,6 +1,7 @@
 import type { LlmResponse } from '../model/types.js';
 import type { ToolDef } from '../model/types.js';
-import { callLlm } from '../model/llm.js';
+import { callLlm, type LlmResult } from '../model/llm.js';
+import { interactionStore } from '../utils/interaction-store.js';
 import { getTools } from '../tools/registry.js';
 import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext } from '../agent/prompts.js';
 import { extractTextContent, hasToolCalls } from '../utils/ai-message.js';
@@ -101,12 +102,14 @@ export class Agent {
 
       let response: LlmResponse;
       let usage: TokenUsage | undefined;
+      let lastInteractionId: number | null | undefined;
 
       while (true) {
         try {
-          const result = await this.callModel(currentPrompt);
+          const result = await this.callModel(currentPrompt, ctx);
           response = result.response;
           usage = result.usage;
+          lastInteractionId = result.interactionId;
           overflowRetries = 0;
           break;
         } catch (error) {
@@ -168,7 +171,7 @@ export class Agent {
       }
 
       // Execute tools and add results to scratchpad
-      for await (const event of this.toolExecutor.executeAll(response, ctx)) {
+      for await (const event of this.toolExecutor.executeAll(response, ctx, lastInteractionId ?? undefined)) {
         yield event;
         if (event.type === 'tool_denied') {
           const totalTime = Date.now() - ctx.startTime;
@@ -221,14 +224,18 @@ export class Agent {
   /**
    * Call the LLM with the current prompt.
    */
-  private async callModel(prompt: string, useTools: boolean = true): Promise<{ response: LlmResponse; usage?: TokenUsage }> {
+  private async callModel(prompt: string, ctx: RunContext, useTools: boolean = true): Promise<{ response: LlmResponse; usage?: TokenUsage; interactionId?: number | null }> {
+    ctx.sequenceNum++;
     const result = await callLlm(prompt, {
       model: this.model,
       systemPrompt: this.systemPrompt,
       tools: useTools ? this.tools : undefined,
       signal: this.signal,
+      runId: ctx.runId,
+      sequenceNum: ctx.sequenceNum,
+      callType: 'agent',
     });
-    return { response: result.response, usage: result.usage };
+    return { response: result.response, usage: result.usage, interactionId: result.interactionId };
   }
 
   /**

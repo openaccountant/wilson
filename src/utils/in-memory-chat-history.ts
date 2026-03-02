@@ -122,6 +122,7 @@ Generate a brief 1-2 sentence summary of this answer.`;
       const { response } = await callLlm(prompt, {
         systemPrompt: MESSAGE_SUMMARY_SYSTEM_PROMPT,
         model: this.model,
+        callType: 'summarize',
       });
       return response.content.trim();
     } catch {
@@ -223,6 +224,7 @@ Select which previous messages are relevant to understanding or answering the cu
         systemPrompt: MESSAGE_SELECTION_SYSTEM_PROMPT,
         model: this.model,
         outputSchema: SelectedMessagesSchema,
+        callType: 'relevance',
       });
 
       const structured = response.structured as { message_ids: number[] } | undefined;
