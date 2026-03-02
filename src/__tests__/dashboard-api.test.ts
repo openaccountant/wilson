@@ -143,11 +143,13 @@ describe('apiTraces', () => {
   });
 
   test('returns empty array with no traces', () => {
-    const traces = apiTraces(new URLSearchParams());
+    const db = createTestDb();
+    const traces = apiTraces(db, new URLSearchParams());
     expect(traces).toEqual([]);
   });
 
   test('returns recorded traces', () => {
+    const db = createTestDb();
     traceStore.record({
       id: 'test-1', timestamp: new Date().toISOString(),
       model: 'gpt-5.2', provider: 'openai',
@@ -155,12 +157,13 @@ describe('apiTraces', () => {
       inputTokens: 50, outputTokens: 25, totalTokens: 75,
       durationMs: 800, status: 'ok',
     });
-    const traces = apiTraces(new URLSearchParams());
+    const traces = apiTraces(db, new URLSearchParams());
     expect(traces).toHaveLength(1);
     expect(traces[0].model).toBe('gpt-5.2');
   });
 
   test('respects limit parameter', () => {
+    const db = createTestDb();
     for (let i = 0; i < 5; i++) {
       traceStore.record({
         id: `test-${i}`, timestamp: new Date().toISOString(),
@@ -170,7 +173,7 @@ describe('apiTraces', () => {
         durationMs: 800, status: 'ok',
       });
     }
-    const traces = apiTraces(new URLSearchParams({ limit: '2' }));
+    const traces = apiTraces(db, new URLSearchParams({ limit: '2' }));
     expect(traces).toHaveLength(2);
   });
 });
@@ -181,6 +184,7 @@ describe('apiTraceStats', () => {
   });
 
   test('returns stats object', () => {
+    const db = createTestDb();
     traceStore.record({
       id: 'test-1', timestamp: new Date().toISOString(),
       model: 'gpt-5.2', provider: 'openai',
@@ -188,7 +192,7 @@ describe('apiTraceStats', () => {
       inputTokens: 50, outputTokens: 25, totalTokens: 75,
       durationMs: 800, status: 'ok',
     });
-    const stats = apiTraceStats();
+    const stats = apiTraceStats(db);
     expect(stats.totalCalls).toBe(1);
     expect(stats.successfulCalls).toBe(1);
     expect(stats.totalTokens).toBe(75);

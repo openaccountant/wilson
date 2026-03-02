@@ -20,6 +20,7 @@ import { getModelDisplayName } from './utils/model.js';
 import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js';
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
+import { traceStore } from './utils/trace-store.js';
 import {
   AgentRunnerController,
   InputHistoryController,
@@ -252,6 +253,8 @@ function renderHistory(chatLog: ChatLogComponent, history: AgentRunnerController
 export async function runCli() {
   // Initialize database and inject into tools
   const db = initDatabase();
+  logger.setDatabase(db);
+  traceStore.setDatabase(db);
   initImportTool(db);
   initCategorizeTool(db);
   initTransactionSearchTool(db);

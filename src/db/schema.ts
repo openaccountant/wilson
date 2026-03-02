@@ -145,6 +145,36 @@ CREATE TABLE IF NOT EXISTS loans (
 );
 `;
 
+// ── Observability Tables ───────────────────────────────────────────────────
+
+export const LOGS_TABLE = `
+CREATE TABLE IF NOT EXISTS logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  level TEXT NOT NULL,
+  message TEXT NOT NULL,
+  data TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
+export const LLM_TRACES_TABLE = `
+CREATE TABLE IF NOT EXISTS llm_traces (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trace_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  prompt_length INTEGER NOT NULL DEFAULT 0,
+  response_length INTEGER NOT NULL DEFAULT 0,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `
@@ -164,4 +194,12 @@ CREATE INDEX IF NOT EXISTS idx_accounts_plaid_id ON accounts(plaid_account_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_account_date ON balance_snapshots(account_id, snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_snapshots_date ON balance_snapshots(snapshot_date);
 CREATE INDEX IF NOT EXISTS idx_loans_linked_asset ON loans(linked_asset_id);
+`;
+
+export const OBSERVABILITY_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
+CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_traces_model ON llm_traces(model);
+CREATE INDEX IF NOT EXISTS idx_llm_traces_created_at ON llm_traces(created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_traces_status ON llm_traces(status);
 `;

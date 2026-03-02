@@ -211,7 +211,10 @@ export function getDashboardHtml(port: number): string {
 <div class="tab-panel" id="tab-chat">
   <div class="chat-layout">
     <div class="chat-sidebar" id="chatSidebar">
-      <h4>Sessions</h4>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h4 style="margin:0;">Sessions</h4>
+        <button id="newChatBtn" class="btn-sm" style="padding:4px 10px;font-size:11px;">+ New Chat</button>
+      </div>
       <div id="sessionList"><p class="loading">Loading...</p></div>
     </div>
     <div class="chat-main">
@@ -795,6 +798,10 @@ export function getDashboardHtml(port: number): string {
       });
       var data = await res.json();
       var answer = data.answer || 'No response.';
+      if (data.sessionId) {
+        activeSessionId = data.sessionId;
+        isLiveSession = true;
+      }
       // Safe: renderMd escapes all HTML entities before applying markdown transforms
       pending.querySelector('.text').innerHTML = renderMd(answer);
       // Refresh session list to show updated titles
@@ -808,6 +815,14 @@ export function getDashboardHtml(port: number): string {
 
   chatSend.addEventListener('click', sendChat);
   chatInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') sendChat(); });
+
+  // New Chat button
+  document.getElementById('newChatBtn').addEventListener('click', function() {
+    activeSessionId = null;
+    isLiveSession = true;
+    chatMessages.replaceChildren();
+    loadSessions();
+  });
 
   // Load sessions on startup
   loadSessions();

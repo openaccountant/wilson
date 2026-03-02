@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import winston from 'winston';
 import { BufferTransport, type LogEntry, type LogLevel, type LogSubscriber } from './logger-buffer-transport.js';
+import type { Database } from '../db/compat-sqlite.js';
 
 export type { LogEntry, LogLevel };
 
@@ -85,20 +86,45 @@ if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
 // ── Public facade ─────────────────────────────────────────────────────────
 
 class LoggerFacade {
+  private db: Database | null = null;
+  private insertStmt: ReturnType<Database['prepare']> | null = null;
+
+  setDatabase(db: Database): void {
+    this.db = db;
+    this.insertStmt = db.prepare(
+      'INSERT INTO logs (level, message, data) VALUES (@level, @message, @data)'
+    );
+  }
+
+  private persistToDb(level: string, message: string, data?: unknown): void {
+    if (!this.insertStmt) return;
+    try {
+      this.insertStmt.run({
+        level,
+        message,
+        data: data !== undefined ? JSON.stringify(data) : null,
+      });
+    } catch { /* don't let DB errors break logging */ }
+  }
+
   debug(message: string, data?: unknown): void {
     winstonLogger.log('debug', message, { data });
+    this.persistToDb('debug', message, data);
   }
 
   info(message: string, data?: unknown): void {
     winstonLogger.log('info', message, { data });
+    this.persistToDb('info', message, data);
   }
 
   warn(message: string, data?: unknown): void {
     winstonLogger.log('warn', message, { data });
+    this.persistToDb('warn', message, data);
   }
 
   error(message: string, data?: unknown): void {
     winstonLogger.log('error', message, { data });
+    this.persistToDb('error', message, data);
   }
 
   subscribe(fn: LogSubscriber): () => void {

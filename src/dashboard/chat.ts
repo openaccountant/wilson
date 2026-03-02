@@ -28,10 +28,12 @@ export function initChatSession(db: Database): void {
  * If sessionId is provided, messages are appended to that session.
  * Returns the agent's response text.
  */
-export async function handleChatMessage(query: string, sessionId?: string): Promise<string> {
+export async function handleChatMessage(
+  query: string, sessionId?: string
+): Promise<{ answer: string; sessionId: string | null }> {
   if (!agentRunner || !chatHistory) {
     logger.warn(`Dashboard chat: session not initialized`);
-    return 'Chat session not initialized.';
+    return { answer: 'Chat session not initialized.', sessionId: null };
   }
 
   if (sessionId) {
@@ -47,11 +49,11 @@ export async function handleChatMessage(query: string, sessionId?: string): Prom
     const durationMs = Date.now() - startTime;
     const answer = result?.answer ?? 'No response generated.';
     logger.info(`Dashboard chat response`, { durationMs, answerChars: answer.length });
-    return answer;
+    return { answer, sessionId: chatHistory.getSessionId() ?? null };
   } catch (err) {
     const durationMs = Date.now() - startTime;
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard chat error`, { durationMs, error: errorMsg });
-    return `Error: ${errorMsg}`;
+    return { answer: `Error: ${errorMsg}`, sessionId: chatHistory.getSessionId() ?? null };
   }
 }

@@ -70,13 +70,13 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
           });
         }
         if (path === '/api/logs') {
-          return Response.json(apiLogs(url.searchParams), { headers });
+          return Response.json(apiLogs(db, url.searchParams), { headers });
         }
         if (path === '/api/traces') {
-          return Response.json(apiTraces(url.searchParams), { headers });
+          return Response.json(apiTraces(db, url.searchParams), { headers });
         }
         if (path === '/api/traces/stats') {
-          return Response.json(apiTraceStats(), { headers });
+          return Response.json(apiTraceStats(db), { headers });
         }
 
         // Transaction edit/delete endpoints
@@ -110,8 +110,8 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
-          const answer = await handleChatMessage(body.query, body.sessionId);
-          return Response.json({ answer }, { headers });
+          const result = await handleChatMessage(body.query, body.sessionId);
+          return Response.json(result, { headers });
         }
 
         return new Response('Not Found', { status: 404, headers });

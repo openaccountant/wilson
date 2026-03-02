@@ -1,4 +1,6 @@
 import { initDatabase } from './db/database.js';
+import { logger } from './utils/logger.js';
+import { traceStore } from './utils/trace-store.js';
 import { initImportTool } from './tools/import/csv-import.js';
 import { initCategorizeTool } from './tools/categorize/categorize.js';
 import { initTransactionSearchTool } from './tools/query/transaction-search.js';
@@ -39,6 +41,8 @@ export async function runHeadless(query: string): Promise<void> {
   try {
     // Initialize database and inject into tools (same as runCli)
     const db = initDatabase();
+    logger.setDatabase(db);
+    traceStore.setDatabase(db);
     initImportTool(db);
     initCategorizeTool(db);
     initTransactionSearchTool(db);

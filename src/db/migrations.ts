@@ -11,6 +11,9 @@ import {
   BALANCE_SNAPSHOTS_TABLE,
   LOANS_TABLE,
   ALL_INDEXES,
+  LOGS_TABLE,
+  LLM_TRACES_TABLE,
+  OBSERVABILITY_INDEXES,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -34,6 +37,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 8, name: 'create_balance_snapshots',    up: BALANCE_SNAPSHOTS_TABLE },
   { version: 9, name: 'create_loans',                up: LOANS_TABLE },
   { version: 10, name: 'create_indexes',             up: ALL_INDEXES },
+  { version: 11, name: 'create_observability_tables', up: LOGS_TABLE + LLM_TRACES_TABLE },
+  { version: 12, name: 'create_observability_indexes', up: OBSERVABILITY_INDEXES },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

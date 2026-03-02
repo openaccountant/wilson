@@ -1,6 +1,3 @@
-import { readFileSync, existsSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
 import type { Database } from '../db/compat-sqlite.js';
 import {
   getSpendingSummary,
@@ -55,29 +52,32 @@ export function apiAlerts(db: Database) {
   return checkAlerts(db);
 }
 
-export function apiLogs(params: URLSearchParams) {
+export function apiLogs(db: Database, params: URLSearchParams) {
   const limit = parseInt(params.get('limit') ?? '100', 10);
   const levelFilter = params.get('level');
 
-  // Try file-based logs first
-  const logFile = join(homedir(), '.openaccountant', 'logs', 'agent.log');
-  if (existsSync(logFile)) {
-    try {
-      const content = readFileSync(logFile, 'utf-8');
-      const lines = content.trim().split('\n').filter(Boolean);
-      let entries = lines.map((line) => {
-        try { return JSON.parse(line); } catch { return null; }
-      }).filter(Boolean);
-      if (levelFilter) {
-        entries = entries.filter((e: { level?: string }) => e.level === levelFilter);
-      }
-      return entries.slice(-limit);
-    } catch {
-      // Fall through to in-memory logs
+  // Read from SQLite (persisted, cross-session)
+  try {
+    let sql = 'SELECT level, message AS msg, data, created_at AS ts FROM logs';
+    const conditions: string[] = [];
+    const sqlParams: Record<string, unknown> = {};
+    if (levelFilter) {
+      conditions.push('level = @level');
+      sqlParams.level = levelFilter;
     }
-  }
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += ' ORDER BY id DESC LIMIT @limit';
+    sqlParams.limit = limit;
+    const rows = db.prepare(sql).all(sqlParams) as { level: string; msg: string; data: string | null; ts: string }[];
+    if (rows.length > 0) {
+      return rows.reverse().map((r) => ({
+        ...r,
+        data: r.data ? JSON.parse(r.data) : undefined,
+      }));
+    }
+  } catch { /* fall through to in-memory */ }
 
-  // Fallback to in-memory logs
+  // Fallback: in-memory buffer (pre-DB or if table doesn't exist yet)
   let entries = logger.getRecentLogs().map((e) => ({
     ts: e.timestamp.toISOString(),
     level: e.level,
@@ -165,11 +165,58 @@ export function apiDeleteTransaction(db: Database, id: number) {
   return { success, id };
 }
 
-export function apiTraces(params: URLSearchParams) {
+export function apiTraces(db: Database, params: URLSearchParams) {
   const limit = parseInt(params.get('limit') ?? '100', 10);
+  try {
+    const rows = db.prepare(`
+      SELECT trace_id AS id, model, provider, prompt_length AS promptLength,
+        response_length AS responseLength, input_tokens AS inputTokens,
+        output_tokens AS outputTokens, total_tokens AS totalTokens,
+        duration_ms AS durationMs, status, error, created_at AS timestamp
+      FROM llm_traces ORDER BY id DESC LIMIT @limit
+    `).all({ limit });
+    if (rows.length > 0) return rows.reverse();
+  } catch { /* fall through */ }
   return traceStore.getRecentTraces(limit);
 }
 
-export function apiTraceStats() {
+export function apiTraceStats(db: Database) {
+  try {
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) AS totalCalls,
+        SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS successfulCalls,
+        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS errorCalls,
+        COALESCE(SUM(CASE WHEN status = 'ok' THEN total_tokens ELSE 0 END), 0) AS totalTokens,
+        COALESCE(SUM(CASE WHEN status = 'ok' THEN duration_ms ELSE 0 END), 0) AS totalDurationMs,
+        CASE WHEN SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) > 0
+          THEN CAST(SUM(CASE WHEN status = 'ok' THEN duration_ms ELSE 0 END) AS REAL) /
+               SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END)
+          ELSE 0 END AS avgDurationMs
+      FROM llm_traces
+    `).get() as Record<string, number> | undefined;
+    if (row && row.totalCalls > 0) {
+      // Build byModel from DB
+      const modelRows = db.prepare(`
+        SELECT model, COUNT(*) AS calls,
+          SUM(total_tokens) AS tokens,
+          CAST(SUM(duration_ms) AS REAL) / COUNT(*) AS avgMs
+        FROM llm_traces WHERE status = 'ok' GROUP BY model
+      `).all() as { model: string; calls: number; tokens: number; avgMs: number }[];
+      const byModel: Record<string, { calls: number; tokens: number; avgMs: number }> = {};
+      for (const m of modelRows) {
+        byModel[m.model] = { calls: m.calls, tokens: m.tokens, avgMs: Math.round(m.avgMs) };
+      }
+      return {
+        totalCalls: row.totalCalls,
+        successfulCalls: row.successfulCalls,
+        errorCalls: row.errorCalls,
+        totalTokens: row.totalTokens,
+        totalDurationMs: row.totalDurationMs,
+        avgDurationMs: Math.round(row.avgDurationMs),
+        byModel,
+      };
+    }
+  } catch { /* fall through */ }
   return traceStore.getStats();
 }
