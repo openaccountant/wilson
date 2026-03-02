@@ -2,6 +2,7 @@ import { execFileSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
 import { getSchedules } from "./store.js";
+import { getActiveProfileName, DEFAULT_PROFILE } from "../profile/index.js";
 
 const CRON_TAG = "# wilson-managed";
 const LOG_FILE = join(homedir(), ".openaccountant", "schedule.log");
@@ -52,8 +53,11 @@ export function syncCrontab(): void {
   const schedules = getSchedules().filter((s) => s.enabled);
   const oaPath = getOaPath();
 
+  const profileName = getActiveProfileName();
+  const profileFlag = profileName !== DEFAULT_PROFILE ? ` --profile ${profileName}` : '';
+
   for (const schedule of schedules) {
-    const entry = `${schedule.cron} ${oaPath} --run "${schedule.query.replace(/"/g, '\\"')}" >> ${LOG_FILE} 2>&1 ${CRON_TAG}`;
+    const entry = `${schedule.cron} ${oaPath}${profileFlag} --run "${schedule.query.replace(/"/g, '\\"')}" >> ${LOG_FILE} 2>&1 ${CRON_TAG}`;
     lines.push(entry);
   }
 

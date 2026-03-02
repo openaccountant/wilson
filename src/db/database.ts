@@ -1,16 +1,17 @@
 import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { ALL_SCHEMA, SAFE_MIGRATIONS, ALL_INDEXES } from './schema.js';
+import { getActiveProfile } from '../profile/active.js';
 
-const DB_DIR = '.openaccountant';
-const DB_FILE = 'data.db';
-
-export function initDatabase(): Database {
-  if (!existsSync(DB_DIR)) {
-    mkdirSync(DB_DIR, { recursive: true });
+export function initDatabase(dbPath?: string): Database {
+  const resolvedPath = dbPath ?? getActiveProfile().database;
+  const dir = dirname(resolvedPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
   }
 
-  const db = new Database(`${DB_DIR}/${DB_FILE}`);
+  const db = new Database(resolvedPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 

@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from '
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
 import { logger } from './logger.js';
+import { getActiveProfile } from '../profile/active.js';
 
 // ============================================================================
 // Types
@@ -28,7 +29,9 @@ interface CacheEntry {
   cachedAt: string;
 }
 
-const CACHE_DIR = '.openaccountant/cache';
+function getCacheDir(): string {
+  return getActiveProfile().cache;
+}
 
 // ============================================================================
 // Helpers
@@ -130,7 +133,7 @@ export function readCache(
   params: Record<string, string | number | string[] | undefined>
 ): { data: Record<string, unknown>; url: string } | null {
   const cacheKey = buildCacheKey(endpoint, params);
-  const filepath = join(CACHE_DIR, cacheKey);
+  const filepath = join(getCacheDir(), cacheKey);
   const label = describeRequest(endpoint, params);
 
   if (!existsSync(filepath)) {
@@ -170,7 +173,7 @@ export function writeCache(
   url: string
 ): void {
   const cacheKey = buildCacheKey(endpoint, params);
-  const filepath = join(CACHE_DIR, cacheKey);
+  const filepath = join(getCacheDir(), cacheKey);
   const label = describeRequest(endpoint, params);
 
   const entry: CacheEntry = {

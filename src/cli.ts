@@ -39,9 +39,11 @@ import {
 } from './components/index.js';
 import { editorTheme, theme } from './theme.js';
 import { initDatabase } from './db/database.js';
-import { initImportTool } from './tools/import/csv-import.js';
-import { initCategorizeTool } from './tools/categorize/categorize.js';
+import { initImportTool, csvImportTool } from './tools/import/csv-import.js';
+import { initCategorizeTool, categorizeTool } from './tools/categorize/categorize.js';
 import { initTransactionSearchTool } from './tools/query/transaction-search.js';
+import { initEditTransactionTool } from './tools/query/edit-transaction.js';
+import { initDeleteTransactionTool } from './tools/query/delete-transaction.js';
 import { initSpendingSummaryTool } from './tools/query/spending-summary.js';
 import { initAnomalyDetectTool } from './tools/query/anomaly-detect.js';
 import { initMonarchTool } from './tools/import/monarch.js';
@@ -49,7 +51,7 @@ import { initExportTool } from './tools/export/export-transactions.js';
 import { initBudgetSetTool } from './tools/budget/budget-set.js';
 import { initBudgetCheckTool } from './tools/budget/budget-check.js';
 import { setBudget, clearBudget, getBudgetVsActual } from './db/queries.js';
-import { initBudgetPrompt } from './agent/prompts.js';
+import { initBudgetPrompt, initDataContext } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
 import { initProfitLossTool } from './tools/query/profit-loss.js';
 import { initProfitDiffTool } from './tools/query/profit-diff.js';
@@ -68,6 +70,7 @@ import { discoverSkills } from './skills/registry.js';
 import { validateLicense, getLicenseInfo, deactivateLicense, hasLicense } from './licensing/license.js';
 import { getSchedules, addSchedule, removeSchedule, toggleSchedule } from './schedule/store.js';
 import { syncCrontab } from './schedule/cron.js';
+import { getActiveProfileName, listProfiles, DEFAULT_PROFILE } from './profile/index.js';
 
 function truncateAtWord(str: string, maxLength: number): string {
   if (str.length <= maxLength) {
@@ -246,6 +249,8 @@ export async function runCli() {
   initImportTool(db);
   initCategorizeTool(db);
   initTransactionSearchTool(db);
+  initEditTransactionTool(db);
+  initDeleteTransactionTool(db);
   initSpendingSummaryTool(db);
   initAnomalyDetectTool(db);
   initMonarchTool(db);
@@ -253,6 +258,7 @@ export async function runCli() {
   initBudgetSetTool(db);
   initBudgetCheckTool(db);
   initBudgetPrompt(db);
+  initDataContext(db);
   initPlaidSyncTool(db);
   initProfitLossTool(db);
   initProfitDiffTool(db);
@@ -285,6 +291,9 @@ export async function runCli() {
     tui.requestRender();
   });
 
+  // Enable chat history persistence
+  modelSelection.inMemoryChatHistory.setDatabase(db);
+
   const agentRunner = new AgentRunnerController(
     { model: modelSelection.model, modelProvider: modelSelection.provider, maxIterations: 10 },
     modelSelection.inMemoryChatHistory,
@@ -296,7 +305,8 @@ export async function runCli() {
     },
   );
 
-  const intro = new IntroComponent(modelSelection.model);
+  const currentProfileName = getActiveProfileName();
+  const intro = new IntroComponent(modelSelection.model, currentProfileName !== DEFAULT_PROFILE ? currentProfileName : undefined);
   const errorText = new Text('', 0, 0);
   const workingIndicator = new WorkingIndicatorComponent(tui);
   const editor = new CustomEditor(tui, editorTheme);
@@ -304,6 +314,8 @@ export async function runCli() {
 
   // Set up slash command autocomplete with @ file search
   const slashCommands: SlashCommand[] = [
+    { name: 'import', description: 'Import a bank file (CSV, OFX, QIF)' },
+    { name: 'categorize', description: 'AI-categorize uncategorized transactions' },
     { name: 'model', description: 'Switch LLM provider and model' },
     { name: 'pull', description: 'Download an Ollama model' },
     { name: 'license', description: 'Manage your license key' },
@@ -312,6 +324,7 @@ export async function runCli() {
     { name: 'sync', description: 'Pull latest transactions from linked banks' },
     { name: 'dashboard', description: 'Open browser dashboard' },
     { name: 'schedule', description: 'Manage scheduled tasks (add/remove/pause/resume)' },
+    { name: 'profile', description: 'Show or switch profile (e.g. /profile switch business)' },
     { name: 'help', description: 'Show available commands' },
     ...RECOMMENDED_OLLAMA_MODELS.map((m) => ({
       name: `pull ${m.name}`,
@@ -388,6 +401,8 @@ export async function runCli() {
     if (query === '/help') {
       chatLog.addQuery(query);
       const commands = [
+        '  /import    — Import a bank file (CSV, OFX, QIF)',
+        '  /categorize — AI-categorize uncategorized transactions',
         '  /model     — Switch LLM provider and model',
         '  /pull      — Download an Ollama model (e.g. /pull granite3-dense:2b)',
         '  /connect   — Link a bank account via Plaid (Pro)',
@@ -396,10 +411,108 @@ export async function runCli() {
         '  /dashboard — Open browser dashboard with charts and chat',
         '  /license   — Manage your license key',
         '  /schedule  — Manage scheduled tasks',
+        '  /profile   — Show or switch profile',
         '  /help      — Show this help message',
         ...discoverSkills().map((s) => `  /skill ${s.name}  — ${s.description}`),
       ];
       chatLog.finalizeAnswer(`**Available commands:**\n\n${commands.join('\n')}`);
+      tui.requestRender();
+      return;
+    }
+
+    if (query.startsWith('/import ') || query === '/import') {
+      chatLog.addQuery(query);
+      const rawPath = query.slice(8).trim();
+      if (!rawPath) {
+        chatLog.finalizeAnswer(
+          'Usage: `/import <file>`\n\n' +
+          'Supports CSV (Chase, Amex, BofA, auto-detected), OFX, and QIF.\n' +
+          'Example: `/import ~/Downloads/chase-statement.csv`\n' +
+          'Tip: type `@` to search for files.'
+        );
+        tui.requestRender();
+        return;
+      }
+
+      // Strip surrounding quotes and leading @ (from file autocomplete)
+      const filePath = rawPath.replace(/^["']|["']$/g, '').replace(/^@/, '');
+
+      chatLog.finalizeAnswer(`Importing **${filePath}**...`);
+      tui.requestRender();
+
+      try {
+        const resultJson = await csvImportTool.func({ filePath, bank: 'auto' });
+        const result = JSON.parse(resultJson);
+        const data = result.data ?? result;
+
+        if (data.error) {
+          chatLog.finalizeAnswer(`**Import failed:** ${data.error}`);
+        } else if (data.alreadyImported) {
+          chatLog.finalizeAnswer(data.message);
+        } else {
+          let msg = `Imported **${data.transactionsImported}** transactions`;
+          if (data.bankDetected) {
+            msg += ` (${data.bankDetected} ${data.formatDetected?.toUpperCase() ?? 'CSV'})`;
+          }
+          if (data.dateRange) {
+            msg += `\nDate range: ${data.dateRange.start} to ${data.dateRange.end}`;
+          }
+          if (data.transactionsSkipped > 0) {
+            msg += `\n${data.transactionsSkipped} duplicates skipped.`;
+          }
+          msg += '\n\nRun `/categorize` to categorize them.';
+          chatLog.finalizeAnswer(msg);
+        }
+      } catch (err) {
+        chatLog.finalizeAnswer(`**Import failed:** ${err instanceof Error ? err.message : String(err)}`);
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/categorize' || query.startsWith('/categorize ')) {
+      chatLog.addQuery(query);
+      chatLog.finalizeAnswer('Categorizing transactions...');
+      tui.requestRender();
+
+      const limitArg = query.slice(12).trim();
+      const limit = limitArg ? parseInt(limitArg, 10) : undefined;
+
+      try {
+        const resultJson = await categorizeTool.func({
+          limit: limit && !isNaN(limit) ? limit : undefined,
+        });
+        const result = JSON.parse(resultJson);
+        const data = result.data ?? result;
+
+        if (data.categorized === 0 && !data.error) {
+          chatLog.finalizeAnswer(data.message ?? 'All transactions are already categorized.');
+        } else if (data.error) {
+          chatLog.finalizeAnswer(`**Categorization failed:** ${data.error}`);
+        } else {
+          let msg = `Categorized **${data.categorized}** of ${data.totalUncategorized} transactions`;
+          if (data.ruleMatched > 0) {
+            msg += ` (${data.ruleMatched} by rules, ${data.llmCategorized} by AI)`;
+          }
+          if (data.needingReview > 0) {
+            msg += `\n${data.needingReview} need review (low confidence).`;
+          }
+          if (data.categoriesApplied && Object.keys(data.categoriesApplied).length > 0) {
+            msg += '\n\n**Categories:**\n';
+            const sorted = Object.entries(data.categoriesApplied as Record<string, number>)
+              .sort(([, a], [, b]) => b - a);
+            for (const [cat, count] of sorted) {
+              msg += `  ${cat}: ${count}\n`;
+            }
+          }
+          if (data.errors && data.errors.length > 0) {
+            msg += `\n${data.errors.length} batch errors occurred.`;
+          }
+          chatLog.finalizeAnswer(msg);
+        }
+      } catch (err) {
+        chatLog.finalizeAnswer(`**Categorization failed:** ${err instanceof Error ? err.message : String(err)}`);
+      }
       tui.requestRender();
       return;
     }
@@ -745,6 +858,52 @@ export async function runCli() {
       return;
     }
 
+    if (query === '/profile' || query.startsWith('/profile ')) {
+      chatLog.addQuery(query);
+      const subcommand = query.slice(8).trim();
+
+      if (subcommand.startsWith('switch ')) {
+        const target = subcommand.slice(7).trim();
+        if (!target) {
+          chatLog.finalizeAnswer('Usage: `/profile switch <name>`');
+        } else {
+          chatLog.finalizeAnswer(`Switching to profile **${target}**... (restarting)`);
+          tui.requestRender();
+          // Re-exec with --profile flag to get clean DB/tool state
+          const oaPath = process.argv[1];
+          const newArgs = ['--profile', target, ...process.argv.slice(2).filter((a, i, arr) => {
+            if (a === '--profile') return false;
+            if (i > 0 && arr[i - 1] === '--profile') return false;
+            return true;
+          })];
+          const { execFileSync } = await import('child_process');
+          tui.stop();
+          try {
+            execFileSync(process.argv[0], [oaPath, ...newArgs], { stdio: 'inherit' });
+          } catch {
+            // Child process exited
+          }
+          process.exit(0);
+        }
+      } else {
+        const currentProfile = getActiveProfileName();
+        const profiles = listProfiles();
+        let msg = `**Active profile:** ${currentProfile}`;
+        if (profiles.length > 0) {
+          msg += '\n\n**All profiles:**\n';
+          for (const p of profiles) {
+            const marker = p === currentProfile ? ' (active)' : '';
+            const isDefault = p === DEFAULT_PROFILE ? ' (default)' : '';
+            msg += `  ${p}${marker}${isDefault}\n`;
+          }
+        }
+        msg += '\nSwitch with: `/profile switch <name>`';
+        chatLog.finalizeAnswer(msg);
+      }
+      tui.requestRender();
+      return;
+    }
+
     if (query === '/dashboard' || query === '/dashboard stop') {
       chatLog.addQuery(query);
       if (query === '/dashboard stop') {
@@ -849,7 +1008,6 @@ export async function runCli() {
       root.addChild(workingIndicator);
     }
     root.addChild(new Spacer(1));
-    root.addChild(new Text(theme.primary('\u276f '), 0, 0));
     root.addChild(editor);
     root.addChild(debugPanel);
     tui.setFocus(editor);

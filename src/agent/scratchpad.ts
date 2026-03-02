@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { getActiveProfile } from '../profile/active.js';
 
 /**
  * Record of a tool call for external consumers (e.g., DoneEvent)
@@ -63,7 +64,7 @@ const DEFAULT_LIMIT_CONFIG: ToolLimitConfig = {
  * - Query similarity detection to help prevent retry loops
  */
 export class Scratchpad {
-  private readonly scratchpadDir = '.openaccountant/scratchpad';
+  private readonly scratchpadDir: string;
   private readonly filepath: string;
   private readonly limitConfig: ToolLimitConfig;
 
@@ -77,6 +78,7 @@ export class Scratchpad {
 
   constructor(query: string, limitConfig?: Partial<ToolLimitConfig>) {
     this.limitConfig = { ...DEFAULT_LIMIT_CONFIG, ...limitConfig };
+    this.scratchpadDir = getActiveProfile().scratchpad;
 
     if (!existsSync(this.scratchpadDir)) {
       mkdirSync(this.scratchpadDir, { recursive: true });
