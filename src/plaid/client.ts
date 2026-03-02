@@ -6,7 +6,7 @@ import {
   CountryCode,
   type AccountBase,
   type RecurringTransactionFrequency,
-} from 'plaid';
+} from "plaid";
 
 // ── Errors ───────────────────────────────────────────────────────────────────
 
@@ -18,29 +18,47 @@ export class PlaidError extends Error {
     public readonly statusCode: number,
   ) {
     super(message);
-    this.name = 'PlaidError';
+    this.name = "PlaidError";
   }
 }
 
-function isPlaidApiError(err: unknown): err is { response: { data: { error_type: string; error_code: string; error_message: string }; status: number } } {
-  return typeof err === 'object' && err !== null && 'response' in err;
+function isPlaidApiError(
+  err: unknown,
+): err is {
+  response: {
+    data: { error_type: string; error_code: string; error_message: string };
+    status: number;
+  };
+} {
+  return typeof err === "object" && err !== null && "response" in err;
 }
 
 function wrapPlaidError(err: unknown): never {
   if (isPlaidApiError(err)) {
     const d = err.response.data;
-    throw new PlaidError(d.error_message, d.error_type, d.error_code, err.response.status);
+    throw new PlaidError(
+      d.error_message,
+      d.error_type,
+      d.error_code,
+      err.response.status,
+    );
   }
   throw err;
 }
 
 // ── Retry ────────────────────────────────────────────────────────────────────
 
-const RETRYABLE_CODES = new Set(['INTERNAL_SERVER_ERROR', 'PLANNED_MAINTENANCE']);
+const RETRYABLE_CODES = new Set([
+  "INTERNAL_SERVER_ERROR",
+  "PLANNED_MAINTENANCE",
+]);
 
 function isRetryable(err: unknown): boolean {
   if (isPlaidApiError(err)) {
-    return RETRYABLE_CODES.has(err.response.data.error_code) || err.response.status >= 500;
+    return (
+      RETRYABLE_CODES.has(err.response.data.error_code) ||
+      err.response.status >= 500
+    );
   }
   return false;
 }
@@ -60,13 +78,13 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
       await sleep(Math.pow(2, attempt) * 1000);
     }
   }
-  throw new Error('unreachable');
+  throw new Error("unreachable");
 }
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
 function getPlaidEnv(): string {
-  return process.env.PLAID_ENV ?? 'sandbox';
+  return process.env.PLAID_ENV ?? "sandbox";
 }
 
 function getPlaidConfig(): Configuration {
@@ -75,15 +93,15 @@ function getPlaidConfig(): Configuration {
 
   if (!clientId || !secret) {
     throw new Error(
-      'Plaid credentials not configured. Set PLAID_CLIENT_ID and PLAID_SECRET environment variables.'
+      "Plaid credentials not configured. Set PLAID_CLIENT_ID and PLAID_SECRET environment variables.",
     );
   }
 
   const env = getPlaidEnv();
   const basePath =
-    env === 'production'
+    env === "production"
       ? PlaidEnvironments.production
-      : env === 'development'
+      : env === "development"
         ? PlaidEnvironments.development
         : PlaidEnvironments.sandbox;
 
@@ -91,8 +109,8 @@ function getPlaidConfig(): Configuration {
     basePath,
     baseOptions: {
       headers: {
-        'PLAID-CLIENT-ID': clientId,
-        'PLAID-SECRET': secret,
+        "PLAID-CLIENT-ID": clientId,
+        "PLAID-SECRET": secret,
       },
     },
   });
@@ -123,11 +141,11 @@ export async function createLinkToken(proLicensed = false): Promise<string> {
 
   const response = await withRetry(() =>
     plaid.linkTokenCreate({
-      user: { client_user_id: 'oa-user' },
-      client_name: 'Open Accountant',
+      user: { client_user_id: "wilson-user" },
+      client_name: "Open Accountant",
       products,
       country_codes: [CountryCode.Us],
-      language: 'en',
+      language: "en",
     }),
   );
 
@@ -164,21 +182,27 @@ export async function getItemInfo(accessToken: string): Promise<{
 }> {
   const plaid = getClient();
 
-  const accountsRes = await withRetry(() => plaid.accountsGet({ access_token: accessToken }));
-  const accounts = accountsRes.data.accounts.map((a: { account_id: string; name: string; mask: string | null }) => ({
-    id: a.account_id,
-    name: a.name,
-    mask: a.mask ?? '',
-  }));
+  const accountsRes = await withRetry(() =>
+    plaid.accountsGet({ access_token: accessToken }),
+  );
+  const accounts = accountsRes.data.accounts.map(
+    (a: { account_id: string; name: string; mask: string | null }) => ({
+      id: a.account_id,
+      name: a.name,
+      mask: a.mask ?? "",
+    }),
+  );
 
-  let institutionName = 'Unknown Institution';
+  let institutionName = "Unknown Institution";
   const instId = accountsRes.data.item.institution_id;
   if (instId) {
     try {
-      const instRes = await withRetry(() => plaid.institutionsGetById({
-        institution_id: instId,
-        country_codes: [CountryCode.Us],
-      }));
+      const instRes = await withRetry(() =>
+        plaid.institutionsGetById({
+          institution_id: instId,
+          country_codes: [CountryCode.Us],
+        }),
+      );
       institutionName = instRes.data.institution.name;
     } catch {
       // Fall back to "Unknown Institution"
@@ -208,7 +232,7 @@ export interface SyncedTransaction {
 
 export async function syncTransactions(
   accessToken: string,
-  cursor: string | null
+  cursor: string | null,
 ): Promise<{
   added: SyncedTransaction[];
   nextCursor: string;
@@ -216,7 +240,7 @@ export async function syncTransactions(
   const plaid = getClient();
   const added: SyncedTransaction[] = [];
 
-  let currentCursor = cursor ?? '';
+  let currentCursor = cursor ?? "";
   let hasMore = true;
 
   while (hasMore) {
@@ -237,7 +261,9 @@ export async function syncTransactions(
         category: txn.category ?? [],
         accountId: txn.account_id,
         merchantName: txn.merchant_name ?? undefined,
-        personalFinanceCategory: pfc ? { primary: pfc.primary, detailed: pfc.detailed } : undefined,
+        personalFinanceCategory: pfc
+          ? { primary: pfc.primary, detailed: pfc.detailed }
+          : undefined,
         paymentChannel: txn.payment_channel ?? undefined,
         pending: txn.pending,
         authorizedDate: txn.authorized_date ?? undefined,
@@ -267,7 +293,9 @@ export interface AccountBalance {
 /**
  * Get current balances for all accounts on an access token.
  */
-export async function getBalances(accessToken: string): Promise<AccountBalance[]> {
+export async function getBalances(
+  accessToken: string,
+): Promise<AccountBalance[]> {
   const plaid = getClient();
 
   const response = await withRetry(() =>
@@ -277,9 +305,9 @@ export async function getBalances(accessToken: string): Promise<AccountBalance[]
   return response.data.accounts.map((a: AccountBase) => ({
     accountId: a.account_id,
     name: a.name,
-    mask: a.mask ?? '',
+    mask: a.mask ?? "",
     type: a.type,
-    subtype: a.subtype ?? '',
+    subtype: a.subtype ?? "",
     balanceCurrent: a.balances.current,
     balanceAvailable: a.balances.available,
     isoCurrencyCode: a.balances.iso_currency_code,

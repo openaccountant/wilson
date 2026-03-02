@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/oa-hero.png" alt="Open Accountant CLI" width="600">
+  <img src=".github/assets/wilson-hero.png" alt="Open Accountant CLI" width="600">
 </p>
 
 <h1 align="center">Open Accountant</h1>
