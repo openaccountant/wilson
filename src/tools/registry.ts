@@ -46,6 +46,30 @@ const MONARCH_IMPORT_DESCRIPTION = `
 - Deduplicates against previously imported Monarch transactions
 `.trim();
 
+const FIREFLY_IMPORT_DESCRIPTION = `
+**Requires Pro license.** Import transactions from a self-hosted Firefly III instance into the local database.
+
+## When to Use
+
+- When the user wants to import transactions from Firefly III
+- When the user says "sync from Firefly", "import from Firefly III", or "pull my Firefly transactions"
+- When the user wants to connect their self-hosted Firefly III instance
+
+## When NOT to Use
+
+- When the user wants to import from a CSV file (use csv_import instead)
+- When the user is asking about already-imported transactions
+
+## Usage Notes
+
+- Requires FIREFLY_API_URL and FIREFLY_API_TOKEN env vars
+- Fetches transactions via Firefly III REST API (v1)
+- Supports date range filtering via startDate/endDate
+- Transfers are skipped by default (use includeTransfers to include them)
+- Deduplicates by external_id and composite key (date|description|amount)
+- Skips reconciliation and opening balance entries
+`.trim();
+
 const CSV_IMPORT_DESCRIPTION = `
 Import transactions from a CSV file into the local database.
 
@@ -352,6 +376,47 @@ Check for active spending alerts and warnings.
 - Severity levels: info, warning, critical
 `.trim();
 
+const EDIT_TRANSACTION_DESCRIPTION = `
+Edit a transaction's fields (date, description, amount, category, notes).
+
+## When to Use
+
+- When the user wants to change a transaction's category, description, date, amount, or notes
+- When the user says "change", "update", "edit", "fix", or "correct" a transaction
+- When the user wants to recategorize a specific transaction manually
+
+## When NOT to Use
+
+- When the user wants to bulk-categorize (use categorize instead)
+- When the user wants to delete a transaction (use delete_transaction)
+
+## Usage Notes
+
+- Requires a transaction ID — use transaction_search first to find it
+- Only the specified fields are updated; others remain unchanged
+`.trim();
+
+const DELETE_TRANSACTION_DESCRIPTION = `
+Delete a transaction permanently from the database.
+
+## When to Use
+
+- When the user wants to remove a transaction
+- When the user says "delete", "remove", or "get rid of" a transaction
+- When a transaction was imported in error or is a duplicate
+
+## When NOT to Use
+
+- When the user wants to edit a transaction (use edit_transaction)
+- When the user hasn't identified which transaction to delete
+
+## Usage Notes
+
+- This is permanent and cannot be undone
+- Requires a transaction ID — use transaction_search first to find it
+- Confirm with the user before deleting
+`.trim();
+
 const GENERATE_REPORT_DESCRIPTION = `
 Generate a comprehensive Markdown financial report and save to a file.
 
@@ -503,13 +568,26 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>('./import/monarch.js');
-  if (monarchMod?.monarchImportTool) {
-    tools.push({
-      name: 'monarch_import',
-      tool: monarchMod.monarchImportTool,
-      description: MONARCH_IMPORT_DESCRIPTION,
-    });
+  if (process.env.MONARCH_TOKEN || (process.env.MONARCH_EMAIL && process.env.MONARCH_PASSWORD)) {
+    const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>('./import/monarch.js');
+    if (monarchMod?.monarchImportTool) {
+      tools.push({
+        name: 'monarch_import',
+        tool: monarchMod.monarchImportTool,
+        description: MONARCH_IMPORT_DESCRIPTION,
+      });
+    }
+  }
+
+  if (process.env.FIREFLY_API_URL && process.env.FIREFLY_API_TOKEN) {
+    const fireflyMod = safeRequire<{ fireflyImportTool: ToolDef }>('./import/firefly.js');
+    if (fireflyMod?.fireflyImportTool) {
+      tools.push({
+        name: 'firefly_import',
+        tool: fireflyMod.fireflyImportTool,
+        description: FIREFLY_IMPORT_DESCRIPTION,
+      });
+    }
   }
 
   const catMod = safeRequire<{ categorizeTool: ToolDef }>('./categorize/categorize.js');
@@ -528,6 +606,16 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       tool: txnMod.transactionSearchTool,
       description: TRANSACTION_SEARCH_DESCRIPTION,
     });
+  }
+
+  const editTxnMod = safeRequire<{ editTransactionTool: ToolDef }>('./query/edit-transaction.js');
+  if (editTxnMod?.editTransactionTool) {
+    tools.push({ name: 'edit_transaction', tool: editTxnMod.editTransactionTool, description: EDIT_TRANSACTION_DESCRIPTION });
+  }
+
+  const deleteTxnMod = safeRequire<{ deleteTransactionTool: ToolDef }>('./query/delete-transaction.js');
+  if (deleteTxnMod?.deleteTransactionTool) {
+    tools.push({ name: 'delete_transaction', tool: deleteTxnMod.deleteTransactionTool, description: DELETE_TRANSACTION_DESCRIPTION });
   }
 
   const sumMod = safeRequire<{ spendingSummaryTool: ToolDef }>('./query/spending-summary.js');

@@ -1,6 +1,6 @@
 import { parse } from 'csv-parse/sync';
 
-export type BankType = 'chase' | 'amex' | 'generic' | 'bofa' | 'bofa-cc' | 'ofx' | 'qif' | 'monarch' | 'plaid';
+export type BankType = 'chase' | 'amex' | 'generic' | 'bofa' | 'bofa-cc' | 'ofx' | 'qif' | 'monarch' | 'plaid' | 'firefly';
 
 export interface ParsedTransaction {
   date: string;           // YYYY-MM-DD

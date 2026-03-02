@@ -320,7 +320,7 @@ export async function runReport(args: string[], injectedDb?: Database): Promise<
   try {
     const filePath = getArgValue(args, '--report');
     if (!filePath) {
-      console.error('Error: --report requires a file path. Example: oa --report ~/report.md');
+      console.error('Error: --report requires a file path. Example: wilson --report ~/report.md');
       process.exit(1);
     }
 
@@ -346,7 +346,7 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
   try {
     const filePath = getArgValue(args, '--export');
     if (!filePath) {
-      console.error('Error: --export requires a file path. Example: oa --export ~/transactions.csv');
+      console.error('Error: --export requires a file path. Example: wilson --export ~/transactions.csv');
       process.exit(1);
     }
 

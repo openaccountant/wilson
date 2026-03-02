@@ -93,12 +93,33 @@ CREATE INDEX IF NOT EXISTS idx_tax_deductions_year ON tax_deductions(tax_year);
 CREATE INDEX IF NOT EXISTS idx_tax_deductions_category ON tax_deductions(irs_category);
 `;
 
+export const CHAT_SESSIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id TEXT PRIMARY KEY,
+  started_at TEXT DEFAULT (datetime('now')),
+  title TEXT
+);
+`;
+
+export const CHAT_HISTORY_TABLE = `
+CREATE TABLE IF NOT EXISTS chat_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query TEXT NOT NULL,
+  answer TEXT,
+  summary TEXT,
+  session_id TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
 export const ALL_SCHEMA: string[] = [
   TRANSACTIONS_TABLE,
   IMPORTS_TABLE,
   BUDGETS_TABLE,
   CATEGORIZATION_RULES_TABLE,
   TAX_DEDUCTIONS_TABLE,
+  CHAT_SESSIONS_TABLE,
+  CHAT_HISTORY_TABLE,
 ];
 
 /** Indexes that depend on columns added by SAFE_MIGRATIONS — must run AFTER migrations. */
@@ -138,6 +159,11 @@ export const AUTHORIZED_DATE_COLUMN = `
 ALTER TABLE transactions ADD COLUMN authorized_date TEXT;
 `;
 
+/** Add session_id column to chat_history for session grouping */
+export const CHAT_SESSION_ID_COLUMN = `
+ALTER TABLE chat_history ADD COLUMN session_id TEXT;
+`;
+
 /**
  * Safe ALTER TABLE statements that may fail if columns already exist.
  * These should be run with error handling (ignore "duplicate column" errors).
@@ -151,4 +177,5 @@ export const SAFE_MIGRATIONS: string[] = [
   PAYMENT_CHANNEL_COLUMN,
   PENDING_COLUMN,
   AUTHORIZED_DATE_COLUMN,
+  CHAT_SESSION_ID_COLUMN,
 ];

@@ -24,7 +24,7 @@ Execute a skill to get specialized instructions for complex tasks.
 
 ## Usage Notes
 
-- Invoke the skill IMMEDIATELY when relevant, as your first action
+- Only invoke a skill when no standard tool (transaction_search, spending_summary, etc.) handles the query directly
 - The skill returns instructions that you should follow to complete the task
 - Use the skill name exactly as listed in Available Skills
 - Pass any relevant arguments (like date ranges) via the args parameter

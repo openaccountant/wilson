@@ -11,6 +11,7 @@ import type {
   ToolStartEvent,
 } from './types.js';
 import type { RunContext } from './run-context.js';
+import { logger } from '../utils/logger.js';
 
 type ToolExecutionEvent =
   | ToolStartEvent
@@ -91,6 +92,12 @@ export class AgentToolExecutor {
       };
     }
 
+    // Summarize args for logging (avoid huge payloads)
+    const argsSummary: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(toolArgs)) {
+      argsSummary[k] = typeof v === 'string' && v.length > 200 ? v.slice(0, 200) + '...' : v;
+    }
+    logger.info(`Tool started: ${toolName}`, { tool: toolName, args: argsSummary });
     yield { type: 'tool_start', tool: toolName, args: toolArgs };
 
     const toolStartTime = Date.now();
@@ -98,6 +105,7 @@ export class AgentToolExecutor {
     try {
       const tool = this.toolMap.get(toolName);
       if (!tool) {
+        logger.error(`Tool not found: ${toolName}`);
         throw new Error(`Tool '${toolName}' not found`);
       }
 
@@ -130,6 +138,12 @@ export class AgentToolExecutor {
       const result = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
       const duration = Date.now() - toolStartTime;
 
+      logger.info(`Tool completed: ${toolName}`, {
+        tool: toolName,
+        durationMs: duration,
+        resultChars: result.length,
+        resultPreview: result.slice(0, 200),
+      });
       yield { type: 'tool_end', tool: toolName, args: toolArgs, result, duration };
 
       // Record the tool call for limit tracking
@@ -139,6 +153,8 @@ export class AgentToolExecutor {
       ctx.scratchpad.addToolResult(toolName, toolArgs, result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const duration = Date.now() - toolStartTime;
+      logger.error(`Tool failed: ${toolName}`, { tool: toolName, durationMs: duration, error: errorMessage });
       yield { type: 'tool_error', tool: toolName, error: errorMessage };
 
       // Still record the call even on error (counts toward limit)

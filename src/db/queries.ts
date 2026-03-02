@@ -614,3 +614,125 @@ export function getBudgetVsActual(
 
   return results;
 }
+
+// ── Chat history queries ────────────────────────────────────────────────────
+
+export interface ChatHistoryRow {
+  id: number;
+  query: string;
+  answer: string | null;
+  summary: string | null;
+  session_id: string | null;
+  created_at: string;
+}
+
+export interface ChatSessionRow {
+  id: string;
+  started_at: string;
+  title: string | null;
+}
+
+export function createChatSession(db: Database): string {
+  const id = crypto.randomUUID();
+  db.prepare(`INSERT INTO chat_sessions (id) VALUES (@id)`).run({ id });
+  return id;
+}
+
+export function updateSessionTitle(db: Database, sessionId: string, title: string): void {
+  db.prepare(`UPDATE chat_sessions SET title = @title WHERE id = @id`).run({ id: sessionId, title });
+}
+
+export function getChatSessions(db: Database, limit: number = 50): ChatSessionRow[] {
+  return db.prepare(`
+    SELECT * FROM chat_sessions ORDER BY started_at DESC LIMIT @limit
+  `).all({ limit }) as ChatSessionRow[];
+}
+
+export function getChatHistoryBySession(db: Database, sessionId: string): ChatHistoryRow[] {
+  return db.prepare(`
+    SELECT * FROM chat_history WHERE session_id = @sessionId ORDER BY id ASC
+  `).all({ sessionId }) as ChatHistoryRow[];
+}
+
+export function insertChatMessage(
+  db: Database,
+  query: string,
+  answer: string | null,
+  summary: string | null,
+  sessionId: string | null = null
+): number {
+  const result = db.prepare(`
+    INSERT INTO chat_history (query, answer, summary, session_id)
+    VALUES (@query, @answer, @summary, @sessionId)
+  `).run({ query, answer: answer ?? null, summary: summary ?? null, sessionId: sessionId ?? null });
+  return (result as { lastInsertRowid: number }).lastInsertRowid;
+}
+
+export function updateChatAnswer(
+  db: Database,
+  id: number,
+  answer: string,
+  summary: string | null
+): void {
+  db.prepare(`
+    UPDATE chat_history SET answer = @answer, summary = @summary WHERE id = @id
+  `).run({ id, answer, summary: summary ?? null });
+}
+
+export function getRecentChatHistory(
+  db: Database,
+  limit: number = 50
+): ChatHistoryRow[] {
+  return db.prepare(`
+    SELECT * FROM chat_history ORDER BY id DESC LIMIT @limit
+  `).all({ limit }) as ChatHistoryRow[];
+}
+
+// ── Transaction edit/delete queries ─────────────────────────────────────────
+
+export interface TransactionUpdate {
+  date?: string;
+  description?: string;
+  amount?: number;
+  category?: string;
+  notes?: string;
+}
+
+/**
+ * Update specific fields on a transaction.
+ */
+export function updateTransaction(
+  db: Database,
+  id: number,
+  updates: TransactionUpdate
+): boolean {
+  const sets: string[] = [];
+  const params: Record<string, unknown> = { id };
+
+  if (updates.date !== undefined) { sets.push('date = @date'); params.date = updates.date; }
+  if (updates.description !== undefined) { sets.push('description = @description'); params.description = updates.description; }
+  if (updates.amount !== undefined) { sets.push('amount = @amount'); params.amount = updates.amount; }
+  if (updates.category !== undefined) { sets.push('category = @category'); params.category = updates.category; }
+  if (updates.notes !== undefined) { sets.push('notes = @notes'); params.notes = updates.notes; }
+
+  if (sets.length === 0) return false;
+
+  sets.push("updated_at = datetime('now')");
+  const result = db.prepare(`UPDATE transactions SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  return (result as { changes: number }).changes > 0;
+}
+
+/**
+ * Delete a transaction by ID.
+ */
+export function deleteTransaction(db: Database, id: number): boolean {
+  const result = db.prepare('DELETE FROM transactions WHERE id = @id').run({ id });
+  return (result as { changes: number }).changes > 0;
+}
+
+/**
+ * Get a single transaction by ID.
+ */
+export function getTransactionById(db: Database, id: number): TransactionRow | undefined {
+  return db.prepare('SELECT * FROM transactions WHERE id = @id').get({ id }) as TransactionRow | undefined;
+}

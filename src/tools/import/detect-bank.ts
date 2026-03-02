@@ -36,12 +36,20 @@ export function detectFormat(content: string): DetectedFormat {
     }
   }
 
-  // Fall back to CSV — parse the first line as headers
-  const firstLine = lines[0] ?? '';
-  const headers = firstLine.split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  const bank = detectBank(headers);
+  // Fall back to CSV — scan lines for the best header row.
+  // Some banks (e.g. BofA checking) prepend summary rows before the real headers,
+  // so we check each line until we find a recognized bank or exhaust the scan.
+  let bestBank: BankType = 'generic';
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const headers = lines[i].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+    const bank = detectBank(headers);
+    if (bank !== 'generic') {
+      bestBank = bank;
+      break;
+    }
+  }
 
-  return { format: 'csv', bank };
+  return { format: 'csv', bank: bestBank };
 }
 
 /**

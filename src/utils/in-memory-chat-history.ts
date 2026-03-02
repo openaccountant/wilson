@@ -6,6 +6,8 @@ import {
   type HistoryEntry,
 } from './history-context.js';
 import { z } from 'zod';
+import type { Database } from '../db/compat-sqlite.js';
+import { insertChatMessage, updateChatAnswer, getRecentChatHistory, createChatSession, updateSessionTitle } from '../db/queries.js';
 
 /**
  * Represents a single conversation turn (query + answer + summary)
@@ -45,10 +47,50 @@ export class InMemoryChatHistory {
   private model: string;
   private readonly maxTurns: number;
   private relevantMessagesByQuery: Map<string, Message[]> = new Map();
+  private db: Database | null = null;
+  private lastDbId: number | null = null;
+  private sessionId: string | null = null;
+  private sessionTitled: boolean = false;
 
   constructor(model: string = DEFAULT_MODEL, maxTurns: number = DEFAULT_HISTORY_LIMIT) {
     this.model = model;
     this.maxTurns = maxTurns;
+  }
+
+  /**
+   * Enable SQLite persistence. Session is created lazily on first message,
+   * avoiding empty session records when the CLI starts but no chat occurs.
+   */
+  setDatabase(db: Database): void {
+    this.db = db;
+  }
+
+  /**
+   * Ensure a session exists, creating one lazily on first use.
+   */
+  private ensureSession(): void {
+    if (this.sessionId || !this.db) return;
+    try {
+      this.sessionId = createChatSession(this.db);
+    } catch {
+      this.sessionId = null;
+    }
+  }
+
+  /**
+   * Returns the current session ID (for API/dashboard use).
+   */
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  /**
+   * Switch to an existing session (e.g., when dashboard user selects a prior session).
+   * New messages will be appended to this session.
+   */
+  setSessionId(sessionId: string): void {
+    this.sessionId = sessionId;
+    this.sessionTitled = true; // existing sessions already have titles
   }
 
   /**
@@ -102,6 +144,16 @@ Generate a brief 1-2 sentence summary of this answer.`;
       answer: null,
       summary: null,
     });
+
+    // Persist to DB (lazily creates session on first message)
+    if (this.db) {
+      try {
+        this.ensureSession();
+        this.lastDbId = insertChatMessage(this.db, query, null, null, this.sessionId);
+      } catch {
+        this.lastDbId = null;
+      }
+    }
   }
 
   /**
@@ -116,6 +168,22 @@ Generate a brief 1-2 sentence summary of this answer.`;
 
     lastMessage.answer = answer;
     lastMessage.summary = await this.generateSummary(lastMessage.query, answer);
+
+    // Persist to DB
+    if (this.db && this.lastDbId !== null) {
+      try {
+        updateChatAnswer(this.db, this.lastDbId, answer, lastMessage.summary);
+        // Auto-title the session from the first Q&A
+        if (!this.sessionTitled && this.sessionId) {
+          const title = lastMessage.summary || lastMessage.query.slice(0, 100);
+          updateSessionTitle(this.db, this.sessionId, title);
+          this.sessionTitled = true;
+        }
+      } catch {
+        // Ignore persistence errors
+      }
+      this.lastDbId = null;
+    }
   }
 
   /**

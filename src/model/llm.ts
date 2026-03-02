@@ -5,6 +5,7 @@ import { getAdapter } from './providers/index.js';
 import { logger } from '../utils/logger.js';
 import { classifyError, isNonRetryableError } from '../utils/errors.js';
 import { resolveProvider, getProviderById } from '../providers.js';
+import { traceStore } from '../utils/trace-store.js';
 
 export const DEFAULT_PROVIDER = 'openai';
 export const DEFAULT_MODEL = 'gpt-5.2';
@@ -75,19 +76,78 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   }
 
   const adapter = getAdapter(provider.id);
+  const startTime = Date.now();
+  const promptChars = prompt.length + finalSystemPrompt.length;
+  const toolCount = tools?.length ?? 0;
 
-  const response = await withRetry(
-    () =>
-      adapter.call({
-        model: apiModel,
-        systemPrompt: finalSystemPrompt,
-        userPrompt: prompt,
-        tools,
-        outputSchema,
-        signal,
-      }),
-    provider.displayName,
-  );
+  logger.debug(`LLM call start`, { model: apiModel, provider: provider.id, promptChars, tools: toolCount });
 
-  return { response, usage: response.usage };
+  try {
+    const response = await withRetry(
+      () =>
+        adapter.call({
+          model: apiModel,
+          systemPrompt: finalSystemPrompt,
+          userPrompt: prompt,
+          tools,
+          outputSchema,
+          signal,
+        }),
+      provider.displayName,
+    );
+
+    const durationMs = Date.now() - startTime;
+    const inputTokens = response.usage?.inputTokens ?? 0;
+    const outputTokens = response.usage?.outputTokens ?? 0;
+    const totalTokens = response.usage?.totalTokens ?? 0;
+    const toolCallCount = response.toolCalls?.length ?? 0;
+
+    traceStore.record({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      model: apiModel,
+      provider: provider.id,
+      promptLength: promptChars,
+      responseLength: response.content.length,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      durationMs,
+      status: 'ok',
+    });
+
+    logger.info(`LLM call completed`, {
+      model: apiModel,
+      provider: provider.id,
+      durationMs,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      responseChars: response.content.length,
+      toolCalls: toolCallCount,
+    });
+
+    return { response, usage: response.usage };
+  } catch (error) {
+    const durationMs = Date.now() - startTime;
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    traceStore.record({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      timestamp: new Date().toISOString(),
+      model: apiModel,
+      provider: provider.id,
+      promptLength: promptChars,
+      responseLength: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      durationMs,
+      status: 'error',
+      error: errorMsg,
+    });
+
+    logger.error(`LLM call failed`, { model: apiModel, provider: provider.id, durationMs, error: errorMsg });
+    throw error;
+  }
 }

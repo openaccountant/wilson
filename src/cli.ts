@@ -47,6 +47,7 @@ import { initDeleteTransactionTool } from './tools/query/delete-transaction.js';
 import { initSpendingSummaryTool } from './tools/query/spending-summary.js';
 import { initAnomalyDetectTool } from './tools/query/anomaly-detect.js';
 import { initMonarchTool } from './tools/import/monarch.js';
+import { initFireflyTool } from './tools/import/firefly.js';
 import { initExportTool } from './tools/export/export-transactions.js';
 import { initBudgetSetTool } from './tools/budget/budget-set.js';
 import { initBudgetCheckTool } from './tools/budget/budget-check.js';
@@ -96,7 +97,7 @@ function summarizeToolResult(tool: string, args: Record<string, unknown>, result
       }
       if (typeof parsed.data === 'object') {
         const keys = Object.keys(parsed.data).filter((key) => !key.startsWith('_'));
-        if (tool === 'csv_import' || tool === 'monarch_import') {
+        if (tool === 'csv_import' || tool === 'monarch_import' || tool === 'firefly_import') {
           const count = parsed.data.transactionsImported ?? parsed.data.transaction_count;
           if (count !== undefined) {
             return `Imported ${count} transactions`;
@@ -254,6 +255,7 @@ export async function runCli() {
   initSpendingSummaryTool(db);
   initAnomalyDetectTool(db);
   initMonarchTool(db);
+  initFireflyTool(db);
   initExportTool(db);
   initBudgetSetTool(db);
   initBudgetCheckTool(db);
@@ -904,33 +906,14 @@ export async function runCli() {
       return;
     }
 
-    if (query === '/dashboard' || query === '/dashboard stop') {
+    if (query === '/dashboard') {
       chatLog.addQuery(query);
-      if (query === '/dashboard stop') {
-        if ((globalThis as any).__oaDashboard) {
-          const { stopDashboardServer } = await import('./dashboard/server.js');
-          stopDashboardServer((globalThis as any).__oaDashboard);
-          (globalThis as any).__oaDashboard = null;
-          chatLog.finalizeAnswer('Dashboard stopped.');
-        } else {
-          chatLog.finalizeAnswer('No dashboard running.');
-        }
-      } else {
-        if ((globalThis as any).__oaDashboard) {
-          chatLog.finalizeAnswer('Dashboard already running. Type `/dashboard stop` to close it.');
-        } else {
-          const { startDashboardServer } = await import('./dashboard/server.js');
-          const { server, url } = startDashboardServer(db);
-          (globalThis as any).__oaDashboard = server;
-          // Open in default browser
-          try {
-            Bun.spawn(['open', url]);
-          } catch {
-            // open may not be available on all platforms
-          }
-          chatLog.finalizeAnswer(`Dashboard at ${url} — type \`/dashboard stop\` to close`);
-        }
+      try {
+        Bun.spawn(['open', dashUrl]);
+      } catch {
+        // open may not be available on all platforms
       }
+      chatLog.finalizeAnswer(`Dashboard at ${dashUrl}`);
       tui.requestRender();
       return;
     }
@@ -1128,6 +1111,12 @@ export async function runCli() {
   renderSelectionOverlay();
   refreshError();
 
+  // Auto-start dashboard server
+  const { startDashboardServer, stopDashboardServer } = await import('./dashboard/server.js');
+  const { server: dashServer, url: dashUrl } = startDashboardServer(db);
+  (globalThis as any).__oaDashboard = dashServer;
+  intro.setDashboard(dashUrl);
+
   tui.start();
   await new Promise<void>((resolve) => {
     const finish = () => resolve();
@@ -1138,6 +1127,12 @@ export async function runCli() {
 
   workingIndicator.dispose();
   debugPanel.dispose();
+
+  // Stop dashboard server
+  if ((globalThis as any).__oaDashboard) {
+    stopDashboardServer((globalThis as any).__oaDashboard);
+    (globalThis as any).__oaDashboard = null;
+  }
 
   // Cleanup MCP connections
   const { closeMcpClients } = await import('./mcp/client.js');

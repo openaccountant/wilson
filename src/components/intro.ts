@@ -43,6 +43,7 @@ function colorizeArt(art: string): string {
 export class IntroComponent extends Container {
   private readonly modelText: Text;
   private readonly profileText: Text;
+  private readonly dashboardText: Text;
 
   constructor(model: string, profile?: string) {
     super();
@@ -81,6 +82,10 @@ export class IntroComponent extends Container {
       this.setProfile(profile);
     }
 
+    // Dashboard line
+    this.dashboardText = new Text("", 0, 0);
+    this.addChild(this.dashboardText);
+
     this.addChild(new Spacer(1));
 
     // Bottom separator
@@ -98,6 +103,12 @@ export class IntroComponent extends Container {
   setProfile(name: string) {
     this.profileText.setText(
       `${theme.muted("Profile: ")}${theme.primary(name)}`,
+    );
+  }
+
+  setDashboard(url: string) {
+    this.dashboardText.setText(
+      `${theme.muted("Dashboard: ")}${theme.primary(url)}`,
     );
   }
 }

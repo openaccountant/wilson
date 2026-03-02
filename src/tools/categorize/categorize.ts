@@ -6,6 +6,7 @@ import { buildCategorizationPrompt, type CategorizationInput } from './prompt.js
 import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
+import { getConfiguredModel } from '../../utils/config.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -105,9 +106,11 @@ export const categorizeTool = defineTool({
 
       try {
         // 3. Call LLM with structured output
+        const { model } = getConfiguredModel();
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial transaction categorizer. Respond only with valid JSON.',
           outputSchema: categorizationOutputSchema,
+          model,
         });
 
         // Parse the result — with structured output, response.structured is the parsed object

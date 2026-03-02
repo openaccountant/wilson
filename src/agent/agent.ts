@@ -2,7 +2,7 @@ import type { LlmResponse } from '../model/types.js';
 import type { ToolDef } from '../model/types.js';
 import { callLlm } from '../model/llm.js';
 import { getTools } from '../tools/registry.js';
-import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext } from '../agent/prompts.js';
+import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext } from '../agent/prompts.js';
 import { extractTextContent, hasToolCalls } from '../utils/ai-message.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { buildHistoryContext } from '../utils/history-context.js';
@@ -11,6 +11,7 @@ import { formatUserFacingError, isContextOverflowError } from '../utils/errors.j
 import type { AgentConfig, AgentEvent, ContextClearedEvent, TokenUsage } from '../agent/types.js';
 import { createRunContext, type RunContext } from './run-context.js';
 import { AgentToolExecutor } from './tool-executor.js';
+import { logger } from '../utils/logger.js';
 
 
 const DEFAULT_MODEL = 'gpt-5.2';
@@ -53,12 +54,20 @@ export class Agent {
     const soulContent = await loadSoulDocument();
     let systemPrompt = await buildSystemPrompt(model, soulContent);
 
+    // Inject data context so the agent knows what's in the database
+    const dataContext = buildDataContext();
+    if (dataContext) {
+      systemPrompt += `\n\n${dataContext}`;
+    }
+
     // Inject budget context if budgets are configured
     const budgetContext = buildBudgetContext();
     if (budgetContext) {
       systemPrompt += `\n\n${budgetContext}`;
     }
 
+    const toolNames = tools.map(t => t.name);
+    logger.info(`Agent created`, { model, toolCount: tools.length, tools: toolNames });
     return new Agent(config, tools, systemPrompt);
   }
 
@@ -69,8 +78,10 @@ export class Agent {
    */
   async *run(query: string, inMemoryHistory?: InMemoryChatHistory): AsyncGenerator<AgentEvent> {
     const startTime = Date.now();
+    logger.info(`Agent run started`, { query: query.slice(0, 200), model: this.model, maxIterations: this.maxIterations });
 
     if (this.tools.length === 0) {
+      logger.warn(`Agent run aborted: no tools available`);
       yield { type: 'done', answer: 'No tools available. Please check your API key configuration.', toolCalls: [], iterations: 0, totalTime: Date.now() - startTime };
       return;
     }
@@ -79,11 +90,14 @@ export class Agent {
 
     // Build initial prompt with conversation history context
     let currentPrompt = this.buildInitialPrompt(query, inMemoryHistory);
+    const hasHistory = inMemoryHistory?.hasMessages() ?? false;
+    logger.debug(`Initial prompt built`, { promptChars: currentPrompt.length, hasHistory });
 
     // Main agent loop
     let overflowRetries = 0;
     while (ctx.iteration < this.maxIterations) {
       ctx.iteration++;
+      logger.debug(`Iteration ${ctx.iteration}/${this.maxIterations} starting`);
 
       let response: LlmResponse;
       let usage: TokenUsage | undefined;
@@ -101,6 +115,7 @@ export class Agent {
           if (isContextOverflowError(errorMessage) && overflowRetries < MAX_OVERFLOW_RETRIES) {
             overflowRetries++;
             const clearedCount = ctx.scratchpad.clearOldestToolResults(OVERFLOW_KEEP_TOOL_USES);
+            logger.warn(`Context overflow, cleared ${clearedCount} tool results (retry ${overflowRetries}/${MAX_OVERFLOW_RETRIES})`);
 
             if (clearedCount > 0) {
               yield { type: 'context_cleared', clearedCount, keptCount: OVERFLOW_KEEP_TOOL_USES };
@@ -134,11 +149,20 @@ export class Agent {
       if (responseText?.trim() && hasToolCalls(response)) {
         const trimmedText = responseText.trim();
         ctx.scratchpad.addThinking(trimmedText);
+        logger.debug(`Agent thinking`, { preview: trimmedText.slice(0, 150) });
         yield { type: 'thinking', message: trimmedText };
       }
 
       // No tool calls = final answer is in this response
       if (!hasToolCalls(response)) {
+        const totalTime = Date.now() - startTime;
+        const tokenUsage = ctx.tokenCounter.getUsage();
+        logger.info(`Agent run completed (direct response)`, {
+          iterations: ctx.iteration,
+          totalTimeMs: totalTime,
+          totalTokens: tokenUsage?.totalTokens,
+          answerChars: (responseText ?? '').length,
+        });
         yield* this.handleDirectResponse(responseText ?? '', ctx);
         return;
       }
@@ -160,6 +184,10 @@ export class Agent {
           return;
         }
       }
+      const toolRecords = ctx.scratchpad.getToolCallRecords();
+      const lastTools = toolRecords.slice(-10).map(t => t.tool);
+      logger.info(`Iteration ${ctx.iteration} completed`, { toolsCalled: lastTools, totalToolCalls: toolRecords.length });
+
       yield* this.manageContextThreshold(ctx);
 
       // Build iteration prompt with full tool results (Anthropic-style)
@@ -172,13 +200,20 @@ export class Agent {
 
     // Max iterations reached with no final response
     const totalTime = Date.now() - ctx.startTime;
+    const tokenUsage = ctx.tokenCounter.getUsage();
+    logger.warn(`Agent run hit max iterations`, {
+      maxIterations: this.maxIterations,
+      totalTimeMs: totalTime,
+      totalTokens: tokenUsage?.totalTokens,
+      toolCalls: ctx.scratchpad.getToolCallRecords().length,
+    });
     yield {
       type: 'done',
       answer: `Reached maximum iterations (${this.maxIterations}). I was unable to complete the research in the allotted steps.`,
       toolCalls: ctx.scratchpad.getToolCallRecords(),
       iterations: ctx.iteration,
       totalTime,
-      tokenUsage: ctx.tokenCounter.getUsage(),
+      tokenUsage,
       tokensPerSecond: ctx.tokenCounter.getTokensPerSecond(totalTime),
     };
   }

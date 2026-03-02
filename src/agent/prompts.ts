@@ -68,9 +68,9 @@ ${skillList}
 
 ## Skill Usage Policy
 
-- Check if available skills can help complete the task more effectively
-- When a skill is relevant, invoke it IMMEDIATELY as your first action
-- Skills provide specialized workflows for complex tasks (e.g., subscription audit, tax prep)
+- Skills are for complex multi-step workflows only (e.g., subscription audit, tax prep)
+- ALWAYS prefer standard tools first: transaction_search, spending_summary, categorize, anomaly_detect
+- Only use the skill tool when the user explicitly requests a workflow or no standard tool applies
 - Do not invoke a skill that has already been invoked for the current query`;
 }
 
@@ -236,6 +236,48 @@ ${fullToolResults}`;
 Continue working toward answering the query. When you have gathered sufficient data to answer, write your complete answer directly and do not call more tools.`;
 
   return prompt;
+}
+
+// ============================================================================
+// Data Context
+// ============================================================================
+
+let dataDb: Database | null = null;
+
+/**
+ * Inject the database reference for data context generation.
+ */
+export function initDataContext(db: Database): void {
+  dataDb = db;
+}
+
+/**
+ * Build a data context summary for system prompt injection.
+ * Tells the agent what data is available so it picks the right tools.
+ * Returns null if no transactions exist.
+ */
+export function buildDataContext(): string | null {
+  if (!dataDb) return null;
+
+  try {
+    const row = dataDb.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        MIN(date) AS min_date,
+        MAX(date) AS max_date,
+        SUM(CASE WHEN category IS NULL THEN 1 ELSE 0 END) AS uncategorized,
+        COUNT(DISTINCT category) AS category_count
+      FROM transactions
+    `).get() as { total: number; min_date: string | null; max_date: string | null; uncategorized: number; category_count: number } | undefined;
+
+    if (!row || row.total === 0) {
+      return `## Data Context\n\nNo transactions in the database yet. Use csv_import to import transaction data.`;
+    }
+
+    return `## Data Context\n\nYou have ${row.total} transactions in the database (${row.min_date} to ${row.max_date}), ${row.category_count} categories, ${row.uncategorized} uncategorized.\nUse transaction_search, spending_summary, and anomaly_detect to query this data.`;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================

@@ -8,7 +8,7 @@ const CRON_TAG = "# wilson-managed";
 const LOG_FILE = join(homedir(), ".openaccountant", "schedule.log");
 
 /**
- * Get the absolute path to the oa binary.
+ * Get the absolute path to the wilson binary.
  */
 function getOaPath(): string {
   return process.argv[0];

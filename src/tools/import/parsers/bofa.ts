@@ -71,8 +71,13 @@ function parseBofAChecking(content: string): ParsedTransaction[] {
       continue;
     }
 
+    // Skip summary rows (e.g. "Beginning balance as of ...")
+    if (/^(beginning|ending) balance/i.test(description)) {
+      continue;
+    }
+
     const date = parseBofADate(rawDate);
-    const amount = parseFloat(rawAmount);
+    const amount = parseFloat(rawAmount.replace(/,/g, ''));
 
     if (isNaN(amount)) {
       continue;
@@ -114,7 +119,7 @@ function parseBofACreditCard(content: string): ParsedTransaction[] {
     }
 
     const date = parseBofADate(rawDate);
-    const amount = parseFloat(rawAmount);
+    const amount = parseFloat(rawAmount.replace(/,/g, ''));
 
     if (isNaN(amount)) {
       continue;
