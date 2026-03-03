@@ -69,7 +69,8 @@ Usage:
   wilson --net-worth               Net worth summary
   wilson --balance-sheet           Full balance sheet with equity
   wilson --dashboard [--port N]     Run standalone dashboard server
-  wilson --sync                    Sync all linked bank accounts (Plaid)
+  wilson --sync                    Sync all linked accounts (Plaid, Monarch, Firefly III)
+  wilson --mcp                     Show MCP server connections and available tools
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
@@ -109,6 +110,23 @@ Usage:
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : undefined;
   const { runStandalone } = await import("./dashboard/standalone.js");
   await runStandalone(port);
+} else if (args.includes("--mcp")) {
+  const { initMcpClients, getConnectedServers, getMcpClient, closeMcpClients } = await import("./mcp/client.js");
+  const connected = await initMcpClients();
+  if (connected.length === 0) {
+    console.log("No MCP servers configured. Add servers to ~/.openaccountant/mcp.json");
+  } else {
+    console.log(`Connected to ${connected.length} MCP server(s):\n`);
+    for (const name of connected) {
+      const client = getMcpClient(name)!;
+      const { tools } = await client.listTools();
+      console.log(`  ${name} (${tools.length} tool${tools.length === 1 ? '' : 's'})`);
+      for (const tool of tools) {
+        console.log(`    - ${tool.name}: ${tool.description?.slice(0, 80) ?? '(no description)'}`);
+      }
+    }
+    await closeMcpClients();
+  }
 } else if (args.includes("--sync")) {
   const { runSync } = await import("./sync.js");
   await runSync();

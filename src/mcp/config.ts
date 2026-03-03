@@ -4,11 +4,17 @@ import { homedir } from 'os';
 
 /**
  * Configuration for a single MCP server.
+ * Supports stdio (command + args) and SSE (url) transports.
  */
 export interface McpServerConfig {
-  command: string;
+  /** Transport type. Defaults to 'stdio' when command is set, 'sse' when url is set. */
+  transport?: 'stdio' | 'sse';
+  /** Command to spawn (stdio transport). */
+  command?: string;
   args?: string[];
   env?: Record<string, string>;
+  /** Server URL (SSE transport). */
+  url?: string;
 }
 
 /**

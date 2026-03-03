@@ -1,17 +1,19 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { loadMcpConfig, type McpServerConfig } from './config.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 interface McpClientEntry {
   client: Client;
-  transport: StdioClientTransport;
+  transport: Transport;
 }
 
 const clients = new Map<string, McpClientEntry>();
 
 /**
  * Initialize all MCP clients from ~/.openaccountant/mcp.json.
- * Spawns each server process, connects via stdio, and calls tools/list to verify.
+ * Spawns each server process, connects via stdio or SSE, and calls tools/list to verify.
  * Returns the list of server names that connected successfully.
  */
 export async function initMcpClients(): Promise<string[]> {
@@ -37,11 +39,25 @@ export async function initMcpClients(): Promise<string[]> {
 }
 
 async function connectServer(name: string, config: McpServerConfig): Promise<void> {
-  const transport = new StdioClientTransport({
-    command: config.command,
-    args: config.args,
-    env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
-  });
+  const isSSE = config.transport === 'sse' || (!config.command && config.url);
+
+  let transport: Transport;
+
+  if (isSSE) {
+    if (!config.url) {
+      throw new Error(`SSE server "${name}" requires a "url" field`);
+    }
+    transport = new SSEClientTransport(new URL(config.url));
+  } else {
+    if (!config.command) {
+      throw new Error(`Stdio server "${name}" requires a "command" field`);
+    }
+    transport = new StdioClientTransport({
+      command: config.command,
+      args: config.args,
+      env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
+    });
+  }
 
   const client = new Client({
     name: 'open-accountant',
