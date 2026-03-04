@@ -24,7 +24,8 @@ const LICENSE_FILE = join(LICENSE_DIR, 'license.json');
 const REVALIDATION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 /** Allow offline use for up to this many milliseconds (30 days) */
 const OFFLINE_GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
-const POLAR_VALIDATE_URL = 'https://api.polar.sh/v1/licenses/validate';
+const API_BASE = process.env.OA_API_URL ?? 'https://openaccountant-api.workers.dev';
+const VALIDATE_URL = `${API_BASE}/license/validate`;
 
 // ── Cache I/O ────────────────────────────────────────────────────────────────
 
@@ -53,11 +54,11 @@ function removeCache(): void {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Validate a license key with Polar.sh and cache the result locally.
+ * Validate a license key via the OA API and cache the result locally.
  * @throws Error if validation fails or the key is invalid.
  */
 export async function validateLicense(key: string): Promise<LicenseCache> {
-  const res = await fetch(POLAR_VALIDATE_URL, {
+  const res = await fetch(VALIDATE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key }),
@@ -70,32 +71,18 @@ export async function validateLicense(key: string): Promise<LicenseCache> {
 
   const data = (await res.json()) as {
     valid: boolean;
-    license?: {
-      email?: string;
-      expires_at?: string;
-      product?: { name?: string };
-    };
-    products?: Array<{ name: string }>;
+    products: string[];
   };
 
   if (!data.valid) {
     throw new Error('License key is invalid or expired.');
   }
 
-  const products: string[] = [];
-  if (data.products) {
-    for (const p of data.products) {
-      if (p.name) products.push(p.name);
-    }
-  } else if (data.license?.product?.name) {
-    products.push(data.license.product.name);
-  }
-
   const cache: LicenseCache = {
     key,
-    email: data.license?.email ?? '',
-    products,
-    validUntil: data.license?.expires_at ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    email: '',
+    products: data.products ?? [],
+    validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
     validatedAt: new Date().toISOString(),
   };
 

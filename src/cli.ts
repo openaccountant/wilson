@@ -78,6 +78,8 @@ import { loadMcpTools } from './mcp/adapter.js';
 import { pullOllamaModel, RECOMMENDED_OLLAMA_MODELS } from './utils/model-downloader.js';
 import { discoverSkills } from './skills/registry.js';
 import { validateLicense, getLicenseInfo, deactivateLicense, hasLicense } from './licensing/license.js';
+import { interactiveUpsell, getCheckoutUrl } from './licensing/upsell.js';
+import { openBrowser } from './utils/browser.js';
 import { getSchedules, addSchedule, removeSchedule, toggleSchedule } from './schedule/store.js';
 import { syncCrontab } from './schedule/cron.js';
 import { getActiveProfileName, listProfiles, DEFAULT_PROFILE } from './profile/index.js';
@@ -347,6 +349,7 @@ export async function runCli() {
     { name: 'dashboard', description: 'Open browser dashboard' },
     { name: 'schedule', description: 'Manage scheduled tasks (add/remove/pause/resume)' },
     { name: 'profile', description: 'Show or switch profile (e.g. /profile switch business)' },
+    { name: 'upgrade', description: 'Upgrade to Open Accountant Pro' },
     { name: 'help', description: 'Show available commands' },
     ...RECOMMENDED_OLLAMA_MODELS.map((m) => ({
       name: `pull ${m.name}`,
@@ -423,21 +426,35 @@ export async function runCli() {
     if (query === '/help') {
       chatLog.addQuery(query);
       const commands = [
-        '  /import    — Import a bank file (CSV, OFX, QIF)',
-        '  /categorize — AI-categorize uncategorized transactions',
-        '  /model     — Switch LLM provider and model',
-        '  /pull      — Download an Ollama model (e.g. /pull granite3-dense:2b)',
-        '  /connect   — Link a bank account via Plaid (Pro)',
-        '  /sync      — Pull latest transactions from linked banks (Pro)',
-        '  /budget    — View budget vs actual (set/clear with /budget set|clear)',
-        '  /dashboard — Open browser dashboard with charts and chat',
-        '  /license   — Manage your license key',
-        '  /schedule  — Manage scheduled tasks',
-        '  /profile   — Show or switch profile',
-        '  /help      — Show this help message',
-        ...discoverSkills().map((s) => `  /skill ${s.name}  — ${s.description}`),
+        '  /import       — Import a bank file or directory (CSV, OFX, QIF)',
+        '  /categorize   — AI-categorize uncategorized transactions',
+        '  /model        — Switch LLM provider and model',
+        '  /pull         — Download an Ollama model',
+        '  /connect      — Link a bank account via Plaid (Pro)',
+        '  /sync         — Pull latest transactions (Pro)',
+        '  /budget       — View budget vs actual',
+        '  /dashboard    — Open browser dashboard',
+        '  /upgrade      — Upgrade to Pro',
+        '  /license <key> — Activate a license key',
+        '  /schedule     — Manage scheduled tasks',
+        '  /profile      — Show or switch profile',
+        '  /help         — Show this help message',
       ];
-      chatLog.finalizeAnswer(`**Available commands:**\n\n${commands.join('\n')}`);
+      const skills = discoverSkills();
+      const freeSkills = skills.filter((s) => s.tier !== 'paid').map((s) => s.name);
+      const paidSkills = skills.filter((s) => s.tier === 'paid').map((s) => s.name);
+      let output = `**Commands**\n\n${commands.join('\n')}`;
+      if (skills.length > 0) {
+        output += `\n\n**Skills** — run with \`/skill <name>\``;
+        if (freeSkills.length > 0) {
+          output += `\n\n  **Free:** ${freeSkills.join(', ')}`;
+        }
+        if (paidSkills.length > 0) {
+          output += `\n\n  **Pro:** ${paidSkills.join(', ')}`;
+        }
+        output += `\n\n  Ask me about any skill by name for details.`;
+      }
+      chatLog.finalizeAnswer(output);
       tui.requestRender();
       return;
     }
@@ -447,9 +464,10 @@ export async function runCli() {
       const rawPath = query.slice(8).trim();
       if (!rawPath) {
         chatLog.finalizeAnswer(
-          'Usage: `/import <file>`\n\n' +
+          'Usage: `/import <file or directory>`\n\n' +
           'Supports CSV (Chase, Amex, BofA, auto-detected), OFX, and QIF.\n' +
           'Example: `/import ~/Downloads/chase-statement.csv`\n' +
+          'Example: `/import ~/Downloads/bank-statements/`\n' +
           'Tip: type `@` to search for files.'
         );
         tui.requestRender();
@@ -566,12 +584,7 @@ export async function runCli() {
     if (query === '/connect' || query.startsWith('/connect ')) {
       chatLog.addQuery(query);
       if (!hasLicense('pro')) {
-        chatLog.finalizeAnswer(
-          '**Bank sync is a Pro feature.**\n\n' +
-          'Connect your bank for automatic transaction imports — no more CSV downloads.\n\n' +
-          'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: openaccountant.ai/pricing'
-        );
+        chatLog.finalizeAnswer(interactiveUpsell('Bank sync', 'Connect your bank for automatic transaction imports — no more CSV downloads.'));
         tui.requestRender();
         return;
       }
@@ -602,16 +615,24 @@ export async function runCli() {
         }
       } else {
         // Launch Plaid Link
-        if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+        const hasLocalCreds = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+        const useProxy = !hasLocalCreds; // Pro users without local creds use OA API proxy
+
+        if (!hasLocalCreds && !hasLicense('pro')) {
           chatLog.finalizeAnswer(
             'Plaid not configured. Set `PLAID_CLIENT_ID` and `PLAID_SECRET` environment variables.\n\n' +
-            'Get free sandbox credentials at: https://dashboard.plaid.com'
+            'Get free sandbox credentials at: https://dashboard.plaid.com\n\n' +
+            'Or upgrade to **Pro** for zero-config bank sync — no Plaid credentials needed.'
           );
         } else {
-          chatLog.finalizeAnswer('Opening Plaid Link in your browser...');
+          chatLog.finalizeAnswer(
+            useProxy
+              ? 'Opening Plaid Link via Open Accountant Pro...'
+              : 'Opening Plaid Link in your browser...'
+          );
           tui.requestRender();
           try {
-            const item = await startPlaidLinkServer();
+            const item = await startPlaidLinkServer(useProxy);
             if (item) {
               const accounts = item.accounts.map((a) => `${a.name} (****${a.mask})`).join(', ');
               chatLog.finalizeAnswer(
@@ -633,12 +654,7 @@ export async function runCli() {
     if (query === '/sync') {
       chatLog.addQuery(query);
       if (!hasLicense('pro')) {
-        chatLog.finalizeAnswer(
-          '**Bank sync is a Pro feature.**\n\n' +
-          'Automatically pull transactions from your linked bank accounts.\n\n' +
-          'Activate with: `/license activate <key>`\n' +
-          'Get Pro at: openaccountant.ai/pricing'
-        );
+        chatLog.finalizeAnswer(interactiveUpsell('Bank sync', 'Auto-pull transactions from your linked bank accounts.'));
         tui.requestRender();
         return;
       }
@@ -713,35 +729,75 @@ export async function runCli() {
       return;
     }
 
+    if (query === '/upgrade' || query.startsWith('/upgrade ')) {
+      chatLog.addQuery(query);
+      const arg = query.slice(8).trim().toLowerCase();
+      const isMonthly = arg === 'month' || arg === 'monthly';
+      const cycle = isMonthly ? 'monthly' as const : 'annual' as const;
+
+      const pitch = [
+        '**Open Accountant Pro** — everything unlocked.',
+        '',
+        '  Bank sync (Plaid, Monarch, Firefly)',
+        '  40+ financial skills (tax prep, subscription audit, forecasting...)',
+        '  Tax tracking & deduction flagging',
+        '  Net worth trends & mortgage tools',
+        '',
+        isMonthly
+          ? '  **$20/mo**  ←  opening checkout now'
+          : '  **$99/yr (save 59%)**  ←  opening checkout now',
+        '',
+        !isMonthly ? '  `/upgrade month`  $20/mo if you prefer' : '  `/upgrade`  $99/yr to save 59%',
+      ];
+
+      chatLog.finalizeAnswer(pitch.join('\n'));
+      tui.requestRender();
+      openBrowser(getCheckoutUrl(cycle));
+      return;
+    }
+
     if (query === '/license' || query.startsWith('/license ')) {
       chatLog.addQuery(query);
       const subcommand = query.slice(8).trim();
 
+      const activateKey = async (key: string) => {
+        chatLog.finalizeAnswer('Validating license key...');
+        tui.requestRender();
+        try {
+          const result = await validateLicense(key);
+          const products = result.products.length > 0 ? result.products.join(', ') : 'all products';
+          chatLog.finalizeAnswer(
+            `License activated!\n\n` +
+            `  **Email:** ${result.email || '(none)'}\n` +
+            `  **Products:** ${products}\n` +
+            `  **Valid until:** ${new Date(result.validUntil).toLocaleDateString()}`
+          );
+        } catch (err) {
+          chatLog.finalizeAnswer(`License activation failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      };
+
       if (subcommand.startsWith('activate ')) {
         const key = subcommand.slice(9).trim();
         if (!key) {
-          chatLog.finalizeAnswer('Usage: `/license activate <key>`');
+          chatLog.finalizeAnswer('Usage: `/license <key>`');
         } else {
-          chatLog.finalizeAnswer('Validating license key...');
-          tui.requestRender();
-          try {
-            const result = await validateLicense(key);
-            const products = result.products.length > 0 ? result.products.join(', ') : 'all products';
-            chatLog.finalizeAnswer(
-              `License activated!\n\n` +
-              `  **Email:** ${result.email || '(none)'}\n` +
-              `  **Products:** ${products}\n` +
-              `  **Valid until:** ${new Date(result.validUntil).toLocaleDateString()}`
-            );
-          } catch (err) {
-            chatLog.finalizeAnswer(`License activation failed: ${err instanceof Error ? err.message : String(err)}`);
-          }
+          await activateKey(key);
         }
+      } else if (subcommand === 'manage') {
+        openBrowser('https://polar.sh/openaccountant/portal');
+        chatLog.finalizeAnswer(
+          'Opening customer portal — manage billing, cancel, or view invoices.\n\n' +
+          'If the page didn\'t open, visit: https://polar.sh/openaccountant/portal'
+        );
       } else if (subcommand === 'deactivate') {
         deactivateLicense();
         chatLog.finalizeAnswer('License deactivated. Paid features are now locked.');
+      } else if (subcommand && subcommand !== 'activate') {
+        // Treat bare key as activation: /license OA-xxx → activate
+        await activateKey(subcommand);
       } else {
-        // Show current license status
+        // /license with no args (or bare "activate" with no key) — show status
         const info = getLicenseInfo();
         if (info) {
           const products = info.products.length > 0 ? info.products.join(', ') : 'all products';
@@ -751,13 +807,16 @@ export async function runCli() {
             `  **Products:** ${products}\n` +
             `  **Valid until:** ${new Date(info.validUntil).toLocaleDateString()}\n` +
             `  **Last validated:** ${new Date(info.validatedAt).toLocaleDateString()}\n\n` +
-            `Commands: \`/license activate <key>\` · \`/license deactivate\``
+            `Commands: \`/license <key>\` · \`/license manage\` · \`/license deactivate\``
           );
         } else {
           chatLog.finalizeAnswer(
-            `No license active.\n\n` +
-            `Activate with: \`/license activate <key>\`\n` +
-            `Get a key at: openaccountant.ai/pricing`
+            '**No license activated.**\n\n' +
+            'Already have a key? Paste it:\n\n' +
+            '  `/license <key>`\n\n' +
+            'Need to purchase?\n\n' +
+            '  `/upgrade`        $99/yr\n' +
+            '  `/upgrade month`  $20/mo'
           );
         }
       }
@@ -928,11 +987,7 @@ export async function runCli() {
 
     if (query === '/dashboard') {
       chatLog.addQuery(query);
-      try {
-        Bun.spawn(['open', dashUrl]);
-      } catch {
-        // open may not be available on all platforms
-      }
+      openBrowser(dashUrl);
       chatLog.finalizeAnswer(`Dashboard at ${dashUrl}`);
       tui.requestRender();
       return;

@@ -3,6 +3,7 @@ import { defineTool } from '../define-tool.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 import {
   getNetWorthSummary,
   getNetWorthTrend,
@@ -50,9 +51,7 @@ export const netWorthTool = defineTool({
       }
 
       case 'trend': {
-        if (!hasLicense('pro')) {
-          return formatToolResult({ error: 'Net worth trend requires a Pro license.' });
-        }
+        if (!hasLicense('pro')) return toolUpsell('Net worth trends');
         const trend = getNetWorthTrend(db, months ?? 12);
         if (trend.length === 0) {
           return formatToolResult({ message: 'No balance snapshots found. Update account balances to build trend data.' });

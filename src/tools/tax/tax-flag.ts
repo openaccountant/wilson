@@ -5,6 +5,7 @@ import { flagTaxDeduction, unflagTaxDeduction, getTaxDeductions, getTaxSummary }
 import { formatToolResult } from '../types.js';
 import { IRS_CATEGORIES } from './irs-categories.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 
 let db: Database | null = null;
 
@@ -30,11 +31,7 @@ export const taxFlagTool = defineTool({
     notes: z.string().optional().describe('Optional notes for the deduction'),
   }),
   func: async ({ action, transactionId, irsCategory, taxYear, notes }) => {
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Tax tracking is a Pro feature. Activate with: /license activate <key>',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Tax tracking');
 
     const database = getDb();
     const year = taxYear ?? new Date().getFullYear();

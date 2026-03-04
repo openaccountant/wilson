@@ -524,12 +524,14 @@ const MORTGAGE_MANAGE_DESCRIPTION = `
 
 const LINK_TRANSACTIONS_DESCRIPTION = `
 Link unlinked transactions to an account by matching account_last4, bank, or account_name.
+Can look up the target account by numeric ID or by name (use lookupName when the ID is unknown).
 
 ## When to Use
 
 - When the user says "these Chase transactions are from my checking"
 - When the user wants to associate existing transactions with a tracked account
 - After importing transactions and setting up accounts
+- Use lookupName (e.g., "Amex Gold") instead of accountId when the numeric ID is not known
 
 ## When NOT to Use
 
@@ -541,6 +543,7 @@ Link unlinked transactions to an account by matching account_last4, bank, or acc
 - Only links transactions where account_id is currently NULL
 - Supports dry run to preview matches before committing
 - Matches on account_last4, bank name, or account_name
+- If accountId is wrong or unknown, pass lookupName with the account name for automatic lookup
 `.trim();
 
 const PLAID_BALANCES_DESCRIPTION = `
@@ -564,7 +567,8 @@ const PLAID_BALANCES_DESCRIPTION = `
 - Includes account type (checking, savings, credit, etc.)
 - Automatically creates/updates accounts in the net worth tracker
 - Records balance snapshots for trend tracking
-- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
+- Pro users without local Plaid credentials use the OA API proxy automatically
+- Always call this tool when the user asks — the tool handles license and credential checks internally
 `.trim();
 
 const PLAID_RECURRING_DESCRIPTION = `
@@ -587,7 +591,8 @@ const PLAID_RECURRING_DESCRIPTION = `
 - Uses Plaid's recurring transaction detection algorithm
 - Shows both inflows (recurring income) and outflows (subscriptions/bills)
 - Includes frequency, amount, merchant, and active/inactive status
-- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
+- Pro users without local Plaid credentials use the OA API proxy automatically
+- Always call this tool when the user asks — the tool handles license and credential checks internally
 `.trim();
 
 const PLAID_SYNC_DESCRIPTION = `
@@ -609,7 +614,8 @@ const PLAID_SYNC_DESCRIPTION = `
 - Requires linked Plaid accounts (set up via /connect)
 - Uses incremental sync — only fetches new transactions since last sync
 - Deduplicates against previously synced transactions via plaid_transaction_id
-- Requires PLAID_CLIENT_ID and PLAID_SECRET environment variables
+- Pro users without local Plaid credentials use the OA API proxy automatically
+- Always call this tool when the user asks to sync — the tool handles license and credential checks internally
 `.trim();
 
 const WEB_SEARCH_DESCRIPTION = `

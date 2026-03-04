@@ -3,6 +3,7 @@ import { defineTool } from '../define-tool.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 import {
   insertLoan,
   updateLoan,
@@ -36,9 +37,7 @@ export const mortgageManageTool = defineTool({
     notes: z.string().optional().describe('Notes about this loan'),
   }),
   func: async (args) => {
-    if (!hasLicense('pro')) {
-      return formatToolResult({ error: 'Mortgage management requires a Pro license.' });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Loan management');
 
     switch (args.action) {
       case 'add': {

@@ -101,10 +101,10 @@ export async function getSkill(name: string): Promise<Skill | undefined> {
 
   // Gate paid skills behind license check
   if (metadata.tier === 'paid') {
-    if (!hasLicense(metadata.name)) {
+    if (!hasLicense('pro')) {
       return {
         ...metadata,
-        instructions: `This skill requires a license. Run \`/license\` for details or visit openaccountant.ai/pricing.`,
+        instructions: `The **${metadata.name}** skill is a Pro feature. Upgrade to Pro — $99/yr (that's $8.25/mo). Run \`/upgrade\` or visit https://openaccountant.ai/buy`,
       };
     }
 
@@ -120,7 +120,7 @@ export async function getSkill(name: string): Promise<Skill | undefined> {
     // Server fetch failed — return stub
     return {
       ...metadata,
-      instructions: `This skill requires a license. Run \`/license\` for details or visit openaccountant.ai/pricing.`,
+      instructions: `The **${metadata.name}** skill is a Pro feature. Upgrade to Pro — $99/yr (that's $8.25/mo). Run \`/upgrade\` or visit https://openaccountant.ai/buy`,
     };
   }
 
