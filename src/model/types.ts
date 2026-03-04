@@ -37,6 +37,8 @@ export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
 export interface ToolInvokeConfig {
   metadata?: Record<string, unknown>;
   signal?: AbortSignal;
+  /** Active model from the parent agent — tools like chains should inherit this. */
+  model?: string;
 }
 
 /**

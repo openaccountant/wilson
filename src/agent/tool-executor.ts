@@ -39,6 +39,7 @@ export class AgentToolExecutor {
       args: Record<string, unknown>;
     }) => Promise<ApprovalDecision>,
     sessionApprovedTools?: Set<string>,
+    private readonly model?: string,
   ) {
     this.sessionApprovedTools = sessionApprovedTools ?? new Set();
   }
@@ -118,6 +119,7 @@ export class AgentToolExecutor {
       const config = {
         metadata: { onProgress: channel.emit },
         ...(this.signal ? { signal: this.signal } : {}),
+        ...(this.model ? { model: this.model } : {}),
       };
 
       // Launch tool invocation -- closes the channel when it settles

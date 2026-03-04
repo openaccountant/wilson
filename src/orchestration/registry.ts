@@ -21,6 +21,7 @@ export function chainToTool(chain: ChainDef): ToolDef {
     }),
     func: async ({ input }, config) => {
       const result = await runChain(chain, input, {
+        model: config?.model,
         signal: config?.signal,
       });
       return result;
@@ -42,6 +43,7 @@ export function teamToTool(team: TeamDef): ToolDef {
     }),
     func: async ({ query }, config) => {
       const result = await runTeam(team, query, {
+        model: config?.model,
         signal: config?.signal,
       });
       return result;

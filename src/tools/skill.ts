@@ -53,8 +53,9 @@ export const skillTool = defineTool({
     const metadata = discoverSkills().find((s) => s.name === skill);
     if (metadata?.tier === 'paid') {
       const { hasLicense } = await import('../licensing/license.js');
-      if (!hasLicense(skill)) {
-        return `The **${skillDef.name}** workflow requires a license. Run \`/license\` for details or visit openaccountant.ai/pricing.`;
+      if (!hasLicense('pro')) {
+        const { toolUpsell } = await import('../licensing/upsell.js');
+        return toolUpsell(`${skillDef.name} skill`);
       }
     }
 
