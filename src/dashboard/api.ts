@@ -31,6 +31,12 @@ function parseAccountId(params: URLSearchParams): number | undefined {
 }
 
 function parseDateRange(params: URLSearchParams) {
+  const directStart = params.get('startDate');
+  const directEnd = params.get('endDate');
+  if (directStart && directEnd) {
+    const month = directStart.slice(0, 7);
+    return { month, startDate: directStart, endDate: directEnd };
+  }
   const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
   const [year, mon] = month.split('-').map(Number);
   const startDate = `${month}-01`;
@@ -188,6 +194,35 @@ export function apiExportNetWorthCsv(db: Database): string {
   lines.push(['','','','Total Liabilities', String(nw.totalLiabilities)].join(','));
   lines.push(['','','','Net Worth', String(nw.netWorth)].join(','));
   return lines.join('\n');
+}
+
+// ── Spending by Institution ──────────────────────────────────────────────────
+
+export function apiSpendingByInstitution(db: Database, params: URLSearchParams) {
+  const { startDate, endDate } = parseDateRange(params);
+  const accountId = parseAccountId(params);
+  const category = params.get('category');
+  const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
+  const sqlParams: Record<string, unknown> = { startDate, endDate };
+  if (accountId !== undefined) {
+    conditions.push('account_id = @accountId');
+    sqlParams.accountId = accountId;
+  }
+  if (category) {
+    conditions.push('category = @category');
+    sqlParams.category = category;
+  }
+  const rows = db.prepare(`
+    SELECT
+      COALESCE(bank, 'Unknown') AS institution,
+      SUM(amount) AS total,
+      COUNT(*) AS count
+    FROM transactions
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY bank
+    ORDER BY total ASC
+  `).all(sqlParams) as { institution: string; total: number; count: number }[];
+  return rows;
 }
 
 // ── Accounts / Net Worth ────────────────────────────────────────────────────

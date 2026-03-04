@@ -60,9 +60,11 @@ export function getCurrentProfileName(): string {
 
 /**
  * Set initial profile (called during startup).
+ * If a db is provided, register it in the connection cache.
  */
-export function setInitialProfile(name: string): void {
+export function setInitialProfile(name: string, db?: Database): void {
   currentProfile = name;
+  if (db) connections.set(name, db);
 }
 
 /**

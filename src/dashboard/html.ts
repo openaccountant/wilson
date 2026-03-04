@@ -163,6 +163,15 @@ export function getDashboardHtml(port: number): string {
   .acct-row { cursor:pointer; }
   .acct-row:hover { background:#21262d; }
 
+  /* Dialog */
+  dialog { background:#161b22; color:#e1e4e8; border:1px solid #30363d; border-radius:12px; padding:0; max-width:800px; width:90vw; max-height:80vh; overflow:hidden; display:flex; flex-direction:column; }
+  dialog::backdrop { background:rgba(0,0,0,0.6); }
+  dialog .dialog-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #30363d; flex-shrink:0; }
+  dialog .dialog-header h3 { margin:0; font-size:14px; color:#e1e4e8; text-transform:uppercase; letter-spacing:0.5px; }
+  dialog .dialog-body { flex:1; overflow-y:auto; padding:16px 20px; min-height:0; }
+  dialog .dialog-close { background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer; padding:4px 8px; border-radius:4px; }
+  dialog .dialog-close:hover { color:#e1e4e8; background:#21262d; }
+
   .loading { color:#8b949e; font-style:italic; }
   .empty { color:#8b949e; }
   .hidden { display:none !important; }
@@ -220,7 +229,7 @@ export function getDashboardHtml(port: number): string {
     <select id="categoryFilter" title="Filter by category">
       <option value="">All Categories</option>
     </select>
-    <select id="monthPicker"></select>
+    <select id="rangePicker"></select>
     <button id="authSettingsBtn" class="btn-sm hidden" title="Auth Settings">Settings</button>
     <span id="userBadge" class="hidden" style="font-size:12px;color:#8b949e;"></span>
     <button id="logoutBtn" class="btn-sm hidden">Logout</button>
@@ -242,7 +251,9 @@ export function getDashboardHtml(port: number): string {
     <div class="card"><h3>Profit &amp; Loss</h3><div class="pnl-grid" id="pnlContent"><p class="loading">Loading...</p></div></div>
     <div class="card"><h3>Budgets</h3><div id="budgetContent"><p class="loading">Loading...</p></div></div>
     <div class="card"><h3>Spending by Category</h3><div id="spendingContent"><p class="loading">Loading...</p></div></div>
+    <div class="card"><h3>Spending by Institution</h3><div id="spendingByInstContent"><p class="loading">Loading...</p></div></div>
     <div class="card"><h3>Savings Rate Trend</h3><div id="savingsContent"><p class="loading">Loading...</p></div></div>
+    <div class="card"><h3>Liabilities</h3><div id="liabilitiesContent"><p class="loading">Loading...</p></div></div>
     <div class="card full-width"><h3>Alerts</h3><div id="alertContent"><p class="loading">Loading...</p></div></div>
   </div>
 </div>
@@ -261,10 +272,15 @@ export function getDashboardHtml(port: number): string {
 </div>
 
 <div class="tab-panel" id="tab-accounts">
-  <div style="padding:16px 24px;flex:1;overflow-y:auto;min-height:0;">
-    <div class="nw-stats" id="nwStats"><p class="loading">Loading...</p></div>
-    <div class="card full-width" style="margin-bottom:16px;"><h3>Accounts</h3><div id="accountsTable"><p class="loading">Loading...</p></div></div>
-    <div class="card full-width"><h3>Net Worth Trend</h3><div id="nwTrend"><p class="loading">Loading...</p></div></div>
+  <div style="padding:16px 24px 0;flex-shrink:0;">
+    <div style="display:flex;gap:16px;margin-bottom:16px;">
+      <div style="flex:1;"><div class="nw-stats" id="nwStats"><p class="loading">Loading...</p></div></div>
+      <div class="card" style="flex:1;"><h3>Net Worth Trend</h3><div id="nwTrend"><p class="loading">Loading...</p></div></div>
+    </div>
+    <div class="card full-width" style="margin-bottom:16px;"><h3>Net Worth by Institution</h3><div id="nwByInstitution"><p class="loading">Loading...</p></div></div>
+  </div>
+  <div style="flex:1;overflow-y:auto;min-height:0;padding:0 24px 16px;">
+    <div class="card full-width"><h3>Accounts</h3><div id="accountsTable"><p class="loading">Loading...</p></div></div>
   </div>
 </div>
 
@@ -304,7 +320,7 @@ export function getDashboardHtml(port: number): string {
 </div>
 
 <div class="tab-panel" id="tab-training">
-  <div style="padding:16px 24px;flex:1;overflow-y:auto;min-height:0;">
+  <div style="padding:16px 24px 0;flex-shrink:0;">
     <div style="display:flex;gap:16px;margin-bottom:16px;">
       <div class="card" style="flex:1;"><h3>Training Stats</h3><div id="trainingStats"><p class="loading">Loading...</p></div></div>
       <div class="card" style="flex:0 0 auto;">
@@ -315,7 +331,7 @@ export function getDashboardHtml(port: number): string {
         </div>
       </div>
     </div>
-    <div class="card full-width" style="margin-bottom:16px;">
+    <div class="card full-width" style="margin-bottom:0;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <h3 style="margin:0;">Interactions</h3>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -324,41 +340,71 @@ export function getDashboardHtml(port: number): string {
           <select id="trainFilterRating" class="btn-sm"><option value="">Any Rating</option><option value="5">5 Stars</option><option value="4">4+ Stars</option><option value="3">3+ Stars</option></select>
         </div>
       </div>
-      <table id="interactionTable"><thead><tr><th>ID</th><th>Run</th><th>Type</th><th>Model</th><th>Tokens</th><th>Rating</th><th>Time</th><th></th></tr></thead><tbody id="interactionBody"></tbody></table>
     </div>
-    <div class="card full-width" id="interactionDetailCard" style="display:none;">
-      <h3>Interaction Detail</h3>
-      <div id="interactionDetail"></div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
-        <h3>Annotate</h3>
-        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-          <div><label style="font-size:12px;color:#8b949e;">Rating</label><div id="ratingStars" style="display:flex;gap:4px;margin-top:4px;"></div></div>
-          <div><label style="font-size:12px;color:#8b949e;">Preference</label>
-            <select id="prefSelect" class="btn-sm" style="margin-top:4px;display:block;"><option value="">—</option><option value="chosen">Chosen</option><option value="rejected">Rejected</option><option value="neutral">Neutral</option></select>
-          </div>
-          <div><label style="font-size:12px;color:#8b949e;">Pair ID</label>
-            <input id="pairIdInput" class="btn-sm" style="margin-top:4px;display:block;width:120px;" placeholder="DPO pair ID">
-          </div>
-          <div><label style="font-size:12px;color:#8b949e;">Notes</label>
-            <input id="annotNotes" class="btn-sm" style="margin-top:4px;display:block;width:200px;" placeholder="Optional notes">
-          </div>
-          <button id="saveAnnotation" class="btn-sm btn-save" style="padding:6px 16px;margin-top:18px;">Save</button>
-        </div>
-      </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;min-height:0;padding:0 24px 16px;">
+    <div class="card full-width" style="border-top:none;border-top-left-radius:0;border-top-right-radius:0;">
+      <table id="interactionTable"><thead><tr><th>ID</th><th>Run</th><th>Type</th><th>Model</th><th>Tokens</th><th>Rating</th><th>Time</th><th></th></tr></thead><tbody id="interactionBody"></tbody></table>
     </div>
   </div>
 </div>
+
+<dialog id="interactionDialog">
+  <div class="dialog-header">
+    <h3>Interaction Detail</h3>
+    <button class="dialog-close" id="dialogClose">&times;</button>
+  </div>
+  <div class="dialog-body">
+    <div id="interactionDetail"></div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
+      <h3 style="font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Annotate</h3>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+        <div><label style="font-size:12px;color:#8b949e;">Rating</label><div id="ratingStars" style="display:flex;gap:4px;margin-top:4px;"></div></div>
+        <div><label style="font-size:12px;color:#8b949e;">Preference</label>
+          <select id="prefSelect" class="btn-sm" style="margin-top:4px;display:block;"><option value="">—</option><option value="chosen">Chosen</option><option value="rejected">Rejected</option><option value="neutral">Neutral</option></select>
+        </div>
+        <div><label style="font-size:12px;color:#8b949e;">Pair ID</label>
+          <input id="pairIdInput" class="btn-sm" style="margin-top:4px;display:block;width:120px;" placeholder="DPO pair ID">
+        </div>
+        <div><label style="font-size:12px;color:#8b949e;">Notes</label>
+          <input id="annotNotes" class="btn-sm" style="margin-top:4px;display:block;width:200px;" placeholder="Optional notes">
+        </div>
+        <button id="saveAnnotation" class="btn-sm btn-save" style="padding:6px 16px;margin-top:18px;">Save</button>
+      </div>
+    </div>
+  </div>
+</dialog>
 </div>
 
 <script>
 (function() {
   'use strict';
   var BASE = 'http://localhost:${port}';
-  var currentMonth = new Date().toISOString().slice(0,7);
+  var currentStartDate = '';
+  var currentEndDate = '';
   var currentAccountId = '';
   var currentCategory = '';
   var authToken = localStorage.getItem('oa_token') || '';
   var currentUser = null;
+
+  function computeRange(key) {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    var s, e;
+    switch(key) {
+      case 'this-month': s = new Date(y,m,1); e = new Date(y,m+1,0); break;
+      case 'last-month': s = new Date(y,m-1,1); e = new Date(y,m,0); break;
+      case 'last-quarter': s = new Date(y,m-3,1); e = new Date(y,m,0); break;
+      case 'this-year': s = new Date(y,0,1); e = new Date(y,m+1,0); break;
+      case 'prev-year': s = new Date(y-1,0,1); e = new Date(y-1,11,31); break;
+      case 'last-30': s = new Date(now); s.setDate(s.getDate()-30); e = now; break;
+      case 'last-90': s = new Date(now); s.setDate(s.getDate()-90); e = now; break;
+      case 'ytd': s = new Date(y,0,1); e = now; break;
+      default: s = new Date(y,m,1); e = new Date(y,m+1,0);
+    }
+    currentStartDate = s.toISOString().slice(0,10);
+    currentEndDate = e.toISOString().slice(0,10);
+  }
+  function rangeParams() { return 'startDate='+currentStartDate+'&endDate='+currentEndDate; }
 
   function el(tag, className, text) {
     var e = document.createElement(tag);
@@ -555,7 +601,7 @@ export function getDashboardHtml(port: number): string {
   var categoryFilter = document.getElementById('categoryFilter');
   async function loadCategoryOptions() {
     try {
-      var data = await (await authFetch(BASE+'/api/summary?month='+currentMonth+acctParam())).json();
+      var data = await (await authFetch(BASE+'/api/summary?'+rangeParams()+acctParam())).json();
       while (categoryFilter.options.length > 1) categoryFilter.remove(1);
       if (data && data.length) data.forEach(function(r) {
         if (!r.category) return;
@@ -602,26 +648,31 @@ export function getDashboardHtml(port: number): string {
     activateTab(location.hash.replace('#/','') || 'overview');
   }
 
-  // ── Month picker ────────────────────────────────────────────────────────
-  var picker = document.getElementById('monthPicker');
-  for (var i = 0; i < 12; i++) {
-    var d = new Date(); d.setMonth(d.getMonth() - i);
-    var opt = document.createElement('option'); opt.value = d.toISOString().slice(0,7);
-    opt.textContent = d.toLocaleString('en-US', {month:'long',year:'numeric'});
+  // ── Range picker ────────────────────────────────────────────────────────
+  var picker = document.getElementById('rangePicker');
+  var rangeOptions = [
+    {value:'this-month',label:'This Month'},{value:'last-month',label:'Last Month'},
+    {value:'last-quarter',label:'Last Quarter'},{value:'this-year',label:'This Year'},
+    {value:'prev-year',label:'Previous Year'},{value:'last-30',label:'Last 30 Days'},
+    {value:'last-90',label:'Last 90 Days'},{value:'ytd',label:'Year to Date'}
+  ];
+  rangeOptions.forEach(function(r) {
+    var opt = document.createElement('option'); opt.value = r.value; opt.textContent = r.label;
     picker.appendChild(opt);
-  }
-  picker.addEventListener('change', function() { currentMonth = picker.value; loadCategoryOptions(); loadOverview(); });
+  });
+  computeRange('this-month');
+  picker.addEventListener('change', function() { computeRange(picker.value); loadCategoryOptions(); loadOverview(); });
 
   // ── Overview ────────────────────────────────────────────────────────────
   async function loadPnl() {
-    var data = await (await authFetch(BASE+'/api/pnl?month='+currentMonth+acctParam()+catParam())).json();
+    var data = await (await authFetch(BASE+'/api/pnl?'+rangeParams()+acctParam()+catParam())).json();
     var c = document.getElementById('pnlContent'); c.replaceChildren();
     [{label:'Income',value:data.totalIncome,cls:'income'},{label:'Expenses',value:data.totalExpenses,cls:'expense'},{label:'Net',value:data.netProfitLoss,cls:data.netProfitLoss>=0?'income':'expense'}].forEach(function(it) {
       var div = el('div','pnl-item'); div.appendChild(el('div','label',it.label)); div.appendChild(el('div','value '+it.cls,fmt(it.value))); c.appendChild(div);
     });
   }
   async function loadBudgets() {
-    var data = await (await authFetch(BASE+'/api/budgets?month='+currentMonth+acctParam()+catParam())).json();
+    var data = await (await authFetch(BASE+'/api/budgets?'+rangeParams()+acctParam()+catParam())).json();
     var c = document.getElementById('budgetContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No budgets set.')); return; }
     data.forEach(function(b) {
@@ -636,7 +687,7 @@ export function getDashboardHtml(port: number): string {
   }
   var COLORS = ['#3fb950','#58a6ff','#d29922','#f85149','#bc8cff','#79c0ff','#f0883e','#56d364','#db61a2','#8b949e'];
   async function loadSpending() {
-    var data = await (await authFetch(BASE+'/api/summary?month='+currentMonth+acctParam()+catParam())).json();
+    var data = await (await authFetch(BASE+'/api/summary?'+rangeParams()+acctParam()+catParam())).json();
     var c = document.getElementById('spendingContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No spending data.')); return; }
     var total = data.reduce(function(s,r){return s+Math.abs(r.total);},0);
@@ -671,6 +722,20 @@ export function getDashboardHtml(port: number): string {
     });
     layout.appendChild(legend); c.appendChild(layout);
   }
+  async function loadSpendingByInstitution() {
+    var data = await (await authFetch(BASE+'/api/spending-by-institution?'+rangeParams()+acctParam()+catParam())).json();
+    var c = document.getElementById('spendingByInstContent'); c.replaceChildren();
+    if (!data.length) { c.appendChild(el('p','empty','No spending data.')); return; }
+    var total = data.reduce(function(s,r){return s+Math.abs(r.total);},0);
+    data.forEach(function(r,i) {
+      var pct = total>0?(Math.abs(r.total)/total*100).toFixed(0):0;
+      var row = el('div','legend-item');
+      var sw = el('span','legend-swatch'); sw.style.backgroundColor = COLORS[i%COLORS.length];
+      row.appendChild(sw); row.appendChild(el('span',null,r.institution));
+      var vs = el('span',null,fmt(r.total)+' ('+pct+'%)'); vs.style.marginLeft='auto'; vs.style.color='#8b949e'; row.appendChild(vs);
+      c.appendChild(row);
+    });
+  }
   async function loadSavings() {
     var data = await (await authFetch(BASE+'/api/savings?months=6'+acctParam()+catParam())).json();
     var c = document.getElementById('savingsContent'); c.replaceChildren();
@@ -687,7 +752,25 @@ export function getDashboardHtml(port: number): string {
     if (!data.length) { c.appendChild(el('p','empty','No active alerts.')); return; }
     data.forEach(function(a) { c.appendChild(el('div','alert-item alert-'+a.severity,a.message)); });
   }
-  function loadOverview() { loadPnl(); loadBudgets(); loadSpending(); loadSavings(); loadAlerts(); }
+  async function loadLiabilities() {
+    try {
+      var nw = await (await authFetch(BASE+'/api/net-worth')).json();
+      var c = document.getElementById('liabilitiesContent'); c.replaceChildren();
+      if (!nw.accounts || !nw.accounts.length) { c.appendChild(el('p','empty','No accounts.')); return; }
+      var liabilities = nw.accounts.filter(function(a) { return a.account_type === 'liability'; });
+      if (!liabilities.length) { c.appendChild(el('p','empty','No liabilities.')); return; }
+      var totalDiv = el('div'); totalDiv.style.cssText = 'font-size:24px;font-weight:700;color:#f85149;margin-bottom:12px;';
+      totalDiv.textContent = fmt(nw.totalLiabilities); c.appendChild(totalDiv);
+      liabilities.forEach(function(a) {
+        var row = el('div','legend-item');
+        var name = a.name; if (a.institution) name += ' (' + a.institution + ')';
+        row.appendChild(el('span',null,name));
+        var vs = el('span','expense',fmt(-a.current_balance)); vs.style.marginLeft='auto'; row.appendChild(vs);
+        c.appendChild(row);
+      });
+    } catch(e) { document.getElementById('liabilitiesContent').replaceChildren(el('p','empty','Error loading liabilities.')); }
+  }
+  function loadOverview() { loadPnl(); loadBudgets(); loadSpending(); loadSpendingByInstitution(); loadSavings(); loadLiabilities(); loadAlerts(); }
 
   // ── Transactions ────────────────────────────────────────────────────────
   var isAdmin = function() { return !currentUser || currentUser.role === 'admin'; };
@@ -696,13 +779,14 @@ export function getDashboardHtml(port: number): string {
     var c = document.getElementById('txnContent'); c.replaceChildren();
     if (!data.length) { c.appendChild(el('p','empty','No transactions.')); return; }
     var table = document.createElement('table'), thead = document.createElement('thead'), hr = document.createElement('tr');
-    var cols = ['Date','Description','Amount','Category']; if (isAdmin()) cols.push('Actions');
+    var cols = ['Date','Description','Amount','Category','Account']; if (isAdmin()) cols.push('Actions');
     cols.forEach(function(h){hr.appendChild(el('th',null,h));}); thead.appendChild(hr); table.appendChild(thead);
     var tbody = document.createElement('tbody');
     data.forEach(function(t) {
       var tr = document.createElement('tr'); tr.dataset.id = t.id;
       tr.appendChild(el('td',null,t.date)); tr.appendChild(el('td',null,t.description));
       tr.appendChild(el('td',t.amount>=0?'amt-pos':'amt-neg',fmt(t.amount))); tr.appendChild(el('td',null,t.category||'\\u2014'));
+      var acctLabel = ''; if (t.bank) { acctLabel = t.bank; if (t.account_last4) acctLabel += ' ****' + t.account_last4; } tr.appendChild(el('td',null,acctLabel||'\\u2014'));
       if (isAdmin()) {
         var act = el('td','txn-actions');
         var eb = el('button','btn-sm','Edit'); eb.addEventListener('click',function(){startEdit(tr,t);});
@@ -751,19 +835,62 @@ export function getDashboardHtml(port: number): string {
       [{label:'Total Assets',value:nw.totalAssets,cls:'income'},{label:'Total Liabilities',value:nw.totalLiabilities,cls:'expense'},{label:'Net Worth',value:nw.netWorth,cls:nw.netWorth>=0?'income':'expense'}].forEach(function(s) {
         var card = el('div','nw-stat'); card.appendChild(el('div','nw-value '+s.cls,fmt(s.value))); card.appendChild(el('div','nw-label',s.label)); sc.appendChild(card);
       });
+      // ── Net Worth by Institution ────────────────────────────────
+      var nwByInst = document.getElementById('nwByInstitution'); nwByInst.replaceChildren();
+      if (nw.accounts && nw.accounts.length) {
+        var instMap = {};
+        nw.accounts.forEach(function(a) {
+          var inst = a.institution || 'Unknown';
+          if (!instMap[inst]) instMap[inst] = { total: 0, count: 0 };
+          var bal = a.account_type === 'liability' ? -a.current_balance : a.current_balance;
+          instMap[inst].total += bal;
+          instMap[inst].count++;
+        });
+        var instList = Object.keys(instMap).sort(function(a,b){ return instMap[b].total - instMap[a].total; });
+        instList.forEach(function(inst) {
+          var row = el('div','legend-item');
+          row.appendChild(el('span',null,inst));
+          var info = el('span',null,fmt(instMap[inst].total) + '  (' + instMap[inst].count + ' account' + (instMap[inst].count===1?'':'s') + ')');
+          info.style.marginLeft='auto'; info.className = instMap[inst].total >= 0 ? 'income' : 'expense';
+          row.appendChild(info); nwByInst.appendChild(row);
+        });
+      } else { nwByInst.appendChild(el('p','empty','No accounts.')); }
+
+      // ── Accounts table grouped by institution ─────────────────
       var tc = document.getElementById('accountsTable'); tc.replaceChildren();
       if (!nw.accounts||!nw.accounts.length) { tc.appendChild(el('p','empty','No accounts. Add accounts via the CLI.')); }
       else {
         var table = document.createElement('table'), thead = document.createElement('thead'), hrow = document.createElement('tr');
-        ['Name','Type','Institution','Balance'].forEach(function(h){hrow.appendChild(el('th',null,h));}); thead.appendChild(hrow); table.appendChild(thead);
+        ['Name','Type','Balance'].forEach(function(h){hrow.appendChild(el('th',null,h));}); thead.appendChild(hrow); table.appendChild(thead);
         var tbody = document.createElement('tbody');
+        // Group by institution
+        var groups = {};
         nw.accounts.forEach(function(a) {
-          var tr = document.createElement('tr'); tr.className = 'acct-row';
-          tr.appendChild(el('td',null,a.name)); tr.appendChild(el('td',null,a.account_subtype));
-          tr.appendChild(el('td',null,a.institution||'\\u2014'));
-          tr.appendChild(el('td',a.current_balance>=0?'amt-pos':'amt-neg',fmt(a.current_balance)));
-          tr.addEventListener('click',function(){navigateTo('transactions?accountId='+a.id);});
-          tbody.appendChild(tr);
+          var inst = a.institution || 'Unknown';
+          if (!groups[inst]) groups[inst] = [];
+          groups[inst].push(a);
+        });
+        var instKeys = Object.keys(groups).sort();
+        instKeys.forEach(function(inst) {
+          var accts = groups[inst];
+          var instTotal = accts.reduce(function(s,a) {
+            return s + (a.account_type === 'liability' ? -a.current_balance : a.current_balance);
+          }, 0);
+          // Institution header row
+          var ihr = document.createElement('tr'); ihr.style.background = '#1c2128'; ihr.style.fontWeight = '600';
+          var instTd = el('td',null,inst); instTd.setAttribute('colspan','2'); ihr.appendChild(instTd);
+          ihr.appendChild(el('td', instTotal>=0?'amt-pos':'amt-neg', fmt(instTotal)));
+          tbody.appendChild(ihr);
+          // Account rows
+          accts.forEach(function(a) {
+            var tr = document.createElement('tr'); tr.className = 'acct-row';
+            var nameLabel = '  ' + a.name; if (a.account_number_last4) nameLabel += ' (****' + a.account_number_last4 + ')';
+            tr.appendChild(el('td',null,nameLabel)); tr.appendChild(el('td',null,a.account_subtype));
+            var dispBal = a.account_type === 'liability' ? -a.current_balance : a.current_balance;
+            tr.appendChild(el('td',dispBal>=0?'amt-pos':'amt-neg',fmt(dispBal)));
+            tr.addEventListener('click',function(){navigateTo('transactions?accountId='+a.id);});
+            tbody.appendChild(tr);
+          });
         });
         table.appendChild(tbody); tc.appendChild(table);
       }
@@ -975,13 +1102,15 @@ export function getDashboardHtml(port: number): string {
     } catch(e) {}
   }
 
+  var interactionDialog = document.getElementById('interactionDialog');
+  document.getElementById('dialogClose').addEventListener('click', function() { interactionDialog.close(); });
+  interactionDialog.addEventListener('click', function(e) { if (e.target === interactionDialog) interactionDialog.close(); });
+
   async function loadInteractionDetail(id) {
     selectedInteractionId = id;
     try {
       var data = await (await authFetch(BASE+'/api/interactions/'+id)).json();
       if (!data) return;
-      var card = document.getElementById('interactionDetailCard');
-      card.style.display = 'block';
       var detail = document.getElementById('interactionDetail');
       detail.replaceChildren();
 
@@ -1016,7 +1145,7 @@ export function getDashboardHtml(port: number): string {
       document.getElementById('pairIdInput').value = currentAnnotation.pairId;
       document.getElementById('annotNotes').value = currentAnnotation.notes;
 
-      card.scrollIntoView({behavior:'smooth'});
+      interactionDialog.showModal();
     } catch(e) {}
   }
 

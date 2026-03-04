@@ -6,7 +6,7 @@ import {
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
-  apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions,
+  apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
   apiInteractions, apiInteractionDetail, apiRunInteractions,
   apiAnnotateInteraction, apiAnnotationStats,
 } from './api.js';
@@ -253,6 +253,9 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
 
         // ── Accounts / Net Worth ────────────────────────────────────
 
+        if (path === '/api/spending-by-institution') {
+          return Response.json(apiSpendingByInstitution(activeDb, url.searchParams), { headers });
+        }
         if (path === '/api/accounts') {
           return Response.json(apiAccounts(activeDb), { headers });
         }
