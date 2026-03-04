@@ -5,6 +5,7 @@ import { insertTransactions, recordImport, type TransactionInsert } from '../../
 import { getAccounts, linkTransactionsToAccount } from '../../db/net-worth-queries.js';
 import { formatToolResult } from '../types.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -63,12 +64,7 @@ export const monarchImportTool = defineTool({
       .describe('End date filter (YYYY-MM-DD)'),
   }),
   func: async ({ limit = 500, startDate, endDate }) => {
-    // Pro license gate
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Monarch import is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Monarch import');
 
     const database = getDb();
 

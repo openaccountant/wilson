@@ -5,6 +5,7 @@ import { insertTransactions, recordImport, type TransactionInsert } from '../../
 import { getAccounts, linkTransactionsToAccount } from '../../db/net-worth-queries.js';
 import { formatToolResult } from '../types.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -146,12 +147,7 @@ export const fireflyImportTool = defineTool({
       .describe('Include transfer transactions (default: false)'),
   }),
   func: async ({ limit, startDate, endDate, includeTransfers = false }) => {
-    // Pro license gate
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Firefly III import is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Firefly III import');
 
     const database = getDb();
 
