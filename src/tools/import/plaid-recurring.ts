@@ -2,21 +2,19 @@ import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
 import { formatToolResult } from '../types.js';
 import { getPlaidItems } from '../../plaid/store.js';
-import { getRecurringTransactions } from '../../plaid/client.js';
+import { getRecurringTransactions, hasLocalPlaidCreds } from '../../plaid/client.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 
 export const plaidRecurringTool = defineTool({
   name: 'plaid_recurring',
   description: 'Show recurring transactions (subscriptions, bills, income) for linked bank accounts via Plaid.',
   schema: z.object({}),
   func: async () => {
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Recurring transaction detection is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Recurring detection');
 
-    if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+    const useProxy = !hasLocalPlaidCreds() && hasLicense('pro');
+    if (!useProxy && !hasLocalPlaidCreds()) {
       return formatToolResult({
         message: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.',
       });
@@ -36,7 +34,7 @@ export const plaidRecurringTool = defineTool({
     }> = [];
 
     for (const item of items) {
-      const { inflow, outflow } = await getRecurringTransactions(item.accessToken);
+      const { inflow, outflow } = await getRecurringTransactions(item.accessToken, useProxy);
       allStreams.push({
         institution: item.institutionName,
         inflow: inflow.map((s) => ({

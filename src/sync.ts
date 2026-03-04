@@ -1,12 +1,12 @@
 import { initDatabase } from './db/database.js';
-import { upsertAccountFromPlaid } from './db/net-worth-queries.js';
 import { getPlaidItems } from './plaid/store.js';
-import { getBalances } from './plaid/client.js';
+import { hasLocalPlaidCreds } from './plaid/client.js';
 import { syncPlaidItem } from './tools/import/plaid-sync.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
 import { initMonarchTool, monarchImportTool } from './tools/import/monarch.js';
 import { initFireflyTool, fireflyImportTool } from './tools/import/firefly.js';
 import { hasLicense } from './licensing/license.js';
+import { headlessUpsell } from './licensing/upsell.js';
 
 interface SyncResult {
   name: string;
@@ -23,18 +23,18 @@ interface SyncResult {
  */
 export async function runSync(): Promise<void> {
   if (!hasLicense('pro')) {
-    console.error('Bank sync requires a Pro license.');
-    process.exit(1);
+    headlessUpsell('Bank sync');
   }
 
-  const hasPlaid = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+  const plaidUseProxy = !hasLocalPlaidCreds() && hasLicense('pro');
+  const hasPlaid = hasLocalPlaidCreds() || plaidUseProxy;
   const hasMonarch = !!(process.env.MONARCH_TOKEN || (process.env.MONARCH_EMAIL && process.env.MONARCH_PASSWORD));
   const hasFirefly = !!(process.env.FIREFLY_API_URL && process.env.FIREFLY_API_TOKEN);
 
   if (!hasPlaid && !hasMonarch && !hasFirefly) {
     console.log(`No integrations configured. Set environment variables to enable sync:
 
-  Plaid:    PLAID_CLIENT_ID + PLAID_SECRET
+  Plaid:    PLAID_CLIENT_ID + PLAID_SECRET (or Pro license for zero-config)
   Monarch:  MONARCH_TOKEN (or MONARCH_EMAIL + MONARCH_PASSWORD)
   Firefly:  FIREFLY_API_URL + FIREFLY_API_TOKEN`);
     return;
@@ -58,7 +58,7 @@ export async function runSync(): Promise<void> {
 
         for (const item of items) {
           console.log(`[Plaid] Syncing ${item.institutionName}...`);
-          const result = await syncPlaidItem(db, item);
+          const result = await syncPlaidItem(db, item, plaidUseProxy);
           totalAdded += result.added;
           totalLinked += result.linked;
           totalSkipped += result.skipped;
@@ -66,32 +66,14 @@ export async function runSync(): Promise<void> {
           if (result.added > 0 || result.skipped > 0) {
             console.log(`  ${result.added} new transactions (${result.skipped} skipped)`);
           }
+          if (result.accountsCreated > 0) {
+            console.log(`  ${result.accountsCreated} new account(s) created`);
+          }
+          if (result.accountsUpdated > 0) {
+            console.log(`  ${result.accountsUpdated} balance(s) updated`);
+          }
           if (result.linked > 0) {
             console.log(`  ${result.linked} transactions auto-linked to accounts`);
-          }
-
-          // Fetch balances and upsert accounts
-          try {
-            const balances = await getBalances(item.accessToken);
-            for (const b of balances) {
-              if (b.balanceCurrent !== null) {
-                const { created } = upsertAccountFromPlaid(db, {
-                  plaidAccountId: b.accountId,
-                  name: b.name,
-                  mask: b.mask,
-                  plaidType: b.type,
-                  plaidSubtype: b.subtype,
-                  balance: b.balanceCurrent,
-                  currency: b.isoCurrencyCode ?? 'USD',
-                  institution: item.institutionName,
-                });
-                if (created) {
-                  console.log(`  New account: ${b.name} (****${b.mask})`);
-                }
-              }
-            }
-          } catch (err) {
-            console.error(`  Warning: failed to fetch balances for ${item.institutionName}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
 

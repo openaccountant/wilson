@@ -4,8 +4,9 @@ import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import { upsertAccountFromPlaid } from '../../db/net-worth-queries.js';
 import { getPlaidItems } from '../../plaid/store.js';
-import { getBalances } from '../../plaid/client.js';
+import { getBalances, hasLocalPlaidCreds } from '../../plaid/client.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
 
 let db: Database;
 
@@ -18,13 +19,10 @@ export const plaidBalancesTool = defineTool({
   description: 'Show current account balances for all linked bank accounts via Plaid. Also updates account records and balance snapshots.',
   schema: z.object({}),
   func: async () => {
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Account balances is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Account balances');
 
-    if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+    const useProxy = !hasLocalPlaidCreds() && hasLicense('pro');
+    if (!useProxy && !hasLocalPlaidCreds()) {
       return formatToolResult({
         message: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.',
       });
@@ -53,7 +51,7 @@ export const plaidBalancesTool = defineTool({
     let accountsUpdated = 0;
 
     for (const item of items) {
-      const balances = await getBalances(item.accessToken);
+      const balances = await getBalances(item.accessToken, useProxy);
 
       // Upsert accounts into the accounts table for net worth tracking
       if (db) {

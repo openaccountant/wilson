@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'http';
-import { execFileSync } from 'child_process';
-import { createLinkToken, exchangePublicToken, getItemInfo } from './client.js';
+import { createLinkToken, exchangePublicToken, getItemInfo, hasLocalPlaidCreds } from './client.js';
+import { openBrowser } from '../utils/browser.js';
 import { savePlaidItem } from './store.js';
 import type { PlaidItem } from './store.js';
 
@@ -71,32 +71,17 @@ function buildLinkPage(linkToken: string): string {
 </html>`;
 }
 
-/**
- * Open a URL in the user's default browser.
- */
-function openBrowser(url: string): void {
-  try {
-    if (process.platform === 'darwin') {
-      execFileSync('open', [url]);
-    } else if (process.platform === 'linux') {
-      execFileSync('xdg-open', [url]);
-    } else {
-      execFileSync('cmd', ['/c', 'start', url]);
-    }
-  } catch {
-    // Browser open failed — user can navigate manually
-  }
-}
 
 /**
  * Start a local HTTP server to handle Plaid Link flow.
  * Opens browser, receives public token callback, exchanges for access token,
  * stores credentials, then auto-shuts down.
  *
+ * @param useProxy - If true, use the OA API proxy instead of local Plaid creds
  * @returns The linked PlaidItem on success, or null if cancelled/failed
  */
-export async function startPlaidLinkServer(): Promise<PlaidItem | null> {
-  const linkToken = await createLinkToken();
+export async function startPlaidLinkServer(useProxy = false): Promise<PlaidItem | null> {
+  const linkToken = await createLinkToken(true, useProxy);
 
   return new Promise<PlaidItem | null>((resolve) => {
     let server: Server;
@@ -126,8 +111,8 @@ export async function startPlaidLinkServer(): Promise<PlaidItem | null> {
         req.on('end', async () => {
           try {
             const { public_token } = JSON.parse(body);
-            const { accessToken, itemId } = await exchangePublicToken(public_token);
-            const info = await getItemInfo(accessToken);
+            const { accessToken, itemId } = await exchangePublicToken(public_token, useProxy);
+            const info = await getItemInfo(accessToken, useProxy);
 
             const item: PlaidItem = {
               itemId,

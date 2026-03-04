@@ -3,12 +3,14 @@ import { defineTool } from '../define-tool.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import type { TransactionInsert } from '../../db/queries.js';
-import { getAccountByPlaidId } from '../../db/net-worth-queries.js';
+import { getAccountByPlaidId, upsertAccountFromPlaid } from '../../db/net-worth-queries.js';
 import { getPlaidItems, updatePlaidCursor } from '../../plaid/store.js';
-import { syncTransactions } from '../../plaid/client.js';
+import { syncTransactions, getBalances } from '../../plaid/client.js';
 import type { SyncedTransaction } from '../../plaid/client.js';
 import type { PlaidItem } from '../../plaid/store.js';
 import { hasLicense } from '../../licensing/license.js';
+import { toolUpsell } from '../../licensing/upsell.js';
+import { hasLocalPlaidCreds } from '../../plaid/client.js';
 
 let db: Database;
 
@@ -21,6 +23,8 @@ export interface PlaidSyncItemResult {
   added: number;
   skipped: number;
   linked: number;
+  accountsCreated: number;
+  accountsUpdated: number;
 }
 
 /**
@@ -29,8 +33,9 @@ export interface PlaidSyncItemResult {
 export async function syncPlaidItem(
   database: Database,
   item: PlaidItem,
+  useProxy = false,
 ): Promise<PlaidSyncItemResult> {
-  const { added, nextCursor } = await syncTransactions(item.accessToken, item.cursor);
+  const { added, nextCursor } = await syncTransactions(item.accessToken, item.cursor, useProxy);
 
   // Check for existing plaid_transaction_ids to dedup
   const existingIds = new Set<string>();
@@ -109,6 +114,31 @@ export async function syncPlaidItem(
     insertAll();
   }
 
+  // Upsert accounts from Plaid balance data so accounts exist before linking
+  let accountsCreated = 0;
+  let accountsUpdated = 0;
+  try {
+    const balances = await getBalances(item.accessToken, useProxy);
+    for (const b of balances) {
+      if (b.balanceCurrent !== null) {
+        const { created } = upsertAccountFromPlaid(database, {
+          plaidAccountId: b.accountId,
+          name: b.name,
+          mask: b.mask,
+          plaidType: b.type,
+          plaidSubtype: b.subtype,
+          balance: b.balanceCurrent,
+          currency: b.isoCurrencyCode ?? 'USD',
+          institution: item.institutionName,
+        });
+        if (created) accountsCreated++;
+        else accountsUpdated++;
+      }
+    }
+  } catch {
+    // Non-fatal — balance fetch may fail but transactions are already synced
+  }
+
   // Auto-link newly inserted transactions to their accounts by plaid_account_id
   let linked = 0;
   if (newTxns.length > 0) {
@@ -147,6 +177,8 @@ export async function syncPlaidItem(
     added: newTxns.length,
     skipped,
     linked,
+    accountsCreated,
+    accountsUpdated,
   };
 }
 
@@ -155,13 +187,10 @@ export const plaidSyncTool = defineTool({
   description: 'Sync transactions from all linked bank accounts via Plaid.',
   schema: z.object({}),
   func: async () => {
-    if (!hasLicense('pro')) {
-      return formatToolResult({
-        error: 'Bank sync is a Pro feature. Run `/license` for details or visit openaccountant.ai/pricing.',
-      });
-    }
+    if (!hasLicense('pro')) return toolUpsell('Bank sync');
 
-    if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET) {
+    const useProxy = !hasLocalPlaidCreds() && hasLicense('pro');
+    if (!useProxy && !hasLocalPlaidCreds()) {
       return formatToolResult({
         message: 'Plaid not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.',
       });
@@ -177,23 +206,31 @@ export const plaidSyncTool = defineTool({
     let totalAdded = 0;
     let totalSkipped = 0;
     let totalLinked = 0;
+    let totalAccountsCreated = 0;
+    let totalAccountsUpdated = 0;
     const synced: PlaidSyncItemResult[] = [];
 
     for (const item of items) {
-      const result = await syncPlaidItem(db, item);
+      const result = await syncPlaidItem(db, item, useProxy);
       totalAdded += result.added;
       totalSkipped += result.skipped;
       totalLinked += result.linked;
+      totalAccountsCreated += result.accountsCreated;
+      totalAccountsUpdated += result.accountsUpdated;
       synced.push(result);
     }
 
     let message = `Synced ${totalAdded} new transactions (${totalSkipped} duplicates skipped).`;
+    if (totalAccountsCreated > 0) message += ` ${totalAccountsCreated} new account(s) created.`;
+    if (totalAccountsUpdated > 0) message += ` ${totalAccountsUpdated} balance(s) updated.`;
     if (totalLinked > 0) message += ` ${totalLinked} transactions auto-linked to accounts.`;
 
     return formatToolResult({
       totalAdded,
       totalSkipped,
       totalLinked,
+      totalAccountsCreated,
+      totalAccountsUpdated,
       accounts: synced,
       message,
     });
