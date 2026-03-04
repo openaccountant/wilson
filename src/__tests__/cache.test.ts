@@ -135,5 +135,68 @@ describe('cache utilities', () => {
       const cached = readCache(endpoint, params2);
       expect(cached).toBeNull();
     });
+
+    test('overwriting same key replaces cached data', () => {
+      const endpoint = '/test-overwrite/';
+      const params = { ticker: 'OVR', ts: 'fixed' };
+
+      writeCache(endpoint, params, { version: 1 }, 'url-v1');
+      const first = readCache(endpoint, params);
+      expect(first!.data).toEqual({ version: 1 });
+
+      writeCache(endpoint, params, { version: 2 }, 'url-v2');
+      const second = readCache(endpoint, params);
+      expect(second!.data).toEqual({ version: 2 });
+      expect(second!.url).toBe('url-v2');
+    });
+
+    test('corrupted JSON cache file returns null and is cleaned up', () => {
+      const endpoint = '/test-corrupt/';
+      const params = { ticker: 'BAD', ts: String(Date.now()) };
+
+      // Write valid entry first, then corrupt it
+      writeCache(endpoint, params, { ok: true }, 'url');
+      const cached = readCache(endpoint, params);
+      expect(cached).not.toBeNull();
+
+      // Manually corrupt the file
+      const cacheKey = buildCacheKey(endpoint, params);
+      const filepath = join(tmpDir, 'cache', cacheKey);
+      const { writeFileSync: wfs } = require('fs');
+      wfs(filepath, '{invalid json!!!');
+
+      // Should return null and remove corrupt file
+      const corrupt = readCache(endpoint, params);
+      expect(corrupt).toBeNull();
+    });
+
+    test('cache file with invalid structure returns null', () => {
+      const endpoint = '/test-invalid-struct/';
+      const params = { ticker: 'INV', ts: String(Date.now()) };
+
+      // Write valid entry first to create directory
+      writeCache(endpoint, params, { ok: true }, 'url');
+
+      // Overwrite with valid JSON but wrong structure (missing required fields)
+      const cacheKey = buildCacheKey(endpoint, params);
+      const filepath = join(tmpDir, 'cache', cacheKey);
+      const { writeFileSync: wfs } = require('fs');
+      wfs(filepath, JSON.stringify({ someField: 'not a cache entry' }));
+
+      const result = readCache(endpoint, params);
+      expect(result).toBeNull();
+    });
+
+    test('multiple endpoints coexist without interference', () => {
+      const params = { ticker: 'MULTI', ts: String(Date.now()) };
+
+      writeCache('/endpoint-a/', params, { source: 'a' }, 'url-a');
+      writeCache('/endpoint-b/', params, { source: 'b' }, 'url-b');
+
+      const a = readCache('/endpoint-a/', params);
+      const b = readCache('/endpoint-b/', params);
+      expect(a!.data).toEqual({ source: 'a' });
+      expect(b!.data).toEqual({ source: 'b' });
+    });
   });
 });

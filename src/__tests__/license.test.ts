@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeAll, afterAll, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeAll, afterAll, beforeEach, afterEach, spyOn } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { hasLicense, getLicenseInfo, deactivateLicense, type LicenseCache } from '../licensing/license.js';
+import { hasLicense, getLicenseInfo, deactivateLicense, validateLicense, type LicenseCache } from '../licensing/license.js';
 
 const LICENSE_DIR = join(homedir(), '.openaccountant');
 const LICENSE_FILE = join(LICENSE_DIR, 'license.json');
@@ -18,7 +18,7 @@ function removeLicenseFile(): void {
 
 describe('licensing/license', () => {
   let originalContent: string | null = null;
-  let originalFetch: typeof globalThis.fetch;
+  let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeAll(() => {
     // Save original license file
@@ -27,18 +27,10 @@ describe('licensing/license', () => {
     } catch {
       originalContent = null;
     }
-    // Mock fetch to prevent real HTTP calls from background re-validation
-    originalFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ valid: true, license: { email: 'test@test.com' }, products: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })) as typeof globalThis.fetch;
   });
 
   afterAll(() => {
     // Restore original state
-    globalThis.fetch = originalFetch;
     if (originalContent) {
       writeFileSync(LICENSE_FILE, originalContent);
     } else {
@@ -48,6 +40,16 @@ describe('licensing/license', () => {
 
   beforeEach(() => {
     removeLicenseFile();
+    // Mock fetch per-test to prevent real HTTP calls from background re-validation
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(JSON.stringify({ valid: true, license: { email: 'test@test.com' }, products: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
   });
 
   test('hasLicense returns false when no cache file exists', () => {
@@ -140,5 +142,82 @@ describe('licensing/license', () => {
     expect(existsSync(LICENSE_FILE)).toBe(true);
     deactivateLicense();
     expect(existsSync(LICENSE_FILE)).toBe(false);
+  });
+});
+
+describe('validateLicense (Polar API)', () => {
+  let originalContent: string | null = null;
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeAll(() => {
+    try {
+      originalContent = readFileSync(LICENSE_FILE, 'utf-8');
+    } catch {
+      originalContent = null;
+    }
+  });
+
+  afterAll(() => {
+    if (originalContent) {
+      writeFileSync(LICENSE_FILE, originalContent);
+    } else {
+      removeLicenseFile();
+    }
+  });
+
+  beforeEach(() => {
+    removeLicenseFile();
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  test('validateLicense succeeds with valid API response', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(
+        JSON.stringify({
+          valid: true,
+          products: ['pro'],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+
+    const cache = await validateLicense('valid-key-123');
+    expect(cache.key).toBe('valid-key-123');
+    expect(cache.products).toEqual(['pro']);
+    // Should have written to disk
+    expect(existsSync(LICENSE_FILE)).toBe(true);
+  });
+
+  test('validateLicense throws on HTTP error', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response('Unauthorized', { status: 401 }));
+
+    await expect(validateLicense('bad-key')).rejects.toThrow('License validation failed (401)');
+  });
+
+  test('validateLicense throws when key is invalid (valid: false)', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(
+        JSON.stringify({ valid: false, products: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+
+    await expect(validateLicense('expired-key')).rejects.toThrow('License key is invalid or expired');
+  });
+
+  test('validateLicense returns products from API', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      new Response(
+        JSON.stringify({
+          valid: true,
+          products: ['tax'],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ));
+
+    const cache = await validateLicense('single-product-key');
+    expect(cache.products).toEqual(['tax']);
   });
 });

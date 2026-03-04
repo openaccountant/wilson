@@ -59,4 +59,36 @@ describe('alerts', () => {
     expect(spike).toBeDefined();
     expect(spike?.severity).toBe('warning');
   });
+
+  test('budget at exactly 100% triggers exceeded', () => {
+    // Set Groceries budget to exactly the spent amount ($85.50)
+    setBudget(db, 'Groceries', 85.50);
+    const alerts = checkAlerts(db);
+    const exceeded = alerts.find((a) => a.type === 'budget_exceeded' && a.category === 'Groceries');
+    expect(exceeded).toBeDefined();
+    expect(exceeded?.severity).toBe('critical');
+  });
+
+  test('no transactions for budget category shows no alert', () => {
+    // Create a budget for a category with no transactions
+    setBudget(db, 'Travel', 500);
+    const alerts = checkAlerts(db);
+    const travelAlerts = alerts.filter((a) => a.category === 'Travel');
+    expect(travelAlerts).toHaveLength(0);
+  });
+
+  test('new recurring charge detected', () => {
+    // Insert a single recurring charge within last 30 days
+    const recent = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    db.prepare(
+      `INSERT INTO transactions (date, description, amount, category, is_recurring) VALUES (@date, @description, @amount, @category, @isRecurring)`
+    ).run({ date: recent, description: 'NEW SUBSCRIPTION', amount: -9.99, category: 'Entertainment', isRecurring: 1 });
+
+    const alerts = checkAlerts(db);
+    const newRecurring = alerts.find((a) => a.type === 'new_recurring');
+    expect(newRecurring).toBeDefined();
+    expect(newRecurring?.severity).toBe('info');
+    expect(newRecurring?.message).toContain('NEW SUBSCRIPTION');
+    expect(newRecurring?.amount).toBeCloseTo(9.99);
+  });
 });

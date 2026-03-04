@@ -11,9 +11,13 @@ import {
   printPnl,
   printSavings,
   printTaxSummary,
+  printBalanceSheet,
+  printNetWorth,
+  runReport,
 } from "../reports.js";
 import { flagTaxDeduction, getTransactions } from "../db/queries.js";
-import { createTestDb, seedTestData } from "./helpers.js";
+import { insertAccount } from "../db/net-worth-queries.js";
+import { createTestDb, seedTestData, makeTmpPath } from "./helpers.js";
 
 describe("reports", () => {
   let db: Database;
@@ -232,6 +236,101 @@ describe("reports", () => {
       expect(output).toContain("Tax Deductions Summary");
       expect(output).toContain("Office expense");
       expect(output).toContain("Travel");
+    });
+  });
+
+  // ── printBalanceSheet ─────────────────────────────────────────────────────
+
+  describe("printBalanceSheet", () => {
+    test("with accounts prints table", async () => {
+      insertAccount(db, {
+        name: "Checking",
+        account_type: "asset",
+        account_subtype: "checking",
+        current_balance: 10000,
+      });
+      insertAccount(db, {
+        name: "Car Loan",
+        account_type: "liability",
+        account_subtype: "auto_loan",
+        current_balance: 15000,
+      });
+      await printBalanceSheet(["--balance-sheet"], db);
+      const output = allOutput();
+      expect(output).toContain("Balance Sheet");
+      expect(output).toContain("ASSETS");
+      expect(output).toContain("Checking");
+      expect(output).toContain("LIABILITIES");
+      expect(output).toContain("Car Loan");
+      expect(output).toContain("NET WORTH");
+    });
+
+    test("no accounts prints message", async () => {
+      const emptyDb = createTestDb();
+      await printBalanceSheet(["--balance-sheet"], emptyDb);
+      const output = allOutput();
+      expect(output).toContain("No accounts configured");
+    });
+  });
+
+  // ── printNetWorth ─────────────────────────────────────────────────────────
+
+  describe("printNetWorth", () => {
+    test("with accounts prints summary", async () => {
+      insertAccount(db, {
+        name: "Savings",
+        account_type: "asset",
+        account_subtype: "savings",
+        current_balance: 50000,
+      });
+      await printNetWorth(["--net-worth"], db);
+      const output = allOutput();
+      expect(output).toContain("Net Worth Summary");
+      expect(output).toContain("ASSETS");
+      expect(output).toContain("NET WORTH");
+    });
+
+    test("no accounts prints message", async () => {
+      const emptyDb = createTestDb();
+      await printNetWorth(["--net-worth"], emptyDb);
+      const output = allOutput();
+      expect(output).toContain("No accounts configured");
+    });
+  });
+
+  // ── runReport ─────────────────────────────────────────────────────────────
+
+  describe("runReport", () => {
+    test("with file path writes markdown", async () => {
+      const tmpFile = makeTmpPath(".md");
+      await runReport(["--report", tmpFile], db);
+      const output = allOutput();
+      expect(output).toContain("Report saved to");
+      const content = fs.readFileSync(tmpFile, "utf-8");
+      expect(content.length).toBeGreaterThan(0);
+      fs.unlinkSync(tmpFile);
+    });
+
+    test("missing path prints error", async () => {
+      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      const exitSpy = spyOn(process, "exit").mockImplementation(() => {
+        throw new Error("process.exit called");
+      });
+
+      try {
+        await runReport(["--report"], db);
+      } catch {
+        // expected — process.exit throws
+      }
+
+      expect(errorSpy).toHaveBeenCalled();
+      const errorOutput = errorSpy.mock.calls
+        .map((c) => c.join(" "))
+        .join("\n");
+      expect(errorOutput).toContain("--report requires a file path");
+
+      errorSpy.mockRestore();
+      exitSpy.mockRestore();
     });
   });
 });

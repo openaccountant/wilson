@@ -136,3 +136,82 @@ describe('TraceStore.getStats', () => {
     expect(stats.avgDurationMs).toBe(2000);
   });
 });
+
+describe('TraceStore edge cases', () => {
+  beforeEach(() => {
+    traceStore.clear();
+  });
+
+  test('getRecentTraces with limit larger than trace count returns all', () => {
+    traceStore.record(makeTrace({ model: 'a' }));
+    traceStore.record(makeTrace({ model: 'b' }));
+    const recent = traceStore.getRecentTraces(100);
+    expect(recent).toHaveLength(2);
+  });
+
+  test('getRecentTraces default limit is 50', () => {
+    for (let i = 0; i < 60; i++) {
+      traceStore.record(makeTrace({ model: `m-${i}` }));
+    }
+    const recent = traceStore.getRecentTraces();
+    expect(recent).toHaveLength(50);
+    expect(recent[0].model).toBe('m-10');
+  });
+
+  test('getTraces returns empty after clear', () => {
+    traceStore.record(makeTrace());
+    traceStore.clear();
+    expect(traceStore.getTraces()).toEqual([]);
+  });
+
+  test('getStats with all errors has zero tokens and duration', () => {
+    traceStore.record(makeTrace({ status: 'error', totalTokens: 0, durationMs: 500, error: 'err1' }));
+    traceStore.record(makeTrace({ status: 'error', totalTokens: 0, durationMs: 300, error: 'err2' }));
+    const stats = traceStore.getStats();
+    expect(stats.totalCalls).toBe(2);
+    expect(stats.successfulCalls).toBe(0);
+    expect(stats.totalTokens).toBe(0);
+    expect(stats.totalDurationMs).toBe(0);
+    expect(stats.avgDurationMs).toBe(0);
+    expect(Object.keys(stats.byModel)).toHaveLength(0);
+  });
+
+  test('getStats byModel does not include error traces', () => {
+    traceStore.record(makeTrace({ model: 'err-model', status: 'error', error: 'bad' }));
+    traceStore.record(makeTrace({ model: 'ok-model', status: 'ok', totalTokens: 50 }));
+    const stats = traceStore.getStats();
+    expect(stats.byModel['ok-model']).toBeDefined();
+    expect(stats.byModel['err-model']).toBeUndefined();
+  });
+
+  test('multiple subscribers all receive notifications', () => {
+    let count1 = 0;
+    let count2 = 0;
+    const unsub1 = traceStore.subscribe(() => { count1++; });
+    const unsub2 = traceStore.subscribe(() => { count2++; });
+    // Each subscriber gets initial call
+    expect(count1).toBe(1);
+    expect(count2).toBe(1);
+    traceStore.record(makeTrace());
+    expect(count1).toBe(2);
+    expect(count2).toBe(2);
+    unsub1();
+    unsub2();
+  });
+
+  test('clear notifies subscribers', () => {
+    let notified = 0;
+    const unsub = traceStore.subscribe(() => { notified++; });
+    traceStore.record(makeTrace());
+    const countBefore = notified;
+    traceStore.clear();
+    expect(notified).toBe(countBefore + 1);
+    unsub();
+  });
+
+  test('trace with error field stores error string', () => {
+    traceStore.record(makeTrace({ status: 'error', error: 'Connection refused' }));
+    const traces = traceStore.getTraces();
+    expect(traces[0].error).toBe('Connection refused');
+  });
+});

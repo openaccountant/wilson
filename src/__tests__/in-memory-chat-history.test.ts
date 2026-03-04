@@ -213,3 +213,128 @@ describe('InMemoryChatHistory session lifecycle', () => {
     expect(messages[1].session_id).toBe(sessionId);
   });
 });
+
+describe('InMemoryChatHistory selectRelevantMessages', () => {
+  let history: InMemoryChatHistory;
+  let llmSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    history = new InMemoryChatHistory('test-model', 10);
+    // Default mock for saveAnswer's generateSummary
+    llmSpy = spyOn(llmModule, 'callLlm').mockResolvedValue({
+      response: { content: 'Mock summary', structured: null },
+      metadata: {},
+    } as any);
+  });
+
+  afterEach(() => {
+    llmSpy.mockRestore();
+  });
+
+  test('selectRelevantMessages returns selected messages from LLM', async () => {
+    // Build up history with completed messages
+    history.saveUserQuery('What did I spend on groceries?');
+    await history.saveAnswer('You spent $200 on groceries.');
+    history.saveUserQuery('Show my budget');
+    await history.saveAnswer('Your budget is $500.');
+
+    // Now reconfigure the spy to return structured message_ids for selectRelevantMessages
+    llmSpy.mockResolvedValue({
+      response: {
+        content: '',
+        structured: { message_ids: [0] },
+      },
+      metadata: {},
+    } as any);
+
+    const relevant = await history.selectRelevantMessages('How much did I overspend?');
+    expect(relevant).toHaveLength(1);
+    expect(relevant[0].query).toBe('What did I spend on groceries?');
+  });
+
+  test('selectRelevantMessages cache hit on same query', async () => {
+    history.saveUserQuery('test query');
+    await history.saveAnswer('test answer');
+
+    llmSpy.mockResolvedValue({
+      response: {
+        content: '',
+        structured: { message_ids: [0] },
+      },
+      metadata: {},
+    } as any);
+
+    // First call — should call LLM
+    const first = await history.selectRelevantMessages('same query');
+    const callCount = llmSpy.mock.calls.length;
+
+    // Second call with same query — should use cache, no additional LLM call
+    const second = await history.selectRelevantMessages('same query');
+    // Only the calls from saveAnswer's generateSummary + the first selectRelevantMessages
+    // The second call should NOT have added another LLM call
+    expect(llmSpy.mock.calls.length).toBe(callCount);
+    expect(second).toEqual(first);
+  });
+
+  test('selectRelevantMessages returns [] on LLM error', async () => {
+    history.saveUserQuery('test query');
+    await history.saveAnswer('test answer');
+
+    // Make the next LLM call throw
+    llmSpy.mockRejectedValue(new Error('LLM unavailable'));
+
+    const result = await history.selectRelevantMessages('will this work?');
+    expect(result).toEqual([]);
+  });
+
+  test('selectRelevantMessages returns [] when no completed messages', async () => {
+    history.saveUserQuery('unanswered query');
+    // No saveAnswer call — message has no answer
+
+    const result = await history.selectRelevantMessages('anything');
+    expect(result).toEqual([]);
+  });
+
+  test('clear resets messages, cache, and hasMessages', async () => {
+    history.saveUserQuery('q1');
+    await history.saveAnswer('a1');
+
+    // Populate selectRelevantMessages cache
+    llmSpy.mockResolvedValue({
+      response: { content: '', structured: { message_ids: [0] } },
+      metadata: {},
+    } as any);
+    await history.selectRelevantMessages('cached query');
+
+    history.clear();
+    expect(history.hasMessages()).toBe(false);
+    expect(history.getMessages()).toHaveLength(0);
+    expect(history.getUserMessages()).toEqual([]);
+
+    // After clear, selectRelevantMessages should return [] (no messages)
+    const result = await history.selectRelevantMessages('cached query');
+    expect(result).toEqual([]);
+  });
+
+  test('setSessionId and getSessionId', () => {
+    expect(history.getSessionId()).toBeNull();
+    history.setSessionId('custom-id-123');
+    expect(history.getSessionId()).toBe('custom-id-123');
+  });
+
+  test('setDatabase enables persistence on saveUserQuery', async () => {
+    const db = createTestDb();
+    history.setDatabase(db);
+
+    history.saveUserQuery('persisted query');
+    await history.saveAnswer('persisted answer');
+
+    const sessionId = history.getSessionId();
+    expect(sessionId).toBeTruthy();
+
+    const rows = getChatHistoryBySession(db, sessionId!);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].query).toBe('persisted query');
+    expect(rows[0].answer).toBe('persisted answer');
+  });
+});

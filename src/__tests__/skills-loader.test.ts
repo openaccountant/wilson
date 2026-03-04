@@ -1,6 +1,6 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { writeFileSync, unlinkSync } from 'fs';
-import { parseSkillFile, loadSkillFromPath } from '../skills/loader.js';
+import { parseSkillFile, loadSkillFromPath, extractSkillMetadata } from '../skills/loader.js';
 import { makeTmpPath } from './helpers.js';
 
 const VALID_SKILL = `---
@@ -95,6 +95,46 @@ description: No body
 
     test('throws on nonexistent file', () => {
       expect(() => loadSkillFromPath('/nonexistent/SKILL.md', 'builtin')).toThrow();
+    });
+  });
+
+  describe('extractSkillMetadata', () => {
+    test('extracts metadata from valid SKILL.md', () => {
+      const fp = makeTmpPath('.md');
+      tmpFiles.push(fp);
+      writeFileSync(fp, VALID_SKILL);
+
+      const meta = extractSkillMetadata(fp, 'builtin');
+      expect(meta.name).toBe('monthly-report');
+      expect(meta.description).toBe('Generate a monthly financial report');
+      expect(meta.tier).toBe('paid');
+      expect(meta.source).toBe('builtin');
+      expect(meta.path).toBe(fp);
+    });
+
+    test('defaults tier to free when not specified', () => {
+      const fp = makeTmpPath('.md');
+      tmpFiles.push(fp);
+      writeFileSync(fp, SKILL_NO_TIER);
+
+      const meta = extractSkillMetadata(fp, 'user');
+      expect(meta.tier).toBe('free');
+    });
+
+    test('throws on missing name field', () => {
+      const fp = makeTmpPath('.md');
+      tmpFiles.push(fp);
+      writeFileSync(fp, `---\ndescription: No name\n---\nBody.`);
+
+      expect(() => extractSkillMetadata(fp, 'builtin')).toThrow("missing required 'name'");
+    });
+
+    test('throws on missing description field', () => {
+      const fp = makeTmpPath('.md');
+      tmpFiles.push(fp);
+      writeFileSync(fp, `---\nname: no-desc\n---\nBody.`);
+
+      expect(() => extractSkillMetadata(fp, 'builtin')).toThrow("missing required 'description'");
     });
   });
 });

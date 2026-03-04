@@ -1,9 +1,12 @@
 import * as os from 'os';
 import * as path from 'path';
+import { z } from 'zod';
 import { Database } from '../db/compat-sqlite.js';
 import { runMigrations } from '../db/migrations.js';
 import { insertTransactions, setBudget } from '../db/queries.js';
 import { setActiveProfilePaths, getActiveProfile } from '../profile/index.js';
+import type { LlmResponse, ToolDef } from '../model/types.js';
+import type { LlmResult } from '../model/llm.js';
 
 /**
  * Ensure a test profile is set so modules that call getActiveProfile() don't throw.
@@ -51,6 +54,45 @@ export function seedTestData(db: Database): void {
 /** Temp file path for filesystem tests. */
 export function makeTmpPath(ext: string): string {
   return path.join(os.tmpdir(), `wilson-test-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+}
+
+/**
+ * Create a mock LlmResult sequence. Each call returns the next response.
+ */
+export function mockCallLlm(responses: Partial<LlmResult>[]): () => Promise<LlmResult> {
+  let index = 0;
+  return async (): Promise<LlmResult> => {
+    const res = responses[Math.min(index, responses.length - 1)];
+    index++;
+    return {
+      response: res.response ?? { content: '', toolCalls: [] },
+      usage: res.usage,
+      interactionId: res.interactionId ?? null,
+    };
+  };
+}
+
+/**
+ * Create a mock ToolDef with a given name and function.
+ */
+export function mockTool(name: string, fn: (args: Record<string, unknown>) => Promise<string>): ToolDef {
+  return {
+    name,
+    description: `Mock tool: ${name}`,
+    schema: z.object({}).passthrough(),
+    func: fn,
+  };
+}
+
+/**
+ * Drain an async generator into an array.
+ */
+export async function collectEvents<T>(gen: AsyncGenerator<T>): Promise<T[]> {
+  const events: T[] = [];
+  for await (const event of gen) {
+    events.push(event);
+  }
+  return events;
 }
 
 /** Seed transactions that trigger spike detection in anomaly tests. */

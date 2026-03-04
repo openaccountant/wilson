@@ -103,3 +103,54 @@ describe('formatResponse', () => {
     expect(result).toContain('\u250c');
   });
 });
+
+describe('parseMarkdownTable — additional edge cases', () => {
+  test('parses table without leading/trailing pipes', () => {
+    const table = `Name | Age
+--- | ---
+Alice | 30
+Bob | 25`;
+    const result = parseMarkdownTable(table);
+    expect(result).not.toBeNull();
+    expect(result!.headers.length).toBeGreaterThanOrEqual(2);
+    expect(result!.rows.length).toBe(2);
+  });
+
+  test('parses table with empty cells', () => {
+    const table = `| Name | Age | City |
+| --- | --- | --- |
+| Alice | 30 | |
+| | 25 | NYC |`;
+    const result = parseMarkdownTable(table);
+    expect(result).not.toBeNull();
+    expect(result!.rows.length).toBe(2);
+  });
+
+  test('parses single-column table', () => {
+    const table = `| Item |
+| --- |
+| Apple |
+| Banana |`;
+    const result = parseMarkdownTable(table);
+    expect(result).not.toBeNull();
+    expect(result!.headers).toEqual(['Item']);
+    expect(result!.rows.length).toBe(2);
+  });
+});
+
+describe('transformMarkdownTables — tableRegex2 branch', () => {
+  test('transforms tables without leading/trailing pipes', () => {
+    const content = `Some text\n\nName | Age\n--- | ---\nAlice | 30\nBob | 25\n\nMore text`;
+    const result = transformMarkdownTables(content);
+    // Should be transformed to box-drawing characters
+    expect(result).toContain('\u250c');
+    expect(result).toContain('Alice');
+    expect(result).toContain('Bob');
+  });
+
+  test('handles table with empty cells via transformMarkdownTables', () => {
+    const content = `| A | B |\n| --- | --- |\n| 1 | |\n| | 2 |`;
+    const result = transformMarkdownTables(content);
+    expect(result).toContain('\u250c');
+  });
+});

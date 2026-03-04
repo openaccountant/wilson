@@ -22,6 +22,7 @@ mock.module('../plaid/store.js', () => ({
 
 mock.module('../plaid/client.js', () => ({
   getBalances: async () => [],
+  hasLocalPlaidCreds: () => false,
 }));
 
 mock.module('../tools/import/plaid-sync.js', () => ({
@@ -110,16 +111,18 @@ describe('runSync', () => {
   test('exits with error when no pro license', async () => {
     licenseSpy.mockReturnValue(false);
     await expect(runSync()).rejects.toThrow('process.exit');
-    expect(consoleErrorSpy).toHaveBeenCalledWith('Bank sync requires a Pro license.');
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Bank sync requires Open Accountant Pro')
+    );
   });
 
-  test('prints setup instructions when no integrations configured', async () => {
+  test('Pro user with no env vars still has Plaid via proxy', async () => {
+    // Pro users always have Plaid available via proxy, even without local creds
+    spyOn(plaidStore, 'getPlaidItems').mockReturnValue([]);
     await runSync();
     const output = getLogOutput();
-    expect(output).toContain('No integrations configured');
-    expect(output).toContain('PLAID_CLIENT_ID');
-    expect(output).toContain('MONARCH_TOKEN');
-    expect(output).toContain('FIREFLY_API_URL');
+    // Plaid section runs (via proxy) but no items linked
+    expect(output).toContain('[Plaid] No bank accounts linked');
   });
 
   test('runs only Plaid when only Plaid is configured', async () => {
@@ -129,8 +132,9 @@ describe('runSync', () => {
     spyOn(plaidStore, 'getPlaidItems').mockReturnValue([
       { accessToken: 'tok', itemId: 'item1', institutionName: 'Test Bank', institutionId: 'ins1', cursor: null },
     ] as any);
-    spyOn(plaidSync, 'syncPlaidItem').mockResolvedValue({ added: 5, linked: 2, skipped: 1 } as any);
-    spyOn(plaidClient, 'getBalances').mockResolvedValue([]);
+    spyOn(plaidSync, 'syncPlaidItem').mockResolvedValue({
+      institution: 'Test Bank', added: 5, linked: 2, skipped: 1, accountsCreated: 0, accountsUpdated: 0,
+    } as any);
 
     await runSync();
     const output = getLogOutput();
@@ -211,5 +215,232 @@ describe('runSync', () => {
     await runSync();
     const output = getLogOutput();
     expect(output).toContain('[Monarch] Syncing...');
+  });
+
+  test('Plaid sync with balances logs new account creation', async () => {
+    process.env.PLAID_CLIENT_ID = 'test';
+    process.env.PLAID_SECRET = 'test';
+
+    spyOn(plaidStore, 'getPlaidItems').mockReturnValue([
+      { accessToken: 'tok', itemId: 'item1', institutionName: 'Test Bank', institutionId: 'ins1', cursor: null },
+    ] as any);
+    spyOn(plaidSync, 'syncPlaidItem').mockResolvedValue({
+      institution: 'Test Bank', added: 3, linked: 1, skipped: 0, accountsCreated: 1, accountsUpdated: 0,
+    } as any);
+
+    await runSync();
+    const output = getLogOutput();
+    expect(output).toContain('[Plaid] Syncing Test Bank...');
+    expect(output).toContain('3 new transactions');
+    expect(output).toContain('1 new account(s) created');
+    expect(output).toContain('1 transactions auto-linked');
+  });
+
+  test('Monarch returns transactions that get inserted into DB', async () => {
+    process.env.MONARCH_TOKEN = 'test-token';
+
+    mockMonarchResult = {
+      allTransactions: {
+        results: [
+          {
+            id: 'mon-1',
+            amount: 50.00,
+            date: '2026-03-01',
+            pending: false,
+            plaidName: null,
+            notes: null,
+            isRecurring: false,
+            category: { name: 'Groceries' },
+            merchant: { name: 'Trader Joes' },
+            account: null,
+          },
+          {
+            id: 'mon-2',
+            amount: 25.00,
+            date: '2026-03-02',
+            pending: false,
+            plaidName: null,
+            notes: null,
+            isRecurring: false,
+            category: { name: 'Dining' },
+            merchant: { name: 'Pizza Place' },
+            account: null,
+          },
+        ],
+      },
+    };
+
+    await runSync();
+    const output = getLogOutput();
+    expect(output).toContain('[Monarch] Syncing...');
+
+    // Verify transactions were inserted
+    const txns = testDb.prepare("SELECT * FROM transactions WHERE bank = 'monarch'").all() as any[];
+    expect(txns).toHaveLength(2);
+    expect(txns[0].description).toBe('Trader Joes');
+    // Monarch positive = expense, OA negates: amount should be negative
+    expect(txns[0].amount).toBe(-50.00);
+  });
+
+  test('Firefly returns transactions with attributes that get inserted', async () => {
+    process.env.FIREFLY_API_URL = 'https://firefly.example.com';
+    process.env.FIREFLY_API_TOKEN = 'test-token';
+
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({
+        data: [
+          {
+            type: 'transactions',
+            id: '1',
+            attributes: {
+              group_title: null,
+              transactions: [
+                {
+                  transaction_journal_id: 'j1',
+                  type: 'withdrawal',
+                  date: '2026-03-01T00:00:00Z',
+                  amount: '100.00',
+                  description: 'Grocery shopping',
+                  source_name: 'Checking',
+                  destination_name: 'Whole Foods',
+                  category_name: 'Groceries',
+                  budget_name: null,
+                  bill_name: null,
+                  tags: ['food'],
+                  notes: null,
+                  internal_reference: null,
+                  external_url: null,
+                },
+              ],
+            },
+          },
+          {
+            type: 'transactions',
+            id: '2',
+            attributes: {
+              group_title: null,
+              transactions: [
+                {
+                  transaction_journal_id: 'j2',
+                  type: 'deposit',
+                  date: '2026-03-02T00:00:00Z',
+                  amount: '3000.00',
+                  description: 'Salary',
+                  source_name: 'Employer',
+                  destination_name: 'Checking',
+                  category_name: 'Income',
+                  budget_name: null,
+                  bill_name: null,
+                  tags: null,
+                  notes: null,
+                  internal_reference: null,
+                  external_url: null,
+                },
+              ],
+            },
+          },
+        ],
+        meta: { pagination: { total: 2, count: 2, per_page: 50, current_page: 1, total_pages: 1 } },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+      }),
+    );
+
+    await runSync();
+    const output = getLogOutput();
+    expect(output).toContain('[Firefly] Syncing...');
+
+    const txns = testDb.prepare("SELECT * FROM transactions WHERE bank = 'firefly' ORDER BY date").all() as any[];
+    expect(txns).toHaveLength(2);
+    // Withdrawal: destination_name used as description, amount negated
+    expect(txns[0].description).toBe('Whole Foods');
+    expect(txns[0].amount).toBe(-100.00);
+    expect(txns[0].category).toBe('Groceries');
+    // Deposit: source_name used as description, amount positive
+    expect(txns[1].description).toBe('Employer');
+    expect(txns[1].amount).toBe(3000.00);
+
+    fetchSpy.mockRestore();
+  });
+
+  test('Firefly pagination fetches all pages', async () => {
+    process.env.FIREFLY_API_URL = 'https://firefly.example.com';
+    process.env.FIREFLY_API_TOKEN = 'test-token';
+
+    let callCount = 0;
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      callCount++;
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const page = new URL(url).searchParams.get('page') ?? '1';
+
+      if (page === '1') {
+        return new Response(JSON.stringify({
+          data: [{
+            type: 'transactions',
+            id: '1',
+            attributes: {
+              group_title: null,
+              transactions: [{
+                transaction_journal_id: 'p1-j1',
+                type: 'withdrawal',
+                date: '2026-03-01T00:00:00Z',
+                amount: '50.00',
+                description: 'Page 1 txn',
+                source_name: 'Checking',
+                destination_name: 'Store A',
+                category_name: null,
+                budget_name: null,
+                bill_name: null,
+                tags: null,
+                notes: null,
+                internal_reference: null,
+                external_url: null,
+              }],
+            },
+          }],
+          meta: { pagination: { total: 2, count: 1, per_page: 1, current_page: 1, total_pages: 2 } },
+        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } });
+      } else {
+        return new Response(JSON.stringify({
+          data: [{
+            type: 'transactions',
+            id: '2',
+            attributes: {
+              group_title: null,
+              transactions: [{
+                transaction_journal_id: 'p2-j1',
+                type: 'withdrawal',
+                date: '2026-03-02T00:00:00Z',
+                amount: '75.00',
+                description: 'Page 2 txn',
+                source_name: 'Checking',
+                destination_name: 'Store B',
+                category_name: null,
+                budget_name: null,
+                bill_name: null,
+                tags: null,
+                notes: null,
+                internal_reference: null,
+                external_url: null,
+              }],
+            },
+          }],
+          meta: { pagination: { total: 2, count: 1, per_page: 1, current_page: 2, total_pages: 2 } },
+        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } });
+      }
+    });
+
+    await runSync();
+
+    // Should have fetched 2 pages
+    expect(callCount).toBe(2);
+
+    const txns = testDb.prepare("SELECT * FROM transactions WHERE bank = 'firefly' ORDER BY date").all() as any[];
+    expect(txns).toHaveLength(2);
+    expect(txns[0].description).toBe('Store A');
+    expect(txns[1].description).toBe('Store B');
+
+    fetchSpy.mockRestore();
   });
 });

@@ -1,5 +1,7 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { BufferTransport, type LogEntry } from '../utils/logger-buffer-transport.js';
+import { createTestDb } from './helpers.js';
+import type { Database } from '../db/compat-sqlite.js';
 
 describe('BufferTransport', () => {
   let transport: BufferTransport;
@@ -135,5 +137,97 @@ describe('logger singleton', () => {
     await new Promise(r => setTimeout(r, 10));
     expect(received.length).toBeGreaterThanOrEqual(1);
     unsub();
+  });
+});
+
+describe('logger.enableFileLogging', () => {
+  test('does not throw when called', async () => {
+    const { logger } = await import('../utils/logger.js');
+    expect(() => logger.enableFileLogging()).not.toThrow();
+  });
+
+  test('calling twice does not throw', async () => {
+    const { logger } = await import('../utils/logger.js');
+    expect(() => logger.enableFileLogging()).not.toThrow();
+    expect(() => logger.enableFileLogging()).not.toThrow();
+  });
+});
+
+describe('logger.shutdown', () => {
+  test('resolves without error', async () => {
+    const { logger } = await import('../utils/logger.js');
+    await expect(logger.shutdown()).resolves.toBeUndefined();
+  });
+});
+
+describe('logger.setDatabase', () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  test('persists logs to the logs table', async () => {
+    const { logger } = await import('../utils/logger.js');
+    logger.setDatabase(db);
+    logger.info('db-persisted message', { key: 'value' });
+
+    // Small delay for winston async
+    await new Promise(r => setTimeout(r, 20));
+
+    const row = db.prepare("SELECT level, message, data FROM logs WHERE message = 'db-persisted message'").get() as {
+      level: string; message: string; data: string | null;
+    } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.level).toBe('info');
+    expect(row!.message).toBe('db-persisted message');
+    expect(JSON.parse(row!.data!)).toEqual({ key: 'value' });
+  });
+
+  test('debug level persists to db', async () => {
+    const { logger } = await import('../utils/logger.js');
+    logger.setDatabase(db);
+    logger.debug('debug msg');
+    await new Promise(r => setTimeout(r, 20));
+
+    const row = db.prepare("SELECT level FROM logs WHERE message = 'debug msg'").get() as { level: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.level).toBe('debug');
+  });
+
+  test('warn level persists to db', async () => {
+    const { logger } = await import('../utils/logger.js');
+    logger.setDatabase(db);
+    logger.warn('warn msg');
+    await new Promise(r => setTimeout(r, 20));
+
+    const row = db.prepare("SELECT level FROM logs WHERE message = 'warn msg'").get() as { level: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.level).toBe('warn');
+  });
+
+  test('error level persists to db', async () => {
+    const { logger } = await import('../utils/logger.js');
+    logger.setDatabase(db);
+    logger.error('error msg', { code: 500 });
+    await new Promise(r => setTimeout(r, 20));
+
+    const row = db.prepare("SELECT level, data FROM logs WHERE message = 'error msg'").get() as {
+      level: string; data: string | null;
+    } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.level).toBe('error');
+    expect(JSON.parse(row!.data!)).toEqual({ code: 500 });
+  });
+
+  test('logs without data store null in data column', async () => {
+    const { logger } = await import('../utils/logger.js');
+    logger.setDatabase(db);
+    logger.info('no-data msg');
+    await new Promise(r => setTimeout(r, 20));
+
+    const row = db.prepare("SELECT data FROM logs WHERE message = 'no-data msg'").get() as { data: string | null } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.data).toBeNull();
   });
 });

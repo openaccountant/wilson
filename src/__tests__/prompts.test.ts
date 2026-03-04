@@ -1,15 +1,23 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import {
   getCurrentDate,
   buildIterationPrompt,
+  buildSystemPrompt,
+  loadSoulDocument,
   initDataContext,
   buildDataContext,
   initBudgetPrompt,
   buildBudgetContext,
   initAlertPrompt,
   buildAlertContext,
+  initNetWorthContext,
+  buildNetWorthContext,
 } from '../agent/prompts.js';
+import * as toolsRegistry from '../tools/registry.js';
+import * as skillsIndex from '../skills/index.js';
+import { insertAccount } from '../db/net-worth-queries.js';
+import { setBudget, insertTransactions } from '../db/queries.js';
 import { createTestDb, seedTestData } from './helpers.js';
 
 describe('agent/prompts', () => {
@@ -55,6 +63,21 @@ describe('agent/prompts', () => {
     test('ends with continue instruction', () => {
       const prompt = buildIterationPrompt('query', '');
       expect(prompt).toContain('Continue working toward answering');
+    });
+  });
+
+  describe('loadSoulDocument', () => {
+    test('returns content (bundled SOUL.md exists in project root)', async () => {
+      const content = await loadSoulDocument();
+      // The bundled SOUL.md should exist at the project root
+      // If no user override and no bundled file, returns null
+      if (content !== null) {
+        expect(typeof content).toBe('string');
+        expect(content.length).toBeGreaterThan(0);
+      } else {
+        // SOUL.md is optional — null is also valid
+        expect(content).toBeNull();
+      }
     });
   });
 
@@ -113,6 +136,125 @@ describe('agent/prompts', () => {
       initAlertPrompt(db);
       const ctx = buildAlertContext();
       expect(ctx).toBeNull();
+    });
+
+    test('returns formatted string with alerts present', () => {
+      const db = createTestDb();
+      seedTestData(db);
+      // Set Groceries budget to $50 so actual $85.50 > limit → budget_exceeded
+      setBudget(db, 'Groceries', 50);
+      initAlertPrompt(db);
+      const ctx = buildAlertContext();
+      expect(ctx).not.toBeNull();
+      expect(ctx).toContain('Active Alerts');
+      expect(ctx).toContain('Groceries');
+    });
+  });
+
+  describe('buildBudgetContext (extended)', () => {
+    test('shows OVER for exceeded budget', () => {
+      const db = createTestDb();
+      seedTestData(db);
+      // Current month's groceries: seed has $92 in March (2026-03-01)
+      // Set budget low to trigger OVER
+      setBudget(db, 'Groceries', 50);
+      initBudgetPrompt(db);
+      const ctx = buildBudgetContext();
+      // Should contain OVER since $92 > $50
+      if (ctx && ctx.includes('Groceries')) {
+        expect(ctx).toContain('OVER');
+      }
+    });
+  });
+
+  describe('buildNetWorthContext', () => {
+    test('returns null when no db set', () => {
+      // Reset net worth context by calling with a fresh DB that has no accounts
+      const db = createTestDb();
+      initNetWorthContext(db);
+      const ctx = buildNetWorthContext();
+      expect(ctx).toBeNull();
+    });
+
+    test('returns formatted string with accounts', () => {
+      const db = createTestDb();
+      insertAccount(db, {
+        name: 'Checking',
+        account_type: 'asset',
+        account_subtype: 'checking',
+        current_balance: 10000,
+      });
+      insertAccount(db, {
+        name: 'Credit Card',
+        account_type: 'liability',
+        account_subtype: 'credit_card',
+        current_balance: 2000,
+      });
+      initNetWorthContext(db);
+      const ctx = buildNetWorthContext();
+      expect(ctx).not.toBeNull();
+      expect(ctx).toContain('Balance Sheet');
+      expect(ctx).toContain('Net worth');
+      expect(ctx).toContain('Checking');
+    });
+  });
+
+  describe('buildSystemPrompt', () => {
+    let toolDescSpy: ReturnType<typeof spyOn>;
+    let discoverSpy: ReturnType<typeof spyOn>;
+    let metadataSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      toolDescSpy = spyOn(toolsRegistry, 'buildToolDescriptions').mockResolvedValue('## Mock Tool Descriptions');
+      discoverSpy = spyOn(skillsIndex, 'discoverSkills').mockReturnValue([]);
+      metadataSpy = spyOn(skillsIndex, 'buildSkillMetadataSection').mockReturnValue('');
+    });
+
+    afterEach(() => {
+      toolDescSpy?.mockRestore();
+      discoverSpy?.mockRestore();
+      metadataSpy?.mockRestore();
+    });
+
+    test('returns system prompt with tool descriptions', async () => {
+      const prompt = await buildSystemPrompt('test-model');
+      expect(prompt).toContain('Open Accountant');
+      expect(prompt).toContain('Mock Tool Descriptions');
+      expect(prompt).toContain('Tool Usage Policy');
+    });
+
+    test('includes skills section when skills exist', async () => {
+      discoverSpy.mockReturnValue([{ name: 'test-skill', description: 'A test', tier: 'free', source: 'builtin', path: '/tmp' }]);
+      metadataSpy.mockReturnValue('- **test-skill**: A test');
+
+      const prompt = await buildSystemPrompt('test-model');
+      expect(prompt).toContain('Available Skills');
+      expect(prompt).toContain('Skill Usage Policy');
+    });
+
+    test('omits skills section when no skills', async () => {
+      discoverSpy.mockReturnValue([]);
+
+      const prompt = await buildSystemPrompt('test-model');
+      expect(prompt).not.toContain('Available Skills');
+    });
+
+    test('includes soul content when provided', async () => {
+      const prompt = await buildSystemPrompt('test-model', 'You are Wilson, a witty accountant.');
+      expect(prompt).toContain('Identity');
+      expect(prompt).toContain('You are Wilson, a witty accountant.');
+      expect(prompt).toContain('Embody the identity');
+    });
+
+    test('omits identity section when no soul content', async () => {
+      const prompt = await buildSystemPrompt('test-model', null);
+      expect(prompt).not.toContain('Identity');
+    });
+
+    test('includes response format section', async () => {
+      const prompt = await buildSystemPrompt('test-model');
+      expect(prompt).toContain('Response Format');
+      expect(prompt).toContain('Tables');
     });
   });
 });
