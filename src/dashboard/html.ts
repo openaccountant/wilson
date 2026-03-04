@@ -164,11 +164,17 @@ export function getDashboardHtml(port: number): string {
   .acct-row:hover { background:#21262d; }
 
   /* Dialog */
-  dialog { background:#161b22; color:#e1e4e8; border:1px solid #30363d; border-radius:12px; padding:0; max-width:800px; width:90vw; max-height:80vh; overflow:hidden; display:flex; flex-direction:column; }
+  dialog { background:#161b22; color:#e1e4e8; border:1px solid #30363d; border-radius:12px; padding:0; max-width:800px; width:90vw; height:80vh; overflow:hidden; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); margin:0; }
+  dialog[open] { display:flex; flex-direction:column; }
   dialog::backdrop { background:rgba(0,0,0,0.6); }
   dialog .dialog-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #30363d; flex-shrink:0; }
   dialog .dialog-header h3 { margin:0; font-size:14px; color:#e1e4e8; text-transform:uppercase; letter-spacing:0.5px; }
-  dialog .dialog-body { flex:1; overflow-y:auto; padding:16px 20px; min-height:0; }
+  dialog .dialog-body { flex:1; overflow:hidden; padding:16px 20px; min-height:0; display:flex; flex-direction:column; }
+  dialog .dialog-body .detail-sections { flex:1; display:flex; flex-direction:column; gap:8px; min-height:0; overflow:hidden; }
+  dialog .dialog-body .detail-section { flex:1 1 0; display:flex; flex-direction:column; min-height:80px; }
+  dialog .dialog-body .detail-section .section-label { font-size:11px; color:#8b949e; text-transform:uppercase; margin-bottom:4px; flex-shrink:0; }
+  dialog .dialog-body .detail-section pre { flex:1; min-height:60px; overflow:auto; resize:vertical; background:#0f1117; border:1px solid #30363d; border-radius:6px; padding:10px; font-size:12px; white-space:pre-wrap; word-break:break-word; margin:0; }
+  dialog .dialog-footer { flex-shrink:0; padding:12px 20px; border-top:1px solid #30363d; background:#161b22; }
   dialog .dialog-close { background:none; border:none; color:#8b949e; font-size:20px; cursor:pointer; padding:4px 8px; border-radius:4px; }
   dialog .dialog-close:hover { color:#e1e4e8; background:#21262d; }
 
@@ -348,6 +354,7 @@ export function getDashboardHtml(port: number): string {
     </div>
   </div>
 </div>
+</div>
 
 <dialog id="interactionDialog">
   <div class="dialog-header">
@@ -355,26 +362,25 @@ export function getDashboardHtml(port: number): string {
     <button class="dialog-close" id="dialogClose">&times;</button>
   </div>
   <div class="dialog-body">
-    <div id="interactionDetail"></div>
-    <div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">
-      <h3 style="font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Annotate</h3>
-      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
-        <div><label style="font-size:12px;color:#8b949e;">Rating</label><div id="ratingStars" style="display:flex;gap:4px;margin-top:4px;"></div></div>
-        <div><label style="font-size:12px;color:#8b949e;">Preference</label>
-          <select id="prefSelect" class="btn-sm" style="margin-top:4px;display:block;"><option value="">—</option><option value="chosen">Chosen</option><option value="rejected">Rejected</option><option value="neutral">Neutral</option></select>
-        </div>
-        <div><label style="font-size:12px;color:#8b949e;">Pair ID</label>
-          <input id="pairIdInput" class="btn-sm" style="margin-top:4px;display:block;width:120px;" placeholder="DPO pair ID">
-        </div>
-        <div><label style="font-size:12px;color:#8b949e;">Notes</label>
-          <input id="annotNotes" class="btn-sm" style="margin-top:4px;display:block;width:200px;" placeholder="Optional notes">
-        </div>
-        <button id="saveAnnotation" class="btn-sm btn-save" style="padding:6px 16px;margin-top:18px;">Save</button>
+    <div id="interactionDetail" class="detail-sections"></div>
+  </div>
+  <div class="dialog-footer">
+    <h3 style="font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Annotate</h3>
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+      <div><label style="font-size:12px;color:#8b949e;">Rating</label><div id="ratingStars" style="display:flex;gap:4px;margin-top:4px;"></div></div>
+      <div><label style="font-size:12px;color:#8b949e;">Preference</label>
+        <select id="prefSelect" class="btn-sm" style="margin-top:4px;display:block;"><option value="">—</option><option value="chosen">Chosen</option><option value="rejected">Rejected</option><option value="neutral">Neutral</option></select>
       </div>
+      <div><label style="font-size:12px;color:#8b949e;">Pair ID</label>
+        <input id="pairIdInput" class="btn-sm" style="margin-top:4px;display:block;width:120px;" placeholder="DPO pair ID">
+      </div>
+      <div><label style="font-size:12px;color:#8b949e;">Notes</label>
+        <input id="annotNotes" class="btn-sm" style="margin-top:4px;display:block;width:200px;" placeholder="Optional notes">
+      </div>
+      <button id="saveAnnotation" class="btn-sm btn-save" style="padding:6px 16px;margin-top:18px;">Save</button>
     </div>
   </div>
 </dialog>
-</div>
 
 <script>
 (function() {
@@ -660,8 +666,31 @@ export function getDashboardHtml(port: number): string {
     var opt = document.createElement('option'); opt.value = r.value; opt.textContent = r.label;
     picker.appendChild(opt);
   });
+  // Add individual months
+  var sep = document.createElement('option'); sep.disabled = true; sep.textContent = '──────────';
+  picker.appendChild(sep);
+  for (var mi = 0; mi < 12; mi++) {
+    var md = new Date(); md.setMonth(md.getMonth() - mi);
+    var mv = md.toISOString().slice(0,7);
+    var mopt = document.createElement('option'); mopt.value = 'month:'+mv;
+    mopt.textContent = md.toLocaleString('en-US', {month:'long',year:'numeric'});
+    picker.appendChild(mopt);
+  }
   computeRange('this-month');
-  picker.addEventListener('change', function() { computeRange(picker.value); loadCategoryOptions(); loadOverview(); });
+  picker.addEventListener('change', function() {
+    var v = picker.value;
+    if (v.indexOf('month:') === 0) {
+      var ym = v.slice(6);
+      var parts = ym.split('-').map(Number);
+      var s = new Date(parts[0], parts[1]-1, 1);
+      var e = new Date(parts[0], parts[1], 0);
+      currentStartDate = s.toISOString().slice(0,10);
+      currentEndDate = e.toISOString().slice(0,10);
+    } else {
+      computeRange(v);
+    }
+    loadCategoryOptions(); loadOverview();
+  });
 
   // ── Overview ────────────────────────────────────────────────────────────
   async function loadPnl() {
@@ -1114,12 +1143,12 @@ export function getDashboardHtml(port: number): string {
       var detail = document.getElementById('interactionDetail');
       detail.replaceChildren();
 
-      function addSection(title, content, mono) {
-        var h = el('div','',title); h.style.cssText = 'font-size:11px;color:#8b949e;text-transform:uppercase;margin:12px 0 4px;';
-        detail.appendChild(h);
-        var pre = el('pre'); pre.style.cssText = 'background:#0f1117;border:1px solid #30363d;border-radius:6px;padding:10px;font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-word;';
-        pre.textContent = content || '(empty)';
-        detail.appendChild(pre);
+      function addSection(title, content) {
+        var section = el('div','detail-section');
+        section.appendChild(el('div','section-label',title));
+        var pre = el('pre'); pre.textContent = content || '(empty)';
+        section.appendChild(pre);
+        detail.appendChild(section);
       }
 
       addSection('System Prompt', data.system_prompt);

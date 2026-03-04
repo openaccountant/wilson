@@ -1,0 +1,55 @@
+!Type:Bank
+D01/03/2026
+T-42.67
+PCorner Market #1247
+LFood:Groceries
+MGrocery run
+^
+D01/07/2026
+T-128.50
+PCity Electric Co
+LUtilities:Electric
+MMonthly autopay
+^
+D01/10/2026
+T-350.00
+PCheck 1042
+LHousing:Rent
+N1042
+^
+D01/15/2026
+T3200.00
+PAcme Corp
+LIncome:Salary
+MDirect deposit
+^
+D01/18/2026
+T-5.75
+POak Street Coffee
+LFood:Coffee
+^
+D01/22/2026
+T-275.00
+PMega Online Store
+SClothing
+EWinter jacket
+$-189.30
+SElectronics
+EUSB-C cable
+$-15.70
+SBooks
+ENovel
+$-70.00
+^
+D01/25/2026
+T189.30
+PMega Online Store
+LClothing
+MRefund - wrong size jacket
+^
+D02/01/2026
+T-2400.00
+PMaple Ave Apartments
+LHousing:Rent
+MFebruary rent
+^

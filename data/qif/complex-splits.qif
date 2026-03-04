@@ -1,0 +1,59 @@
+!Type:Bank
+D01/05/2026
+T-425.00
+PCostco Wholesale #1142
+SFood:Groceries
+EGroceries and household items
+$-285.00
+SHome:Supplies
+ECleaning supplies, paper towels
+$-62.50
+SElectronics
+EHDMI cables
+$-24.99
+SClothing
+EKids winter boots
+$-52.51
+^
+D01/10/2026
+T-1250.00
+PHome Depot #4821
+SHome:Improvement
+EBathroom vanity
+$-650.00
+SHome:Improvement
+EPlumbing supplies
+$-125.00
+SHome:Tools
+EDrill and bits
+$-189.99
+SHome:Supplies
+EPaint and brushes
+$-285.01
+^
+D01/15/2026
+T-89.50
+PTarget Store #2847
+SFood:Groceries
+ESnacks and drinks
+$-32.50
+SBaby:Supplies
+EDiapers and wipes
+$-42.00
+SHome:Supplies
+ECleaning spray
+$-15.00
+^
+D01/20/2026
+T-156.78
+POffice Depot
+SBusiness:Supplies
+EPrinter paper (5 reams)
+$-45.00
+SBusiness:Supplies
+EInk cartridges
+$-78.99
+SBusiness:Supplies
+EFile folders and labels
+$-32.79
+^

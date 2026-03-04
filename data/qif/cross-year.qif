@@ -1,0 +1,75 @@
+!Type:Bank
+D12/01/2025
+T-1800.00
+PRiverside Apartments
+LHousing:Rent
+MDec rent
+^
+D12/05/2025
+T-312.45
+PBest Buy #921
+LShopping:Electronics
+MHoliday gift - headphones
+^
+D12/10/2025
+T-89.99
+PAmazon.com
+LShopping:Online
+MHoliday gifts
+^
+D12/15/2025
+T3500.00
+PEmployer Inc
+LIncome:Salary
+^
+D12/18/2025
+T-75.00
+PCharity Foundation
+LCharity:Donations
+MYear-end giving
+^
+D12/20/2025
+T-250.00
+PCharity Foundation
+LCharity:Donations
+MYear-end giving
+^
+D12/24/2025
+T-145.00
+PHoliday Restaurant
+LFood:Dining
+MChristmas Eve dinner
+^
+D12/28/2025
+T-67.89
+PTrader Joes #142
+LFood:Groceries
+^
+D12/31/2025
+T-45.00
+PNew Years Eve Restaurant
+LFood:Dining
+MNYE dinner
+^
+D01/01/2026
+T-1800.00
+PRiverside Apartments
+LHousing:Rent
+MJan rent
+^
+D01/05/2026
+T-52.30
+PCorner Market #1247
+LFood:Groceries
+^
+D01/10/2026
+T-128.50
+PPG&E Electric
+LUtilities:Electric
+MMonthly electric
+^
+D01/15/2026
+T3500.00
+PEmployer Inc
+LIncome:Salary
+^

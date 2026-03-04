@@ -1,0 +1,137 @@
+{
+  "_comment": "Example Plaid /transactions/sync response. Not a file import — fetched via Plaid API. See src/tools/import/plaid-sync.ts and src/plaid/client.ts for the importer.",
+  "added": [
+    {
+      "transactionId": "txn_plaid_001",
+      "date": "2026-01-03",
+      "name": "CORNER MARKET #1247",
+      "amount": 42.67,
+      "category": ["Food and Drink", "Groceries"],
+      "accountId": "acct_001",
+      "merchantName": "Corner Market",
+      "personalFinanceCategory": {
+        "primary": "FOOD_AND_DRINK",
+        "detailed": "FOOD_AND_DRINK_GROCERIES"
+      },
+      "paymentChannel": "in_store",
+      "pending": false,
+      "authorizedDate": "2026-01-02"
+    },
+    {
+      "transactionId": "txn_plaid_002",
+      "date": "2026-01-05",
+      "name": "ACME CORP PAYROLL",
+      "amount": -3200.00,
+      "category": ["Transfer", "Payroll"],
+      "accountId": "acct_001",
+      "merchantName": null,
+      "personalFinanceCategory": {
+        "primary": "INCOME",
+        "detailed": "INCOME_WAGES"
+      },
+      "paymentChannel": "other",
+      "pending": false,
+      "authorizedDate": "2026-01-05"
+    },
+    {
+      "transactionId": "txn_plaid_003",
+      "date": "2026-01-07",
+      "name": "AMZN MKTP US*1A2B3C",
+      "amount": 89.99,
+      "category": ["Shops", "Online Marketplaces"],
+      "accountId": "acct_002",
+      "merchantName": "Amazon",
+      "personalFinanceCategory": {
+        "primary": "GENERAL_MERCHANDISE",
+        "detailed": "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES"
+      },
+      "paymentChannel": "online",
+      "pending": false,
+      "authorizedDate": "2026-01-06"
+    },
+    {
+      "transactionId": "txn_plaid_004",
+      "date": "2026-01-10",
+      "name": "STREAMFLIX",
+      "amount": 14.99,
+      "category": ["Service", "Subscription"],
+      "accountId": "acct_002",
+      "merchantName": "Streamflix",
+      "personalFinanceCategory": {
+        "primary": "ENTERTAINMENT",
+        "detailed": "ENTERTAINMENT_TV_AND_MOVIES"
+      },
+      "paymentChannel": "online",
+      "pending": false,
+      "authorizedDate": "2026-01-10"
+    },
+    {
+      "transactionId": "txn_plaid_005",
+      "date": "2026-01-12",
+      "name": "OAKWOOD PROPERTY MGMT",
+      "amount": 1450.00,
+      "category": ["Transfer", "Debit"],
+      "accountId": "acct_001",
+      "merchantName": "Oakwood Property Mgmt",
+      "personalFinanceCategory": {
+        "primary": "RENT_AND_UTILITIES",
+        "detailed": "RENT_AND_UTILITIES_RENT"
+      },
+      "paymentChannel": "other",
+      "pending": false,
+      "authorizedDate": "2026-01-11"
+    },
+    {
+      "transactionId": "txn_plaid_006",
+      "date": "2026-01-14",
+      "name": "QUICKFUEL STATION 42",
+      "amount": 52.30,
+      "category": ["Travel", "Gas Stations"],
+      "accountId": "acct_001",
+      "merchantName": "QuickFuel",
+      "personalFinanceCategory": {
+        "primary": "TRANSPORTATION",
+        "detailed": "TRANSPORTATION_GAS"
+      },
+      "paymentChannel": "in_store",
+      "pending": true,
+      "authorizedDate": "2026-01-14"
+    },
+    {
+      "transactionId": "txn_plaid_007",
+      "date": "2026-01-16",
+      "name": "AMZN MKTP US REFUND",
+      "amount": -29.99,
+      "category": ["Shops", "Online Marketplaces"],
+      "accountId": "acct_002",
+      "merchantName": "Amazon",
+      "personalFinanceCategory": {
+        "primary": "GENERAL_MERCHANDISE",
+        "detailed": "GENERAL_MERCHANDISE_ONLINE_MARKETPLACES"
+      },
+      "paymentChannel": "online",
+      "pending": false,
+      "authorizedDate": "2026-01-15"
+    },
+    {
+      "transactionId": "txn_plaid_008",
+      "date": "2026-01-16",
+      "name": "SQ *MORNING BREW CAFE",
+      "amount": 6.50,
+      "category": ["Food and Drink", "Coffee Shop"],
+      "accountId": "acct_001",
+      "merchantName": "Morning Brew Cafe",
+      "personalFinanceCategory": {
+        "primary": "FOOD_AND_DRINK",
+        "detailed": "FOOD_AND_DRINK_COFFEE"
+      },
+      "paymentChannel": "in_store",
+      "pending": false,
+      "authorizedDate": "2026-01-16"
+    }
+  ],
+  "modified": [],
+  "removed": [],
+  "nextCursor": "cursor_abc123def456",
+  "hasMore": false
+}

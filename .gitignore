@@ -4,3 +4,4 @@ dist/
 .openaccountant*/
 *.db
 firebase-debug.log
+data/api/debug/

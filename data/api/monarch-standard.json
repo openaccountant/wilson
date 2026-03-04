@@ -1,0 +1,101 @@
+{
+  "_comment": "Example Monarch Money API response (allTransactions.results). Not a file import — fetched via monarch-money-api GraphQL. See src/tools/import/monarch.ts for the importer.",
+  "results": [
+    {
+      "id": "txn_monarch_001",
+      "amount": 42.67,
+      "date": "2026-01-03",
+      "pending": false,
+      "plaidName": null,
+      "notes": null,
+      "isRecurring": false,
+      "category": { "name": "Food & Drink" },
+      "merchant": { "name": "Corner Market #1247" },
+      "account": { "displayName": "Main Checking" }
+    },
+    {
+      "id": "txn_monarch_002",
+      "amount": -3200.00,
+      "date": "2026-01-05",
+      "pending": false,
+      "plaidName": null,
+      "notes": "Monthly payroll",
+      "isRecurring": true,
+      "category": { "name": "Income" },
+      "merchant": { "name": "Acme Corp" },
+      "account": { "displayName": "Main Checking" }
+    },
+    {
+      "id": "txn_monarch_003",
+      "amount": 89.99,
+      "date": "2026-01-07",
+      "pending": false,
+      "plaidName": "AMZN MKTP US",
+      "notes": null,
+      "isRecurring": false,
+      "category": { "name": "Shopping" },
+      "merchant": null,
+      "account": { "displayName": "Rewards Visa" }
+    },
+    {
+      "id": "txn_monarch_004",
+      "amount": 14.99,
+      "date": "2026-01-10",
+      "pending": false,
+      "plaidName": null,
+      "notes": null,
+      "isRecurring": true,
+      "category": { "name": "Entertainment" },
+      "merchant": { "name": "Streamflix" },
+      "account": { "displayName": "Rewards Visa" }
+    },
+    {
+      "id": "txn_monarch_005",
+      "amount": 1450.00,
+      "date": "2026-01-12",
+      "pending": false,
+      "plaidName": null,
+      "notes": null,
+      "isRecurring": true,
+      "category": { "name": "Housing" },
+      "merchant": { "name": "Oakwood Property Mgmt" },
+      "account": { "displayName": "Main Checking" }
+    },
+    {
+      "id": "txn_monarch_006",
+      "amount": 52.30,
+      "date": "2026-01-14",
+      "pending": true,
+      "plaidName": null,
+      "notes": null,
+      "isRecurring": false,
+      "category": { "name": "Gas" },
+      "merchant": { "name": "QuickFuel Station" },
+      "account": { "displayName": "Main Checking" }
+    },
+    {
+      "id": "txn_monarch_007",
+      "amount": -150.00,
+      "date": "2026-01-15",
+      "pending": false,
+      "plaidName": null,
+      "notes": "Freelance invoice #47",
+      "isRecurring": false,
+      "category": { "name": "Income" },
+      "merchant": { "name": "Pixel Design Co" },
+      "account": { "displayName": "Main Checking" }
+    },
+    {
+      "id": "txn_monarch_008",
+      "amount": 6.50,
+      "date": "2026-01-16",
+      "pending": false,
+      "plaidName": "SQ *MORNING BREW",
+      "notes": null,
+      "isRecurring": false,
+      "category": { "name": "Food & Drink" },
+      "merchant": { "name": "Morning Brew Cafe" },
+      "account": { "displayName": "Rewards Visa" }
+    }
+  ]
+}

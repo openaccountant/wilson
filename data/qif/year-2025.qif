@@ -1,0 +1,59 @@
+!Type:Bank
+D05/01/2025
+T-1800.00
+PRiverside Apartments
+LHousing:Rent
+MMay rent
+^
+D05/03/2025
+T-112.47
+PWhole Foods Market
+LFood:Groceries
+MWeekly groceries
+^
+D05/05/2025
+T-79.99
+PComcast Cable
+LUtilities:Internet
+MMonthly internet
+^
+D05/08/2025
+T-48.72
+PShell Oil #57442
+LAuto:Gas
+MFilled up
+^
+D05/10/2025
+T3500.00
+PEmployer Inc
+LIncome:Salary
+MSemi-monthly pay
+^
+D05/12/2025
+T-15.99
+PNetflix
+LEntertainment:Streaming
+^
+D05/15/2025
+T-34.50
+PChipotle Online
+LFood:Dining
+^
+D05/18/2025
+T-200.00
+PATM Withdrawal
+LCash
+MATM #4821
+^
+D05/20/2025
+T-89.00
+PState Farm Insurance
+LInsurance:Auto
+MMonthly premium
+^
+D05/25/2025
+T3500.00
+PEmployer Inc
+LIncome:Salary
+MSemi-monthly pay
+^

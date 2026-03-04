@@ -1,0 +1,60 @@
+{
+  "_comment": "Plaid /transactions/sync response with added, modified, and removed arrays populated. Tests the full sync lifecycle.",
+  "added": [
+    {
+      "transactionId": "txn_plaid_009",
+      "date": "2026-01-20",
+      "name": "WALGREENS #4219",
+      "amount": 22.15,
+      "category": ["Shops", "Pharmacies"],
+      "accountId": "acct_001",
+      "merchantName": "Walgreens",
+      "personalFinanceCategory": {
+        "primary": "MEDICAL",
+        "detailed": "MEDICAL_PHARMACIES_AND_SUPPLEMENTS"
+      },
+      "paymentChannel": "in_store",
+      "pending": false,
+      "authorizedDate": "2026-01-20"
+    },
+    {
+      "transactionId": "txn_plaid_010",
+      "date": "2026-01-22",
+      "name": "UBER *TRIP",
+      "amount": 18.75,
+      "category": ["Travel", "Taxi"],
+      "accountId": "acct_001",
+      "merchantName": "Uber",
+      "personalFinanceCategory": {
+        "primary": "TRANSPORTATION",
+        "detailed": "TRANSPORTATION_TAXIS_AND_RIDE_SHARES"
+      },
+      "paymentChannel": "online",
+      "pending": false,
+      "authorizedDate": "2026-01-22"
+    }
+  ],
+  "modified": [
+    {
+      "transactionId": "txn_plaid_006",
+      "date": "2026-01-14",
+      "name": "QUICKFUEL STATION 42",
+      "amount": 54.80,
+      "category": ["Travel", "Gas Stations"],
+      "accountId": "acct_001",
+      "merchantName": "QuickFuel",
+      "personalFinanceCategory": {
+        "primary": "TRANSPORTATION",
+        "detailed": "TRANSPORTATION_GAS"
+      },
+      "paymentChannel": "in_store",
+      "pending": false,
+      "authorizedDate": "2026-01-14"
+    }
+  ],
+  "removed": [
+    { "transactionId": "txn_plaid_temp_001" }
+  ],
+  "nextCursor": "cursor_xyz789ghi012",
+  "hasMore": false
+}

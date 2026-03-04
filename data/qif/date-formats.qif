@@ -1,0 +1,31 @@
+!Type:Bank
+D01/03/2026
+T-42.67
+PCorner Market
+LFood:Groceries
+^
+D1/7/2026
+T-128.50
+PCity Electric Co
+LUtilities:Electric
+^
+D1-10-2026
+T-49.99
+PRiverdale Gym
+LHealth:Fitness
+^
+D1/15'26
+T3200.00
+PAcme Corp
+LIncome:Salary
+^
+D01-18-2026
+T-5.75
+POak Street Coffee
+LFood:Coffee
+^
+D2/1/2026
+T-2400.00
+PMaple Ave Apartments
+LHousing:Rent
+^

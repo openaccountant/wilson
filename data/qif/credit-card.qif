@@ -1,0 +1,52 @@
+!Type:CCard
+D01/02/2026
+T-67.89
+PAmazon.com
+LShopping:Online
+MOrder #X9182
+^
+D01/05/2026
+T-342.00
+PDelta Air Lines
+LTravel:Airfare
+MFlight to NYC
+^
+D01/08/2026
+T-189.00
+PHilton Hotels
+LTravel:Hotels
+MNYC business trip
+^
+D01/10/2026
+T-28.43
+PUber Eats
+LFood:Delivery
+^
+D01/12/2026
+T-9.99
+PApple.com
+LEntertainment:Streaming
+MiCloud+ subscription
+^
+D01/15/2026
+T-2500.00
+POnline Payment
+MThank you for your payment
+C*
+^
+D01/18/2026
+T189.00
+PHilton Hotels
+LTravel:Hotels
+MRefund - hotel overcharge
+^
+D01/20/2026
+T-45.99
+PSephora Online
+LShopping:Personal Care
+^
+D01/22/2026
+T-12.00
+PParking Garage Downtown
+LAuto:Parking
+^
