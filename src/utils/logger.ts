@@ -9,7 +9,7 @@ export type { LogEntry, LogLevel };
 
 const LOG_DIR = join(homedir(), '.openaccountant', 'logs');
 const LOG_FILE = join(LOG_DIR, 'agent.log');
-const MAX_DATA_LENGTH = 2000;
+const MAX_DATA_LENGTH = 50000;
 
 /**
  * Custom JSON Lines format matching the existing schema:

@@ -1,3 +1,4 @@
+export { openBrowser } from './browser.js';
 export { loadConfig, saveConfig, getSetting, setSetting } from './config.js';
 export {
   getApiKeyNameForProvider,
