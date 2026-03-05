@@ -8,7 +8,7 @@ import type { Database } from '../db/compat-sqlite.js';
 export type { LogEntry, LogLevel };
 
 const LOG_DIR = join(homedir(), '.openaccountant', 'logs');
-const LOG_FILE = join(LOG_DIR, 'agent.log');
+export const LOG_FILE = join(LOG_DIR, 'agent.log');
 const MAX_DATA_LENGTH = 50000;
 
 /**

@@ -369,7 +369,7 @@ describe('runSync', () => {
     process.env.FIREFLY_API_TOKEN = 'test-token';
 
     let callCount = 0;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async (input) => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async (input: URL | RequestInfo) => {
       callCount++;
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const page = new URL(url).searchParams.get('page') ?? '1';

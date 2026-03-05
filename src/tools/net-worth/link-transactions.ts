@@ -30,7 +30,7 @@ export const linkTransactionsTool = defineTool({
     }
     if (!account && accountName) {
       const all = getAccounts(db, { active: true });
-      account = all.find((a) => a.name.toLowerCase() === accountName.toLowerCase());
+      account = all.find((a) => a.name.toLowerCase() === accountName!.toLowerCase());
     }
     if (!account) {
       const hint = lookupName || accountName ? ` Try 'account_manage list' to see available accounts.` : '';
