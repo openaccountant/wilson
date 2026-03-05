@@ -41,9 +41,9 @@ describe('mockCallLlm', () => {
   });
 
   test('explicit interactionId is preserved', async () => {
-    const callLlm = mockCallLlm([{ interactionId: 'int-123' }]);
+    const callLlm = mockCallLlm([{ interactionId: 123 }]);
     const r = await callLlm();
-    expect(r.interactionId).toBe('int-123');
+    expect(r.interactionId).toBe(123);
   });
 
   test('usage defaults to undefined', async () => {
@@ -61,13 +61,13 @@ describe('mockCallLlm', () => {
 
   test('multiple calls cycle through responses with mixed fields', async () => {
     const callLlm = mockCallLlm([
-      { response: { content: 'a', toolCalls: [] }, interactionId: 'id-1' },
+      { response: { content: 'a', toolCalls: [] }, interactionId: 1 },
       { response: { content: 'b', toolCalls: [{ id: 'tc1', name: 'tool', args: {} }] }, usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
     ]);
 
     const r1 = await callLlm();
     expect(r1.response.content).toBe('a');
-    expect(r1.interactionId).toBe('id-1');
+    expect(r1.interactionId).toBe(1);
     expect(r1.usage).toBeUndefined();
 
     const r2 = await callLlm();
@@ -86,7 +86,7 @@ describe('mockTool', () => {
   });
 
   test('tool func returns expected value', async () => {
-    const tool = mockTool('adder', async (args) => `sum: ${(args.a as number) + (args.b as number)}`);
+    const tool = mockTool('adder', async (args) => `sum: ${((args as Record<string, unknown>).a as number) + ((args as Record<string, unknown>).b as number)}`);
     const result = await tool.func({ a: 1, b: 2 });
     expect(result).toBe('sum: 3');
   });

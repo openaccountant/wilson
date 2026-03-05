@@ -4,11 +4,49 @@ import {
   getApiKeyNameForProvider,
   getProviderDisplayName,
   checkApiKeyExists,
+  checkApiKeyExistsForProvider,
   saveApiKeyToEnv,
   saveApiKeyForProvider,
 } from '../utils/env.js';
 
 describe('env utils', () => {
+  describe('checkApiKeyExistsForProvider', () => {
+    let existsSpy: ReturnType<typeof spyOn>;
+    let readSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      existsSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
+    });
+
+    afterEach(() => {
+      if (existsSpy) existsSpy.mockRestore();
+      if (readSpy) readSpy.mockRestore();
+    });
+
+    test('returns true when provider has API key and it exists', () => {
+      process.env.OPENAI_API_KEY = 'sk-real-key';
+      expect(checkApiKeyExistsForProvider('openai')).toBe(true);
+      delete process.env.OPENAI_API_KEY;
+    });
+
+    test('returns false when provider has API key but it does not exist', () => {
+      delete process.env.OPENAI_API_KEY;
+      existsSpy.mockReturnValue(false);
+      expect(checkApiKeyExistsForProvider('openai')).toBe(false);
+    });
+
+    test('returns true when key exists in .env file', () => {
+      delete process.env.OPENAI_API_KEY;
+      existsSpy.mockReturnValue(true);
+      readSpy = spyOn(fs, 'readFileSync').mockReturnValue('OPENAI_API_KEY=sk-from-env\n');
+      expect(checkApiKeyExistsForProvider('openai')).toBe(true);
+    });
+
+    test('returns true for provider without API key requirement', () => {
+      expect(checkApiKeyExistsForProvider('ollama')).toBe(true);
+    });
+  });
+
   describe('getApiKeyNameForProvider', () => {
     test('returns env var name for known provider', () => {
       expect(getApiKeyNameForProvider('openai')).toBe('OPENAI_API_KEY');

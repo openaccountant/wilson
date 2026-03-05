@@ -151,6 +151,32 @@ describe('logger.enableFileLogging', () => {
     expect(() => logger.enableFileLogging()).not.toThrow();
     expect(() => logger.enableFileLogging()).not.toThrow();
   });
+
+  test('file is created when OA_DEBUG is set', async () => {
+    const originalDebug = process.env.OA_DEBUG;
+    process.env.OA_DEBUG = '1';
+    
+    const { logger, LOG_FILE } = await import('../utils/logger.js');
+    logger.clear();
+    logger.enableFileLogging();
+    logger.info('debug test message');
+    
+    await new Promise(r => setTimeout(r, 50));
+    
+    const { existsSync, unlinkSync } = await import('fs');
+    const logExists = existsSync(LOG_FILE);
+    expect(logExists).toBe(true);
+    
+    if (logExists) {
+      unlinkSync(LOG_FILE);
+    }
+    
+    if (originalDebug === undefined) {
+      delete process.env.OA_DEBUG;
+    } else {
+      process.env.OA_DEBUG = originalDebug;
+    }
+  });
 });
 
 describe('logger.shutdown', () => {

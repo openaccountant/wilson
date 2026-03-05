@@ -369,7 +369,7 @@ describe('runSync', () => {
     process.env.FIREFLY_API_TOKEN = 'test-token';
 
     let callCount = 0;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async (input) => {
       callCount++;
       const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const page = new URL(url).searchParams.get('page') ?? '1';
@@ -400,7 +400,7 @@ describe('runSync', () => {
             },
           }],
           meta: { pagination: { total: 2, count: 1, per_page: 1, current_page: 1, total_pages: 2 } },
-        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } });
+        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } }) as unknown as Response;
       } else {
         return new Response(JSON.stringify({
           data: [{
@@ -427,9 +427,9 @@ describe('runSync', () => {
             },
           }],
           meta: { pagination: { total: 2, count: 1, per_page: 1, current_page: 2, total_pages: 2 } },
-        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } });
+        }), { status: 200, headers: { 'Content-Type': 'application/vnd.api+json' } }) as unknown as Response;
       }
-    });
+    }) as unknown as typeof fetch);
 
     await runSync();
 

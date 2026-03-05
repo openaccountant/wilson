@@ -41,11 +41,11 @@ describe('licensing/license', () => {
   beforeEach(() => {
     removeLicenseFile();
     // Mock fetch per-test to prevent real HTTP calls from background re-validation
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
       new Response(JSON.stringify({ valid: true, license: { email: 'test@test.com' }, products: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      }));
+      }) as unknown as Response) as unknown as typeof fetch);
   });
 
   afterEach(() => {
@@ -174,14 +174,14 @@ describe('validateLicense (Polar API)', () => {
   });
 
   test('validateLicense succeeds with valid API response', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
       new Response(
         JSON.stringify({
           valid: true,
           products: ['pro'],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ));
+      ) as unknown as Response) as unknown as typeof fetch);
 
     const cache = await validateLicense('valid-key-123');
     expect(cache.key).toBe('valid-key-123');
@@ -191,31 +191,31 @@ describe('validateLicense (Polar API)', () => {
   });
 
   test('validateLicense throws on HTTP error', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      new Response('Unauthorized', { status: 401 }));
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
+      new Response('Unauthorized', { status: 401 }) as unknown as Response) as unknown as typeof fetch);
 
     await expect(validateLicense('bad-key')).rejects.toThrow('License validation failed (401)');
   });
 
   test('validateLicense throws when key is invalid (valid: false)', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
       new Response(
         JSON.stringify({ valid: false, products: [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ));
+      ) as unknown as Response) as unknown as typeof fetch);
 
     await expect(validateLicense('expired-key')).rejects.toThrow('License key is invalid or expired');
   });
 
   test('validateLicense returns products from API', async () => {
-    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () =>
       new Response(
         JSON.stringify({
           valid: true,
           products: ['tax'],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ));
+      ) as unknown as Response) as unknown as typeof fetch);
 
     const cache = await validateLicense('single-product-key');
     expect(cache.products).toEqual(['tax']);

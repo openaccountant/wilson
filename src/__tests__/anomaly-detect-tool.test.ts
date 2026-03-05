@@ -86,7 +86,7 @@ describe('anomaly_detect tool', () => {
 
     initAnomalyDetectTool(db);
 
-    const raw = await anomalyDetectTool.func({ types: ['subscriptions'] });
+    const raw = await anomalyDetectTool.func({ types: ['unused_subscriptions'] });
     const result = JSON.parse(raw as string);
     if (result.data.unusedSubscriptions > 0) {
       expect(result.data.formatted).toContain('POTENTIALLY UNUSED SUBSCRIPTIONS');

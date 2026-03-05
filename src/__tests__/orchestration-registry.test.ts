@@ -60,7 +60,7 @@ describe('orchestration/registry', () => {
 
       const tool = chainToTool(chain);
       expect(tool.schema).toBeDefined();
-      const shape = tool.schema.shape;
+      const shape = (tool.schema as any).shape;
       expect(shape.input).toBeDefined();
     });
 
@@ -105,7 +105,7 @@ describe('orchestration/registry', () => {
 
       const tool = teamToTool(team);
       expect(tool.schema).toBeDefined();
-      const shape = tool.schema.shape;
+      const shape = (tool.schema as any).shape;
       expect(shape.query).toBeDefined();
     });
 

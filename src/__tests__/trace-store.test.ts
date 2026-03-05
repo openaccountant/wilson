@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
 import { traceStore, type LlmTrace } from '../utils/trace-store.js';
+import { createTestDb } from './helpers.js';
 
 function makeTrace(overrides: Partial<LlmTrace> = {}): LlmTrace {
   return {
@@ -213,5 +214,40 @@ describe('TraceStore edge cases', () => {
     traceStore.record(makeTrace({ status: 'error', error: 'Connection refused' }));
     const traces = traceStore.getTraces();
     expect(traces[0].error).toBe('Connection refused');
+  });
+});
+
+describe('TraceStore.setDatabase', () => {
+  test('persists traces to database', async () => {
+    const db = createTestDb();
+    traceStore.setDatabase(db);
+    traceStore.clear();
+    
+    traceStore.record(makeTrace({ id: 'trace-1', model: 'gpt-5.2', totalTokens: 100 }));
+    
+    await new Promise(r => setTimeout(r, 10));
+    
+    const rows = db.prepare('SELECT * FROM llm_traces').all() as Record<string, unknown>[];
+    const row = rows.find(r => r.trace_id === 'trace-1');
+    expect(row).toBeDefined();
+    expect(row!.trace_id).toBe('trace-1');
+    expect(row!.model).toBe('gpt-5.2');
+    expect(row!.total_tokens).toBe(100);
+  });
+
+  test('persists error traces to database', async () => {
+    const db = createTestDb();
+    traceStore.setDatabase(db);
+    traceStore.clear();
+    
+    traceStore.record(makeTrace({ status: 'error', error: 'timeout' }));
+    
+    await new Promise(r => setTimeout(r, 10));
+    
+    const rows = db.prepare('SELECT status, error FROM llm_traces').all() as { status: string; error: string | null }[];
+    const row = rows.find(r => r.status === 'error');
+    expect(row).toBeDefined();
+    expect(row!.status).toBe('error');
+    expect(row!.error).toBe('timeout');
   });
 });

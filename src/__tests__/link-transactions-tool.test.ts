@@ -22,8 +22,8 @@ describe('link_transactions tool', () => {
       name,
       account_type: 'liability',
       account_subtype: 'credit_card',
-      institution: opts?.institution ?? null,
-      account_number_last4: opts?.last4 ?? null,
+      institution: opts?.institution ?? undefined,
+      account_number_last4: opts?.last4 ?? undefined,
     });
   }
 

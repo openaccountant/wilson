@@ -75,7 +75,7 @@ export function mockCallLlm(responses: Partial<LlmResult>[]): () => Promise<LlmR
 /**
  * Create a mock ToolDef with a given name and function.
  */
-export function mockTool(name: string, fn: (args: Record<string, unknown>) => Promise<string>): ToolDef {
+export function mockTool(name: string, fn: (args: unknown) => Promise<string>): ToolDef {
   return {
     name,
     description: `Mock tool: ${name}`,

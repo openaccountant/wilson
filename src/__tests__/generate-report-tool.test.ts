@@ -25,7 +25,7 @@ describe('generate_report tool', () => {
     const filePath = makeTmpPath('.md');
     tmpFiles.push(filePath);
 
-    const raw = await generateReportTool.func({ filePath, month: '2026-02' });
+    const raw = await generateReportTool.func({ filePath, month: '2026-02', sections: ['all'] });
     const result = JSON.parse(raw as string);
     expect(result.data.message).toContain('Report saved');
     expect(existsSync(filePath)).toBe(true);
@@ -38,7 +38,7 @@ describe('generate_report tool', () => {
     const filePath = makeTmpPath('.md');
     tmpFiles.push(filePath);
 
-    await generateReportTool.func({ filePath, month: '2026-02' });
+    await generateReportTool.func({ filePath, month: '2026-02', sections: ['all'] });
     const content = readFileSync(filePath, 'utf-8');
     expect(content).toContain('February 2026');
   });
@@ -57,7 +57,7 @@ describe('generate_report tool', () => {
     const filePath = makeTmpPath('.md');
     tmpFiles.push(filePath);
 
-    await generateReportTool.func({ filePath, month: '2026-02' });
+    await generateReportTool.func({ filePath, month: '2026-02', sections: ['all'] });
     const content = readFileSync(filePath, 'utf-8');
     expect(content).toContain('## Summary');
     expect(content).toContain('## Spending by Category');
@@ -75,7 +75,7 @@ describe('generate_report tool', () => {
   });
 
   test('invalid path returns error', async () => {
-    const raw = await generateReportTool.func({ filePath: '/nonexistent/dir/report.md', month: '2026-02' });
+    const raw = await generateReportTool.func({ filePath: '/nonexistent/dir/report.md', month: '2026-02', sections: ['all'] });
     const result = JSON.parse(raw as string);
     expect(result.data.error).toContain('Failed to write report');
   });

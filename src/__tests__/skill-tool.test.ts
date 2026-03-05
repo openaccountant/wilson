@@ -2,8 +2,8 @@ import { describe, expect, test, beforeEach, mock } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
 
 // Mock the skills module before importing the skill tool
-const mockGetSkill = mock(() => Promise.resolve(null));
-const mockDiscoverSkills = mock(() => []);
+const mockGetSkill = mock(() => Promise.resolve(null as any));
+const mockDiscoverSkills = mock(() => [] as any[]);
 
 mock.module('../skills/index.js', () => ({
   getSkill: mockGetSkill,
