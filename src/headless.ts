@@ -29,6 +29,10 @@ import { initBalanceUpdateTool } from './tools/net-worth/balance-update.js';
 import { initNetWorthTool } from './tools/net-worth/net-worth.js';
 import { initMortgageManageTool } from './tools/net-worth/mortgage-manage.js';
 import { initLinkTransactionsTool } from './tools/net-worth/link-transactions.js';
+import { initCategoryManageTool } from './tools/categorize/category-manage.js';
+import { initGoalManageTool } from './tools/goals/goal-manage.js';
+import { initMemoryManageTool } from './tools/memory/memory-manage.js';
+import { initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
 import { initMcpClients, closeMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
 import { AgentRunnerController } from './controllers/index.js';
@@ -75,6 +79,12 @@ export async function runHeadless(query: string): Promise<void> {
     initNetWorthTool(db);
     initMortgageManageTool(db);
     initLinkTransactionsTool(db);
+    initCategoryManageTool(db);
+    initGoalManageTool(db);
+    initMemoryManageTool(db);
+    initGoalContext(db);
+    initMemoryContext(db);
+    initCustomPromptContext(db);
 
     await initMcpClients();
     await loadMcpTools();

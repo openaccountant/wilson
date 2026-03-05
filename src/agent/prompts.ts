@@ -8,6 +8,8 @@ import type { Database } from '../db/compat-sqlite.js';
 import { getBudgetVsActual } from '../db/queries.js';
 import { checkAlerts } from '../alerts/engine.js';
 import { getNetWorthSummary } from '../db/net-worth-queries.js';
+import { getActiveGoals } from '../db/goal-queries.js';
+import { getActiveMemories, pruneExpiredMemories } from '../db/memory-queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -394,6 +396,109 @@ export function buildNetWorthContext(): string | null {
     if (topLiabilities.length > 0) parts.push(`Top liabilities: ${topLiabilities.join(', ')}`);
 
     return `## Balance Sheet\n\n${parts.join('\n')}\n\nReference net worth and account balances when relevant to cash flow questions.`;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Goal Context
+// ============================================================================
+
+let goalDb: Database | null = null;
+
+export function initGoalContext(db: Database): void {
+  goalDb = db;
+}
+
+/**
+ * Build a goal summary for system prompt injection.
+ * Returns null if no active goals exist.
+ */
+export function buildGoalContext(): string | null {
+  if (!goalDb) return null;
+
+  try {
+    const goals = getActiveGoals(goalDb);
+    if (goals.length === 0) return null;
+
+    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+    const lines = goals.map((g) => {
+      const type = g.goal_type === 'financial' ? 'Financial' : 'Behavioral';
+      if (g.goal_type === 'financial' && g.target_amount) {
+        const pct = Math.round((g.current_amount / g.target_amount) * 100);
+        const target = g.target_date ? `, target: ${g.target_date}` : '';
+        return `${type}: "${g.title}" — ${fmt(g.current_amount)}/${fmt(g.target_amount)} (${pct}%${target})`;
+      }
+      const cat = g.category ? ` [${g.category}]` : '';
+      return `${type}: "${g.title}"${cat}`;
+    });
+
+    return `## Active Goals\n\n${lines.join('\n')}\n\nReference goals when giving financial advice. Proactively note progress or setbacks.`;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Memory Context
+// ============================================================================
+
+let memoryDb: Database | null = null;
+
+export function initMemoryContext(db: Database): void {
+  memoryDb = db;
+}
+
+/**
+ * Build a memory summary for system prompt injection.
+ * Prunes expired memories on each call.
+ * Returns null if no active memories exist.
+ */
+export function buildMemoryContext(): string | null {
+  if (!memoryDb) return null;
+
+  try {
+    pruneExpiredMemories(memoryDb);
+    const memories = getActiveMemories(memoryDb, undefined, 10);
+    if (memories.length === 0) return null;
+
+    const lines = memories.map((m) => {
+      return `- [${m.memory_type}] ${m.content}`;
+    });
+
+    return `## Memory\n\n${lines.join('\n')}\n\nUse these memories to personalize advice. Add new memories when you discover patterns or give important advice.`;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Custom Prompt Context
+// ============================================================================
+
+let customPromptDb: Database | null = null;
+
+export function initCustomPromptContext(db: Database): void {
+  customPromptDb = db;
+}
+
+/**
+ * Build custom prompt context for system prompt injection.
+ * Reads the 'custom_prompt' key from dashboard_config.
+ * Returns null if no custom prompt is set.
+ */
+export function buildCustomPromptContext(): string | null {
+  if (!customPromptDb) return null;
+
+  try {
+    const row = customPromptDb.prepare(
+      `SELECT value FROM dashboard_config WHERE key = 'custom_prompt'`
+    ).get() as { value: string } | undefined;
+    if (!row?.value) return null;
+
+    return `## Custom Instructions\n\n${row.value}`;
   } catch {
     return null;
   }

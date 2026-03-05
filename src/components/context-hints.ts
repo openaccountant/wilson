@@ -9,6 +9,8 @@ import {
   getMonthlySavingsData,
   getLastImportDate,
 } from '../db/queries.js';
+import { getActiveGoals } from '../db/goal-queries.js';
+import { getActiveMemories } from '../db/memory-queries.js';
 import { getPlaidItems } from '../plaid/store.js';
 import { theme } from '../theme.js';
 
@@ -93,6 +95,59 @@ function buildSavingsHint(db: Database): string[] {
     theme.accent(`${rate}%`) +
     theme.muted(' of income last month'),
   ];
+}
+
+function buildGoalProgressHints(db: Database): string[] {
+  const hints: string[] = [];
+  try {
+    const goals = getActiveGoals(db);
+    for (const goal of goals) {
+      if (goal.goal_type === 'financial' && goal.target_amount && goal.target_amount > 0) {
+        const pct = Math.round((goal.current_amount / goal.target_amount) * 100);
+        if (pct >= 80) {
+          hints.push(
+            theme.muted('Almost there: ') +
+            theme.accent(`${goal.title}`) +
+            theme.muted(` is ${pct}% complete`)
+          );
+        }
+      }
+      if (goal.goal_type === 'behavioral' && goal.category) {
+        const now = new Date();
+        const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+        const summary = getSpendingSummary(db, startDate, endDate);
+        const catSpending = summary.find(r => r.category?.toLowerCase() === goal.category?.toLowerCase());
+        if (catSpending) {
+          const spent = Math.abs(catSpending.total);
+          if (goal.target_amount && spent > goal.target_amount) {
+            hints.push(
+              theme.accent(`${goal.category}`) +
+              theme.muted(` spending $${Math.round(spent)} exceeds goal target $${goal.target_amount}`)
+            );
+          }
+        }
+      }
+    }
+  } catch {
+    // goals table may not exist yet
+  }
+  return hints;
+}
+
+function buildPendingAdviceHints(db: Database): string[] {
+  try {
+    const adviceMemories = getActiveMemories(db, 'advice', 5);
+    if (adviceMemories.length === 0) return [];
+    const oldest = adviceMemories[adviceMemories.length - 1];
+    const daysSince = Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSince >= 7) {
+      return [theme.muted('You have ') + theme.accent('unreviewed financial advice') + theme.muted(' from past sessions')];
+    }
+  } catch {
+    // memories table may not exist yet
+  }
+  return [];
 }
 
 // ── Hint collection ──────────────────────────────────────────────────────────
@@ -186,6 +241,12 @@ export function collectHints(db: Database): string[] {
 
   // 9. Savings rate
   hints.push(...buildSavingsHint(db));
+
+  // 10. Goal progress
+  hints.push(...buildGoalProgressHints(db));
+
+  // 11. Pending advice
+  hints.push(...buildPendingAdviceHints(db));
 
   // ── Fallback ──────────────────────────────────────────────────────────────
 

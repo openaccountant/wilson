@@ -9,6 +9,10 @@ import {
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
   apiInteractions, apiInteractionDetail, apiRunInteractions,
   apiAnnotateInteraction, apiAnnotationStats,
+  apiDailySpending, apiStreak, apiWeeklySummary, apiBudgetCountdown,
+  apiGoals, apiGoalSnapshots,
+  apiMemories, apiAddMemory, apiDeactivateMemory,
+  apiGetCustomPrompt, apiSetCustomPrompt,
 } from './api.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
@@ -42,8 +46,18 @@ function canManageUsers(role: Role): boolean {
  * Start the dashboard HTTP server.
  * Supports optional auth/RBAC and multi-profile DB switching.
  */
-export function startDashboardServer(db: Database, preferredPort?: number) {
+export async function startDashboardServer(db: Database, preferredPort?: number) {
   const port = preferredPort ?? DEFAULT_PORT;
+
+  // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
+  let reactDashboardHtml: string | null = null;
+  try {
+    reactDashboardHtml = await Bun.file(
+      new URL('./ui/dist/index.html', import.meta.url)
+    ).text();
+  } catch {
+    // React build not available — fall back to legacy getDashboardHtml()
+  }
 
   // Set up initial DB in manager and chat session
   setInitialProfile(getCurrentProfileName(), db);
@@ -102,7 +116,8 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
-          return new Response(getDashboardHtml(port), {
+          const html = reactDashboardHtml ?? getDashboardHtml(port);
+          return new Response(html, {
             headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
           });
         }
@@ -228,6 +243,18 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
         if (path === '/api/alerts') {
           return Response.json(apiAlerts(activeDb), { headers });
         }
+        if (path === '/api/daily-spending') {
+          return Response.json(apiDailySpending(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/streak') {
+          return Response.json(apiStreak(activeDb), { headers });
+        }
+        if (path === '/api/weekly-summary') {
+          return Response.json(apiWeeklySummary(activeDb), { headers });
+        }
+        if (path === '/api/budget-countdown') {
+          return Response.json(apiBudgetCountdown(activeDb, url.searchParams), { headers });
+        }
         if (path === '/api/transactions') {
           return Response.json(apiTransactions(activeDb, url.searchParams), { headers });
         }
@@ -249,6 +276,51 @@ export function startDashboardServer(db: Database, preferredPort?: number) {
             }
             return Response.json(apiDeleteTransaction(activeDb, id), { headers });
           }
+        }
+
+        // ── Goals ──────────────────────────────────────────────────
+
+        if (path === '/api/goals') {
+          return Response.json(apiGoals(activeDb), { headers });
+        }
+        const goalSnapshotMatch = path.match(/^\/api\/goals\/(\d+)\/snapshots$/);
+        if (goalSnapshotMatch) {
+          const goalId = parseInt(goalSnapshotMatch[1], 10);
+          return Response.json(apiGoalSnapshots(activeDb, goalId, url.searchParams), { headers });
+        }
+
+        // ── Memories ─────────────────────────────────────────────────
+
+        if (path === '/api/memories' && req.method === 'GET') {
+          return Response.json(apiMemories(activeDb), { headers });
+        }
+        if (path === '/api/memories' && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as Record<string, unknown>;
+          return Response.json(apiAddMemory(activeDb, body as { memoryType?: string; content?: string; category?: string }), { headers });
+        }
+        const memoryDeleteMatch = path.match(/^\/api\/memories\/(\d+)$/);
+        if (memoryDeleteMatch && req.method === 'DELETE') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const id = parseInt(memoryDeleteMatch[1], 10);
+          return Response.json(apiDeactivateMemory(activeDb, id), { headers });
+        }
+
+        // ── Settings ────────────────────────────────────────────────
+
+        if (path === '/api/settings/custom-prompt' && req.method === 'GET') {
+          return Response.json(apiGetCustomPrompt(activeDb), { headers });
+        }
+        if (path === '/api/settings/custom-prompt' && req.method === 'PUT') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as { prompt?: string };
+          return Response.json(apiSetCustomPrompt(activeDb, body), { headers });
         }
 
         // ── Accounts / Net Worth ────────────────────────────────────

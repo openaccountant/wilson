@@ -1,4 +1,5 @@
 import { CATEGORIES, CATEGORY_DESCRIPTIONS } from './categories.js';
+import type { CategoryRow } from '../../db/queries.js';
 
 export interface CategorizationInput {
   id: number;
@@ -8,15 +9,47 @@ export interface CategorizationInput {
 }
 
 /**
+ * Build a hierarchical category list from DB categories for the LLM prompt.
+ */
+function buildCategoryListFromDb(dbCategories: CategoryRow[]): string {
+  const roots = dbCategories.filter(c => c.parent_id === null);
+  const childrenMap = new Map<number, CategoryRow[]>();
+  for (const c of dbCategories) {
+    if (c.parent_id !== null) {
+      const siblings = childrenMap.get(c.parent_id) ?? [];
+      siblings.push(c);
+      childrenMap.set(c.parent_id, siblings);
+    }
+  }
+
+  const lines: string[] = [];
+  for (const root of roots) {
+    lines.push(`  - ${root.name}: ${root.description ?? ''}`);
+    const children = childrenMap.get(root.id);
+    if (children) {
+      for (const child of children) {
+        lines.push(`    - ${child.name}: ${child.description ?? ''}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
  * Build a prompt for batch transaction categorization.
  *
  * The prompt instructs the LLM to categorize each transaction into one of our
  * standard categories, returning structured JSON with confidence scores.
+ *
+ * When dbCategories is provided, renders the hierarchical list from the DB.
+ * Otherwise falls back to the hardcoded CATEGORIES list.
  */
-export function buildCategorizationPrompt(transactions: CategorizationInput[]): string {
-  const categoryList = CATEGORIES.map(
-    (cat) => `  - ${cat}: ${CATEGORY_DESCRIPTIONS[cat] ?? ''}`
-  ).join('\n');
+export function buildCategorizationPrompt(transactions: CategorizationInput[], dbCategories?: CategoryRow[]): string {
+  const categoryList = dbCategories && dbCategories.length > 0
+    ? buildCategoryListFromDb(dbCategories)
+    : CATEGORIES.map(
+        (cat) => `  - ${cat}: ${CATEGORY_DESCRIPTIONS[cat] ?? ''}`
+      ).join('\n');
 
   const transactionList = transactions
     .map(

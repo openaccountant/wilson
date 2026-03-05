@@ -246,6 +246,7 @@ export function getDashboardHtml(port: number): string {
   <button class="tab-btn active" data-tab="overview">Overview</button>
   <button class="tab-btn" data-tab="transactions">Transactions</button>
   <button class="tab-btn" data-tab="accounts">Accounts</button>
+  <button class="tab-btn" data-tab="goals">Goals</button>
   <button class="tab-btn" data-tab="chat">Chat</button>
   <button class="tab-btn" data-tab="traces">Traces</button>
   <button class="tab-btn" data-tab="logs">Logs</button>
@@ -287,6 +288,13 @@ export function getDashboardHtml(port: number): string {
   </div>
   <div style="flex:1;overflow-y:auto;min-height:0;padding:0 24px 16px;">
     <div class="card full-width"><h3>Accounts</h3><div id="accountsTable"><p class="loading">Loading...</p></div></div>
+  </div>
+</div>
+
+<div class="tab-panel" id="tab-goals">
+  <div style="padding:16px 24px;flex:1;overflow-y:auto;min-height:0;">
+    <h3 style="margin:0 0 16px;font-size:13px;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;">Active Goals</h3>
+    <div id="goalsContent"><p class="loading">Loading...</p></div>
   </div>
 </div>
 
@@ -622,7 +630,7 @@ export function getDashboardHtml(port: number): string {
   });
 
   // ── Hash routing ────────────────────────────────────────────────────────
-  var TABS = ['overview','transactions','accounts','chat','traces','logs','training'];
+  var TABS = ['overview','transactions','accounts','goals','chat','traces','logs','training'];
   var tabBtns = document.querySelectorAll('.tab-btn');
 
   function activateTab(tabName) {
@@ -642,6 +650,7 @@ export function getDashboardHtml(port: number): string {
     if (tabName === 'overview') loadOverview();
     if (tabName === 'transactions') loadTransactions();
     if (tabName === 'accounts') loadAccountsTab();
+    if (tabName === 'goals') loadGoals();
     if (tabName === 'chat') loadSessions();
     if (tabName === 'traces') loadTraces();
     if (tabName === 'logs') loadLogs();
@@ -857,6 +866,90 @@ export function getDashboardHtml(port: number): string {
   });
 
   // ── Accounts tab ────────────────────────────────────────────────────────
+  async function loadGoals() {
+    var el = document.getElementById('goalsContent');
+    try {
+      var goals = await (await authFetch(BASE+'/api/goals')).json();
+      el.replaceChildren();
+      if (!goals.length) {
+        var emptyP = document.createElement('p');
+        emptyP.style.color = '#8b949e';
+        emptyP.textContent = 'No active goals. Use the CLI to set a goal: "set a goal to save $10,000 for an emergency fund"';
+        el.appendChild(emptyP);
+        return;
+      }
+      goals.forEach(function(g) {
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.style.marginBottom = '12px';
+        var pct = g.target_amount ? Math.min(Math.round((g.current_amount / g.target_amount) * 100), 100) : 0;
+        var barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#eab308' : '#ef4444';
+
+        // Header row
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+        var titleDiv = document.createElement('div');
+        var titleStrong = document.createElement('strong');
+        titleStrong.textContent = g.title;
+        titleDiv.appendChild(titleStrong);
+        var typeSpan = document.createElement('span');
+        typeSpan.style.cssText = 'color:#8b949e;font-size:12px;margin-left:6px;';
+        typeSpan.textContent = '(' + (g.goal_type === 'financial' ? 'Financial' : 'Behavioral') + ')';
+        titleDiv.appendChild(typeSpan);
+        header.appendChild(titleDiv);
+        var badge = document.createElement('span');
+        badge.style.cssText = 'display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;';
+        badge.style.background = g.status === 'active' ? '#22c55e22' : g.status === 'completed' ? '#3b82f622' : '#8b949e22';
+        badge.style.color = g.status === 'active' ? '#22c55e' : g.status === 'completed' ? '#3b82f6' : '#8b949e';
+        badge.textContent = g.status;
+        header.appendChild(badge);
+        card.appendChild(header);
+
+        // Progress bar for financial goals
+        if (g.goal_type === 'financial' && g.target_amount) {
+          var progressLabel = document.createElement('div');
+          progressLabel.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;color:#8b949e;margin-bottom:4px;';
+          var amtSpan = document.createElement('span');
+          amtSpan.textContent = '$' + fmtN(g.current_amount) + ' / $' + fmtN(g.target_amount);
+          progressLabel.appendChild(amtSpan);
+          var pctSpan = document.createElement('span');
+          pctSpan.textContent = pct + '%';
+          progressLabel.appendChild(pctSpan);
+          card.appendChild(progressLabel);
+
+          var barOuter = document.createElement('div');
+          barOuter.style.cssText = 'background:#21262d;border-radius:4px;height:8px;overflow:hidden;';
+          var barInner = document.createElement('div');
+          barInner.style.cssText = 'height:100%;border-radius:4px;transition:width 0.3s;';
+          barInner.style.width = pct + '%';
+          barInner.style.background = barColor;
+          barOuter.appendChild(barInner);
+          card.appendChild(barOuter);
+        }
+
+        if (g.target_date) {
+          var dateDiv = document.createElement('div');
+          dateDiv.style.cssText = 'font-size:12px;color:#8b949e;margin-top:6px;';
+          dateDiv.textContent = 'Target: ' + g.target_date;
+          card.appendChild(dateDiv);
+        }
+        if (g.category) {
+          var catDiv = document.createElement('div');
+          catDiv.style.cssText = 'font-size:12px;color:#8b949e;margin-top:2px;';
+          catDiv.textContent = 'Category: ' + g.category;
+          card.appendChild(catDiv);
+        }
+        el.appendChild(card);
+      });
+    } catch(e) {
+      el.replaceChildren();
+      var errP = document.createElement('p');
+      errP.style.color = '#f85149';
+      errP.textContent = 'Failed to load goals';
+      el.appendChild(errP);
+    }
+  }
+
   async function loadAccountsTab() {
     try {
       var nw = await (await authFetch(BASE+'/api/net-worth')).json();

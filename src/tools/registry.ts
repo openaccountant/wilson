@@ -291,6 +291,76 @@ Compare profit & loss between two periods to identify changes.
 - Identifies new and dropped categories
 `.trim();
 
+const CATEGORY_MANAGE_DESCRIPTION = `
+Manage spending categories — add custom categories, delete custom categories, or list all.
+
+## When to Use
+
+- When the user wants to add a custom spending category or sub-category
+- When the user says "add a category", "create a sub-category", "list categories", "delete category"
+- When the user wants to see the category hierarchy
+
+## When NOT to Use
+
+- When the user wants to categorize transactions (use categorize instead)
+- When the user wants to set a budget (use budget_set instead)
+
+## Usage Notes
+
+- 18 system categories are pre-seeded and cannot be deleted
+- Custom categories can be nested under any existing category
+- Sub-category spending rolls up into parent budgets
+- Actions: add (name, optional parentName, description), delete (categoryId), list
+`.trim();
+
+const GOAL_MANAGE_DESCRIPTION = `
+Manage financial and behavioral goals — add, update, track progress, list, or change status.
+
+## When to Use
+
+- When the user wants to set a financial goal ("save $10K for emergency fund by December")
+- When the user wants to set a behavioral goal ("reduce dining to $200/month")
+- When the user says "update my goal", "how are my goals", "I reached my goal"
+- When tracking progress toward savings targets, debt payoff, or spending reduction
+
+## When NOT to Use
+
+- When the user wants to set a monthly budget (use budget_set instead)
+- When the user is asking about spending or transactions without goal context
+
+## Usage Notes
+
+- Financial goals have a target_amount and track current_amount progress
+- Behavioral goals track spending patterns relative to a category target
+- Goals can be linked to accounts (e.g., savings account for emergency fund)
+- Status transitions: active → completed/paused/abandoned
+- Progress updates automatically record snapshots for trend tracking
+`.trim();
+
+const MEMORY_MANAGE_DESCRIPTION = `
+Store and retrieve memories — context about the user, insights discovered, and advice given.
+
+## When to Use
+
+- When the user shares important context ("I'm self-employed", "my income varies monthly")
+- When you discover a spending pattern or insight worth remembering
+- When you give important financial advice that should be referenced later
+- When the user asks "what do you know about me" or "what have you told me before"
+- When the user says "remember that..." or "keep in mind that..."
+
+## When NOT to Use
+
+- For transient queries or one-off lookups
+- When the information is already captured in the database (transactions, budgets, etc.)
+
+## Usage Notes
+
+- Memory types: context (user facts), insight (discovered patterns), advice (recommendations given)
+- Memories are injected into the system prompt so the agent is always aware of them
+- Expired memories are automatically pruned
+- Use deactivate to remove memories that are no longer relevant
+`.trim();
+
 const RULE_MANAGE_DESCRIPTION = `
 Manage categorization rules for automatic transaction classification.
 
@@ -710,6 +780,26 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       tool: catMod.categorizeTool,
       description: CATEGORIZE_DESCRIPTION,
     });
+  }
+
+  const catManageMod = safeRequire<{ categoryManageTool: ToolDef }>('./categorize/category-manage.js');
+  if (catManageMod?.categoryManageTool) {
+    tools.push({
+      name: 'category_manage',
+      tool: catManageMod.categoryManageTool,
+      description: CATEGORY_MANAGE_DESCRIPTION,
+    });
+  }
+
+  // Goals & Memory tools (always available)
+  const goalMod = safeRequire<{ goalManageTool: ToolDef }>('./goals/goal-manage.js');
+  if (goalMod?.goalManageTool) {
+    tools.push({ name: 'goal_manage', tool: goalMod.goalManageTool, description: GOAL_MANAGE_DESCRIPTION });
+  }
+
+  const memoryMod = safeRequire<{ memoryManageTool: ToolDef }>('./memory/memory-manage.js');
+  if (memoryMod?.memoryManageTool) {
+    tools.push({ name: 'memory_manage', tool: memoryMod.memoryManageTool, description: MEMORY_MANAGE_DESCRIPTION });
   }
 
   const txnMod = safeRequire<{ transactionSearchTool: ToolDef }>('./query/transaction-search.js');

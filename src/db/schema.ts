@@ -271,6 +271,100 @@ CREATE INDEX IF NOT EXISTS idx_annotations_pair_id ON interaction_annotations(pa
 CREATE INDEX IF NOT EXISTS idx_annotations_rating ON interaction_annotations(rating);
 `;
 
+// ── Categories Table ─────────────────────────────────────────────────────────
+
+export const CATEGORIES_TABLE = `
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  parent_id INTEGER,
+  description TEXT,
+  is_system INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+`;
+
+export const CATEGORIES_SEED = `
+INSERT OR IGNORE INTO categories (name, slug, is_system, sort_order, description) VALUES
+  ('Dining', 'dining', 1, 1, 'Restaurants, fast food, coffee shops, bars, takeout'),
+  ('Groceries', 'groceries', 1, 2, 'Supermarkets, grocery stores, farmers markets, food delivery'),
+  ('Transport', 'transport', 1, 3, 'Gas, ride-share, parking, tolls, public transit, car maintenance'),
+  ('Shopping', 'shopping', 1, 4, 'Retail, clothing, electronics, household items, online shopping'),
+  ('Subscriptions', 'subscriptions', 1, 5, 'Streaming services, software, memberships, recurring digital services'),
+  ('Utilities', 'utilities', 1, 6, 'Electric, gas, water, internet, phone, trash'),
+  ('Health', 'health', 1, 7, 'Doctor visits, pharmacy, dental, vision, gym, fitness'),
+  ('Entertainment', 'entertainment', 1, 8, 'Movies, concerts, games, hobbies, sports events'),
+  ('Travel', 'travel', 1, 9, 'Flights, hotels, rental cars, vacation expenses'),
+  ('Education', 'education', 1, 10, 'Tuition, books, courses, training, school supplies'),
+  ('Home', 'home', 1, 11, 'Rent, mortgage, repairs, furniture, home improvement'),
+  ('Personal Care', 'personal-care', 1, 12, 'Haircuts, salon, skincare, spa'),
+  ('Insurance', 'insurance', 1, 13, 'Health, auto, home, life, renters insurance premiums'),
+  ('Gifts', 'gifts', 1, 14, 'Gifts for others, donations, charitable contributions'),
+  ('Fees & Interest', 'fees-interest', 1, 15, 'Bank fees, ATM fees, credit card interest, late fees'),
+  ('Income', 'income', 1, 16, 'Salary, freelance income, refunds, reimbursements'),
+  ('Transfer', 'transfer', 1, 17, 'Account transfers, Venmo/Zelle/PayPal between own accounts'),
+  ('Other', 'other', 1, 18, 'Transactions that do not fit any other category');
+`;
+
+// ── Goals & Memory Tables ────────────────────────────────────────────────────
+
+export const GOALS_TABLE = `
+CREATE TABLE IF NOT EXISTS goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  goal_type TEXT NOT NULL CHECK(goal_type IN ('financial', 'behavioral')),
+  target_amount REAL,
+  current_amount REAL DEFAULT 0,
+  target_date TEXT,
+  category TEXT,
+  account_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused', 'abandoned')),
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL
+);
+`;
+
+export const GOAL_SNAPSHOTS_TABLE = `
+CREATE TABLE IF NOT EXISTS goal_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  snapshot_date TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);
+`;
+
+export const MEMORIES_TABLE = `
+CREATE TABLE IF NOT EXISTS memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  memory_type TEXT NOT NULL CHECK(memory_type IN ('context', 'insight', 'advice')),
+  content TEXT NOT NULL,
+  category TEXT,
+  source_query TEXT,
+  expires_at TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+`;
+
+export const GOALS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+CREATE INDEX IF NOT EXISTS idx_goals_type ON goals(goal_type);
+CREATE INDEX IF NOT EXISTS idx_goal_snapshots_goal ON goal_snapshots(goal_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_goal_snapshots_goal_date ON goal_snapshots(goal_id, snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memories_active ON memories(is_active);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

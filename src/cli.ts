@@ -54,7 +54,7 @@ import { initFireflyTool } from './tools/import/firefly.js';
 import { initExportTool } from './tools/export/export-transactions.js';
 import { initBudgetSetTool } from './tools/budget/budget-set.js';
 import { initBudgetCheckTool } from './tools/budget/budget-check.js';
-import { setBudget, clearBudget, getBudgetVsActual } from './db/queries.js';
+import { setBudget, clearBudget, getBudgetVsActual, getCategoryTree, getCategoryByName, addCategory, deleteCategory, getCategories, type CategoryTreeNode } from './db/queries.js';
 import { initBudgetPrompt, initDataContext } from './agent/prompts.js';
 import { initPlaidSyncTool } from './tools/import/plaid-sync.js';
 import { initPlaidBalancesTool } from './tools/import/plaid-balances.js';
@@ -70,7 +70,10 @@ import { initBalanceUpdateTool } from './tools/net-worth/balance-update.js';
 import { initNetWorthTool } from './tools/net-worth/net-worth.js';
 import { initMortgageManageTool } from './tools/net-worth/mortgage-manage.js';
 import { initLinkTransactionsTool } from './tools/net-worth/link-transactions.js';
-import { initAlertPrompt, initNetWorthContext } from './agent/prompts.js';
+import { initCategoryManageTool } from './tools/categorize/category-manage.js';
+import { initGoalManageTool } from './tools/goals/goal-manage.js';
+import { initMemoryManageTool } from './tools/memory/memory-manage.js';
+import { initAlertPrompt, initNetWorthContext, initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
 import { getPlaidItems, removePlaidItem } from './plaid/store.js';
 import { startPlaidLinkServer } from './plaid/link-server.js';
 import { initMcpClients } from './mcp/client.js';
@@ -289,8 +292,14 @@ export async function runCli() {
   initNetWorthTool(db);
   initMortgageManageTool(db);
   initLinkTransactionsTool(db);
+  initCategoryManageTool(db);
+  initGoalManageTool(db);
+  initMemoryManageTool(db);
   initAlertPrompt(db);
   initNetWorthContext(db);
+  initGoalContext(db);
+  initMemoryContext(db);
+  initCustomPromptContext(db);
 
   // Initialize MCP client connections (non-blocking — failures are logged, not fatal)
   await initMcpClients();
@@ -433,6 +442,7 @@ export async function runCli() {
         '  /connect      — Link a bank account via Plaid (Pro)',
         '  /sync         — Pull latest transactions (Pro)',
         '  /budget       — View budget vs actual',
+        '  /category     — Manage spending categories',
         '  /dashboard    — Open browser dashboard',
         '  /upgrade      — Upgrade to Pro',
         '  /license <key> — Activate a license key',
@@ -672,6 +682,66 @@ export async function runCli() {
           await inputHistory.updateAgentResponse(result.answer);
         }
         refreshError();
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/category' || query.startsWith('/category ')) {
+      chatLog.addQuery(query);
+      const subcommand = query.slice(9).trim();
+
+      if (subcommand.startsWith('add ')) {
+        const rest = subcommand.slice(4).trim();
+        // Parse: /category add <name> under <parent>
+        const underMatch = rest.match(/^(.+?)\s+under\s+(.+)$/i);
+        if (underMatch) {
+          const [, childName, parentName] = underMatch;
+          const parent = getCategoryByName(db, parentName.trim());
+          if (!parent) {
+            chatLog.finalizeAnswer(`Parent category "${parentName.trim()}" not found.`);
+          } else {
+            const id = addCategory(db, childName.trim(), parent.id);
+            chatLog.finalizeAnswer(`Created sub-category **${childName.trim()}** under **${parent.name}** (id: ${id})`);
+          }
+        } else if (rest) {
+          const id = addCategory(db, rest);
+          chatLog.finalizeAnswer(`Created category **${rest}** (id: ${id})`);
+        } else {
+          chatLog.finalizeAnswer('Usage: `/category add <name>` or `/category add <name> under <parent>`');
+        }
+      } else if (subcommand.startsWith('delete ')) {
+        const idStr = subcommand.slice(7).trim();
+        const id = parseInt(idStr, 10);
+        if (isNaN(id)) {
+          chatLog.finalizeAnswer('Usage: `/category delete <id>`');
+        } else {
+          const result = deleteCategory(db, id);
+          chatLog.finalizeAnswer(result.ok
+            ? `Category #${id} deleted.`
+            : `Cannot delete: ${result.error}`);
+        }
+      } else {
+        // List categories as tree
+        const tree = getCategoryTree(db);
+        if (tree.length === 0) {
+          chatLog.finalizeAnswer('No categories found.');
+        } else {
+          const formatCatTree = (nodes: CategoryTreeNode[], indent: number = 0): string => {
+            const lines: string[] = [];
+            for (const node of nodes) {
+              const prefix = '  '.repeat(indent);
+              const sys = node.is_system ? '' : ' *(custom)*';
+              lines.push(`${prefix}- **${node.name}**${sys}`);
+              if (node.children.length > 0) {
+                lines.push(formatCatTree(node.children, indent + 1));
+              }
+            }
+            return lines.join('\n');
+          };
+          const total = getCategories(db).length;
+          chatLog.finalizeAnswer(`**Categories** (${total} total)\n\n${formatCatTree(tree)}`);
+        }
       }
       tui.requestRender();
       return;
@@ -1190,7 +1260,7 @@ export async function runCli() {
 
   // Auto-start dashboard server
   const { startDashboardServer, stopDashboardServer } = await import('./dashboard/server.js');
-  const { server: dashServer, url: dashUrl } = startDashboardServer(db);
+  const { server: dashServer, url: dashUrl } = await startDashboardServer(db);
   (globalThis as any).__oaDashboard = dashServer;
   intro.setDashboard(dashUrl);
 

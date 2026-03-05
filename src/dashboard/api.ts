@@ -19,7 +19,15 @@ import {
   getNetWorthTrend,
   getAccountTransactionSummary,
 } from '../db/net-worth-queries.js';
+import {
+  getDailySpending,
+  getStreak,
+  getWeeklySummary,
+  getBudgetCountdown,
+} from '../db/daily-queries.js';
 import { checkAlerts } from '../alerts/engine.js';
+import { getActiveGoals, getGoalSnapshots, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
+import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 
@@ -223,6 +231,25 @@ export function apiSpendingByInstitution(db: Database, params: URLSearchParams) 
     ORDER BY total ASC
   `).all(sqlParams) as { institution: string; total: number; count: number }[];
   return rows;
+}
+
+// ── Goals ────────────────────────────────────────────────────────────────────
+
+export function apiGoals(db: Database) {
+  try {
+    return getActiveGoals(db);
+  } catch {
+    return [];
+  }
+}
+
+export function apiGoalSnapshots(db: Database, goalId: number, params: URLSearchParams) {
+  try {
+    const months = parseInt(params.get('months') ?? '12', 10);
+    return getGoalSnapshots(db, goalId, months);
+  } catch {
+    return [];
+  }
 }
 
 // ── Accounts / Net Worth ────────────────────────────────────────────────────
@@ -472,6 +499,80 @@ export function apiAnnotateInteraction(db: Database, id: number, annotation: {
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ── Daily / Gamification ─────────────────────────────────────────────────────
+
+export function apiDailySpending(db: Database, params: URLSearchParams) {
+  const startDate = params.get('startDate');
+  const endDate = params.get('endDate');
+  if (!startDate || !endDate) {
+    return { error: 'startDate and endDate required' };
+  }
+  return getDailySpending(db, startDate, endDate);
+}
+
+export function apiStreak(db: Database) {
+  return getStreak(db);
+}
+
+export function apiWeeklySummary(db: Database) {
+  return getWeeklySummary(db);
+}
+
+export function apiBudgetCountdown(db: Database, params: URLSearchParams) {
+  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
+  return getBudgetCountdown(db, month);
+}
+
+// ── Memories ─────────────────────────────────────────────────────────────────
+
+export function apiMemories(db: Database) {
+  try {
+    return getActiveMemories(db);
+  } catch {
+    return [];
+  }
+}
+
+export function apiAddMemory(db: Database, body: { memoryType?: string; content?: string; category?: string }) {
+  if (!body.memoryType || !body.content) {
+    throw new Error('memoryType and content required');
+  }
+  const insert: MemoryInsert = {
+    memoryType: body.memoryType as MemoryInsert['memoryType'],
+    content: body.content,
+    category: body.category,
+  };
+  const id = addMemory(db, insert);
+  return { success: true, id };
+}
+
+export function apiDeactivateMemory(db: Database, id: number) {
+  const success = deactivateMemory(db, id);
+  return { success, id };
+}
+
+// ── Settings (Custom Prompt) ─────────────────────────────────────────────────
+
+export function apiGetCustomPrompt(db: Database) {
+  try {
+    const row = db.prepare(
+      `SELECT value FROM dashboard_config WHERE key = 'custom_prompt'`
+    ).get() as { value: string } | undefined;
+    return { prompt: row?.value ?? '' };
+  } catch {
+    return { prompt: '' };
+  }
+}
+
+export function apiSetCustomPrompt(db: Database, body: { prompt?: string }) {
+  const prompt = body.prompt ?? '';
+  db.prepare(`
+    INSERT INTO dashboard_config (key, value) VALUES ('custom_prompt', @prompt)
+    ON CONFLICT(key) DO UPDATE SET value = @prompt
+  `).run({ prompt });
+  return { success: true };
 }
 
 export function apiAnnotationStats(db: Database) {

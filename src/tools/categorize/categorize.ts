@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
-import { getUncategorizedTransactions, updateCategory, matchRule, type TransactionRow } from '../../db/queries.js';
+import { getUncategorizedTransactions, updateCategory, matchRule, getCategories, resolveCategory, type TransactionRow, type CategoryRow } from '../../db/queries.js';
 import { buildCategorizationPrompt, type CategorizationInput } from './prompt.js';
 import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
@@ -57,6 +57,15 @@ export const categorizeTool = defineTool({
   func: async ({ limit }) => {
     const database = getDb();
 
+    // Load dynamic categories from DB (with fallback)
+    let dbCategories: CategoryRow[] | undefined;
+    try {
+      dbCategories = getCategories(database);
+      if (dbCategories.length === 0) dbCategories = undefined;
+    } catch {
+      dbCategories = undefined;
+    }
+
     // 1. Get uncategorized transactions
     const uncategorized = getUncategorizedTransactions(database, limit);
 
@@ -102,7 +111,7 @@ export const categorizeTool = defineTool({
         date: t.date,
       }));
 
-      const prompt = buildCategorizationPrompt(inputs);
+      const prompt = buildCategorizationPrompt(inputs, dbCategories);
 
       try {
         // 3. Call LLM with structured output
@@ -127,8 +136,13 @@ export const categorizeTool = defineTool({
 
         // 4. Update categories in database
         for (const cat of categorizations.transactions) {
-          // Validate category is in our list
-          const validCategory = CATEGORIES.includes(cat.category) ? cat.category : 'Other';
+          // Validate category: try DB lookup first, fall back to hardcoded list, then 'Other'
+          let validCategory: string;
+          if (dbCategories) {
+            validCategory = resolveCategory(database, cat.category) ?? 'Other';
+          } else {
+            validCategory = CATEGORIES.includes(cat.category) ? cat.category : 'Other';
+          }
           const confidence = Math.max(0, Math.min(1, cat.confidence));
 
           updateCategory(database, cat.id, validCategory, confidence);

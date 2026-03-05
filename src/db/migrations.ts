@@ -21,6 +21,12 @@ import {
   LLM_TOOL_RESULTS_TABLE,
   INTERACTION_ANNOTATIONS_TABLE,
   INTERACTION_INDEXES,
+  CATEGORIES_TABLE,
+  CATEGORIES_SEED,
+  GOALS_TABLE,
+  GOAL_SNAPSHOTS_TABLE,
+  MEMORIES_TABLE,
+  GOALS_INDEXES,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -49,6 +55,10 @@ export const MIGRATIONS: Migration[] = [
   { version: 13, name: 'create_dashboard_auth', up: DASHBOARD_USERS_TABLE + DASHBOARD_SESSIONS_TABLE + DASHBOARD_CONFIG_TABLE },
   { version: 14, name: 'create_interaction_tables', up: LLM_INTERACTIONS_TABLE + LLM_TOOL_RESULTS_TABLE + INTERACTION_ANNOTATIONS_TABLE },
   { version: 15, name: 'create_interaction_indexes', up: INTERACTION_INDEXES },
+  { version: 16, name: 'create_categories', up: CATEGORIES_TABLE + CATEGORIES_SEED },
+  { version: 17, name: 'create_goals', up: GOALS_TABLE + GOAL_SNAPSHOTS_TABLE },
+  { version: 18, name: 'create_memories', up: MEMORIES_TABLE },
+  { version: 19, name: 'create_goals_indexes', up: GOALS_INDEXES },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

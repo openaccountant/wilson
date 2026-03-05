@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -9,13 +10,12 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "isolatedModules": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "baseUrl": "."
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/dashboard/ui"]
+  "include": ["src"]
 }

@@ -17,7 +17,7 @@ export async function runStandalone(port?: number): Promise<void> {
   logger.setDatabase(db);
   traceStore.setDatabase(db);
 
-  const { url } = startDashboardServer(db, port);
+  const { url } = await startDashboardServer(db, port);
 
   console.log(`Open Accountant Dashboard running at ${url}`);
   console.log(`Profile: ${profileName}`);

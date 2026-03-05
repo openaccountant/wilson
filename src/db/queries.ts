@@ -584,7 +584,7 @@ export function setBudget(
  * Remove a budget limit for a category.
  */
 export function clearBudget(db: Database, category: string): boolean {
-  const result = db.prepare('DELETE FROM budgets WHERE category = @category').run({ category });
+  const result = db.prepare('DELETE FROM budgets WHERE LOWER(category) = LOWER(@category)').run({ category });
   return (result as { changes: number }).changes > 0;
 }
 
@@ -611,22 +611,55 @@ export function getBudgetVsActual(
   const budgets = getBudgets(db);
   if (budgets.length === 0) return [];
 
-  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
+  // Check if categories table exists (backward compat)
+  const hasCategories = (() => {
+    try {
+      db.prepare("SELECT 1 FROM categories LIMIT 1").get();
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  const acctFilter = accountId !== undefined ? ' AND t.account_id = @accountId' : '';
   const results: BudgetVsActualRow[] = [];
 
   for (const budget of budgets) {
     const params: Record<string, unknown> = { category: budget.category, startDate, endDate };
     if (accountId !== undefined) params.accountId = accountId;
-    const row = db.prepare(`
-      SELECT COALESCE(SUM(ABS(amount)), 0) AS actual
-      FROM transactions
-      WHERE category = @category
-        AND date >= @startDate
-        AND date <= @endDate
-        AND amount < 0${acctFilter}
-    `).get(params) as { actual: number };
 
-    const actual = row.actual;
+    let actual: number;
+
+    if (hasCategories) {
+      // Use recursive CTE to sum spending from this category + all descendants
+      const row = db.prepare(`
+        WITH RECURSIVE descendants AS (
+          SELECT id, name FROM categories WHERE LOWER(name) = LOWER(@category)
+          UNION ALL
+          SELECT c.id, c.name FROM categories c
+          JOIN descendants d ON c.parent_id = d.id
+        )
+        SELECT COALESCE(SUM(ABS(t.amount)), 0) AS actual
+        FROM transactions t
+        JOIN descendants d ON LOWER(t.category) = LOWER(d.name)
+        WHERE t.date >= @startDate
+          AND t.date <= @endDate
+          AND t.amount < 0${acctFilter}
+      `).get(params) as { actual: number };
+      actual = row.actual;
+    } else {
+      // Fallback: case-insensitive exact match
+      const row = db.prepare(`
+        SELECT COALESCE(SUM(ABS(t.amount)), 0) AS actual
+        FROM transactions t
+        WHERE LOWER(t.category) = LOWER(@category)
+          AND t.date >= @startDate
+          AND t.date <= @endDate
+          AND t.amount < 0${acctFilter}
+      `).get(params) as { actual: number };
+      actual = row.actual;
+    }
+
     const remaining = budget.monthly_limit - actual;
     const percentUsed = budget.monthly_limit > 0 ? Math.round((actual / budget.monthly_limit) * 100) : 0;
 
@@ -785,4 +818,127 @@ export function getUncategorizedCount(db: Database): number {
 export function getBudgetCount(db: Database): number {
   const row = db.prepare('SELECT COUNT(*) AS cnt FROM budgets').get() as { cnt: number };
   return row.cnt;
+}
+
+// ── Category queries ─────────────────────────────────────────────────────────
+
+export interface CategoryRow {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description: string | null;
+  is_system: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryTreeNode extends CategoryRow {
+  children: CategoryTreeNode[];
+}
+
+/**
+ * Convert a category name to a URL-safe slug.
+ */
+export function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, '-')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Get all categories, flat list sorted by sort_order then name.
+ */
+export function getCategories(db: Database): CategoryRow[] {
+  return db.prepare('SELECT * FROM categories ORDER BY sort_order ASC, name ASC').all() as CategoryRow[];
+}
+
+/**
+ * Build a parent/child tree from the flat categories list.
+ */
+export function getCategoryTree(db: Database): CategoryTreeNode[] {
+  const rows = getCategories(db);
+  const map = new Map<number, CategoryTreeNode>();
+  const roots: CategoryTreeNode[] = [];
+
+  for (const row of rows) {
+    map.set(row.id, { ...row, children: [] });
+  }
+
+  for (const node of map.values()) {
+    if (node.parent_id && map.has(node.parent_id)) {
+      map.get(node.parent_id)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}
+
+/**
+ * Case-insensitive category lookup by name.
+ */
+export function getCategoryByName(db: Database, name: string): CategoryRow | undefined {
+  return db.prepare('SELECT * FROM categories WHERE LOWER(name) = LOWER(@name)').get({ name }) as CategoryRow | undefined;
+}
+
+/**
+ * Add a custom category. Returns the new row ID.
+ */
+export function addCategory(
+  db: Database,
+  name: string,
+  parentId?: number,
+  description?: string
+): number {
+  const slug = toSlug(name);
+  const sortOrder = (db.prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM categories').get() as { next: number }).next;
+  const result = db.prepare(`
+    INSERT INTO categories (name, slug, parent_id, description, is_system, sort_order)
+    VALUES (@name, @slug, @parentId, @description, 0, @sortOrder)
+  `).run({ name, slug, parentId: parentId ?? null, description: description ?? null, sortOrder });
+  return (result as { lastInsertRowid: number }).lastInsertRowid;
+}
+
+/**
+ * Delete a custom category. Blocks deletion of system categories and categories with children.
+ */
+export function deleteCategory(db: Database, id: number): { ok: boolean; error?: string } {
+  const cat = db.prepare('SELECT * FROM categories WHERE id = @id').get({ id }) as CategoryRow | undefined;
+  if (!cat) return { ok: false, error: 'Category not found' };
+  if (cat.is_system) return { ok: false, error: 'Cannot delete system category' };
+
+  const childCount = (db.prepare('SELECT COUNT(*) AS cnt FROM categories WHERE parent_id = @id').get({ id }) as { cnt: number }).cnt;
+  if (childCount > 0) return { ok: false, error: 'Cannot delete category with children. Remove children first.' };
+
+  db.prepare('DELETE FROM categories WHERE id = @id').run({ id });
+  return { ok: true };
+}
+
+/**
+ * Get all descendant category names for a given category (inclusive) using recursive CTE.
+ */
+export function getCategoryDescendantNames(db: Database, categoryName: string): string[] {
+  const rows = db.prepare(`
+    WITH RECURSIVE descendants AS (
+      SELECT id, name FROM categories WHERE LOWER(name) = LOWER(@categoryName)
+      UNION ALL
+      SELECT c.id, c.name FROM categories c
+      JOIN descendants d ON c.parent_id = d.id
+    )
+    SELECT name FROM descendants
+  `).all({ categoryName }) as { name: string }[];
+  return rows.map(r => r.name);
+}
+
+/**
+ * Case-insensitive lookup returning canonical category name, or null if not found.
+ */
+export function resolveCategory(db: Database, name: string): string | null {
+  const row = db.prepare('SELECT name FROM categories WHERE LOWER(name) = LOWER(@name)').get({ name }) as { name: string } | undefined;
+  return row?.name ?? null;
 }

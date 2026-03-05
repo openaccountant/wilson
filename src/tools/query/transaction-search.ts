@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
-import { getTransactions, type TransactionFilters, type TransactionRow } from '../../db/queries.js';
+import { getTransactions, getCategories, type TransactionFilters, type TransactionRow } from '../../db/queries.js';
 import { CATEGORIES } from '../categorize/categories.js';
 import { formatToolResult } from '../types.js';
 
@@ -44,6 +44,20 @@ const MONTH_NAMES: Record<string, number> = {
  * - "over $100" / "more than $50" -> amount filter
  * - "last month", "this year", specific months
  */
+/**
+ * Get category names from DB with fallback to hardcoded list.
+ */
+function getCategoryNames(): string[] {
+  if (!db) return CATEGORIES;
+  try {
+    const rows = getCategories(db);
+    if (rows.length > 0) return rows.map(r => r.name);
+  } catch {
+    // categories table may not exist
+  }
+  return CATEGORIES;
+}
+
 function parseNaturalQuery(query: string): TransactionFilters {
   const filters: TransactionFilters = {};
   const lowerQuery = query.toLowerCase();
@@ -52,7 +66,8 @@ function parseNaturalQuery(query: string): TransactionFilters {
   const currentMonth = now.getMonth() + 1;
 
   // --- Category detection ---
-  const matchedCategory = CATEGORIES.find((cat) =>
+  const categoryNames = getCategoryNames();
+  const matchedCategory = categoryNames.find((cat) =>
     lowerQuery.includes(cat.toLowerCase())
   );
   if (matchedCategory) {
@@ -124,7 +139,7 @@ function parseNaturalQuery(query: string): TransactionFilters {
     'over', 'under', 'above', 'below', 'more', 'less', 'than', 'greater',
     'last', 'this', 'next', 'month', 'year', 'week', 'today', 'yesterday',
     'recurring', ...Object.keys(MONTH_NAMES),
-    ...CATEGORIES.map((c) => c.toLowerCase()),
+    ...categoryNames.map((c) => c.toLowerCase()),
   ]);
 
   // Remove dollar amounts and filter words, look for remaining significant words

@@ -8,15 +8,15 @@ import { insertAccount } from '../db/net-worth-queries.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 /** Spin up a fresh server with an in-memory DB. */
-function createServer() {
+async function createServer() {
   const db = createTestDb();
   setInitialProfile('test', db);
-  const result = startDashboardServer(db, 0);
+  const result = await startDashboardServer(db, 0);
   return { db, server: result.server, base: `http://localhost:${result.server.port}` };
 }
 
 describe('dashboard server', () => {
-  const servers: ReturnType<typeof startDashboardServer>['server'][] = [];
+  const servers: Awaited<ReturnType<typeof startDashboardServer>>['server'][] = [];
 
   afterEach(() => {
     for (const s of servers) {
@@ -26,8 +26,8 @@ describe('dashboard server', () => {
     closeAll();
   });
 
-  function start() {
-    const ctx = createServer();
+  async function start() {
+    const ctx = await createServer();
     servers.push(ctx.server);
     return ctx;
   }
@@ -36,7 +36,7 @@ describe('dashboard server', () => {
 
   describe('basic routes', () => {
     test('GET / returns HTML', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/');
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/html');
@@ -45,7 +45,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/summary returns JSON', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/summary');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -53,13 +53,13 @@ describe('dashboard server', () => {
     });
 
     test('GET /unknown returns 404', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/unknown');
       expect(res.status).toBe(404);
     });
 
     test('OPTIONS returns 204 with CORS headers', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/summary', { method: 'OPTIONS' });
       expect(res.status).toBe(204);
       expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
@@ -71,7 +71,7 @@ describe('dashboard server', () => {
 
   describe('auth API', () => {
     test('GET /api/auth/status returns auth disabled by default', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/status');
       const data = await res.json();
       expect(data.authEnabled).toBe(false);
@@ -80,7 +80,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/setup creates first admin', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,7 +95,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/setup rejects when admin exists', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       await createUser(db, 'existing', 'pass', 'admin');
       const res = await fetch(base + '/api/auth/setup', {
         method: 'POST',
@@ -108,7 +108,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/login returns token', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       await createUser(db, 'loginuser', 'mypassword', 'admin');
       enableAuth(db);
       const res = await fetch(base + '/api/auth/login', {
@@ -123,7 +123,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/login rejects bad credentials', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       await createUser(db, 'loginuser', 'mypassword');
       enableAuth(db);
       const res = await fetch(base + '/api/auth/login', {
@@ -135,7 +135,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/logout revokes token', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       await createUser(db, 'logoutuser', 'pass');
       enableAuth(db);
       const loginRes = await fetch(base + '/api/auth/login', {
@@ -163,7 +163,7 @@ describe('dashboard server', () => {
 
   describe('RBAC enforcement', () => {
     async function setupRbac() {
-      const { db, base } = start();
+      const { db, base } = await start();
       await createUser(db, 'admin', 'adminpass', 'admin');
       await createUser(db, 'viewer', 'viewerpass', 'viewer');
       enableAuth(db);
@@ -356,7 +356,7 @@ describe('dashboard server', () => {
 
   describe('accounts and net worth', () => {
     test('GET /api/accounts returns active accounts', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertAccount(db, {
         name: 'Checking',
         account_type: 'asset',
@@ -377,7 +377,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/net-worth returns summary', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertAccount(db, {
         name: 'Checking',
         account_type: 'asset',
@@ -400,7 +400,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/net-worth/trend returns array', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/net-worth/trend?months=6');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -408,7 +408,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/accounts/:id/transactions returns filtered txns', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       const accountId = insertAccount(db, {
         name: 'Test Card',
         account_type: 'liability',
@@ -433,7 +433,7 @@ describe('dashboard server', () => {
 
   describe('export', () => {
     test('GET /api/export/csv returns CSV', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertTransactions(db, [
         { date: '2026-01-15', description: 'Test', amount: -25, category: 'Food' },
       ]);
@@ -447,7 +447,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/export/pnl returns P&L CSV', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertTransactions(db, [
         { date: '2026-02-15', description: 'Income', amount: 3000, category: 'Salary' },
         { date: '2026-02-16', description: 'Expense', amount: -100, category: 'Food' },
@@ -460,7 +460,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/export/net-worth returns net worth CSV', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertAccount(db, {
         name: 'My Account',
         account_type: 'asset',
@@ -480,7 +480,7 @@ describe('dashboard server', () => {
 
   describe('profiles', () => {
     test('GET /api/profiles returns profiles and active', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/profiles');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -493,7 +493,7 @@ describe('dashboard server', () => {
 
   describe('accountId filtering', () => {
     test('GET /api/transactions?accountId filters results', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       const accountId = insertAccount(db, {
         name: 'Filter Test',
         account_type: 'asset',
@@ -514,7 +514,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/summary?accountId scopes to account', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       const accountId = insertAccount(db, {
         name: 'Scoped',
         account_type: 'asset',
@@ -540,7 +540,7 @@ describe('dashboard server', () => {
 
   describe('auth validation', () => {
     test('POST /api/auth/setup rejects missing username', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -552,7 +552,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/login rejects missing credentials', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -564,7 +564,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/auth/users rejects missing credentials', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -576,7 +576,7 @@ describe('dashboard server', () => {
     });
 
     test('DELETE /api/auth/users/:id deactivates user', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       const user = await createUser(db, 'todelete', 'pass');
       const res = await fetch(base + `/api/auth/users/${user.id}`, {
         method: 'DELETE',
@@ -587,7 +587,7 @@ describe('dashboard server', () => {
     });
 
     test('PATCH /api/auth/config toggles auth', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/auth/config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -599,7 +599,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/profiles/switch changes profile', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/profiles/switch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -611,7 +611,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/profiles/switch rejects missing name', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/profiles/switch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -627,7 +627,7 @@ describe('dashboard server', () => {
 
   describe('data API routes', () => {
     test('GET /api/pnl returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/pnl');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -635,7 +635,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/budgets returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/budgets');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -643,7 +643,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/savings returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/savings');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -651,7 +651,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/alerts returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/alerts');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -663,7 +663,7 @@ describe('dashboard server', () => {
 
   describe('logs and traces', () => {
     test('GET /api/logs returns array', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/logs');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -671,7 +671,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/traces returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/traces');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -679,7 +679,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/traces/stats returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/traces/stats');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -689,7 +689,7 @@ describe('dashboard server', () => {
 
   describe('chat routes', () => {
     test('GET /api/chat/history returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/chat/history');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -697,7 +697,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/chat/sessions returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/chat/sessions');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -705,7 +705,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/chat/sessions/:id returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/chat/sessions/test-session-id');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -713,7 +713,7 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/chat rejects missing query', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -727,7 +727,7 @@ describe('dashboard server', () => {
 
   describe('interactions and training', () => {
     test('GET /api/interactions returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/interactions');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -735,13 +735,13 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/interactions/:id returns 404 for missing', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/interactions/99999');
       expect(res.status).toBe(404);
     });
 
     test('POST /api/interactions/:id/annotate creates annotation', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/interactions/1/annotate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -751,7 +751,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/runs/:id returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/runs/test-run-id');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -759,7 +759,7 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/annotations/stats returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/annotations/stats');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -767,21 +767,21 @@ describe('dashboard server', () => {
     });
 
     test('GET /api/export/training/sft returns JSONL', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/export/training/sft');
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/x-ndjson');
     });
 
     test('GET /api/export/training/dpo returns JSONL', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/export/training/dpo');
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/x-ndjson');
     });
 
     test('GET /api/export/training/stats returns data', async () => {
-      const { base } = start();
+      const { base } = await start();
       const res = await fetch(base + '/api/export/training/stats');
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -793,7 +793,7 @@ describe('dashboard server', () => {
 
   describe('xlsx export', () => {
     test('GET /api/export/xlsx returns spreadsheet or error', async () => {
-      const { db, base } = start();
+      const { db, base } = await start();
       insertTransactions(db, [
         { date: '2026-01-15', description: 'XLS Test', amount: -25, category: 'Food' },
       ]);

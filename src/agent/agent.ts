@@ -3,7 +3,7 @@ import type { ToolDef } from '../model/types.js';
 import { callLlm, type LlmResult } from '../model/llm.js';
 import { interactionStore } from '../utils/interaction-store.js';
 import { getTools } from '../tools/registry.js';
-import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext } from '../agent/prompts.js';
+import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext, buildGoalContext, buildMemoryContext, buildCustomPromptContext } from '../agent/prompts.js';
 import { extractTextContent, hasToolCalls } from '../utils/ai-message.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { buildHistoryContext } from '../utils/history-context.js';
@@ -65,6 +65,24 @@ export class Agent {
     const budgetContext = buildBudgetContext();
     if (budgetContext) {
       systemPrompt += `\n\n${budgetContext}`;
+    }
+
+    // Inject goal context if goals are active
+    const goalContext = buildGoalContext();
+    if (goalContext) {
+      systemPrompt += `\n\n${goalContext}`;
+    }
+
+    // Inject memory context if memories exist
+    const memoryContext = buildMemoryContext();
+    if (memoryContext) {
+      systemPrompt += `\n\n${memoryContext}`;
+    }
+
+    // Inject custom prompt context if set
+    const customPromptContext = buildCustomPromptContext();
+    if (customPromptContext) {
+      systemPrompt += `\n\n${customPromptContext}`;
     }
 
     const toolNames = tools.map(t => t.name);
