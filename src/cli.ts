@@ -37,6 +37,7 @@ import {
   IntroComponent,
   WorkingIndicatorComponent,
   createApiKeyConfirmSelector,
+  createDownloadConfirmSelector,
   createModelSelector,
   createProviderSelector,
 } from './components/index.js';
@@ -73,14 +74,21 @@ import { initLinkTransactionsTool } from './tools/net-worth/link-transactions.js
 import { initCategoryManageTool } from './tools/categorize/category-manage.js';
 import { initGoalManageTool } from './tools/goals/goal-manage.js';
 import { initMemoryManageTool } from './tools/memory/memory-manage.js';
+import { initEntityManageTool } from './tools/entity/entity-manage.js';
+import { initEntityClassifyTool } from './tools/entity/entity-classify.js';
 import { initAlertPrompt, initNetWorthContext, initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
-import { getPlaidItems, removePlaidItem } from './plaid/store.js';
-import { startPlaidLinkServer } from './plaid/link-server.js';
+import { getPlaidItems, removePlaidItem, findPlaidItem } from './plaid/store.js';
+import { startPlaidLinkServer, startPlaidLinkUpdateServer } from './plaid/link-server.js';
+import { removeItem as plaidRemoveItem } from './plaid/client.js';
+import { getCoinbaseConnections, removeCoinbaseConnection, saveCoinbaseConnection } from './coinbase/store.js';
+import { hasLocalCoinbaseCreds, validateCoinbaseKey } from './coinbase/client.js';
+import { initCoinbaseSyncTool } from './tools/import/coinbase-sync.js';
 import { initMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
 import { pullOllamaModel, RECOMMENDED_OLLAMA_MODELS } from './utils/model-downloader.js';
 import { discoverSkills } from './skills/registry.js';
 import { validateLicense, getLicenseInfo, deactivateLicense, hasLicense } from './licensing/license.js';
+import { clearOrchestrationCache } from './orchestration/registry.js';
 import { interactiveUpsell, getCheckoutUrl } from './licensing/upsell.js';
 import { openBrowser } from './utils/browser.js';
 import { getSchedules, addSchedule, removeSchedule, toggleSchedule } from './schedule/store.js';
@@ -280,6 +288,7 @@ export async function runCli() {
   initDataContext(db);
   initPlaidSyncTool(db);
   initPlaidBalancesTool(db);
+  initCoinbaseSyncTool(db);
   initProfitLossTool(db);
   initProfitDiffTool(db);
   initRuleManageTool(db);
@@ -295,6 +304,8 @@ export async function runCli() {
   initCategoryManageTool(db);
   initGoalManageTool(db);
   initMemoryManageTool(db);
+  initEntityManageTool(db);
+  initEntityClassifyTool(db);
   initAlertPrompt(db);
   initNetWorthContext(db);
   initGoalContext(db);
@@ -317,8 +328,10 @@ export async function runCli() {
     tui.requestRender();
   };
 
+  let agentRunner: AgentRunnerController;
   const modelSelection = new ModelSelectionController(onError, () => {
     intro.setModel(modelSelection.model);
+    agentRunner?.updateModel(modelSelection.model, modelSelection.provider);
     renderSelectionOverlay();
     tui.requestRender();
   });
@@ -326,14 +339,21 @@ export async function runCli() {
   // Enable chat history persistence
   modelSelection.inMemoryChatHistory.setDatabase(db);
 
-  const agentRunner = new AgentRunnerController(
+  let renderPending = false;
+  agentRunner = new AgentRunnerController(
     { model: modelSelection.model, modelProvider: modelSelection.provider, maxIterations: 10 },
     modelSelection.inMemoryChatHistory,
     () => {
-      renderHistory(chatLog, agentRunner.history);
-      workingIndicator.setState(agentRunner.workingState);
-      renderSelectionOverlay();
-      tui.requestRender();
+      if (!renderPending) {
+        renderPending = true;
+        queueMicrotask(() => {
+          renderPending = false;
+          renderHistory(chatLog, agentRunner.history);
+          workingIndicator.setState(agentRunner.workingState);
+          renderSelectionOverlay();
+          tui.requestRender();
+        });
+      }
     },
   );
 
@@ -440,6 +460,7 @@ export async function runCli() {
         '  /model        — Switch LLM provider and model',
         '  /pull         — Download an Ollama model',
         '  /connect      — Link a bank account via Plaid (Pro)',
+        '  /connect-coinbase — Link Coinbase crypto account (Pro)',
         '  /sync         — Pull latest transactions (Pro)',
         '  /budget       — View budget vs actual',
         '  /category     — Manage spending categories',
@@ -613,14 +634,68 @@ export async function runCli() {
           }
           chatLog.finalizeAnswer(result);
         }
+      } else if (subcommand === 'reauth') {
+        // Re-authenticate a Plaid Item with stale credentials
+        const items = getPlaidItems();
+        if (items.length === 0) {
+          chatLog.finalizeAnswer('No bank accounts linked. Use `/connect` to link one.');
+        } else if (items.length === 1) {
+          chatLog.finalizeAnswer('Opening Plaid Link in update mode for re-authentication...');
+          tui.requestRender();
+          try {
+            const hasLocalCreds = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+            const useProxy = !hasLocalCreds;
+            const success = await startPlaidLinkUpdateServer(items[0], useProxy);
+            chatLog.finalizeAnswer(success
+              ? `Re-authenticated **${items[0].institutionName}** successfully.`
+              : 'Re-authentication was cancelled or timed out.');
+          } catch (err) {
+            chatLog.finalizeAnswer(`Re-authentication failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          chatLog.finalizeAnswer(
+            'Multiple accounts linked. Specify which to re-authenticate:\n\n' +
+            items.map((i) => `  \`/connect reauth ${i.institutionName}\``).join('\n')
+          );
+        }
+      } else if (subcommand.startsWith('reauth ')) {
+        const institution = subcommand.slice(7).trim();
+        const item = findPlaidItem(institution);
+        if (!item) {
+          chatLog.finalizeAnswer(`No linked account found for "${institution}".`);
+        } else {
+          chatLog.finalizeAnswer(`Opening Plaid Link in update mode for **${item.institutionName}**...`);
+          tui.requestRender();
+          try {
+            const hasLocalCreds = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+            const useProxy = !hasLocalCreds;
+            const success = await startPlaidLinkUpdateServer(item, useProxy);
+            chatLog.finalizeAnswer(success
+              ? `Re-authenticated **${item.institutionName}** successfully.`
+              : 'Re-authentication was cancelled or timed out.');
+          } catch (err) {
+            chatLog.finalizeAnswer(`Re-authentication failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
       } else if (subcommand.startsWith('remove ')) {
         const institution = subcommand.slice(7).trim();
         if (!institution) {
           chatLog.finalizeAnswer('Usage: `/connect remove <institution name>`');
         } else {
+          // Call Plaid API to revoke access token, then remove locally
+          const item = findPlaidItem(institution);
+          if (item) {
+            try {
+              const hasLocalCreds = !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET);
+              const useProxy = !hasLocalCreds;
+              await plaidRemoveItem(item.accessToken, useProxy);
+            } catch {
+              // Non-fatal: local cleanup proceeds even if Plaid API call fails
+            }
+          }
           const removed = removePlaidItem(institution);
           chatLog.finalizeAnswer(removed
-            ? `Unlinked **${institution}**.`
+            ? `Disconnected **${institution}** and revoked Plaid access token.`
             : `No linked account found for "${institution}".`);
         }
       } else {
@@ -655,6 +730,134 @@ export async function runCli() {
           } catch (err) {
             chatLog.finalizeAnswer(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
           }
+        }
+      }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/connect-coinbase' || query.startsWith('/connect-coinbase ')) {
+      chatLog.addQuery(query);
+      if (!hasLicense('pro')) {
+        chatLog.finalizeAnswer(interactiveUpsell('Coinbase sync', 'Connect your Coinbase account for automatic crypto transaction imports.'));
+        tui.requestRender();
+        return;
+      }
+      const subcommand = query.slice(17).trim();
+
+      if (subcommand === 'list') {
+        const connections = getCoinbaseConnections();
+        if (connections.length === 0) {
+          chatLog.finalizeAnswer('No Coinbase accounts linked. Use `/connect-coinbase` to link one.');
+        } else {
+          let result = '**Linked Coinbase Accounts**\n\n';
+          for (const conn of connections) {
+            const accounts = conn.accounts.map((a) => `${a.name} (${a.currency})`).join(', ');
+            result += `  **Coinbase** — ${accounts}\n`;
+            result += `  Linked: ${new Date(conn.linkedAt).toLocaleDateString()}`;
+            if (conn.lastSyncedAt) {
+              result += ` | Last synced: ${new Date(conn.lastSyncedAt).toLocaleDateString()}`;
+            }
+            result += '\n\n';
+          }
+          chatLog.finalizeAnswer(result);
+        }
+      } else if (subcommand.startsWith('remove')) {
+        const accountName = subcommand.slice(6).trim();
+        if (!accountName) {
+          chatLog.finalizeAnswer('Usage: `/connect-coinbase remove <account name>`');
+        } else {
+          const removed = removeCoinbaseConnection(accountName);
+          chatLog.finalizeAnswer(removed
+            ? `Unlinked Coinbase account **${accountName}**.`
+            : `No linked Coinbase account found matching "${accountName}".`);
+        }
+      } else {
+        // Check env vars first, then accept file path as argument
+        let keyName = process.env.COINBASE_KEY_NAME;
+        let privateKey = process.env.COINBASE_PRIVATE_KEY;
+
+        if (!keyName || !privateKey) {
+          // Accept a JSON key file path as argument: /connect-coinbase ~/cdp_api_key.json
+          const keyPath = subcommand.trim();
+          if (keyPath) {
+            try {
+              const { readFileSync } = await import('fs');
+              const { resolve: resolvePath } = await import('path');
+              const { homedir } = await import('os');
+              const expanded = keyPath.startsWith('~')
+                ? keyPath.replace('~', homedir())
+                : keyPath;
+              const content = readFileSync(resolvePath(expanded), 'utf-8');
+
+              if (keyPath.endsWith('.json')) {
+                // CDP JSON key file format: { "name": "...", "privateKey": "..." }
+                const keyData = JSON.parse(content) as { name?: string; privateKey?: string };
+                keyName = keyData.name;
+                privateKey = keyData.privateKey;
+              } else {
+                // Plain PEM file — need key name from env
+                keyName = process.env.COINBASE_KEY_NAME;
+                privateKey = content.trim();
+              }
+            } catch (err) {
+              chatLog.finalizeAnswer(`Failed to read key file: ${err instanceof Error ? err.message : String(err)}`);
+              tui.requestRender();
+              return;
+            }
+          }
+        }
+
+        if (!keyName || !privateKey) {
+          chatLog.finalizeAnswer(
+            'To connect Coinbase, provide your CDP API key:\n\n' +
+            '**Option 1:** Set environment variables:\n' +
+            '```\n' +
+            'export COINBASE_KEY_NAME="organizations/.../apiKeys/..."\n' +
+            'export COINBASE_PRIVATE_KEY="-----BEGIN EC PRIVATE KEY-----\\n..."\n' +
+            '```\n' +
+            'Then run `/connect-coinbase` again.\n\n' +
+            '**Option 2:** Pass the CDP JSON key file:\n' +
+            '```\n' +
+            '/connect-coinbase ~/path/to/cdp_api_key.json\n' +
+            '```\n\n' +
+            'Get your key from [CDP Dashboard](https://portal.cdp.coinbase.com/) → API Keys → Secret API Keys (ES256).'
+          );
+          tui.requestRender();
+          return;
+        }
+
+        // Normalize PEM newlines
+        if (privateKey.includes('\\n')) {
+          privateKey = privateKey.replace(/\\n/g, '\n');
+        }
+
+        chatLog.finalizeAnswer('Validating Coinbase credentials...');
+        tui.requestRender();
+
+        try {
+          const accounts = await validateCoinbaseKey(keyName, privateKey);
+          const conn = {
+            keyName,
+            privateKey,
+            accounts: accounts.map((a) => ({
+              id: a.id,
+              name: a.name,
+              type: a.type,
+              currency: a.currency.code,
+            })),
+            linkedAt: new Date().toISOString(),
+            lastSyncedAt: null,
+          };
+          saveCoinbaseConnection(conn);
+
+          const accountList = conn.accounts.map((a) => `${a.name} (${a.currency})`).join(', ');
+          chatLog.finalizeAnswer(
+            `Coinbase linked! ${accountList}\n\n` +
+            `Use \`/sync\` to pull transactions.`
+          );
+        } catch (err) {
+          chatLog.finalizeAnswer(`Failed to connect Coinbase: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       tui.requestRender();
@@ -835,6 +1038,7 @@ export async function runCli() {
         tui.requestRender();
         try {
           const result = await validateLicense(key);
+          clearOrchestrationCache();
           const products = result.products.length > 0 ? result.products.join(', ') : 'all products';
           chatLog.finalizeAnswer(
             `License activated!\n\n` +
@@ -862,6 +1066,7 @@ export async function runCli() {
         );
       } else if (subcommand === 'deactivate') {
         deactivateLicense();
+        clearOrchestrationCache();
         chatLog.finalizeAnswer('License deactivated. Paid features are now locked.');
       } else if (subcommand && subcommand !== 'activate') {
         // Treat bare key as activation: /license OA-xxx → activate
@@ -1218,6 +1423,21 @@ export async function runCli() {
         input,
         'Examples: anthropic/claude-3.5-sonnet, openai/gpt-4-turbo, meta-llama/llama-3-70b\nEnter to confirm · esc to go back',
         input,
+      );
+      return;
+    }
+
+    if (state.appState === 'download_confirm') {
+      const sizeNote = state.pendingDownloadSize ? ` (${state.pendingDownloadSize})` : '';
+      const selector = createDownloadConfirmSelector((proceed) =>
+        modelSelection.handleDownloadConfirm(proceed),
+      );
+      renderScreenView(
+        'Download Model',
+        `This model hasn't been downloaded yet. First run will download it${sizeNote} to ~/.openaccountant/models/.`,
+        selector,
+        'Enter to confirm · esc to go back',
+        selector,
       );
       return;
     }

@@ -3,7 +3,7 @@ import type { ToolDef } from '../model/types.js';
 import { callLlm, type LlmResult } from '../model/llm.js';
 import { interactionStore } from '../utils/interaction-store.js';
 import { getTools } from '../tools/registry.js';
-import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext, buildGoalContext, buildMemoryContext, buildCustomPromptContext } from '../agent/prompts.js';
+import { buildSystemPrompt, buildIterationPrompt, loadSoulDocument, buildBudgetContext, buildDataContext, buildGoalContext, buildMemoryContext, buildCustomPromptContext, buildProfileContext } from '../agent/prompts.js';
 import { extractTextContent, hasToolCalls } from '../utils/ai-message.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { buildHistoryContext } from '../utils/history-context.js';
@@ -83,6 +83,12 @@ export class Agent {
     const customPromptContext = buildCustomPromptContext();
     if (customPromptContext) {
       systemPrompt += `\n\n${customPromptContext}`;
+    }
+
+    // Inject profile context for multi-profile users
+    const profileContext = buildProfileContext();
+    if (profileContext) {
+      systemPrompt += `\n\n${profileContext}`;
     }
 
     const toolNames = tools.map(t => t.name);

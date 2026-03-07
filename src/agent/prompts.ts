@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Database } from '../db/compat-sqlite.js';
 import { getBudgetVsActual } from '../db/queries.js';
+import { getActiveProfileName, listProfiles, DEFAULT_PROFILE } from '../profile/index.js';
 import { checkAlerts } from '../alerts/engine.js';
 import { getNetWorthSummary } from '../db/net-worth-queries.js';
 import { getActiveGoals } from '../db/goal-queries.js';
@@ -153,6 +154,7 @@ ${toolDescriptions}
 - Use spending_summary to generate spending reports, breakdowns by category/merchant/time period
 - Use anomaly_detect to find unusual charges, duplicate transactions, or subscription issues
 - For general web queries or non-financial topics, use web_search
+- Users can manage multiple profiles with /profile (list) and /profile switch <name>. Each profile has its own database.
 - Only respond directly for: conceptual definitions, general financial advice, or conversational queries
 
 ${buildSkillsSection()}
@@ -499,6 +501,38 @@ export function buildCustomPromptContext(): string | null {
     if (!row?.value) return null;
 
     return `## Custom Instructions\n\n${row.value}`;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
+// Profile Context
+// ============================================================================
+
+/**
+ * Build profile context for system prompt injection.
+ * Returns null for single-profile users on the default profile.
+ */
+export function buildProfileContext(): string | null {
+  try {
+    const current = getActiveProfileName();
+    const profiles = listProfiles();
+
+    if (profiles.length <= 1 && current === DEFAULT_PROFILE) {
+      return null;
+    }
+
+    const profileList = profiles.map(p =>
+      p === current ? `${p} (active)` : p
+    ).join(', ');
+
+    return `## Profiles
+
+Active profile: ${current}
+Available profiles: ${profileList}
+
+Each profile has its own isolated database, settings, and transaction history. Users switch profiles with the /profile switch <name> command. Use /profile to list all profiles.`;
   } catch {
     return null;
   }
