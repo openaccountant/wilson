@@ -13,6 +13,7 @@ import {
   apiGoals, apiGoalSnapshots,
   apiMemories, apiAddMemory, apiDeactivateMemory,
   apiGetCustomPrompt, apiSetCustomPrompt,
+  apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
 } from './api.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
@@ -287,6 +288,36 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         if (goalSnapshotMatch) {
           const goalId = parseInt(goalSnapshotMatch[1], 10);
           return Response.json(apiGoalSnapshots(activeDb, goalId, url.searchParams), { headers });
+        }
+
+        // ── Entities ─────────────────────────────────────────────────
+
+        if (path === '/api/entities' && req.method === 'GET') {
+          return Response.json(apiEntities(activeDb), { headers });
+        }
+        if (path === '/api/entities' && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as Record<string, unknown>;
+          return Response.json(apiCreateEntity(activeDb, body as { name?: string; description?: string; color?: string }), { headers });
+        }
+        const entityMatch = path.match(/^\/api\/entities\/(\d+)$/);
+        if (entityMatch) {
+          const id = parseInt(entityMatch[1], 10);
+          if (req.method === 'PUT') {
+            if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+              return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+            }
+            const body = await req.json() as Record<string, unknown>;
+            return Response.json(apiUpdateEntity(activeDb, id, body as { name?: string; description?: string; color?: string }), { headers });
+          }
+          if (req.method === 'DELETE') {
+            if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+              return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+            }
+            return Response.json(apiDeleteEntity(activeDb, id), { headers });
+          }
         }
 
         // ── Memories ─────────────────────────────────────────────────

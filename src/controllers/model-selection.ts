@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { getSetting, setSetting } from '../utils/config.js';
 import {
   checkApiKeyExistsForProvider,
@@ -11,6 +14,15 @@ import {
   type ModelTag,
 } from '../utils/model.js';
 import { getOllamaModels } from '../utils/ollama.js';
+import { checkWebGpuAvailable } from '../model/providers/transformers.js';
+
+/** Returns true if the model has already been downloaded to the local cache. */
+function isTransformersModelCached(modelId: string): boolean {
+  // modelId format: "HuggingFaceTB/SmolLM3-3B-ONNX"
+  // transformers.js cache: ~/.openaccountant/models/models--{org}--{name}/
+  const cacheName = `models--${modelId.replace('/', '--')}`;
+  return existsSync(join(homedir(), '.openaccountant', 'models', cacheName));
+}
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '../model/llm.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 
@@ -29,6 +41,7 @@ const SELECTION_STATES = [
   'provider_select',
   'model_select',
   'model_input',
+  'download_confirm',
   'api_key_confirm',
   'api_key_input',
 ] as const;
@@ -40,6 +53,7 @@ export interface ModelSelectionState {
   appState: AppState;
   pendingProvider: string | null;
   pendingModels: Model[];
+  pendingDownloadSize: string | null;
 }
 
 type ChangeListener = () => void;
@@ -51,6 +65,7 @@ export class ModelSelectionController {
   private pendingProviderValue: string | null = null;
   private pendingModelsValue: Model[] = [];
   private pendingSelectedModelId: string | null = null;
+  private pendingDownloadSizeValue: string | null = null;
   private readonly onError: (message: string) => void;
   private readonly onChange?: ChangeListener;
   private readonly chatHistory = new InMemoryChatHistory(DEFAULT_MODEL);
@@ -70,6 +85,7 @@ export class ModelSelectionController {
       appState: this.appStateValue,
       pendingProvider: this.pendingProviderValue,
       pendingModels: this.pendingModelsValue,
+      pendingDownloadSize: this.pendingDownloadSizeValue,
     };
   }
 
@@ -121,6 +137,16 @@ export class ModelSelectionController {
       return;
     }
 
+    if (providerId === 'transformers') {
+      const webGpuOk = await checkWebGpuAvailable();
+      this.pendingModelsValue = getModelsForProvider('transformers').filter((m) =>
+        webGpuOk ? true : !m.tags?.includes('webgpu'),
+      );
+      this.appStateValue = 'model_select';
+      this.emitChange();
+      return;
+    }
+
     this.pendingModelsValue = getModelsForProvider(providerId);
     this.appStateValue = 'model_select';
     this.emitChange();
@@ -138,6 +164,20 @@ export class ModelSelectionController {
 
     if (this.pendingProviderValue === 'ollama') {
       this.completeModelSwitch(this.pendingProviderValue, `ollama:${modelId}`);
+      return;
+    }
+
+    if (this.pendingProviderValue === 'transformers') {
+      const bareId = modelId.replace(/^transformers:/, '');
+      if (!isTransformersModelCached(bareId)) {
+        const model = this.pendingModelsValue.find((m) => m.id === modelId);
+        this.pendingSelectedModelId = modelId;
+        this.pendingDownloadSizeValue = model?.downloadSize ?? null;
+        this.appStateValue = 'download_confirm';
+        this.emitChange();
+        return;
+      }
+      this.completeModelSwitch(this.pendingProviderValue, modelId);
       return;
     }
 
@@ -169,6 +209,17 @@ export class ModelSelectionController {
 
     this.pendingSelectedModelId = fullModelId;
     this.appStateValue = 'api_key_confirm';
+    this.emitChange();
+  }
+
+  handleDownloadConfirm(proceed: boolean) {
+    if (proceed && this.pendingProviderValue && this.pendingSelectedModelId) {
+      this.completeModelSwitch(this.pendingProviderValue, this.pendingSelectedModelId);
+      return;
+    }
+    this.pendingSelectedModelId = null;
+    this.pendingDownloadSizeValue = null;
+    this.appStateValue = 'model_select';
     this.emitChange();
   }
 
@@ -244,6 +295,7 @@ export class ModelSelectionController {
     this.pendingProviderValue = null;
     this.pendingModelsValue = [];
     this.pendingSelectedModelId = null;
+    this.pendingDownloadSizeValue = null;
     this.appStateValue = 'idle';
     this.emitChange();
   }

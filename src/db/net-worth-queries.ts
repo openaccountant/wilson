@@ -2,6 +2,7 @@ import type { Database } from './compat-sqlite.js';
 import type { AccountType, AccountSubtype } from '../tools/net-worth/account-types.js';
 import { getAccountTypeForSubtype } from '../tools/net-worth/account-types.js';
 import { mapPlaidTypeToSubtype } from '../plaid/account-mapping.js';
+import { mapCoinbaseTypeToSubtype } from '../coinbase/account-mapping.js';
 
 // ── Row Types ────────────────────────────────────────────────────────────────
 
@@ -224,6 +225,53 @@ export function upsertAccountFromPlaid(
     balance: data.balance,
     snapshot_date: new Date().toISOString().slice(0, 10),
     source: 'plaid',
+  });
+
+  return { accountId: id, created: true };
+}
+
+// ── Coinbase Account Upsert ──────────────────────────────────────────────────
+
+export interface CoinbaseAccountUpsertData {
+  coinbaseAccountId: string;
+  name: string;
+  coinbaseType: string;
+  balance: number;
+  currency: string;
+}
+
+/**
+ * Upsert an account from Coinbase balance data.
+ * Reuses the plaid_account_id column — Coinbase UUIDs don't collide with Plaid IDs.
+ */
+export function upsertAccountFromCoinbase(
+  db: Database,
+  data: CoinbaseAccountUpsertData,
+): { accountId: number; created: boolean } {
+  const existing = getAccountByPlaidId(db, data.coinbaseAccountId);
+
+  if (existing) {
+    updateAccountBalance(db, existing.id, data.balance, 'coinbase');
+    return { accountId: existing.id, created: false };
+  }
+
+  const subtype = mapCoinbaseTypeToSubtype(data.coinbaseType);
+  const accountType = getAccountTypeForSubtype(subtype);
+  const id = insertAccount(db, {
+    name: data.name,
+    account_type: accountType,
+    account_subtype: subtype,
+    institution: 'Coinbase',
+    current_balance: data.balance,
+    currency: data.currency || 'USD',
+    plaid_account_id: data.coinbaseAccountId,
+  });
+
+  insertBalanceSnapshot(db, {
+    account_id: id,
+    balance: data.balance,
+    snapshot_date: new Date().toISOString().slice(0, 10),
+    source: 'coinbase',
   });
 
   return { accountId: id, created: true };

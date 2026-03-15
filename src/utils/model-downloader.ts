@@ -1,5 +1,5 @@
 /**
- * Ollama model download via REST API
+ * Ollama model download via REST API, and Transformers.js model pre-download.
  */
 
 export interface RecommendedModel {
@@ -27,6 +27,62 @@ export const RECOMMENDED_OLLAMA_MODELS: RecommendedModel[] = [
   { name: 'gemma3:1b',       size: '815 MB', tags: ['open', 'local', 'small'], desc: 'Google — ultralight, 32K ctx' },
   { name: 'granite4:350m',   size: '708 MB', tags: ['open', 'local', 'small'], desc: 'IBM — smallest Granite, edge-ready' },
 ];
+
+/**
+ * Pre-download a Transformers.js model to the local cache.
+ * Triggers the same download that happens on first inference, but with progress reporting.
+ * After this completes, the model loads from ~/.openaccountant/models/ in <2s.
+ *
+ * @param modelId - HuggingFace model ID (without 'transformers:' prefix), e.g. 'Xenova/Qwen2.5-0.5B-Instruct'
+ * @param onProgress - callback receiving progress 0–100
+ */
+export async function pullTransformersModel(
+  modelId: string,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  const { join } = await import('node:path');
+  const { homedir } = await import('node:os');
+  const { env, pipeline } = await import('@huggingface/transformers');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (env as any).cacheDir = join(homedir(), '.openaccountant', 'models');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((env as any).backends?.onnx?.wasm) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (env as any).backends.onnx.wasm.proxy = false;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let lastFile = '';
+  let filesDone = 0;
+  let totalFiles = 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function progressCallback(progress: any) {
+    if (!onProgress) return;
+    if (progress.status === 'initiate') {
+      totalFiles++;
+    } else if (progress.status === 'done') {
+      filesDone++;
+      lastFile = progress.file ?? lastFile;
+      const pct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
+      onProgress(pct);
+    } else if (progress.status === 'progress' && progress.total) {
+      // Per-file progress for large files
+      const filePct = Math.round((progress.loaded / progress.total) * 100);
+      const basePct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
+      onProgress(Math.min(basePct + Math.round(filePct / totalFiles), 99));
+    }
+  }
+
+  await pipeline('text-generation', modelId, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    progress_callback: progressCallback as any,
+    device: 'cpu',
+  });
+
+  onProgress?.(100);
+}
 
 export async function pullOllamaModel(
   modelName: string,

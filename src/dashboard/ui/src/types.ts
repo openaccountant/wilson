@@ -10,6 +10,7 @@ export interface Transaction {
   category_detailed: string | null;
   account_id: number | null;
   account_name: string | null;
+  entity_id: number | null;
   pending: boolean;
 }
 
@@ -239,6 +240,15 @@ export interface NetWorthTrendPoint {
 export interface DateRange {
   startDate: string;
   endDate: string;
+}
+
+export interface Entity {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  color: string;
+  is_default: number;
 }
 
 export interface Goal {

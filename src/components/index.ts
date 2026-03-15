@@ -9,6 +9,7 @@ export {
   ApiKeyInputComponent,
   createApiKeyConfirmSelector,
   createApprovalSelector,
+  createDownloadConfirmSelector,
   createModelSelector,
   createProviderSelector,
 } from './select-list.js';

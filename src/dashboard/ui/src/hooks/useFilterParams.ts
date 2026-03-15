@@ -5,12 +5,13 @@ import { useAppState } from '@/state';
  * Components use this to ensure API calls respect the header controls.
  */
 export function useFilterParams(): string {
-  const { dateRange, accountId, category } = useAppState();
+  const { dateRange, accountId, category, entityId } = useAppState();
   const parts: string[] = [
     `startDate=${dateRange.startDate}`,
     `endDate=${dateRange.endDate}`,
   ];
   if (accountId != null) parts.push(`accountId=${accountId}`);
   if (category) parts.push(`category=${encodeURIComponent(category)}`);
+  if (entityId != null) parts.push(`entityId=${entityId}`);
   return parts.join('&');
 }

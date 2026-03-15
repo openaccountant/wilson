@@ -55,10 +55,9 @@ describe('model utils', () => {
       expect(getDefaultModelForProvider('unknown')).toBeUndefined();
     });
 
-    test('returns undefined for provider with no models', () => {
-      // Ollama has no hardcoded models in PROVIDER_MODELS
+    test('returns first model for ollama provider', () => {
       const result = getDefaultModelForProvider('ollama');
-      expect(result).toBeUndefined();
+      expect(result).toBe('ollama:qwen3:8b');
     });
   });
 

@@ -15,7 +15,9 @@ const LEVEL_COLORS: Record<string, { text: string; bg: string }> = {
 function formatTimestamp(ts: string): string {
   try {
     const d = new Date(ts);
-    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const time = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `${date} ${time}`;
   } catch {
     return ts;
   }
@@ -97,7 +99,7 @@ export function LogsTab() {
                 <div key={i} className="px-4 py-1.5 hover:bg-white/[0.02]">
                   <div className="flex items-start gap-3">
                     {/* Timestamp */}
-                    <span className="text-text-muted shrink-0 w-[70px]">
+                    <span className="text-text-muted shrink-0 w-[120px]">
                       {formatTimestamp(row.ts)}
                     </span>
 
@@ -125,7 +127,7 @@ export function LogsTab() {
 
                   {/* Expanded JSON data */}
                   {row.data != null && isExpanded && (
-                    <pre className="mt-1 ml-[126px] p-2 rounded bg-black/30 text-text-muted text-[11px] overflow-x-auto whitespace-pre-wrap break-all">
+                    <pre className="mt-1 ml-[176px] p-2 rounded bg-black/30 text-text-muted text-[11px] overflow-x-auto whitespace-pre-wrap break-all">
                       {JSON.stringify(row.data, null, 2)}
                     </pre>
                   )}

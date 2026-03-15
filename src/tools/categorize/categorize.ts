@@ -53,8 +53,12 @@ export const categorizeTool = defineTool({
       .number()
       .optional()
       .describe('Max transactions to categorize (default: all uncategorized)'),
+    entityId: z
+      .number()
+      .optional()
+      .describe('Optional entity ID to assign to categorized transactions'),
   }),
-  func: async ({ limit }) => {
+  func: async ({ limit, entityId }) => {
     const database = getDb();
 
     // Load dynamic categories from DB (with fallback)
@@ -89,6 +93,9 @@ export const categorizeTool = defineTool({
         const match = matchRule(database, txn.description);
         if (match) {
           updateCategory(database, txn.id, match.category, 1.0);
+          if (entityId !== undefined) {
+            database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: txn.id });
+          }
           totalCategorized++;
           ruleMatchCount++;
           categoryCounts[match.category] = (categoryCounts[match.category] ?? 0) + 1;
@@ -146,6 +153,9 @@ export const categorizeTool = defineTool({
           const confidence = Math.max(0, Math.min(1, cat.confidence));
 
           updateCategory(database, cat.id, validCategory, confidence);
+          if (entityId !== undefined) {
+            database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: cat.id });
+          }
           totalCategorized++;
 
           categoryCounts[validCategory] = (categoryCounts[validCategory] ?? 0) + 1;

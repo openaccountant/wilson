@@ -43,6 +43,7 @@ export interface TransactionRow {
   payment_channel: string | null;
   pending: number;
   authorized_date: string | null;
+  entity_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +57,7 @@ export interface TransactionFilters {
   merchant?: string;
   isRecurring?: boolean;
   accountId?: number;
+  entityId?: number;
 }
 
 export interface SpendingSummaryRow {
@@ -175,6 +177,10 @@ export function getTransactions(
     conditions.push('account_id = @accountId');
     params.accountId = filters.accountId;
   }
+  if (filters.entityId !== undefined) {
+    conditions.push('entity_id = @entityId');
+    params.entityId = filters.entityId;
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sql = `SELECT * FROM transactions ${where} ORDER BY date DESC`;
@@ -207,13 +213,18 @@ export function getSpendingSummary(
   db: Database,
   startDate: string,
   endDate: string,
-  accountId?: number
+  accountId?: number,
+  entityId?: number
 ): SpendingSummaryRow[] {
   const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
   const params: Record<string, unknown> = { startDate, endDate };
   if (accountId !== undefined) {
     conditions.push('account_id = @accountId');
     params.accountId = accountId;
+  }
+  if (entityId !== undefined) {
+    conditions.push('entity_id = @entityId');
+    params.entityId = entityId;
   }
   return db.prepare(`
     SELECT
@@ -316,16 +327,19 @@ export function getProfitLoss(
   db: Database,
   startDate: string,
   endDate: string,
-  accountId?: number
+  accountId?: number,
+  entityId?: number
 ): ProfitLossRow {
   const baseParams: Record<string, unknown> = { startDate, endDate };
   const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
   if (accountId !== undefined) baseParams.accountId = accountId;
+  const entityFilter = entityId !== undefined ? ' AND entity_id = @entityId' : '';
+  if (entityId !== undefined) baseParams.entityId = entityId;
 
   const incomeByCategory = db.prepare(`
     SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
     FROM transactions
-    WHERE date >= @startDate AND date <= @endDate AND (amount > 0 OR category = 'Income')${acctFilter}
+    WHERE date >= @startDate AND date <= @endDate AND (amount > 0 OR category = 'Income')${acctFilter}${entityFilter}
     GROUP BY category ORDER BY total DESC
   `).all(baseParams) as SpendingSummaryRow[];
 
@@ -333,7 +347,7 @@ export function getProfitLoss(
     SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
     FROM transactions
     WHERE date >= @startDate AND date <= @endDate AND amount < 0
-      AND COALESCE(category, '') NOT IN ('Income', 'Transfer')${acctFilter}
+      AND COALESCE(category, '') NOT IN ('Income', 'Transfer')${acctFilter}${entityFilter}
     GROUP BY category ORDER BY total ASC
   `).all(baseParams) as SpendingSummaryRow[];
 
@@ -366,7 +380,8 @@ export function getMonthlySavingsData(
   db: Database,
   endMonth?: string,
   months: number = 6,
-  accountId?: number
+  accountId?: number,
+  entityId?: number
 ): MonthlyIncomeExpense[] {
   const end = endMonth ?? new Date().toISOString().slice(0, 7);
   const [endYear, endMon] = end.split('-').map(Number);
@@ -380,12 +395,14 @@ export function getMonthlySavingsData(
   const params: Record<string, unknown> = { startDate, endDate };
   const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
   if (accountId !== undefined) params.accountId = accountId;
+  const entityFilter = entityId !== undefined ? ' AND entity_id = @entityId' : '';
+  if (entityId !== undefined) params.entityId = entityId;
 
   const rows = db.prepare(`
     SELECT strftime('%Y-%m', date) AS month,
       COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income,
       COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS expenses
-    FROM transactions WHERE date >= @startDate AND date <= @endDate${acctFilter}
+    FROM transactions WHERE date >= @startDate AND date <= @endDate${acctFilter}${entityFilter}
     GROUP BY strftime('%Y-%m', date) ORDER BY month
   `).all(params) as { month: string; income: number; expenses: number }[];
 
@@ -601,7 +618,8 @@ export function getBudgets(db: Database): BudgetRow[] {
 export function getBudgetVsActual(
   db: Database,
   month: string,
-  accountId?: number
+  accountId?: number,
+  entityId?: number
 ): BudgetVsActualRow[] {
   const startDate = `${month}-01`;
   // Compute end of month
@@ -622,11 +640,13 @@ export function getBudgetVsActual(
   })();
 
   const acctFilter = accountId !== undefined ? ' AND t.account_id = @accountId' : '';
+  const entityFilter = entityId !== undefined ? ' AND t.entity_id = @entityId' : '';
   const results: BudgetVsActualRow[] = [];
 
   for (const budget of budgets) {
     const params: Record<string, unknown> = { category: budget.category, startDate, endDate };
     if (accountId !== undefined) params.accountId = accountId;
+    if (entityId !== undefined) params.entityId = entityId;
 
     let actual: number;
 
@@ -644,7 +664,7 @@ export function getBudgetVsActual(
         JOIN descendants d ON LOWER(t.category) = LOWER(d.name)
         WHERE t.date >= @startDate
           AND t.date <= @endDate
-          AND t.amount < 0${acctFilter}
+          AND t.amount < 0${acctFilter}${entityFilter}
       `).get(params) as { actual: number };
       actual = row.actual;
     } else {
@@ -655,7 +675,7 @@ export function getBudgetVsActual(
         WHERE LOWER(t.category) = LOWER(@category)
           AND t.date >= @startDate
           AND t.date <= @endDate
-          AND t.amount < 0${acctFilter}
+          AND t.amount < 0${acctFilter}${entityFilter}
       `).get(params) as { actual: number };
       actual = row.actual;
     }
@@ -757,6 +777,7 @@ export interface TransactionUpdate {
   amount?: number;
   category?: string;
   notes?: string;
+  entity_id?: number | null;
 }
 
 /**
@@ -775,6 +796,7 @@ export function updateTransaction(
   if (updates.amount !== undefined) { sets.push('amount = @amount'); params.amount = updates.amount; }
   if (updates.category !== undefined) { sets.push('category = @category'); params.category = updates.category; }
   if (updates.notes !== undefined) { sets.push('notes = @notes'); params.notes = updates.notes; }
+  if (updates.entity_id !== undefined) { sets.push('entity_id = @entity_id'); params.entity_id = updates.entity_id; }
 
   if (sets.length === 0) return false;
 

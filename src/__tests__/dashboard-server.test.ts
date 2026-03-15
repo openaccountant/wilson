@@ -41,7 +41,7 @@ describe('dashboard server', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/html');
       const text = await res.text();
-      expect(text).toContain('Open Accountant Dashboard');
+      expect(text).toContain('Wilson Dashboard');
     });
 
     test('GET /api/summary returns JSON', async () => {

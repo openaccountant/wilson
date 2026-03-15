@@ -20,7 +20,7 @@ export class AgentRunnerController {
   private workingStateValue: WorkingState = { status: 'idle' };
   private errorValue: string | null = null;
   private pendingApprovalValue: { tool: string; args: Record<string, unknown> } | null = null;
-  private readonly agentConfig: AgentConfig;
+  private agentConfig: AgentConfig;
   private readonly inMemoryChatHistory: InMemoryChatHistory;
   private readonly onChange?: ChangeListener;
   private abortController: AbortController | null = null;
@@ -35,6 +35,11 @@ export class AgentRunnerController {
     this.agentConfig = agentConfig;
     this.inMemoryChatHistory = inMemoryChatHistory;
     this.onChange = onChange;
+  }
+
+  /** Update the model used for subsequent agent runs (e.g. after /model switch). */
+  updateModel(model: string, modelProvider: string) {
+    this.agentConfig = { ...this.agentConfig, model, modelProvider };
   }
 
   get history(): HistoryItem[] {

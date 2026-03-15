@@ -8,6 +8,8 @@ export interface AppState {
   setAccountId: (id: number | null) => void;
   category: string | null;
   setCategory: (cat: string | null) => void;
+  entityId: number | null;
+  setEntityId: (id: number | null) => void;
 }
 
 export const AppContext = createContext<AppState | null>(null);

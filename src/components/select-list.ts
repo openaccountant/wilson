@@ -12,6 +12,7 @@ const TAG_COLORS: Record<ModelTag, (text: string) => string> = {
   small: chalk.cyan,
   large: chalk.white,
   reasoning: chalk.magenta,
+  webgpu: chalk.yellow,
 };
 
 function formatTags(tags: ModelTag[]): string {
@@ -98,6 +99,17 @@ export function createApprovalSelector(onSelect: (decision: ApprovalDecision) =>
   const list = new VimSelectList(items, 5, selectListTheme);
   list.onSelect = (item) => onSelect(item.value as ApprovalDecision);
   list.onCancel = () => onSelect('deny');
+  return list;
+}
+
+export function createDownloadConfirmSelector(onConfirm: (proceed: boolean) => void) {
+  const items: SelectItem[] = [
+    { value: 'yes', label: '1. Yes, download now' },
+    { value: 'no', label: '2. No, go back' },
+  ];
+  const list = new VimSelectList(items, 4, selectListTheme);
+  list.onSelect = (item) => onConfirm(item.value === 'yes');
+  list.onCancel = () => onConfirm(false);
   return list;
 }
 

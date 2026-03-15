@@ -1,0 +1,54 @@
+name: Notify Monorepo of Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Parse release info
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const release = context.payload.release;
+            const body = release.body || '';
+            
+            // Check for breaking changes
+            const hasBreaking = body.toLowerCase().includes('breaking') || 
+                               body.includes('BREAKING CHANGE') ||
+                               release.tag_name.includes('!');
+            
+            // Check for new features
+            const hasFeatures = body.toLowerCase().includes('feature') ||
+                               body.includes('### Added') ||
+                               body.includes('## Added');
+            
+            core.setOutput('version', release.tag_name.replace(/^v/, ''));
+            core.setOutput('url', release.html_url);
+            core.setOutput('breaking', hasBreaking);
+            core.setOutput('features', hasFeatures);
+
+      - name: Trigger monorepo workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.MONOREPO_PAT }}
+          repository: ${{ secrets.MONOREPO_OWNER }}/${{ secrets.MONOREPO_REPO }}
+          event-type: cli-release
+          client-payload: |
+            {
+              "version": "${{ steps.release.outputs.version }}",
+              "release_url": "${{ steps.release.outputs.url }}",
+              "breaking": "${{ steps.release.outputs.breaking }}",
+              "features": "${{ steps.release.outputs.features }}"
+            }
+
+      - name: Notify success
+        run: |
+          echo "✅ Monorepo notified of CLI release v${{ steps.release.outputs.version }}"
+          echo "   Breaking changes: ${{ steps.release.outputs.breaking }}"
+          echo "   New features: ${{ steps.release.outputs.features }}"

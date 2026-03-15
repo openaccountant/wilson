@@ -17,6 +17,18 @@ export interface ProviderDef {
 }
 
 export const PROVIDERS: ProviderDef[] = [
+  // Local-first providers
+  {
+    id: 'ollama',
+    displayName: 'Ollama',
+    modelPrefix: 'ollama:',
+  },
+  {
+    id: 'transformers',
+    displayName: 'Transformers.js (local)',
+    modelPrefix: 'transformers:',
+  },
+  // Cloud providers
   {
     id: 'openai',
     displayName: 'OpenAI',
@@ -35,7 +47,7 @@ export const PROVIDERS: ProviderDef[] = [
     id: 'google',
     displayName: 'Google',
     modelPrefix: 'gemini-',
-    apiKeyEnvVar: 'GOOGLE_API_KEY',
+    apiKeyEnvVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
     fastModel: 'gemini-3-flash-preview',
   },
   {
@@ -71,11 +83,6 @@ export const PROVIDERS: ProviderDef[] = [
     displayName: 'LiteLLM',
     modelPrefix: 'litellm:',
     apiKeyEnvVar: 'LITELLM_API_KEY',
-  },
-  {
-    id: 'ollama',
-    displayName: 'Ollama',
-    modelPrefix: 'ollama:',
   },
 ];
 

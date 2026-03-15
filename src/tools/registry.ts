@@ -361,6 +361,55 @@ Store and retrieve memories — context about the user, insights discovered, and
 - Use deactivate to remove memories that are no longer relevant
 `.trim();
 
+const ENTITY_MANAGE_DESCRIPTION = `
+Manage business entities for multi-entity finance tracking.
+
+## When to Use
+
+- When the user wants to separate finances by business entity (personal, side hustle, LLC, etc.)
+- When the user says "add an entity", "list entities", "assign transactions to my side hustle"
+- When the user wants to tag transactions or accounts with a business entity
+
+## When NOT to Use
+
+- When the user wants to categorize transactions by spending type (use categorize instead)
+- When the user wants to manage accounts (use account_manage instead)
+
+## Usage Notes
+
+- Every database starts with a "Personal" default entity
+- Entities have a name, slug, description, and color
+- Transactions and accounts can be assigned to an entity
+- NULL entity_id = unassigned (works with all existing data)
+- Actions: list, add (name, description?, color?), update (entityId, name?, description?, color?), delete (entityId), assign (entityId + transactionIds or accountId)
+`.trim();
+
+const ENTITY_CLASSIFY_DESCRIPTION = `
+Classify unassigned transactions into business entities using AI.
+
+## When to Use
+
+- When the user wants to automatically assign transactions to entities (personal, business, side hustle)
+- When the user says "classify transactions", "which transactions are business expenses", "sort by entity"
+- After creating multiple entities and wanting to bulk-assign transactions
+- When the user wants to separate personal and business spending
+
+## When NOT to Use
+
+- When the user wants to manually assign specific transactions (use entity_manage assign)
+- When there is only one entity (nothing to classify between)
+- When the user wants to categorize by spending type (use categorize instead)
+
+## Usage Notes
+
+- Requires at least 2 entities to classify between
+- Supports dryRun mode to preview classifications before committing
+- Returns confidence scores and one-sentence reasoning for each classification
+- Conservative bias: when uncertain, leans personal (lower tax risk)
+- confidenceThreshold (default 0.7) controls auto-assignment cutoff
+- Low-confidence items are returned as reviewItems for manual decision
+`.trim();
+
 const RULE_MANAGE_DESCRIPTION = `
 Manage categorization rules for automatic transaction classification.
 
@@ -688,6 +737,31 @@ const PLAID_SYNC_DESCRIPTION = `
 - Always call this tool when the user asks to sync — the tool handles license and credential checks internally
 `.trim();
 
+const COINBASE_SYNC_DESCRIPTION = `
+**Requires Pro license.** Sync transactions from linked Coinbase crypto accounts.
+
+## When to Use
+
+- When the user says "sync coinbase", "pull crypto transactions", or "update from Coinbase"
+- When the user wants to import latest crypto transactions from Coinbase
+- After the user has connected Coinbase with /connect-coinbase
+
+## When NOT to Use
+
+- When the user wants to import from a CSV file (use csv_import instead)
+- When no Coinbase account is linked (direct user to /connect-coinbase first)
+- When the user is asking about Plaid/bank sync (use plaid_sync instead)
+
+## Usage Notes
+
+- Requires a linked Coinbase account (set up via /connect-coinbase)
+- Deduplicates against previously synced transactions via external_id
+- Only imports completed transactions
+- Skips internal transfers (trade, transfer, exchange_deposit, exchange_withdrawal)
+- Pro users without local Coinbase credentials use the OA API proxy automatically
+- Always call this tool when the user asks to sync Coinbase — the tool handles license and credential checks internally
+`.trim();
+
 const WEB_SEARCH_DESCRIPTION = `
 Search the web for current information on any topic.
 
@@ -802,6 +876,17 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     tools.push({ name: 'memory_manage', tool: memoryMod.memoryManageTool, description: MEMORY_MANAGE_DESCRIPTION });
   }
 
+  // Entity management
+  const entityMod = safeRequire<{ entityManageTool: ToolDef }>('./entity/entity-manage.js');
+  if (entityMod?.entityManageTool) {
+    tools.push({ name: 'entity_manage', tool: entityMod.entityManageTool, description: ENTITY_MANAGE_DESCRIPTION });
+  }
+
+  const entityClassifyMod = safeRequire<{ entityClassifyTool: ToolDef }>('./entity/entity-classify.js');
+  if (entityClassifyMod?.entityClassifyTool) {
+    tools.push({ name: 'entity_classify', tool: entityClassifyMod.entityClassifyTool, description: ENTITY_CLASSIFY_DESCRIPTION });
+  }
+
   const txnMod = safeRequire<{ transactionSearchTool: ToolDef }>('./query/transaction-search.js');
   if (txnMod?.transactionSearchTool) {
     tools.push({
@@ -891,6 +976,15 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       name: 'plaid_recurring',
       tool: plaidRecMod.plaidRecurringTool,
       description: PLAID_RECURRING_DESCRIPTION,
+    });
+  }
+
+  const coinbaseMod = safeRequire<{ coinbaseSyncTool: ToolDef }>('./import/coinbase-sync.js');
+  if (coinbaseMod?.coinbaseSyncTool) {
+    tools.push({
+      name: 'coinbase_sync',
+      tool: coinbaseMod.coinbaseSyncTool,
+      description: COINBASE_SYNC_DESCRIPTION,
     });
   }
 

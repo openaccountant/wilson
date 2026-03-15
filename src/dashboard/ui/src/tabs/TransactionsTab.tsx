@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useAppState } from '@/state';
-import type { Transaction } from '@/types';
+import { api } from '@/api';
+import type { Transaction, Entity } from '@/types';
 
 function formatAmount(amount: number): string {
   const abs = Math.abs(amount);
@@ -13,19 +14,75 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function EntityCell({
+  txId,
+  entityId,
+  entities,
+  onUpdate,
+}: {
+  txId: number;
+  entityId: number | null;
+  entities: Entity[];
+  onUpdate: (txId: number, entityId: number | null) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  async function handleChange(value: string) {
+    const newEntityId = value === '' ? null : Number(value);
+    setSaving(true);
+    try {
+      await api(`/api/transactions/${txId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ entity_id: newEntityId }),
+      });
+      onUpdate(txId, newEntityId);
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (entities.length <= 1) {
+    const entity = entities.find((e) => e.id === entityId);
+    return (
+      <span className="text-text-muted text-xs">{entity?.name ?? '--'}</span>
+    );
+  }
+
+  return (
+    <select
+      value={entityId ?? ''}
+      onChange={(e) => handleChange(e.target.value)}
+      disabled={saving}
+      className="bg-transparent border border-transparent hover:border-border rounded px-1 py-0.5 text-xs text-text-secondary cursor-pointer focus:outline-none focus:border-green disabled:opacity-50 w-full max-w-[120px]"
+    >
+      <option value="">--</option>
+      {entities.map((e) => (
+        <option key={e.id} value={e.id}>
+          {e.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function TransactionsTab() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const { dateRange, accountId, category: globalCategory } = useAppState();
+  const { dateRange, accountId, category: globalCategory, entityId } = useAppState();
 
   const apiPath = useMemo(() => {
     const parts = [`start=${dateRange.startDate}`, `end=${dateRange.endDate}`, 'limit=500'];
     if (accountId != null) parts.push(`accountId=${accountId}`);
     if (globalCategory) parts.push(`category=${encodeURIComponent(globalCategory)}`);
+    if (entityId != null) parts.push(`entityId=${entityId}`);
     return `/api/transactions?${parts.join('&')}`;
-  }, [dateRange, accountId, globalCategory]);
+  }, [dateRange, accountId, globalCategory, entityId]);
 
-  const { data, loading, error } = useApi<Transaction[]>(apiPath, [apiPath]);
+  const { data, loading, error, refetch } = useApi<Transaction[]>(apiPath, [apiPath]);
+  const { data: entitiesData } = useApi<Entity[]>('/api/entities');
+  const entities = useMemo(() => entitiesData ?? [], [entitiesData]);
 
   const categories = useMemo(() => {
     if (!data) return [];
@@ -49,6 +106,15 @@ export function TransactionsTab() {
       return true;
     });
   }, [data, search, categoryFilter]);
+
+  function handleEntityUpdate(txId: number, newEntityId: number | null) {
+    // Optimistically update local data
+    if (data) {
+      const tx = data.find((t) => t.id === txId);
+      if (tx) tx.entity_id = newEntityId;
+      refetch();
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -118,6 +184,9 @@ export function TransactionsTab() {
                   <th className="text-right px-4 py-3 font-medium">Amount</th>
                   <th className="text-left px-4 py-3 font-medium">Category</th>
                   <th className="text-left px-4 py-3 font-medium">Account</th>
+                  {entities.length > 1 && (
+                    <th className="text-left px-4 py-3 font-medium">Entity</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -161,6 +230,16 @@ export function TransactionsTab() {
                     <td className="px-4 py-3 text-text-secondary text-xs">
                       {tx.account_name ?? <span className="text-text-muted">--</span>}
                     </td>
+                    {entities.length > 1 && (
+                      <td className="px-4 py-3">
+                        <EntityCell
+                          txId={tx.id}
+                          entityId={tx.entity_id}
+                          entities={entities}
+                          onUpdate={handleEntityUpdate}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -4,7 +4,7 @@ import * as loader from '../orchestration/loader.js';
 import * as licenseModule from '../licensing/license.js';
 import * as chainModule from '../orchestration/chain.js';
 import * as teamModule from '../orchestration/team.js';
-import { chainToTool, teamToTool, getOrchestrationTools } from '../orchestration/registry.js';
+import { chainToTool, teamToTool, getOrchestrationTools, clearOrchestrationCache } from '../orchestration/registry.js';
 
 describe('orchestration/registry', () => {
   let discoverChainsSpy: ReturnType<typeof spyOn>;
@@ -13,6 +13,7 @@ describe('orchestration/registry', () => {
   let hasLicenseSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    clearOrchestrationCache();
     discoverChainsSpy = spyOn(loader, 'discoverChains').mockReturnValue([]);
     discoverTeamsSpy = spyOn(loader, 'discoverTeams').mockReturnValue([]);
     loadPaidChainStepsSpy = spyOn(loader, 'loadPaidChainSteps').mockResolvedValue(null);

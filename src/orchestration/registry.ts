@@ -51,12 +51,22 @@ export function teamToTool(team: TeamDef): ToolDef {
   });
 }
 
+// Cache orchestration tools — invalidate via clearOrchestrationCache() (e.g. after license changes)
+let cachedTools: ToolDef[] | null = null;
+
+export function clearOrchestrationCache() {
+  cachedTools = null;
+}
+
 /**
  * Discover all chains and teams, convert them to tools.
  * Skips paid chains/teams that the user doesn't have a license for.
  * For paid chains with a valid license, fetches steps from the server.
+ * Results are cached until clearOrchestrationCache() is called.
  */
 export async function getOrchestrationTools(): Promise<ToolDef[]> {
+  if (cachedTools) return cachedTools;
+
   const tools: ToolDef[] = [];
 
   for (const chain of discoverChains()) {
@@ -82,5 +92,6 @@ export async function getOrchestrationTools(): Promise<ToolDef[]> {
     tools.push(teamToTool(team));
   }
 
+  cachedTools = tools;
   return tools;
 }

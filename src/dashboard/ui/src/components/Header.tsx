@@ -1,9 +1,11 @@
 import { useAppState } from '@/state';
 import type { RangePreset } from '@/hooks/useDateRange';
+import type { Entity } from '@/types';
 
 interface HeaderProps {
   accounts: { id: number; name: string }[];
   categories: string[];
+  entities: Entity[];
   monthLabel: string;
   preset: RangePreset;
   onPrevMonth: () => void;
@@ -22,13 +24,14 @@ const PRESETS: { id: RangePreset; label: string }[] = [
 export function Header({
   accounts,
   categories,
+  entities,
   monthLabel,
   preset,
   onPrevMonth,
   onNextMonth,
   onSelectPreset,
 }: HeaderProps) {
-  const { accountId, setAccountId, category, setCategory } = useAppState();
+  const { accountId, setAccountId, category, setCategory, entityId, setEntityId } = useAppState();
 
   return (
     <header className="flex items-center justify-between px-6 py-3 bg-surface-raised border-b border-border shrink-0">
@@ -98,6 +101,21 @@ export function Header({
             </option>
           ))}
         </select>
+
+        {entities.length > 1 && (
+          <select
+            value={entityId ?? ''}
+            onChange={(e) => setEntityId(e.target.value ? Number(e.target.value) : null)}
+            className="bg-border-muted text-text border border-border px-2.5 py-1.5 rounded-md text-sm"
+          >
+            <option value="">All entities</option>
+            {entities.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     </header>
   );

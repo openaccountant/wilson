@@ -100,3 +100,13 @@ export function removePlaidItem(institutionName: string): boolean {
   }
   return false;
 }
+
+/**
+ * Find a Plaid item by institution name (case-insensitive).
+ */
+export function findPlaidItem(institutionName: string): PlaidItem | undefined {
+  const store = readStore();
+  return store.items.find(
+    (i) => i.institutionName.toLowerCase() === institutionName.toLowerCase()
+  );
+}

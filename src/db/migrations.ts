@@ -27,6 +27,8 @@ import {
   GOAL_SNAPSHOTS_TABLE,
   MEMORIES_TABLE,
   GOALS_INDEXES,
+  ENTITIES_TABLE,
+  ENTITY_ID_COLUMNS,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -59,6 +61,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 17, name: 'create_goals', up: GOALS_TABLE + GOAL_SNAPSHOTS_TABLE },
   { version: 18, name: 'create_memories', up: MEMORIES_TABLE },
   { version: 19, name: 'create_goals_indexes', up: GOALS_INDEXES },
+  { version: 20, name: 'create_entities', up: ENTITIES_TABLE },
+  { version: 21, name: 'add_entity_id_columns', up: ENTITY_ID_COLUMNS },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

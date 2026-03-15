@@ -20,6 +20,14 @@ import {
   getAccountTransactionSummary,
 } from '../db/net-worth-queries.js';
 import {
+  getEntities,
+  getEntityById,
+  createEntity,
+  updateEntity,
+  deleteEntity,
+  type EntityInsert,
+} from '../db/entity-queries.js';
+import {
   getDailySpending,
   getStreak,
   getWeeklySummary,
@@ -35,6 +43,11 @@ import { traceStore } from '../utils/trace-store.js';
 
 function parseAccountId(params: URLSearchParams): number | undefined {
   const val = params.get('accountId');
+  return val ? parseInt(val, 10) : undefined;
+}
+
+function parseEntityId(params: URLSearchParams): number | undefined {
+  const val = params.get('entityId');
   return val ? parseInt(val, 10) : undefined;
 }
 
@@ -64,25 +77,29 @@ function escapeCsv(v: string): string {
 export function apiSummary(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
-  return getSpendingSummary(db, startDate, endDate, accountId);
+  const entityId = parseEntityId(params);
+  return getSpendingSummary(db, startDate, endDate, accountId, entityId);
 }
 
 export function apiPnl(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
-  return getProfitLoss(db, startDate, endDate, accountId);
+  const entityId = parseEntityId(params);
+  return getProfitLoss(db, startDate, endDate, accountId, entityId);
 }
 
 export function apiBudgets(db: Database, params: URLSearchParams) {
   const { month } = parseDateRange(params);
   const accountId = parseAccountId(params);
-  return getBudgetVsActual(db, month, accountId);
+  const entityId = parseEntityId(params);
+  return getBudgetVsActual(db, month, accountId, entityId);
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
   const months = parseInt(params.get('months') ?? '6', 10);
   const accountId = parseAccountId(params);
-  return getMonthlySavingsData(db, undefined, months, accountId);
+  const entityId = parseEntityId(params);
+  return getMonthlySavingsData(db, undefined, months, accountId, entityId);
 }
 
 export function apiAlerts(db: Database) {
@@ -98,11 +115,13 @@ export function apiTransactions(db: Database, params: URLSearchParams) {
   const category = params.get('category');
   const merchant = params.get('merchant');
   const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
   if (start) filters.dateStart = start;
   if (end) filters.dateEnd = end;
   if (category) filters.category = category;
   if (merchant) filters.merchant = merchant;
   if (accountId !== undefined) filters.accountId = accountId;
+  if (entityId !== undefined) filters.entityId = entityId;
   const txns = getTransactions(db, filters);
   const limit = parseInt(params.get('limit') ?? '100', 10);
   return txns.slice(0, limit);
@@ -126,10 +145,12 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
   const end = params.get('end');
   const category = params.get('category');
   const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
   if (start) filters.dateStart = start;
   if (end) filters.dateEnd = end;
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
+  if (entityId !== undefined) filters.entityId = entityId;
   const txns = getTransactions(db, filters);
 
   const header = 'Date,Description,Amount,Category';
@@ -147,10 +168,12 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
   const end = params.get('end');
   const category = params.get('category');
   const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
   if (start) filters.dateStart = start;
   if (end) filters.dateEnd = end;
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
+  if (entityId !== undefined) filters.entityId = entityId;
   const txns = getTransactions(db, filters);
 
   const data = txns.map((t) => ({
@@ -171,7 +194,8 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
 export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
-  const pnl = getProfitLoss(db, startDate, endDate, accountId);
+  const entityId = parseEntityId(params);
+  const pnl = getProfitLoss(db, startDate, endDate, accountId, entityId);
 
   const lines = ['Type,Category,Amount,Count'];
   for (const r of pnl.incomeByCategory) {
@@ -573,6 +597,32 @@ export function apiSetCustomPrompt(db: Database, body: { prompt?: string }) {
     ON CONFLICT(key) DO UPDATE SET value = @prompt
   `).run({ prompt });
   return { success: true };
+}
+
+// ── Entities ─────────────────────────────────────────────────────────────────
+
+export function apiEntities(db: Database) {
+  try {
+    return getEntities(db);
+  } catch {
+    return [];
+  }
+}
+
+export function apiCreateEntity(db: Database, body: { name?: string; description?: string; color?: string }) {
+  if (!body.name) throw new Error('name is required');
+  const id = createEntity(db, body as EntityInsert);
+  return { success: true, id };
+}
+
+export function apiUpdateEntity(db: Database, id: number, body: { name?: string; description?: string; color?: string }) {
+  const success = updateEntity(db, id, body);
+  return { success, id };
+}
+
+export function apiDeleteEntity(db: Database, id: number) {
+  const result = deleteEntity(db, id);
+  return result.ok ? { success: true, id } : { success: false, error: result.error };
 }
 
 export function apiAnnotationStats(db: Database) {

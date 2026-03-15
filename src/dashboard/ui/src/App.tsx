@@ -4,7 +4,7 @@ import { TabBar, type TabId } from '@/components/TabBar';
 import { AppContext, type AppState } from '@/state';
 import { useDateRange } from '@/hooks/useDateRange';
 import { useApi } from '@/hooks/useApi';
-import type { Account, SpendingSummaryItem } from '@/types';
+import type { Account, SpendingSummaryItem, Entity } from '@/types';
 import { OverviewTab } from '@/tabs/OverviewTab';
 import { TransactionsTab } from '@/tabs/TransactionsTab';
 import { AccountsTab } from '@/tabs/AccountsTab';
@@ -35,9 +35,11 @@ export function App() {
   const [activeTab, setActiveTab] = useState<TabId>(getHashTab);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [category, setCategory] = useState<string | null>(null);
+  const [entityId, setEntityId] = useState<number | null>(null);
   const { dateRange, setDateRange, goToPrevMonth, goToNextMonth, selectPreset, preset, monthLabel } = useDateRange();
 
   const { data: accountsData } = useApi<Account[]>('/api/accounts');
+  const { data: entitiesData } = useApi<Entity[]>('/api/entities');
   // Fetch summary with date range so categories update when range changes
   const summaryParams = `startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
   const { data: summaryData } = useApi<SpendingSummaryItem[]>(`/api/summary?${summaryParams}`, [summaryParams]);
@@ -45,6 +47,7 @@ export function App() {
   const { data: allSummaryData } = useApi<SpendingSummaryItem[]>('/api/summary?startDate=2000-01-01&endDate=2099-12-31');
 
   const accounts = useMemo(() => accountsData ?? [], [accountsData]);
+  const entities = useMemo(() => entitiesData ?? [], [entitiesData]);
   const categories = useMemo(() => {
     // Merge categories from current range + all-time to populate dropdown fully
     const combined = [...(summaryData ?? []), ...(allSummaryData ?? [])];
@@ -69,6 +72,8 @@ export function App() {
     setAccountId,
     category,
     setCategory,
+    entityId,
+    setEntityId,
   };
 
   const ActiveTabComponent = TAB_COMPONENTS[activeTab];
@@ -79,6 +84,7 @@ export function App() {
       <Header
         accounts={accounts}
         categories={categories}
+        entities={entities}
         monthLabel={monthLabel}
         preset={preset}
         onPrevMonth={goToPrevMonth}

@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'http';
-import { createLinkToken, exchangePublicToken, getItemInfo, hasLocalPlaidCreds } from './client.js';
+import { createLinkToken, createUpdateLinkToken, exchangePublicToken, getItemInfo, getItemInstitutionId, hasLocalPlaidCreds } from './client.js';
 import { openBrowser } from '../utils/browser.js';
-import { savePlaidItem } from './store.js';
+import { savePlaidItem, getPlaidItems } from './store.js';
 import type { PlaidItem } from './store.js';
 
 const PORT = 53781;
@@ -114,24 +114,106 @@ export async function startPlaidLinkServer(useProxy = false): Promise<PlaidItem 
             const { accessToken, itemId } = await exchangePublicToken(public_token, useProxy);
             const info = await getItemInfo(accessToken, useProxy);
 
+            // Duplicate Item detection: check if institution is already linked
+            const existingItems = getPlaidItems();
+            const duplicate = existingItems.find(
+              (existing) => existing.institutionName.toLowerCase() === info.institutionName.toLowerCase()
+                && existing.itemId !== itemId
+            );
+
             const item: PlaidItem = {
               itemId,
               accessToken,
               institutionName: info.institutionName,
               accounts: info.accounts,
-              cursor: null,
+              cursor: duplicate?.cursor ?? null, // preserve cursor if replacing a duplicate
               linkedAt: new Date().toISOString(),
             };
 
             savePlaidItem(item);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, institution: info.institutionName }));
+            res.end(JSON.stringify({
+              success: true,
+              institution: info.institutionName,
+              duplicate: duplicate ? duplicate.institutionName : undefined,
+            }));
 
             clearTimeout(timeout);
             resolved = true;
             server.close();
             resolve(item);
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      res.writeHead(404);
+      res.end('Not found');
+    });
+
+    server.listen(PORT, () => {
+      openBrowser(`http://localhost:${PORT}`);
+    });
+
+    server.on('error', () => {
+      cleanup();
+    });
+  });
+}
+
+/**
+ * Start Plaid Link in update mode for re-authentication.
+ * Used when a Plaid Item's credentials become stale (ITEM_LOGIN_REQUIRED).
+ *
+ * @param item - The PlaidItem that needs re-authentication
+ * @param useProxy - If true, use the OA API proxy
+ * @returns true if re-auth succeeded, false if cancelled/failed
+ */
+export async function startPlaidLinkUpdateServer(
+  item: PlaidItem,
+  useProxy = false,
+): Promise<boolean> {
+  const linkToken = await createUpdateLinkToken(item.accessToken, useProxy);
+
+  return new Promise<boolean>((resolve) => {
+    let server: Server;
+    let resolved = false;
+
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        server.close();
+        resolve(false);
+      }
+    };
+
+    const timeout = setTimeout(cleanup, 5 * 60 * 1000);
+
+    server = createServer(async (req, res) => {
+      if (req.method === 'GET' && req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(buildLinkPage(linkToken));
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/callback') {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            // In update mode, onSuccess fires but no new public_token exchange is needed.
+            // The existing access_token remains valid after re-auth.
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, institution: item.institutionName }));
+
+            clearTimeout(timeout);
+            resolved = true;
+            server.close();
+            resolve(true);
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));

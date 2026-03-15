@@ -8,8 +8,8 @@ import { resolveProvider, getProviderById } from '../providers.js';
 import { traceStore } from '../utils/trace-store.js';
 import { interactionStore } from '../utils/interaction-store.js';
 
-export const DEFAULT_PROVIDER = 'openai';
-export const DEFAULT_MODEL = 'gpt-5.2';
+export const DEFAULT_PROVIDER = 'ollama';
+export const DEFAULT_MODEL = 'ollama:qwen3:8b';
 
 /**
  * Gets the fast model variant for the given provider.
@@ -78,6 +78,8 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
     apiModel = model.replace(/^litellm:/, '');
   } else if (provider.id === 'ollama') {
     apiModel = model.replace(/^ollama:/, '');
+  } else if (provider.id === 'transformers') {
+    apiModel = model.replace(/^transformers:/, '');
   }
 
   const adapter = getAdapter(provider.id);

@@ -365,6 +365,32 @@ CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(memory_type);
 CREATE INDEX IF NOT EXISTS idx_memories_active ON memories(is_active);
 `;
 
+// ── Entities Table ──────────────────────────────────────────────────────────
+
+export const ENTITIES_TABLE = `
+CREATE TABLE IF NOT EXISTS entities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  color TEXT DEFAULT '#22c55e',
+  is_default INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO entities (name, slug, is_default, description)
+  VALUES ('Personal', 'personal', 1, 'Personal finances');
+`;
+
+export const ENTITY_ID_COLUMNS = `
+ALTER TABLE transactions ADD COLUMN entity_id INTEGER REFERENCES entities(id);
+ALTER TABLE accounts ADD COLUMN entity_id INTEGER REFERENCES entities(id);
+ALTER TABLE budgets ADD COLUMN entity_id INTEGER REFERENCES entities(id);
+CREATE INDEX IF NOT EXISTS idx_transactions_entity_id ON transactions(entity_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_entity_id ON accounts(entity_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_entity_id ON budgets(entity_id);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

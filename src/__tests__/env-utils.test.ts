@@ -51,7 +51,7 @@ describe('env utils', () => {
     test('returns env var name for known provider', () => {
       expect(getApiKeyNameForProvider('openai')).toBe('OPENAI_API_KEY');
       expect(getApiKeyNameForProvider('anthropic')).toBe('ANTHROPIC_API_KEY');
-      expect(getApiKeyNameForProvider('google')).toBe('GOOGLE_API_KEY');
+      expect(getApiKeyNameForProvider('google')).toBe('GOOGLE_GENERATIVE_AI_API_KEY');
     });
 
     test('returns undefined for unknown provider', () => {

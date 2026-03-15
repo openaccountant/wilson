@@ -1,51 +1,74 @@
 import type { ProviderAdapter } from '../types.js';
-import { OpenAIAdapter } from './openai.js';
-import { AnthropicAdapter } from './anthropic.js';
-import { GoogleAdapter } from './google.js';
+import { VercelAiAdapter } from './vercel-ai.js';
+import { TransformersAdapter } from './transformers.js';
+import { openai, createOpenAI } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 
 /**
  * Adapter registry — lazily initialized per provider.
- * No API keys needed at import time; adapters are created on first use.
+ * Vercel AI SDK reads OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY from env automatically.
+ * Ollama uses the OpenAI-compatible endpoint at /v1 (no API key needed).
  */
 const adapters = new Map<string, ProviderAdapter>();
 
-function getApiKey(envVar: string): string {
-  const apiKey = process.env[envVar];
-  if (!apiKey) {
-    throw new Error(`[LLM] ${envVar} not found in environment variables`);
-  }
-  return apiKey;
-}
-
-/** OpenAI-compatible provider configs: provider id → { envVar, baseURL? } */
-const OPENAI_COMPAT: Record<string, { envVar: string; baseURL?: string }> = {
-  openai: { envVar: 'OPENAI_API_KEY' },
-  xai: { envVar: 'XAI_API_KEY', baseURL: 'https://api.x.ai/v1' },
-  openrouter: { envVar: 'OPENROUTER_API_KEY', baseURL: 'https://openrouter.ai/api/v1' },
-  moonshot: { envVar: 'MOONSHOT_API_KEY', baseURL: 'https://api.moonshot.cn/v1' },
-  deepseek: { envVar: 'DEEPSEEK_API_KEY', baseURL: 'https://api.deepseek.com' },
-  litellm: { envVar: 'LITELLM_API_KEY', baseURL: process.env.LITELLM_BASE_URL || 'http://localhost:4000/v1' },
-  ollama: { envVar: '', baseURL: process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1' },
-};
-
-/**
- * Get (or create) the adapter for a given provider ID.
- */
 export function getAdapter(providerId: string): ProviderAdapter {
   const cached = adapters.get(providerId);
   if (cached) return cached;
 
   let adapter: ProviderAdapter;
 
-  if (providerId === 'anthropic') {
-    adapter = new AnthropicAdapter(getApiKey('ANTHROPIC_API_KEY'));
-  } else if (providerId === 'google') {
-    adapter = new GoogleAdapter(getApiKey('GOOGLE_API_KEY'));
-  } else {
-    // OpenAI-compatible providers
-    const config = OPENAI_COMPAT[providerId] ?? OPENAI_COMPAT.openai;
-    const apiKey = config.envVar ? getApiKey(config.envVar) : 'ollama';
-    adapter = new OpenAIAdapter(apiKey, config.baseURL);
+  switch (providerId) {
+    case 'anthropic':
+      adapter = new VercelAiAdapter((m) => anthropic(m));
+      break;
+    case 'google':
+      adapter = new VercelAiAdapter((m) => google(m));
+      break;
+    case 'xai':
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: 'https://api.x.ai/v1' })(m),
+      );
+      break;
+    case 'openrouter':
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({ apiKey: process.env.OPENROUTER_API_KEY, baseURL: 'https://openrouter.ai/api/v1' })(m),
+      );
+      break;
+    case 'deepseek':
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({ apiKey: process.env.DEEPSEEK_API_KEY, baseURL: 'https://api.deepseek.com' })(m),
+      );
+      break;
+    case 'moonshot':
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({ apiKey: process.env.MOONSHOT_API_KEY, baseURL: 'https://api.moonshot.cn/v1' })(m),
+      );
+      break;
+    case 'litellm':
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({
+          apiKey: process.env.LITELLM_API_KEY,
+          baseURL: process.env.LITELLM_BASE_URL || 'http://localhost:4000/v1',
+        })(m),
+      );
+      break;
+    case 'ollama':
+      // Ollama exposes an OpenAI-compatible endpoint at /v1
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({
+          apiKey: 'ollama',
+          baseURL: `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/v1`,
+        })(m),
+      );
+      break;
+    case 'transformers':
+      adapter = new TransformersAdapter();
+      break;
+    default:
+      // openai + unknown providers default to OpenAI
+      adapter = new VercelAiAdapter((m) => openai(m));
+      break;
   }
 
   adapters.set(providerId, adapter);

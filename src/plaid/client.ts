@@ -582,6 +582,85 @@ export interface RecurringStream {
 /**
  * Get recurring transaction streams (subscriptions, bills, income).
  */
+/**
+ * Remove a Plaid Item (revoke access token on Plaid's side).
+ * Should be called before removing from local store.
+ */
+export async function removeItem(
+  accessToken: string,
+  useProxy = false,
+): Promise<void> {
+  if (useProxy) {
+    await proxyFetch("/plaid/item/remove", {
+      access_token: accessToken,
+    });
+    logger.info("plaid:item:remove", { via: "proxy" });
+    return;
+  }
+
+  const plaid = getClient();
+
+  await withRetry(() =>
+    plaid.itemRemove({ access_token: accessToken }),
+  );
+
+  logger.info("plaid:item:remove", { via: "direct" });
+}
+
+/**
+ * Create a Link token in update mode for re-authentication.
+ * Used when a Plaid Item's login credentials become stale.
+ */
+export async function createUpdateLinkToken(
+  accessToken: string,
+  useProxy = false,
+): Promise<string> {
+  if (useProxy) {
+    const data = (await proxyFetch("/plaid/link-token/update", {
+      access_token: accessToken,
+      client_user_id: getPlaidUserId(),
+    })) as { link_token: string };
+    logger.info("plaid:link-token:update", { link_token: data.link_token.slice(0, 20) + "..." });
+    return data.link_token;
+  }
+
+  const plaid = getClient();
+
+  const response = await withRetry(() =>
+    plaid.linkTokenCreate({
+      user: { client_user_id: getPlaidUserId() },
+      client_name: "Open Accountant",
+      country_codes: [CountryCode.Us],
+      language: "en",
+      access_token: accessToken,
+    }),
+  );
+
+  logger.info("plaid:link-token:update", { link_token: response.data.link_token.slice(0, 20) + "..." });
+  return response.data.link_token;
+}
+
+/**
+ * Get the institution_id for a Plaid Item (used for duplicate detection).
+ */
+export async function getItemInstitutionId(
+  accessToken: string,
+  useProxy = false,
+): Promise<string | null> {
+  if (useProxy) {
+    const data = (await proxyFetch("/plaid/accounts", {
+      access_token: accessToken,
+    })) as { item: { institution_id: string | null } };
+    return data.item?.institution_id ?? null;
+  }
+
+  const plaid = getClient();
+  const response = await withRetry(() =>
+    plaid.accountsGet({ access_token: accessToken }),
+  );
+  return response.data.item.institution_id ?? null;
+}
+
 export async function getRecurringTransactions(
   accessToken: string,
   useProxy = false,

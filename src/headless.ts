@@ -32,6 +32,8 @@ import { initLinkTransactionsTool } from './tools/net-worth/link-transactions.js
 import { initCategoryManageTool } from './tools/categorize/category-manage.js';
 import { initGoalManageTool } from './tools/goals/goal-manage.js';
 import { initMemoryManageTool } from './tools/memory/memory-manage.js';
+import { initEntityManageTool } from './tools/entity/entity-manage.js';
+import { initEntityClassifyTool } from './tools/entity/entity-classify.js';
 import { initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
 import { initMcpClients, closeMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
@@ -82,6 +84,8 @@ export async function runHeadless(query: string): Promise<void> {
     initCategoryManageTool(db);
     initGoalManageTool(db);
     initMemoryManageTool(db);
+    initEntityManageTool(db);
+    initEntityClassifyTool(db);
     initGoalContext(db);
     initMemoryContext(db);
     initCustomPromptContext(db);
