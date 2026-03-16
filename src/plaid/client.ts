@@ -223,7 +223,7 @@ export async function createLinkToken(
     })) as {
       link_token: string;
     };
-    logger.info("plaid:link-token", { products, link_token: data.link_token.slice(0, 20) + "..." });
+    logger.info("plaid:link-token", { products, link_token: data.link_token.slice(0, 20) + "...", request_id: (data as Record<string, unknown>).request_id });
     dumpDebug("link-token", data);
     return data.link_token;
   }
@@ -245,7 +245,7 @@ export async function createLinkToken(
     }),
   );
 
-  logger.info("plaid:link-token", { products, link_token: response.data.link_token.slice(0, 20) + "..." });
+  logger.info("plaid:link-token", { products, link_token: response.data.link_token.slice(0, 20) + "...", request_id: response.data.request_id });
   dumpDebug("link-token", response.data);
   return response.data.link_token;
 }
@@ -266,7 +266,7 @@ export async function exchangePublicToken(
     const data = (await proxyFetch("/plaid/exchange", {
       public_token: publicToken,
     })) as { access_token: string; item_id: string };
-    logger.info("plaid:exchange", { item_id: data.item_id, access_token_prefix: data.access_token.slice(0, 10) + "..." });
+    logger.info("plaid:exchange", { item_id: data.item_id, access_token_prefix: data.access_token.slice(0, 10) + "...", request_id: (data as Record<string, unknown>).request_id });
     dumpDebug("exchange", data);
     return {
       accessToken: data.access_token,
@@ -282,7 +282,7 @@ export async function exchangePublicToken(
     }),
   );
 
-  logger.info("plaid:exchange", { item_id: response.data.item_id, access_token_prefix: response.data.access_token.slice(0, 10) + "..." });
+  logger.info("plaid:exchange", { item_id: response.data.item_id, access_token_prefix: response.data.access_token.slice(0, 10) + "...", request_id: response.data.request_id });
   dumpDebug("exchange", response.data);
   return {
     accessToken: response.data.access_token,
@@ -307,7 +307,7 @@ export async function getItemInfo(
       accounts: Array<{ account_id: string; name: string; mask: string | null }>;
       item: { institution_id: string | null };
     };
-    logger.info("plaid:accounts", { accounts: accountsData.accounts, item: accountsData.item });
+    logger.info("plaid:accounts", { accounts: accountsData.accounts, item: accountsData.item, request_id: (accountsData as Record<string, unknown>).request_id });
     dumpDebug("accounts", accountsData);
 
     const accounts = accountsData.accounts.map((a) => ({
@@ -339,7 +339,7 @@ export async function getItemInfo(
   const accountsRes = await withRetry(() =>
     plaid.accountsGet({ access_token: accessToken }),
   );
-  logger.info("plaid:accounts", { accounts: accountsRes.data.accounts, item: accountsRes.data.item });
+  logger.info("plaid:accounts", { accounts: accountsRes.data.accounts, item: accountsRes.data.item, request_id: accountsRes.data.request_id });
   dumpDebug("accounts", accountsRes.data);
   const accounts = accountsRes.data.accounts.map(
     (a: { account_id: string; name: string; mask: string | null }) => ({
@@ -394,11 +394,60 @@ export async function syncTransactions(
   useProxy = false,
 ): Promise<{
   added: SyncedTransaction[];
+  modified: SyncedTransaction[];
+  removed: string[];
   nextCursor: string;
 }> {
   const added: SyncedTransaction[] = [];
+  const modified: SyncedTransaction[] = [];
+  const removed: string[] = [];
   let currentCursor = cursor ?? "";
   let hasMore = true;
+
+  const mapRawTxn = (txn: {
+    transaction_id: string;
+    date: string;
+    name: string;
+    amount: number;
+    category: string[] | null;
+    account_id: string;
+    merchant_name: string | null;
+    personal_finance_category: { primary: string; detailed: string } | null;
+    payment_channel: string | null;
+    pending: boolean;
+    authorized_date: string | null;
+  }): SyncedTransaction => {
+    const pfc = txn.personal_finance_category;
+    return {
+      transactionId: txn.transaction_id,
+      date: txn.date,
+      name: txn.name,
+      amount: txn.amount,
+      category: txn.category ?? [],
+      accountId: txn.account_id,
+      merchantName: txn.merchant_name ?? undefined,
+      personalFinanceCategory: pfc
+        ? { primary: pfc.primary, detailed: pfc.detailed }
+        : undefined,
+      paymentChannel: txn.payment_channel ?? undefined,
+      pending: txn.pending,
+      authorizedDate: txn.authorized_date ?? undefined,
+    };
+  };
+
+  type RawTxn = {
+    transaction_id: string;
+    date: string;
+    name: string;
+    amount: number;
+    category: string[] | null;
+    account_id: string;
+    merchant_name: string | null;
+    personal_finance_category: { primary: string; detailed: string } | null;
+    payment_channel: string | null;
+    pending: boolean;
+    authorized_date: string | null;
+  };
 
   if (useProxy) {
     while (hasMore) {
@@ -406,50 +455,32 @@ export async function syncTransactions(
         access_token: accessToken,
         cursor: currentCursor || undefined,
       })) as {
-        added: Array<{
-          transaction_id: string;
-          date: string;
-          name: string;
-          amount: number;
-          category: string[] | null;
-          account_id: string;
-          merchant_name: string | null;
-          personal_finance_category: { primary: string; detailed: string } | null;
-          payment_channel: string | null;
-          pending: boolean;
-          authorized_date: string | null;
-        }>;
+        added: RawTxn[];
+        modified: RawTxn[];
+        removed: Array<{ transaction_id: string }>;
+        request_id?: string;
         next_cursor: string;
         has_more: boolean;
       };
 
-      logger.info("plaid:sync:page", { added_count: data.added.length, has_more: data.has_more, cursor: data.next_cursor, added: data.added });
+      logger.info("plaid:sync:page", { added_count: data.added.length, modified_count: (data.modified ?? []).length, removed_count: (data.removed ?? []).length, has_more: data.has_more, cursor: data.next_cursor, request_id: data.request_id, added: data.added });
       dumpDebug("sync-page", data);
 
       for (const txn of data.added) {
-        const pfc = txn.personal_finance_category;
-        added.push({
-          transactionId: txn.transaction_id,
-          date: txn.date,
-          name: txn.name,
-          amount: txn.amount,
-          category: txn.category ?? [],
-          accountId: txn.account_id,
-          merchantName: txn.merchant_name ?? undefined,
-          personalFinanceCategory: pfc
-            ? { primary: pfc.primary, detailed: pfc.detailed }
-            : undefined,
-          paymentChannel: txn.payment_channel ?? undefined,
-          pending: txn.pending,
-          authorizedDate: txn.authorized_date ?? undefined,
-        });
+        added.push(mapRawTxn(txn));
+      }
+      for (const txn of (data.modified ?? [])) {
+        modified.push(mapRawTxn(txn));
+      }
+      for (const txn of (data.removed ?? [])) {
+        removed.push(txn.transaction_id);
       }
 
       currentCursor = data.next_cursor;
       hasMore = data.has_more;
     }
 
-    return { added, nextCursor: currentCursor };
+    return { added, modified, removed, nextCursor: currentCursor };
   }
 
   const plaid = getClient();
@@ -462,33 +493,26 @@ export async function syncTransactions(
       }),
     );
 
-    logger.info("plaid:sync:page", { added_count: response.data.added.length, has_more: response.data.has_more, cursor: response.data.next_cursor, added: response.data.added });
+    logger.info("plaid:sync:page", { added_count: response.data.added.length, modified_count: response.data.modified.length, removed_count: response.data.removed.length, has_more: response.data.has_more, cursor: response.data.next_cursor, request_id: response.data.request_id, added: response.data.added });
     dumpDebug("sync-page", response.data);
 
     for (const txn of response.data.added) {
-      const pfc = txn.personal_finance_category;
-      added.push({
-        transactionId: txn.transaction_id,
-        date: txn.date,
-        name: txn.name,
-        amount: txn.amount,
-        category: txn.category ?? [],
-        accountId: txn.account_id,
-        merchantName: txn.merchant_name ?? undefined,
-        personalFinanceCategory: pfc
-          ? { primary: pfc.primary, detailed: pfc.detailed }
-          : undefined,
-        paymentChannel: txn.payment_channel ?? undefined,
-        pending: txn.pending,
-        authorizedDate: txn.authorized_date ?? undefined,
-      });
+      added.push(mapRawTxn(txn as unknown as RawTxn));
+    }
+    for (const txn of response.data.modified) {
+      modified.push(mapRawTxn(txn as unknown as RawTxn));
+    }
+    for (const txn of response.data.removed) {
+      if (txn.transaction_id) {
+        removed.push(txn.transaction_id);
+      }
     }
 
     currentCursor = response.data.next_cursor;
     hasMore = response.data.has_more;
   }
 
-  return { added, nextCursor: currentCursor };
+  return { added, modified, removed, nextCursor: currentCursor };
 }
 
 // ── Balances ─────────────────────────────────────────────────────────────────
@@ -529,7 +553,7 @@ export async function getBalances(
       }>;
     };
 
-    logger.info("plaid:balances", { accounts: data.accounts });
+    logger.info("plaid:balances", { accounts: data.accounts, request_id: (data as Record<string, unknown>).request_id });
     dumpDebug("balances", data);
 
     return data.accounts.map((a) => ({
@@ -550,7 +574,7 @@ export async function getBalances(
     plaid.accountsGet({ access_token: accessToken }),
   );
 
-  logger.info("plaid:balances", { accounts: response.data.accounts });
+  logger.info("plaid:balances", { accounts: response.data.accounts, request_id: response.data.request_id });
   dumpDebug("balances", response.data);
 
   return response.data.accounts.map((a: AccountBase) => ({
@@ -591,20 +615,20 @@ export async function removeItem(
   useProxy = false,
 ): Promise<void> {
   if (useProxy) {
-    await proxyFetch("/plaid/item/remove", {
+    const removeData = await proxyFetch("/plaid/item/remove", {
       access_token: accessToken,
     });
-    logger.info("plaid:item:remove", { via: "proxy" });
+    logger.info("plaid:item:remove", { via: "proxy", request_id: (removeData as Record<string, unknown>).request_id });
     return;
   }
 
   const plaid = getClient();
 
-  await withRetry(() =>
+  const removeRes = await withRetry(() =>
     plaid.itemRemove({ access_token: accessToken }),
   );
 
-  logger.info("plaid:item:remove", { via: "direct" });
+  logger.info("plaid:item:remove", { via: "direct", request_id: removeRes.data.request_id });
 }
 
 /**
@@ -620,7 +644,7 @@ export async function createUpdateLinkToken(
       access_token: accessToken,
       client_user_id: getPlaidUserId(),
     })) as { link_token: string };
-    logger.info("plaid:link-token:update", { link_token: data.link_token.slice(0, 20) + "..." });
+    logger.info("plaid:link-token:update", { link_token: data.link_token.slice(0, 20) + "...", request_id: (data as Record<string, unknown>).request_id });
     return data.link_token;
   }
 
@@ -636,7 +660,7 @@ export async function createUpdateLinkToken(
     }),
   );
 
-  logger.info("plaid:link-token:update", { link_token: response.data.link_token.slice(0, 20) + "..." });
+  logger.info("plaid:link-token:update", { link_token: response.data.link_token.slice(0, 20) + "...", request_id: response.data.request_id });
   return response.data.link_token;
 }
 
@@ -650,7 +674,8 @@ export async function getItemInstitutionId(
   if (useProxy) {
     const data = (await proxyFetch("/plaid/accounts", {
       access_token: accessToken,
-    })) as { item: { institution_id: string | null } };
+    })) as { item: { institution_id: string | null }; request_id?: string };
+    logger.info("plaid:institution-id", { institution_id: data.item?.institution_id, request_id: data.request_id });
     return data.item?.institution_id ?? null;
   }
 
@@ -658,6 +683,7 @@ export async function getItemInstitutionId(
   const response = await withRetry(() =>
     plaid.accountsGet({ access_token: accessToken }),
   );
+  logger.info("plaid:institution-id", { institution_id: response.data.item.institution_id, request_id: response.data.request_id });
   return response.data.item.institution_id ?? null;
 }
 
@@ -720,7 +746,7 @@ export async function getRecurringTransactions(
       }>;
     };
 
-    logger.info("plaid:recurring", { inflow_streams: data.inflow_streams, outflow_streams: data.outflow_streams });
+    logger.info("plaid:recurring", { inflow_streams: data.inflow_streams, outflow_streams: data.outflow_streams, request_id: (data as Record<string, unknown>).request_id });
     dumpDebug("recurring", data);
 
     return {
@@ -738,7 +764,7 @@ export async function getRecurringTransactions(
     }),
   );
 
-  logger.info("plaid:recurring", { inflow_streams: response.data.inflow_streams, outflow_streams: response.data.outflow_streams });
+  logger.info("plaid:recurring", { inflow_streams: response.data.inflow_streams, outflow_streams: response.data.outflow_streams, request_id: response.data.request_id });
   dumpDebug("recurring", response.data);
 
   return {

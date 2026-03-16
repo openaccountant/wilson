@@ -77,7 +77,7 @@ import { initMemoryManageTool } from './tools/memory/memory-manage.js';
 import { initEntityManageTool } from './tools/entity/entity-manage.js';
 import { initEntityClassifyTool } from './tools/entity/entity-classify.js';
 import { initAlertPrompt, initNetWorthContext, initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
-import { getPlaidItems, removePlaidItem, findPlaidItem } from './plaid/store.js';
+import { getPlaidItems, removePlaidItem, findPlaidItem, isReauthRequired } from './plaid/store.js';
 import { startPlaidLinkServer, startPlaidLinkUpdateServer } from './plaid/link-server.js';
 import { removeItem as plaidRemoveItem } from './plaid/client.js';
 import { getCoinbaseConnections, removeCoinbaseConnection, saveCoinbaseConnection } from './coinbase/store.js';
@@ -630,7 +630,13 @@ export async function runCli() {
           for (const item of items) {
             const accounts = item.accounts.map((a) => `${a.name} (****${a.mask})`).join(', ');
             result += `  **${item.institutionName}** — ${accounts}\n`;
-            result += `  Linked: ${new Date(item.linkedAt).toLocaleDateString()}\n\n`;
+            result += `  Linked: ${new Date(item.linkedAt).toLocaleDateString()}`;
+            if (item.errorState) {
+              result += `  \u26a0 Needs re-auth (${item.errorState.code})`;
+            } else if (isReauthRequired(item)) {
+              result += `  \u26a0 Re-auth recommended (approaching 12-month expiry)`;
+            }
+            result += '\n\n';
           }
           chatLog.finalizeAnswer(result);
         }

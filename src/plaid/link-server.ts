@@ -1,8 +1,9 @@
 import { createServer, type Server } from 'http';
 import { createLinkToken, createUpdateLinkToken, exchangePublicToken, getItemInfo, getItemInstitutionId, hasLocalPlaidCreds } from './client.js';
 import { openBrowser } from '../utils/browser.js';
-import { savePlaidItem, getPlaidItems } from './store.js';
+import { savePlaidItem, getPlaidItems, clearPlaidItemError } from './store.js';
 import type { PlaidItem } from './store.js';
+import { logger } from '../utils/logger.js';
 
 const PORT = 53781;
 
@@ -32,8 +33,22 @@ function buildLinkPage(linkToken: string): string {
 <body>
   <div class="container">
     <h1>Open Accountant — Connect Bank</h1>
-    <p>Plaid Link will open automatically...</p>
-    <div id="status"></div>
+    <div id="consent">
+      <p><strong>What we'll access:</strong></p>
+      <ul style="text-align: left; margin: 1rem 0;">
+        <li>Transaction history (amounts, dates, merchants)</li>
+        <li>Account balances</li>
+      </ul>
+      <p><strong>Your data stays local.</strong><br/>
+      Financial data is stored only on your computer in a local database. Nothing is sent to our servers.</p>
+      <button id="connect-btn" style="
+        margin-top: 1.5rem; padding: 0.75rem 2rem;
+        background: #22c55e; color: white; border: none;
+        border-radius: 8px; font-size: 1rem; cursor: pointer;
+        font-weight: 600;
+      ">Connect My Bank</button>
+    </div>
+    <div id="status" style="display: none;"></div>
   </div>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
@@ -64,8 +79,20 @@ function buildLinkPage(linkToken: string): string {
           document.getElementById('status').textContent = 'Cancelled. You can close this window.';
         }
       },
+      onEvent: (eventName, metadata) => {
+        fetch('/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: eventName, metadata }),
+        }).catch(() => {});
+      },
     });
-    handler.open();
+    document.getElementById('connect-btn').addEventListener('click', () => {
+      document.getElementById('consent').style.display = 'none';
+      document.getElementById('status').style.display = 'block';
+      document.getElementById('status').textContent = 'Opening Plaid Link...';
+      handler.open();
+    });
   </script>
 </body>
 </html>`;
@@ -151,6 +178,20 @@ export async function startPlaidLinkServer(useProxy = false): Promise<PlaidItem 
         return;
       }
 
+      if (req.method === 'POST' && req.url === '/event') {
+        let body = '';
+        req.on('data', (chunk: string) => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            logger.info("plaid:link:event", data);
+          } catch { /* ignore parse errors */ }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        });
+        return;
+      }
+
       res.writeHead(404);
       res.end('Not found');
     });
@@ -207,6 +248,10 @@ export async function startPlaidLinkUpdateServer(
           try {
             // In update mode, onSuccess fires but no new public_token exchange is needed.
             // The existing access_token remains valid after re-auth.
+            // Update linkedAt to reset the 12-month reauth clock and clear any error state.
+            savePlaidItem({ ...item, linkedAt: new Date().toISOString(), errorState: null });
+            clearPlaidItemError(item.itemId);
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, institution: item.institutionName }));
 
@@ -218,6 +263,20 @@ export async function startPlaidLinkUpdateServer(
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
           }
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/event') {
+        let body = '';
+        req.on('data', (chunk: string) => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            logger.info("plaid:link:event", data);
+          } catch { /* ignore parse errors */ }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
         });
         return;
       }

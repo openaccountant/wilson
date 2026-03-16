@@ -15,6 +15,8 @@ import { headlessUpsell } from './licensing/upsell.js';
 interface SyncResult {
   name: string;
   added: number;
+  modified: number;
+  removed: number;
   linked: number;
   skipped: number;
   error?: string;
@@ -60,18 +62,30 @@ export async function runSync(): Promise<void> {
         console.log('[Plaid] No bank accounts linked. Use /connect to link a bank account.');
       } else {
         let totalAdded = 0;
+        let totalModified = 0;
+        let totalRemoved = 0;
         let totalLinked = 0;
         let totalSkipped = 0;
+        const reauthNeeded: string[] = [];
+        const reauthRecommended: string[] = [];
 
         for (const item of items) {
           console.log(`[Plaid] Syncing ${item.institutionName}...`);
           const result = await syncPlaidItem(db, item, plaidUseProxy);
           totalAdded += result.added;
+          totalModified += result.modified;
+          totalRemoved += result.removed;
           totalLinked += result.linked;
           totalSkipped += result.skipped;
 
           if (result.added > 0 || result.skipped > 0) {
             console.log(`  ${result.added} new transactions (${result.skipped} skipped)`);
+          }
+          if (result.modified > 0) {
+            console.log(`  ${result.modified} modified`);
+          }
+          if (result.removed > 0) {
+            console.log(`  ${result.removed} removed`);
           }
           if (result.accountsCreated > 0) {
             console.log(`  ${result.accountsCreated} new account(s) created`);
@@ -82,14 +96,28 @@ export async function runSync(): Promise<void> {
           if (result.linked > 0) {
             console.log(`  ${result.linked} transactions auto-linked to accounts`);
           }
+          if (result.needsReauth) {
+            reauthNeeded.push(result.institution);
+          }
+          if (result.reauthRecommended && !result.needsReauth) {
+            reauthRecommended.push(result.institution);
+          }
         }
 
-        results.push({ name: 'Plaid', added: totalAdded, linked: totalLinked, skipped: totalSkipped });
+        // Surface reauth warnings
+        for (const inst of reauthNeeded) {
+          console.log(`[Plaid] \u26a0 ${inst} needs re-authentication. Run: /connect reauth ${inst}`);
+        }
+        for (const inst of reauthRecommended) {
+          console.log(`[Plaid] \u26a0 ${inst} is approaching the 12-month reauthorization deadline. Consider running: /connect reauth ${inst}`);
+        }
+
+        results.push({ name: 'Plaid', added: totalAdded, modified: totalModified, removed: totalRemoved, linked: totalLinked, skipped: totalSkipped });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Plaid] Sync failed: ${msg}`);
-      results.push({ name: 'Plaid', added: 0, linked: 0, skipped: 0, error: msg });
+      results.push({ name: 'Plaid', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: msg });
     }
   }
 
@@ -104,18 +132,18 @@ export async function runSync(): Promise<void> {
 
       if (data.error) {
         console.error(`[Monarch] ${data.error}`);
-        results.push({ name: 'Monarch', added: 0, linked: 0, skipped: 0, error: data.error });
+        results.push({ name: 'Monarch', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: data.error });
       } else {
         const added = data.transactionsImported ?? 0;
         const linked = data.autoLinked ?? 0;
         const skipped = data.skipped ?? 0;
         console.log(`[Monarch] ${data.message ?? `${added} imported, ${skipped} skipped`}`);
-        results.push({ name: 'Monarch', added, linked, skipped });
+        results.push({ name: 'Monarch', added, modified: 0, removed: 0, linked, skipped });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Monarch] Sync failed: ${msg}`);
-      results.push({ name: 'Monarch', added: 0, linked: 0, skipped: 0, error: msg });
+      results.push({ name: 'Monarch', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: msg });
     }
   }
 
@@ -130,18 +158,18 @@ export async function runSync(): Promise<void> {
 
       if (data.error) {
         console.error(`[Firefly] ${data.error}`);
-        results.push({ name: 'Firefly', added: 0, linked: 0, skipped: 0, error: data.error });
+        results.push({ name: 'Firefly', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: data.error });
       } else {
         const added = data.transactionsImported ?? 0;
         const linked = data.autoLinked ?? 0;
         const skipped = data.skipped ?? 0;
         console.log(`[Firefly] ${data.message ?? `${added} imported, ${skipped} skipped`}`);
-        results.push({ name: 'Firefly', added, linked, skipped });
+        results.push({ name: 'Firefly', added, modified: 0, removed: 0, linked, skipped });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Firefly] Sync failed: ${msg}`);
-      results.push({ name: 'Firefly', added: 0, linked: 0, skipped: 0, error: msg });
+      results.push({ name: 'Firefly', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: msg });
     }
   }
 
@@ -180,22 +208,26 @@ export async function runSync(): Promise<void> {
           }
         }
 
-        results.push({ name: 'Coinbase', added: totalAdded, linked: totalLinked, skipped: totalSkipped });
+        results.push({ name: 'Coinbase', added: totalAdded, modified: 0, removed: 0, linked: totalLinked, skipped: totalSkipped });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Coinbase] Sync failed: ${msg}`);
-      results.push({ name: 'Coinbase', added: 0, linked: 0, skipped: 0, error: msg });
+      results.push({ name: 'Coinbase', added: 0, modified: 0, removed: 0, linked: 0, skipped: 0, error: msg });
     }
   }
 
   // ── Summary ────────────────────────────────────────────────────────────
   const totalAdded = results.reduce((s, r) => s + r.added, 0);
+  const totalModified = results.reduce((s, r) => s + r.modified, 0);
+  const totalRemoved = results.reduce((s, r) => s + r.removed, 0);
   const totalLinked = results.reduce((s, r) => s + r.linked, 0);
   const errors = results.filter((r) => r.error);
 
   const parts: string[] = [];
   if (totalAdded > 0) parts.push(`${totalAdded} transactions synced`);
+  if (totalModified > 0) parts.push(`${totalModified} modified`);
+  if (totalRemoved > 0) parts.push(`${totalRemoved} removed`);
   if (totalLinked > 0) parts.push(`${totalLinked} auto-linked`);
   if (errors.length > 0) parts.push(`${errors.length} integration(s) failed`);
 

@@ -18,16 +18,22 @@ mock.module('../db/database.js', () => ({
 // Mock Plaid modules
 mock.module('../plaid/store.js', () => ({
   getPlaidItems: () => [],
+  updatePlaidItemError: () => {},
+  clearPlaidItemError: () => {},
+  isReauthRequired: () => false,
 }));
 
 mock.module('../plaid/client.js', () => ({
   getBalances: async () => [],
   hasLocalPlaidCreds: () => false,
+  PlaidError: class PlaidError extends Error {
+    constructor(message: string, public errorType: string, public errorCode: string, public statusCode: number) { super(message); }
+  },
 }));
 
 mock.module('../tools/import/plaid-sync.js', () => ({
   initPlaidSyncTool: () => {},
-  syncPlaidItem: async () => ({ added: 0, linked: 0, skipped: 0 }),
+  syncPlaidItem: async () => ({ added: 0, modified: 0, removed: 0, linked: 0, skipped: 0 }),
 }));
 
 // Mutable reference for monarch mock

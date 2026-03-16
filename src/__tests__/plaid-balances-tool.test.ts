@@ -14,6 +14,9 @@ mock.module('../plaid/store.js', () => ({
   getPlaidItems: () => mockPlaidItems,
   savePlaidItem: () => {},
   removePlaidItem: () => {},
+  updatePlaidItemError: () => {},
+  clearPlaidItemError: () => {},
+  isReauthRequired: () => false,
 }));
 
 mock.module('../plaid/client.js', () => ({

@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { setSecret, getSecret, deleteSecret } from '../utils/keychain.js';
+import { logger } from '../utils/logger.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,18 +53,56 @@ function writeStore(store: CoinbaseStore): void {
 
 export function saveCoinbaseConnection(conn: CoinbaseConnection): void {
   const store = readStore();
-  // Dedup by keyName
+
+  // Store private key in keychain when available
+  const keychainOk = setSecret(`coinbase-${conn.keyName}`, conn.privateKey);
+  const storeConn = keychainOk
+    ? { ...conn, privateKey: '__keychain__' }
+    : conn;
+
   const idx = store.connections.findIndex((c) => c.keyName === conn.keyName);
   if (idx >= 0) {
-    store.connections[idx] = conn;
+    store.connections[idx] = storeConn;
   } else {
-    store.connections.push(conn);
+    store.connections.push(storeConn);
   }
   writeStore(store);
 }
 
 export function getCoinbaseConnections(): CoinbaseConnection[] {
-  return readStore().connections;
+  const store = readStore();
+  let migrated = false;
+
+  const connections = store.connections.map((conn) => {
+    if (conn.privateKey === '__keychain__') {
+      const key = getSecret(`coinbase-${conn.keyName}`);
+      return key ? { ...conn, privateKey: key } : conn;
+    }
+
+    // Backward compat: migrate file-stored key to keychain
+    if (conn.privateKey && conn.privateKey !== '__keychain__') {
+      const keychainOk = setSecret(`coinbase-${conn.keyName}`, conn.privateKey);
+      if (keychainOk) {
+        conn.privateKey = '__keychain__';
+        migrated = true;
+        logger.info('keychain:coinbase:migrated', { keyName: conn.keyName });
+      }
+    }
+
+    return conn;
+  });
+
+  if (migrated) {
+    writeStore(store);
+  }
+
+  return connections.map((conn) => {
+    if (conn.privateKey === '__keychain__') {
+      const key = getSecret(`coinbase-${conn.keyName}`);
+      return key ? { ...conn, privateKey: key } : conn;
+    }
+    return conn;
+  });
 }
 
 export function updateLastSyncedAt(keyName: string): void {
@@ -77,11 +117,17 @@ export function updateLastSyncedAt(keyName: string): void {
 export function removeCoinbaseConnection(accountName: string): boolean {
   const store = readStore();
   const before = store.connections.length;
+  const removed = store.connections.filter(
+    (c) => c.accounts.some((a) => a.name.toLowerCase() === accountName.toLowerCase())
+  );
   store.connections = store.connections.filter(
     (c) => !c.accounts.some((a) => a.name.toLowerCase() === accountName.toLowerCase())
   );
   if (store.connections.length < before) {
     writeStore(store);
+    for (const conn of removed) {
+      deleteSecret(`coinbase-${conn.keyName}`);
+    }
     return true;
   }
   return false;

@@ -4,8 +4,8 @@ import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import type { TransactionInsert } from '../../db/queries.js';
 import { getAccountByPlaidId, upsertAccountFromPlaid } from '../../db/net-worth-queries.js';
-import { getPlaidItems, updatePlaidCursor } from '../../plaid/store.js';
-import { syncTransactions, getBalances } from '../../plaid/client.js';
+import { getPlaidItems, updatePlaidCursor, updatePlaidItemError, isReauthRequired } from '../../plaid/store.js';
+import { syncTransactions, getBalances, PlaidError } from '../../plaid/client.js';
 import type { SyncedTransaction } from '../../plaid/client.js';
 import type { PlaidItem } from '../../plaid/store.js';
 import { hasLicense } from '../../licensing/license.js';
@@ -21,10 +21,14 @@ export function initPlaidSyncTool(database: Database) {
 export interface PlaidSyncItemResult {
   institution: string;
   added: number;
+  modified: number;
+  removed: number;
   skipped: number;
   linked: number;
   accountsCreated: number;
   accountsUpdated: number;
+  needsReauth?: boolean;
+  reauthRecommended?: boolean;
 }
 
 /**
@@ -35,7 +39,38 @@ export async function syncPlaidItem(
   item: PlaidItem,
   useProxy = false,
 ): Promise<PlaidSyncItemResult> {
-  const { added, nextCursor } = await syncTransactions(item.accessToken, item.cursor, useProxy);
+  // Check if reauth is recommended (approaching 12-month expiry)
+  const reauthRecommended = isReauthRequired(item);
+
+  let added: SyncedTransaction[];
+  let modified: SyncedTransaction[];
+  let removed: string[];
+  let nextCursor: string;
+
+  try {
+    const syncResult = await syncTransactions(item.accessToken, item.cursor, useProxy);
+    added = syncResult.added;
+    modified = syncResult.modified;
+    removed = syncResult.removed;
+    nextCursor = syncResult.nextCursor;
+  } catch (err) {
+    if (err instanceof PlaidError && err.errorCode === 'ITEM_LOGIN_REQUIRED') {
+      updatePlaidItemError(item.itemId, { code: err.errorCode, message: err.message });
+      return {
+        institution: item.institutionName,
+        added: 0,
+        modified: 0,
+        removed: 0,
+        skipped: 0,
+        linked: 0,
+        accountsCreated: 0,
+        accountsUpdated: 0,
+        needsReauth: true,
+        reauthRecommended,
+      };
+    }
+    throw err;
+  }
 
   // Check for existing plaid_transaction_ids to dedup
   const existingIds = new Set<string>();
@@ -114,6 +149,85 @@ export async function syncPlaidItem(
     insertAll();
   }
 
+  // ── Handle modified transactions ──────────────────────────────────────────
+  let modifiedCount = 0;
+  if (modified.length > 0) {
+    const updateStmt = database.prepare(`
+      UPDATE transactions SET
+        date = @date, amount = @amount, description = @description, pending = @pending,
+        authorized_date = @authorized_date, merchant_name = @merchant_name,
+        category = @category, category_detailed = @category_detailed, payment_channel = @payment_channel
+      WHERE plaid_transaction_id = @plaid_transaction_id
+    `);
+    const insertStmt = database.prepare(`
+      INSERT INTO transactions (date, description, amount, category, source_file, bank, account_last4,
+        plaid_transaction_id, merchant_name, category_detailed, external_id, payment_channel, pending, authorized_date)
+      VALUES (@date, @description, @amount, @category, @source_file, @bank, @account_last4,
+        @plaid_transaction_id, @merchant_name, @category_detailed, @external_id, @payment_channel, @pending, @authorized_date)
+    `);
+
+    const updateAll = database.transaction(() => {
+      for (const txn of modified) {
+        const pfcDetailed = txn.personalFinanceCategory?.detailed ?? undefined;
+        const pfcPrimary = txn.personalFinanceCategory?.primary ?? undefined;
+        const category = txn.category.length > 0 ? txn.category[txn.category.length - 1] : null;
+        const categoryDetailed = pfcDetailed ?? pfcPrimary ?? null;
+
+        const result = updateStmt.run({
+          date: txn.date,
+          amount: -txn.amount,
+          description: txn.name,
+          pending: txn.pending ? 1 : 0,
+          authorized_date: txn.authorizedDate ?? null,
+          merchant_name: txn.merchantName ?? null,
+          category,
+          category_detailed: categoryDetailed,
+          payment_channel: txn.paymentChannel ?? null,
+          plaid_transaction_id: txn.transactionId,
+        });
+
+        if ((result as { changes: number }).changes > 0) {
+          modifiedCount++;
+        } else {
+          // Edge case: modified transaction doesn't exist locally — insert it
+          insertStmt.run({
+            date: txn.date,
+            description: txn.name,
+            amount: -txn.amount,
+            category,
+            source_file: `plaid:${item.institutionName}`,
+            bank: item.institutionName,
+            account_last4: item.accounts.find((a) => a.id === txn.accountId)?.mask ?? null,
+            plaid_transaction_id: txn.transactionId,
+            merchant_name: txn.merchantName ?? null,
+            category_detailed: categoryDetailed,
+            external_id: txn.transactionId,
+            payment_channel: txn.paymentChannel ?? null,
+            pending: txn.pending ? 1 : 0,
+            authorized_date: txn.authorizedDate ?? null,
+          });
+          modifiedCount++;
+        }
+      }
+    });
+    updateAll();
+  }
+
+  // ── Handle removed transactions ───────────────────────────────────────────
+  let removedCount = 0;
+  if (removed.length > 0) {
+    const deleteStmt = database.prepare(
+      'DELETE FROM transactions WHERE plaid_transaction_id = @tid'
+    );
+    const deleteAll = database.transaction(() => {
+      for (const tid of removed) {
+        const result = deleteStmt.run({ tid });
+        removedCount += (result as { changes: number }).changes;
+      }
+    });
+    deleteAll();
+  }
+
   // Upsert accounts from Plaid balance data so accounts exist before linking
   let accountsCreated = 0;
   let accountsUpdated = 0;
@@ -175,10 +289,13 @@ export async function syncPlaidItem(
   return {
     institution: item.institutionName,
     added: newTxns.length,
+    modified: modifiedCount,
+    removed: removedCount,
     skipped,
     linked,
     accountsCreated,
     accountsUpdated,
+    reauthRecommended,
   };
 }
 
@@ -204,6 +321,8 @@ export const plaidSyncTool = defineTool({
     }
 
     let totalAdded = 0;
+    let totalModified = 0;
+    let totalRemoved = 0;
     let totalSkipped = 0;
     let totalLinked = 0;
     let totalAccountsCreated = 0;
@@ -213,6 +332,8 @@ export const plaidSyncTool = defineTool({
     for (const item of items) {
       const result = await syncPlaidItem(db, item, useProxy);
       totalAdded += result.added;
+      totalModified += result.modified;
+      totalRemoved += result.removed;
       totalSkipped += result.skipped;
       totalLinked += result.linked;
       totalAccountsCreated += result.accountsCreated;
@@ -221,12 +342,26 @@ export const plaidSyncTool = defineTool({
     }
 
     let message = `Synced ${totalAdded} new transactions (${totalSkipped} duplicates skipped).`;
+    if (totalModified > 0) message += ` ${totalModified} modified.`;
+    if (totalRemoved > 0) message += ` ${totalRemoved} removed.`;
     if (totalAccountsCreated > 0) message += ` ${totalAccountsCreated} new account(s) created.`;
     if (totalAccountsUpdated > 0) message += ` ${totalAccountsUpdated} balance(s) updated.`;
     if (totalLinked > 0) message += ` ${totalLinked} transactions auto-linked to accounts.`;
 
+    // Surface reauth warnings
+    const reauthNeeded = synced.filter((r) => r.needsReauth);
+    if (reauthNeeded.length > 0) {
+      message += ` WARNING: ${reauthNeeded.map((r) => r.institution).join(', ')} need(s) re-authentication. Run: /connect reauth`;
+    }
+    const reauthRecommended = synced.filter((r) => r.reauthRecommended && !r.needsReauth);
+    if (reauthRecommended.length > 0) {
+      message += ` Note: ${reauthRecommended.map((r) => r.institution).join(', ')} approaching 12-month reauth deadline.`;
+    }
+
     return formatToolResult({
       totalAdded,
+      totalModified,
+      totalRemoved,
       totalSkipped,
       totalLinked,
       totalAccountsCreated,
