@@ -37,15 +37,47 @@ export function createTestDb(): Database {
   return db;
 }
 
+/** Build a YYYY-MM-DD string relative to today. */
+export function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Current month as YYYY-MM. */
+export function currentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
+/** First day of current month as YYYY-MM-DD. */
+export function currentMonthStart(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/** Last day of current month as YYYY-MM-DD. */
+export function currentMonthEnd(): string {
+  const d = new Date();
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return last.toISOString().slice(0, 10);
+}
+
+/** Previous month as YYYY-MM. */
+export function previousMonth(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
+
 export function seedTestData(db: Database): void {
   insertTransactions(db, [
-    { date: '2026-02-15', description: 'Grocery Store', amount: -85.50, category: 'Groceries' },
-    { date: '2026-02-18', description: 'Electric Company', amount: -120.00, category: 'Utilities' },
-    { date: '2026-02-20', description: 'Restaurant', amount: -45.00, category: 'Dining' },
-    { date: '2026-02-25', description: 'Unknown Purchase', amount: -30.00 },
-    { date: '2026-03-01', description: 'Grocery Store', amount: -92.00, category: 'Groceries' },
-    { date: '2026-03-05', description: 'Gas Station', amount: -55.00, category: 'Transportation' },
-    { date: '2026-01-10', description: 'Paycheck', amount: 3500.00, category: 'Income' },
+    { date: daysAgo(10), description: 'Grocery Store', amount: -85.50, category: 'Groceries' },
+    { date: daysAgo(8), description: 'Electric Company', amount: -120.00, category: 'Utilities' },
+    { date: daysAgo(6), description: 'Restaurant', amount: -45.00, category: 'Dining' },
+    { date: daysAgo(4), description: 'Unknown Purchase', amount: -30.00 },
+    { date: daysAgo(3), description: 'Grocery Store', amount: -92.00, category: 'Groceries' },
+    { date: daysAgo(2), description: 'Gas Station', amount: -55.00, category: 'Transportation' },
+    { date: daysAgo(30), description: 'Paycheck', amount: 3500.00, category: 'Income' },
   ]);
   setBudget(db, 'Groceries', 200);
   setBudget(db, 'Dining', 100);

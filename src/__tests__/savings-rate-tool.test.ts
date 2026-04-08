@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { initSavingsRateTool, savingsRateTool } from '../tools/query/savings-rate.js';
-import { createTestDb, seedTestData } from './helpers.js';
+import { createTestDb, seedTestData, currentMonth, daysAgo } from './helpers.js';
 
 describe('savings_rate tool', () => {
   let db: Database;
@@ -20,7 +20,9 @@ describe('savings_rate tool', () => {
   });
 
   test('formatted output includes 50/30/20 benchmark when income exists', async () => {
-    const raw = await savingsRateTool.func({ months: 3, endMonth: '2026-01' });
+    // Paycheck is daysAgo(30) — end on that month so the latest month has income
+    const paycheckMonth = daysAgo(30).slice(0, 7);
+    const raw = await savingsRateTool.func({ months: 1, endMonth: paycheckMonth });
     const result = JSON.parse(raw as string);
     expect(result.data.formatted).toContain('50/30/20');
   });
@@ -34,7 +36,7 @@ describe('savings_rate tool', () => {
   });
 
   test('each month has income, expenses, savings, savingsRate', async () => {
-    const raw = await savingsRateTool.func({ months: 3, endMonth: '2026-03' });
+    const raw = await savingsRateTool.func({ months: 3, endMonth: currentMonth() });
     const result = JSON.parse(raw as string);
     for (const m of result.data.months) {
       expect(typeof m.income).toBe('number');

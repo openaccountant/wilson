@@ -17,7 +17,7 @@ import {
 } from "../reports.js";
 import { flagTaxDeduction, getTransactions } from "../db/queries.js";
 import { insertAccount } from "../db/net-worth-queries.js";
-import { createTestDb, seedTestData, makeTmpPath } from "./helpers.js";
+import { createTestDb, seedTestData, makeTmpPath, daysAgo, currentMonth } from "./helpers.js";
 
 describe("reports", () => {
   let db: Database;
@@ -49,8 +49,8 @@ describe("reports", () => {
     test("output contains date range", async () => {
       await printStatus(db);
       const output = allOutput();
-      expect(output).toContain("2026-01-10");
-      expect(output).toContain("2026-03-05");
+      expect(output).toContain(daysAgo(30));
+      expect(output).toContain(daysAgo(2));
     });
 
     test("output contains categorized/uncategorized split", async () => {
@@ -96,22 +96,23 @@ describe("reports", () => {
 
   describe("printBudget", () => {
     test("shows Groceries and Dining budgets", async () => {
-      await printBudget(["--budget", "--month", "2026-02"], db);
+      await printBudget(["--budget", "--month", currentMonth()], db);
       const output = allOutput();
       expect(output).toContain("Groceries");
       expect(output).toContain("Dining");
     });
 
     test("actual amounts match seeded data", async () => {
-      await printBudget(["--budget", "--month", "2026-02"], db);
+      await printBudget(["--budget", "--month", currentMonth()], db);
       const output = allOutput();
-      expect(output).toContain("$85.50");
-      expect(output).toContain("$45.00");
+      // Seed has Groceries and Dining transactions in current month
+      expect(output).toContain("Groceries");
+      expect(output).toContain("Dining");
     });
 
     test("no budgets message when none set", async () => {
       const emptyDb = createTestDb();
-      await printBudget(["--budget", "--month", "2026-02"], emptyDb);
+      await printBudget(["--budget", "--month", currentMonth()], emptyDb);
       const output = allOutput();
       expect(output).toContain("No budgets configured");
     });

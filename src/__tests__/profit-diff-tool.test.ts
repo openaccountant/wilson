@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { initProfitDiffTool, profitDiffTool } from '../tools/query/profit-diff.js';
 import { insertTransactions } from '../db/queries.js';
-import { createTestDb, seedTestData } from './helpers.js';
+import { createTestDb, seedTestData, daysAgo } from './helpers.js';
 
 describe('profit_diff tool', () => {
   let db: Database;
@@ -12,8 +12,8 @@ describe('profit_diff tool', () => {
     seedTestData(db);
     // Add data from previous month for comparison
     insertTransactions(db, [
-      { date: '2026-01-15', description: 'Old Grocery', amount: -60, category: 'Groceries' },
-      { date: '2026-01-20', description: 'Old Restaurant', amount: -30, category: 'Dining' },
+      { date: daysAgo(45), description: 'Old Grocery', amount: -60, category: 'Groceries' },
+      { date: daysAgo(40), description: 'Old Restaurant', amount: -30, category: 'Dining' },
     ]);
     initProfitDiffTool(db);
   });
@@ -36,10 +36,10 @@ describe('profit_diff tool', () => {
   test('newCategories contains categories only in current period', async () => {
     // Add a category that only exists in the current period
     insertTransactions(db, [
-      { date: '2026-02-20', description: 'Gym', amount: -50, category: 'Fitness' },
+      { date: daysAgo(5), description: 'Gym', amount: -50, category: 'Fitness' },
     ]);
     initProfitDiffTool(db);
-    const raw = await profitDiffTool.func({ period: 'month', offset: -1, compareOffset: -1 });
+    const raw = await profitDiffTool.func({ period: 'month', offset: 0, compareOffset: -1 });
     const result = JSON.parse(raw as string);
     expect(result.data.newCategories).toContain('Fitness');
   });
