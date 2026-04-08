@@ -1,6 +1,6 @@
 {
-  "name": "open-accountant",
-  "version": "0.1.0",
+  "name": "@openaccountant/wilson",
+  "version": "0.2.0",
   "description": "Open Accountant - Privacy-first AI bookkeeper CLI",
   "repository": {
     "type": "git",
