@@ -18,13 +18,13 @@ describe('LongTermChatHistory', () => {
   });
 
   test('constructor sets file path based on baseDir', () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     // We can't directly access filePath, but load should create the file
     expect(history).toBeDefined();
   });
 
   test('load creates file when missing', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     const filePath = join(tmpDir, '.openaccountant', 'messages', 'chat_history.json');
     expect(existsSync(filePath)).toBe(true);
@@ -42,7 +42,7 @@ describe('LongTermChatHistory', () => {
       }),
     );
 
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     expect(history.getMessages()).toHaveLength(1);
     expect(history.getMessages()[0].userMessage).toBe('hello');
@@ -53,13 +53,13 @@ describe('LongTermChatHistory', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'chat_history.json'), 'not-json{{{');
 
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     expect(history.getMessages()).toHaveLength(0);
   });
 
   test('load is idempotent (only loads once)', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('first');
     // Second load should be a no-op
@@ -68,7 +68,7 @@ describe('LongTermChatHistory', () => {
   });
 
   test('addUserMessage prepends to stack', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('first');
     await history.addUserMessage('second');
@@ -79,21 +79,21 @@ describe('LongTermChatHistory', () => {
   });
 
   test('addUserMessage sets agentResponse to null', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('test');
     expect(history.getMessages()[0].agentResponse).toBeNull();
   });
 
   test('addUserMessage auto-loads if not loaded', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     // Don't call load() explicitly
     await history.addUserMessage('auto-load');
     expect(history.getMessages()).toHaveLength(1);
   });
 
   test('updateAgentResponse updates most recent entry', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('question');
     await history.updateAgentResponse('answer');
@@ -101,7 +101,7 @@ describe('LongTermChatHistory', () => {
   });
 
   test('updateAgentResponse does nothing if no messages', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     // Should not throw
     await history.updateAgentResponse('orphan answer');
@@ -109,16 +109,16 @@ describe('LongTermChatHistory', () => {
   });
 
   test('updateAgentResponse auto-loads if not loaded', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.addUserMessage('q');
     // Create a fresh instance to test auto-load on updateAgentResponse
-    const history2 = new LongTermChatHistory(tmpDir);
+    const history2 = LongTermChatHistory(tmpDir);
     await history2.updateAgentResponse('a');
     expect(history2.getMessages()[0].agentResponse).toBe('a');
   });
 
   test('getMessages returns a copy', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('test');
     const a = history.getMessages();
@@ -128,7 +128,7 @@ describe('LongTermChatHistory', () => {
   });
 
   test('getMessageStrings returns user messages newest first', async () => {
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     await history.addUserMessage('first');
     await history.addUserMessage('second');
@@ -150,7 +150,7 @@ describe('LongTermChatHistory', () => {
       }),
     );
 
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     // 'hello' appears twice consecutively, should be deduped to one
     expect(history.getMessageStrings()).toEqual(['hello', 'world']);
@@ -170,19 +170,19 @@ describe('LongTermChatHistory', () => {
       }),
     );
 
-    const history = new LongTermChatHistory(tmpDir);
+    const history = LongTermChatHistory(tmpDir);
     await history.load();
     expect(history.getMessageStrings()).toEqual(['hello', 'world', 'hello']);
   });
 
   test('persistence across instances', async () => {
-    const h1 = new LongTermChatHistory(tmpDir);
+    const h1 = LongTermChatHistory(tmpDir);
     await h1.load();
     await h1.addUserMessage('persisted');
     await h1.updateAgentResponse('yes');
 
     // New instance, same dir
-    const h2 = new LongTermChatHistory(tmpDir);
+    const h2 = LongTermChatHistory(tmpDir);
     await h2.load();
     expect(h2.getMessages()).toHaveLength(1);
     expect(h2.getMessages()[0].userMessage).toBe('persisted');

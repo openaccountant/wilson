@@ -6,19 +6,19 @@ let mockAddedMessages: string[] = [];
 let mockUpdatedResponses: string[] = [];
 
 mock.module('../utils/long-term-chat-history.js', () => ({
-  LongTermChatHistory: class {
-    async load() {}
+  LongTermChatHistory: () => ({
+    async load() {},
     getMessageStrings() {
       return [...mockMessages];
-    }
+    },
     async addUserMessage(msg: string) {
       mockAddedMessages.push(msg);
       mockMessages.unshift(msg);
-    }
+    },
     async updateAgentResponse(response: string) {
       mockUpdatedResponses.push(response);
-    }
-  },
+    },
+  }),
 }));
 
 import { InputHistoryController } from '../controllers/input-history.js';

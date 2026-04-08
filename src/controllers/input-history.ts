@@ -3,7 +3,7 @@ import { LongTermChatHistory } from '../utils/long-term-chat-history.js';
 type ChangeListener = () => void;
 
 export class InputHistoryController {
-  private store = new LongTermChatHistory();
+  private store = LongTermChatHistory();
   private messages: string[] = [];
   private historyIndex = -1;
   private onChange?: ChangeListener;
