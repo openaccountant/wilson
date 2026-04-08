@@ -25,6 +25,10 @@ mock.module('../agent/prompts.js', () => ({
   loadSoulDocument: mock(async () => ''),
   buildBudgetContext: mock(() => null),
   buildDataContext: mock(() => null),
+  buildProfileContext: mock(() => null),
+  buildGoalContext: mock(() => null),
+  buildMemoryContext: mock(() => null),
+  buildCustomPromptContext: mock(() => null),
   DEFAULT_SYSTEM_PROMPT: 'You are a financial assistant.',
 }));
 

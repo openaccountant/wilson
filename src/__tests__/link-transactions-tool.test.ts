@@ -255,9 +255,9 @@ describe('link_transactions tool', () => {
     const otherId = addAccount(db, 'Card B');
     addTxns(db, { bank: 'testbank', count: 4 });
 
-    // Pre-link 2 of the 4 to a different account
+    // Pre-link 2 of the 4 to a different account (subquery avoids LIMIT in UPDATE which isn't supported on all SQLite builds)
     db.prepare(
-      "UPDATE transactions SET account_id = @otherId WHERE bank = 'testbank' LIMIT 2"
+      "UPDATE transactions SET account_id = @otherId WHERE id IN (SELECT id FROM transactions WHERE bank = 'testbank' AND account_id IS NULL LIMIT 2)"
     ).run({ otherId });
 
     const result = await linkTransactionsTool.func({

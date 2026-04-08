@@ -22,4 +22,13 @@ jobs:
         run: bun run typecheck
 
       - name: Test
-        run: bun test
+        run: |
+          # Run each test file in its own process to prevent mock.module
+          # contamination across files (Bun shares module cache in-process)
+          FAIL=0
+          for f in src/__tests__/*.test.ts; do
+            if ! bun test "$f" 2>&1; then
+              FAIL=1
+            fi
+          done
+          exit $FAIL
