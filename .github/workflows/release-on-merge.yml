@@ -5,9 +5,11 @@ on:
     branches: [main]
     paths:
       - package.json
+      - .github/workflows/release-on-merge.yml
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -96,6 +98,34 @@ jobs:
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file /tmp/release-notes.md
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.version.outputs.changed == 'true'
+        with:
+          bun-version: "1.2.22"
+
+      - name: Install and test before publish
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          FAIL=0
+          for f in src/__tests__/*.test.ts; do
+            if ! bun test "$f" 2>&1; then FAIL=1; fi
+          done
+          exit $FAIL
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.changed == 'true'
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish to npm
+        if: steps.version.outputs.changed == 'true'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build docs issue body
         if: steps.version.outputs.changed == 'true'
