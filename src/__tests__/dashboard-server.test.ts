@@ -41,7 +41,8 @@ describe('dashboard server', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('text/html');
       const text = await res.text();
-      expect(text).toContain('Wilson Dashboard');
+      // React build uses "Wilson Dashboard", fallback HTML uses "Open Accountant Dashboard"
+      expect(text.includes('Wilson Dashboard') || text.includes('Open Accountant Dashboard')).toBe(true);
     });
 
     test('GET /api/summary returns JSON', async () => {

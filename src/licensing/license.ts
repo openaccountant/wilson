@@ -1,7 +1,12 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { clearContentCache } from '../content/fetcher.js';
+
+// Lazy import to break circular dependency (fetcher.ts imports from license.ts)
+async function clearContentCacheLazy(): Promise<void> {
+  const { clearContentCache } = await import('../content/fetcher.js');
+  clearContentCache();
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,7 +92,7 @@ export async function validateLicense(key: string): Promise<LicenseCache> {
   };
 
   writeCache(cache);
-  clearContentCache();
+  clearContentCacheLazy().catch(() => {});
   return cache;
 }
 
@@ -136,6 +141,6 @@ export function getLicenseInfo(): LicenseCache | null {
  * Remove the cached license (deactivate).
  */
 export function deactivateLicense(): void {
-  clearContentCache();
+  clearContentCacheLazy().catch(() => {});
   removeCache();
 }
