@@ -167,7 +167,7 @@ jobs:
             --title "$TAG" \
             --notes-file /tmp/release-notes.md
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.bump.outputs.bump != 'none'
         with:
           node-version: 22
