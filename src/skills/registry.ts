@@ -49,6 +49,10 @@ function scanSkillDirectory(dirPath: string, source: SkillSource): SkillMetadata
         } catch {
           // Skip invalid skill files silently
         }
+      } else {
+        // Recurse into subdirectories to support nested layouts
+        // (e.g., personal/subscription-audit/SKILL.md)
+        skills.push(...scanSkillDirectory(join(dirPath, entry.name), source));
       }
     }
   }

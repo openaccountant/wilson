@@ -71,6 +71,64 @@ describe('skills/registry', () => {
     });
   });
 
+  describe('nested skill directories', () => {
+    let existsSpy: ReturnType<typeof spyOn>;
+    let readdirSpy: ReturnType<typeof spyOn>;
+    let metadataSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      clearSkillCache();
+      existsSpy = spyOn(fs, 'existsSync');
+      readdirSpy = spyOn(fs, 'readdirSync');
+      metadataSpy = spyOn(skillLoader, 'extractSkillMetadata');
+
+      existsSpy.mockImplementation((p: any) => {
+        const pathStr = String(p);
+        // The user skills directory exists
+        if (pathStr.endsWith('.openaccountant/skills')) return true;
+        // The category subdirectory exists (for recursion)
+        if (pathStr.endsWith('/personal')) return true;
+        // The nested skill file exists
+        if (pathStr.includes('personal/subscription-audit/SKILL.md')) return true;
+        // The category dir "personal" does NOT have a SKILL.md directly
+        if (pathStr.endsWith('personal/SKILL.md')) return false;
+        return false;
+      });
+
+      readdirSpy.mockImplementation((dirPath: any, _opts?: any) => {
+        const pathStr = String(dirPath);
+        if (pathStr.endsWith('.openaccountant/skills')) {
+          return [{ name: 'personal', isDirectory: () => true, isFile: () => false }];
+        }
+        if (pathStr.endsWith('/personal')) {
+          return [{ name: 'subscription-audit', isDirectory: () => true, isFile: () => false }];
+        }
+        return [];
+      });
+
+      metadataSpy.mockImplementation((path: string, source: any) => {
+        if (path.includes('subscription-audit')) {
+          return { name: 'subscription-audit', description: 'Find unused subscriptions', path, source, tier: 'free' };
+        }
+        throw new Error(`Unknown skill: ${path}`);
+      });
+    });
+
+    afterEach(() => {
+      existsSpy?.mockRestore();
+      readdirSpy?.mockRestore();
+      metadataSpy?.mockRestore();
+      clearSkillCache();
+    });
+
+    test('discovers skills in nested category directories', () => {
+      const skills = discoverSkills();
+      const found = skills.find((s) => s.name === 'subscription-audit');
+      expect(found).toBeDefined();
+      expect(found!.description).toBe('Find unused subscriptions');
+    });
+  });
+
   describe('getSkill (paid skill paths)', () => {
     let fetchSpy: ReturnType<typeof spyOn>;
     let existsSpy: ReturnType<typeof spyOn>;

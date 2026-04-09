@@ -3,9 +3,6 @@ name: Release on Merge
 on:
   push:
     branches: [main]
-    paths:
-      - package.json
-      - .github/workflows/release-on-merge.yml
 
 permissions:
   contents: write
@@ -14,98 +11,19 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Skip release commits to prevent infinite loops
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Check for version bump
-        id: version
-        run: |
-          CURRENT=$(jq -r .version package.json)
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1 || echo "")
-
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing tags — first release"
-            echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-            echo "previous_tag=" >> "$GITHUB_OUTPUT"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          elif [ "$LATEST_TAG" = "v$CURRENT" ]; then
-            echo "Version $CURRENT matches latest tag $LATEST_TAG — skipping"
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Version bump detected: $LATEST_TAG → v$CURRENT"
-            echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-            echo "previous_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Generate changelog entry
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          VERSION="${{ steps.version.outputs.current }}"
-          PREV_TAG="${{ steps.version.outputs.previous_tag }}"
-          DATE=$(date +%Y-%m-%d)
-
-          if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s (%h)" HEAD)
-          else
-            COMMITS=$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..HEAD")
-          fi
-
-          # Write changelog section to file (used by later steps)
-          printf "## [v%s] — %s\n\n%s\n" "$VERSION" "$DATE" "$COMMITS" > /tmp/changelog-entry.md
-
-          # Write release notes file for gh release create
-          cp /tmp/changelog-entry.md /tmp/release-notes.md
-
-      - name: Update CHANGELOG.md
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-            echo "" >> CHANGELOG.md
-          fi
-
-          # Prepend new entry after the "# Changelog" header
-          {
-            head -n 1 CHANGELOG.md
-            echo ""
-            cat /tmp/changelog-entry.md
-            echo ""
-            tail -n +2 CHANGELOG.md
-          } > CHANGELOG.tmp
-          mv CHANGELOG.tmp CHANGELOG.md
-
-      - name: Commit changelog
-        if: steps.version.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git diff --cached --quiet && echo "No changelog changes" || \
-            git commit -m "chore: update CHANGELOG for v${{ steps.version.outputs.current }}"
-          git push
-
-      - name: Create tag and GitHub Release
-        if: steps.version.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="v${{ steps.version.outputs.current }}"
-          git tag "$TAG"
-          git push origin "$TAG"
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes-file /tmp/release-notes.md
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: oven-sh/setup-bun@v2
-        if: steps.version.outputs.changed == 'true'
         with:
           bun-version: "1.2.22"
 
-      - name: Install and test before publish
-        if: steps.version.outputs.changed == 'true'
+      - name: Install and test
         run: |
           bun install --frozen-lockfile
           bun run typecheck
@@ -115,51 +33,161 @@ jobs:
           done
           exit $FAIL
 
+      - name: Determine version bump from commits
+        id: bump
+        run: |
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1 || echo "")
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing tags — using all commits"
+            RANGE="HEAD"
+          else
+            RANGE="${LATEST_TAG}..HEAD"
+          fi
+
+          COMMITS=$(git log --pretty=format:"%s" $RANGE)
+
+          if [ -z "$COMMITS" ]; then
+            echo "No new commits since $LATEST_TAG"
+            echo "bump=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Determine bump level from conventional commit prefixes
+          BUMP="none"
+
+          if echo "$COMMITS" | grep -qiE "^BREAKING CHANGE:|^[a-z]+(\(.+\))?!:"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qiE "^fix(\(.+\))?:|^perf(\(.+\))?:"; then
+            BUMP="patch"
+          fi
+
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Detected bump: $BUMP"
+
+      - name: Bump version in package.json
+        if: steps.bump.outputs.bump != 'none'
+        id: version
+        run: |
+          BUMP="${{ steps.bump.outputs.bump }}"
+          CURRENT=$(jq -r .version package.json)
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+          jq --arg v "$NEW_VERSION" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "previous=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Bumped $CURRENT → $NEW_VERSION ($BUMP)"
+
+      - name: Generate changelog
+        if: steps.bump.outputs.bump != 'none'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          LATEST_TAG: ${{ steps.bump.outputs.latest_tag }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+
+          if [ -z "$LATEST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${LATEST_TAG}..HEAD"
+          fi
+
+          # Group commits by type
+          FEATURES=$(git log --pretty=format:"- %s (%h)" $RANGE | grep -iE "^- feat" || true)
+          FIXES=$(git log --pretty=format:"- %s (%h)" $RANGE | grep -iE "^- fix|^- perf" || true)
+          OTHER=$(git log --pretty=format:"- %s (%h)" $RANGE | grep -viE "^- feat|^- fix|^- perf|^- chore|^- ci|^- docs|^- style|^- test|^- build" || true)
+
+          {
+            printf "## [v%s] — %s\n\n" "$VERSION" "$DATE"
+
+            if [ -n "$FEATURES" ]; then
+              printf "### Features\n\n%s\n\n" "$FEATURES"
+            fi
+
+            if [ -n "$FIXES" ]; then
+              printf "### Fixes\n\n%s\n\n" "$FIXES"
+            fi
+
+            if [ -n "$OTHER" ]; then
+              printf "### Other\n\n%s\n\n" "$OTHER"
+            fi
+          } > /tmp/changelog-entry.md
+
+          cp /tmp/changelog-entry.md /tmp/release-notes.md
+
+          # Prepend to CHANGELOG.md
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          {
+            head -n 1 CHANGELOG.md
+            echo ""
+            cat /tmp/changelog-entry.md
+            tail -n +2 CHANGELOG.md
+          } > CHANGELOG.tmp
+          mv CHANGELOG.tmp CHANGELOG.md
+
+      - name: Commit release
+        if: steps.bump.outputs.bump != 'none'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json CHANGELOG.md
+          git commit -m "chore(release): v${VERSION}"
+          git push
+
+      - name: Create tag and GitHub Release
+        if: steps.bump.outputs.bump != 'none'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="v${VERSION}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file /tmp/release-notes.md
+
       - uses: actions/setup-node@v4
-        if: steps.version.outputs.changed == 'true'
+        if: steps.bump.outputs.bump != 'none'
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
+        if: steps.bump.outputs.bump != 'none'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build docs issue body
-        if: steps.version.outputs.changed == 'true'
-        env:
-          VERSION: ${{ steps.version.outputs.current }}
-        run: |
-          cat > /tmp/docs-issue-body.md <<'HEADER'
-          Open Accountant CLI has been released with a new version.
-
-          ## Changelog
-
-          HEADER
-          cat /tmp/changelog-entry.md >> /tmp/docs-issue-body.md
-          cat >> /tmp/docs-issue-body.md <<'FOOTER'
-
-          ## Docs checklist
-
-          - [ ] Review changelog for user-facing changes
-          - [ ] Update CLI command reference if needed
-          - [ ] Update skill/workflow docs if new features added
-          - [ ] Update installation/upgrade instructions
-          FOOTER
-
       - name: File docs issue
-        if: steps.version.outputs.changed == 'true'
+        if: steps.bump.outputs.bump != 'none'
         env:
           GH_TOKEN: ${{ secrets.DOCS_ISSUE_TOKEN }}
-          VERSION: ${{ steps.version.outputs.current }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Replace OWNER/APP_REPO with your docs site repo
           DOCS_REPO="open-accountant/app"
-
           gh issue create \
             --repo "$DOCS_REPO" \
             --title "docs: update for Open Accountant CLI v${VERSION}" \
-            --body-file /tmp/docs-issue-body.md \
+            --body-file /tmp/release-notes.md \
           || echo "::warning::Could not create docs issue — is DOCS_ISSUE_TOKEN configured?"
