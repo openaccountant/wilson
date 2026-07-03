@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.3.0] — 2026-04-09
+
+### Features
+
+- feat: auto-version releases, recursive skill discovery, OSS best practices (fbae552)
+
+
 ## [v0.2.0] — 2026-04-08
 
 - feat: merge npm publish into release-on-merge workflow (182bb85)
