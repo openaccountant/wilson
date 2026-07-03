@@ -32,3 +32,36 @@ jobs:
             fi
           done
           exit $FAIL
+
+  # Encryption tests need the SQLCipher dylib, which only bun:sqlite on macOS
+  # can load (Database.setCustomSQLite is a no-op elsewhere). Each file runs in
+  # its own process so initSqlcipher() executes before any Database exists.
+  check-encryption:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.23"
+
+      - name: Install SQLCipher
+        run: |
+          brew install sqlcipher
+          test -f /opt/homebrew/opt/sqlcipher/lib/libsqlcipher.dylib
+
+      - run: bun install --frozen-lockfile
+
+      - name: Encrypted database tests
+        run: |
+          FAIL=0
+          for f in src/__tests__/sqlcipher-dylib.test.ts \
+                   src/__tests__/compat-sqlite.test.ts \
+                   src/__tests__/encrypt-migrate.test.ts \
+                   src/__tests__/database-init.test.ts \
+                   src/__tests__/encryption-key.test.ts; do
+            if ! bun test "$f" 2>&1; then
+              FAIL=1
+            fi
+          done
+          exit $FAIL
