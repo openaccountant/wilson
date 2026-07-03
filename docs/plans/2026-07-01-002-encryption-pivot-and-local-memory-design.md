@@ -78,6 +78,7 @@ Wilson already records everything (`llm_interactions`, `llm_tool_results`, `chat
 - **Store:** migration 22, `embeddings` table: `id, source_type ('chat'|'transaction'|'memory'), source_id, model, dim, vec BLOB (Float32Array, L2-normalized at write), created_at, UNIQUE(source_type, source_id, model)`. Lives in profile DB → encrypted by Track A on macOS.
 - **Search:** SQL prefilter → dot-product top-k in TS. Instant ≤100k vectors; sqlite-vec deferred (forces Homebrew SQLite on macOS users; still brute-force internally).
 - **Consumers:** `search_memory` agent tool; semantic transaction search ("find charges like X"); replace LLM call in `InMemoryChatHistory.selectRelevantMessages()` with embedding retrieval (flag-guarded initially). These tools are also prime MCP surface (Track C).
+- **Tool RAG (last unit, flag-guarded):** embed the ~40 tool descriptions (`source_type='tool'`); per query, inject only the top 8–10 relevant tool definitions into the main loop instead of all 40 (~6–12k prompt tokens today), with a one-line-per-tool index as retrieval-miss fallback. Complements Track E's scoping: imps pre-commit to an allowlist; tool RAG covers the open-ended main loop. See wilson#14 comments.
 
 **Units:** (1) `embed()` abstraction (`src/utils/embeddings.ts`: provider detect, prefixes if nomic, batching, normalization, fallback); (2) migration + queries; (3) indexer: embed-on-write + `wilson memory index` backfill (batched, resumable — first imp candidate); (4) cosine search + tools; (5) relevance-selection swap; (6) tests w/ fake embedder + Ollama-gated integration.
 
@@ -107,6 +108,8 @@ Story: "the model reads your finances on your GPU, in your browser — nothing l
 Adopt the concepts, not the dependencies (references: [claude-imps](https://github.com/johnlindquist/claude-imps), [loopcraft/pi](https://github.com/joelhooks/aie-loopcraft-workshop-2026)). Pi's lesson: keep Wilson's core loop minimal; profiles/sandboxing/orchestration are a thin layer over it, not a rewrite.
 
 **Imp = named profile:** `{ small local model, allowlist of N≪40 tools, sandbox tier, structured prompt }` running through the existing headless mode.
+
+**Naming:** "imp" stays as the internal architecture/config term. User-facing brand direction: **clerks** in **Wilson's back office** (Forensic Noir-aligned roles — Filing Clerk = indexer, Night Auditor = vigilance, Bookkeeper = categorize, Reconciler = close, Courier = sync). Roles map 1:1 to sandbox tiers ("the Bookkeeper drafts entries; only you post them") and to marketplace framing ("hire staff" rather than "unlock features"). Monetization split: Polar license gates premium clerks (existing paid-feature pattern), x402 gates clerk *definition packs* via the marketplace content API, per-call x402 reserved for future hosted surfaces only — never meter local execution.
 
 - **Sandbox tiers (financial-data-specific):** `read-only` (DB reads only) → `write-gated` (mutations queue for approval) → `full` (never default). Default read-only.
 - **Structured prompt template** (from imps): Mission / tool-output trust boundary (tool output = untrusted input — prompt-injection hygiene) / operating rules / worked examples / error recovery / output style.
