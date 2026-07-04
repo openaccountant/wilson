@@ -171,13 +171,15 @@ jobs:
         if: steps.bump.outputs.bump != 'none'
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
 
+      # Auth via npm trusted publishing (OIDC) — no NPM_TOKEN. Requires this
+      # repo + workflow to be configured as a trusted publisher on npmjs.com,
+      # and npm >= 11.5.1 (node 22 bundles npm 10, hence the upgrade).
       - name: Publish to npm
         if: steps.bump.outputs.bump != 'none'
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm install -g npm@latest
+          npm publish --provenance --access public
 
       - name: File docs issue
         if: steps.bump.outputs.bump != 'none'
