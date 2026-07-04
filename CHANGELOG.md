@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.4.2] — 2026-07-04
+
+### Fixes
+
+- fix: restore installable wilson bin under npm 11 (#29) (5c56f64)
+
+
 ## [v0.4.1] — 2026-07-04
 
 ### Fixes
