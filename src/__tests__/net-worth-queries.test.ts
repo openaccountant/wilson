@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createTestDb } from './helpers.js';
+import { createTestDb, daysAgo } from './helpers.js';
 import {
   insertAccount,
   updateAccount,
@@ -300,9 +300,11 @@ describe('net-worth-queries', () => {
       const db = createTestDb();
       const id = insertAccount(db, { name: 'Checking', account_type: 'asset', account_subtype: 'checking', current_balance: 10000 });
 
-      insertBalanceSnapshot(db, { account_id: id, balance: 8000, snapshot_date: '2025-12-01' });
-      insertBalanceSnapshot(db, { account_id: id, balance: 9000, snapshot_date: '2026-01-01' });
-      insertBalanceSnapshot(db, { account_id: id, balance: 10000, snapshot_date: '2026-02-01' });
+      // Dated relative to today so they stay inside getNetWorthTrend's rolling
+      // 6-month window regardless of when the test runs (see #23).
+      insertBalanceSnapshot(db, { account_id: id, balance: 8000, snapshot_date: daysAgo(90) });
+      insertBalanceSnapshot(db, { account_id: id, balance: 9000, snapshot_date: daysAgo(60) });
+      insertBalanceSnapshot(db, { account_id: id, balance: 10000, snapshot_date: daysAgo(30) });
 
       const trend = getNetWorthTrend(db, 6);
       expect(trend.length).toBe(3);

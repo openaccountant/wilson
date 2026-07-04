@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { initProfitDiffTool, profitDiffTool } from '../tools/query/profit-diff.js';
 import { insertTransactions } from '../db/queries.js';
-import { createTestDb, seedTestData, daysAgo } from './helpers.js';
+import { createTestDb, seedTestData, daysAgo, currentMonthStart } from './helpers.js';
 
 describe('profit_diff tool', () => {
   let db: Database;
@@ -34,9 +34,11 @@ describe('profit_diff tool', () => {
   });
 
   test('newCategories contains categories only in current period', async () => {
-    // Add a category that only exists in the current period
+    // Add a category that only exists in the current period. Use the 1st of
+    // the current month so the transaction lands in the current period even
+    // near month boundaries (daysAgo(N) can cross into the previous month — see #23).
     insertTransactions(db, [
-      { date: daysAgo(5), description: 'Gym', amount: -50, category: 'Fitness' },
+      { date: currentMonthStart(), description: 'Gym', amount: -50, category: 'Fitness' },
     ]);
     initProfitDiffTool(db);
     const raw = await profitDiffTool.func({ period: 'month', offset: 0, compareOffset: -1 });
