@@ -14,10 +14,19 @@ jobs:
     # Skip release commits to prevent infinite loops
     if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
+      # The default GITHUB_TOKEN cannot bypass the main-branch ruleset, so the
+      # release commit/tag are pushed with a token minted for the release-bot
+      # GitHub App, which is on the ruleset's bypass list.
+      - uses: actions/create-github-app-token@v2
+        id: release-bot
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.release-bot.outputs.token }}
 
       - uses: oven-sh/setup-bun@v2
         with:
