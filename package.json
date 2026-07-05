@@ -9,7 +9,7 @@
   "type": "module",
   "main": "src/index.tsx",
   "bin": {
-    "wilson": "./bin/wilson.js"
+    "wilson": "bin/wilson.js"
   },
   "scripts": {
     "start": "bun run src/index.tsx",
