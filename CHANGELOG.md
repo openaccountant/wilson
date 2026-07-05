@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.5.0] — 2026-07-05
+
+### Features
+
+- feat: upgrade @huggingface/transformers to 4.0.1 (#26) (12c1550)
+
+
 ## [v0.4.3] — 2026-07-05
 
 ### Fixes
