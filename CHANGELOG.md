@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.4.3] — 2026-07-05
+
+### Fixes
+
+- fix: drop ./ prefix from bin path so npm 11 keeps it (#30) (9071216)
+
+
+## [v0.4.2] — 2026-07-04
+
+### Fixes
+
+- fix: restore installable wilson bin under npm 11 (#29) (5c56f64)
+
+
+## [v0.4.1] — 2026-07-04
+
+### Fixes
+
+- fix: wire agent tools to database in dashboard chat (#25) (ecb22ea)
+
+
 ## [v0.4.0] — 2026-07-04
 
 ### Features

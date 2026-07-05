@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { AgentRunnerController } from '../controllers/index.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { getConfiguredModel } from '../utils/config.js';
-import { initDataContext } from '../agent/prompts.js';
+import { initAgentTools } from '../agent/init-tools.js';
 import { logger } from '../utils/logger.js';
 
 let chatHistory: InMemoryChatHistory | null = null;
@@ -15,7 +15,9 @@ let agentRunner: AgentRunnerController | null = null;
 export function initChatSession(db: Database): void {
   const { model, provider } = getConfiguredModel();
 
-  initDataContext(db);
+  // Wire every tool to the DB — without this the agent's tool calls fail and
+  // the model answers from thin air instead of the user's real transactions.
+  initAgentTools(db);
 
   chatHistory = new InMemoryChatHistory();
   chatHistory.setDatabase(db);
