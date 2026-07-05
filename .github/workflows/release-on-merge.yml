@@ -3,16 +3,38 @@ name: Release on Merge
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
   id-token: write
 
 jobs:
+  # Manually dispatched npm-auth probe: republishing the current (already
+  # published) version proves auth without burning a release — a working
+  # trusted-publisher config yields "cannot publish over existing version",
+  # a broken one yields ENEEDAUTH. HTTP logging shows the OIDC exchange.
+  publish-diagnostic:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Probe npm trusted-publishing auth
+        run: |
+          npm install -g npm@latest
+          npm --version
+          env | grep -c ACTIONS_ID_TOKEN || echo "OIDC env MISSING"
+          npm publish --provenance --access public --loglevel http 2>&1 || true
+
   release:
     runs-on: ubuntu-latest
-    # Skip release commits to prevent infinite loops
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    # Push events only; skip release commits to prevent infinite loops
+    if: ${{ github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'chore(release):') }}
     steps:
       # The default GITHUB_TOKEN cannot bypass the main-branch ruleset, so the
       # release commit/tag are pushed with a token minted for the release-bot
