@@ -14,6 +14,10 @@ import {
   type ModelTag,
 } from '../utils/model.js';
 import { getOllamaModels } from '../utils/ollama.js';
+import {
+  getOpenAiCompatibleModels,
+  setOpenAiCompatibleBaseUrl,
+} from '../utils/openai-compatible.js';
 import { checkWebGpuAvailable } from '../model/providers/transformers.js';
 
 /** Returns true if the model has already been downloaded to the local cache. */
@@ -26,7 +30,8 @@ function isTransformersModelCached(modelId: string): boolean {
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '../model/llm.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 
-function tagOllamaModel(id: string): ModelTag[] {
+/** Infers tags from a locally served model's name (Ollama tags, OpenAI-compatible model ids). */
+function tagLocalModel(id: string): ModelTag[] {
   const tags: ModelTag[] = ['open', 'local'];
   const lower = id.toLowerCase();
   // Size heuristics from model naming conventions (covers 0.5b–4b, 350m, 270m, tiny, mini, nano)
@@ -41,6 +46,7 @@ const SELECTION_STATES = [
   'provider_select',
   'model_select',
   'model_input',
+  'base_url_input',
   'download_confirm',
   'api_key_confirm',
   'api_key_input',
@@ -131,8 +137,16 @@ export class ModelSelectionController {
 
     if (providerId === 'ollama') {
       const ollamaModelIds = await getOllamaModels();
-      this.pendingModelsValue = ollamaModelIds.map((id) => ({ id, displayName: id, tags: tagOllamaModel(id) }));
+      this.pendingModelsValue = ollamaModelIds.map((id) => ({ id, displayName: id, tags: tagLocalModel(id) }));
       this.appStateValue = 'model_select';
+      this.emitChange();
+      return;
+    }
+
+    if (providerId === 'openai-compatible') {
+      // The server address comes first — models can only be listed once we know it.
+      this.pendingModelsValue = [];
+      this.appStateValue = 'base_url_input';
       this.emitChange();
       return;
     }
@@ -162,8 +176,8 @@ export class ModelSelectionController {
       return;
     }
 
-    if (this.pendingProviderValue === 'ollama') {
-      this.completeModelSwitch(this.pendingProviderValue, `ollama:${modelId}`);
+    if (this.pendingProviderValue === 'ollama' || this.pendingProviderValue === 'openai-compatible') {
+      this.completeModelSwitch(this.pendingProviderValue, `${this.pendingProviderValue}:${modelId}`);
       return;
     }
 
@@ -188,6 +202,35 @@ export class ModelSelectionController {
 
     this.pendingSelectedModelId = modelId;
     this.appStateValue = 'api_key_confirm';
+    this.emitChange();
+  }
+
+  /**
+   * Stores the OpenAI-compatible server URL (empty input keeps the current one),
+   * then lists the models it serves. Falls back to typing a model name when the
+   * server is unreachable or does not implement GET /models.
+   */
+  async handleBaseUrlSubmit(baseUrl: string | null) {
+    if (baseUrl === null || !this.pendingProviderValue) {
+      this.pendingProviderValue = null;
+      this.appStateValue = 'provider_select';
+      this.emitChange();
+      return;
+    }
+
+    if (baseUrl.trim() && setOpenAiCompatibleBaseUrl(baseUrl) === null) {
+      this.onError('Failed to save the server URL to .env.');
+      this.resetPendingState();
+      return;
+    }
+
+    const modelIds = await getOpenAiCompatibleModels();
+    this.pendingModelsValue = modelIds.map((id) => ({
+      id,
+      displayName: id,
+      tags: tagLocalModel(id),
+    }));
+    this.appStateValue = modelIds.length > 0 ? 'model_select' : 'model_input';
     this.emitChange();
   }
 

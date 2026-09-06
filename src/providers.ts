@@ -24,6 +24,11 @@ export const PROVIDERS: ProviderDef[] = [
     modelPrefix: 'ollama:',
   },
   {
+    id: 'openai-compatible',
+    displayName: 'OpenAI-compatible server',
+    modelPrefix: 'openai-compatible:',
+  },
+  {
     id: 'transformers',
     displayName: 'Transformers.js (local)',
     modelPrefix: 'transformers:',

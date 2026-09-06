@@ -81,8 +81,14 @@ export function getDefaultModelForProvider(providerId: string): string | undefin
   return models[0]?.id;
 }
 
+/** Slug prefixes ("ollama:", "openai-compatible:", ...) used for routing only. */
+const SLUG_PREFIXES = PROVIDER_DEFS.map((p) => p.modelPrefix).filter((prefix) =>
+  prefix.endsWith(':'),
+);
+
 export function getModelDisplayName(modelId: string): string {
-  const normalizedId = modelId.replace(/^(ollama|openrouter|transformers):/, '');
+  const slugPrefix = SLUG_PREFIXES.find((prefix) => modelId.startsWith(prefix));
+  const normalizedId = slugPrefix ? modelId.slice(slugPrefix.length) : modelId;
 
   for (const provider of PROVIDERS) {
     const model = provider.models.find((entry) => entry.id === normalizedId || entry.id === modelId);
