@@ -29,7 +29,7 @@ const PROVIDER_MODELS: Record<string, Model[]> = {
     { id: 'ollama:granite4:350m',   displayName: 'Granite 4 350M (local)',  tags: ['local', 'open', 'small'] },
   ],
   transformers: [
-    // WebGPU models — require bun-webgpu + compatible GPU
+    // WebGPU models — require a GPU that ORT's bundled WebGPU EP can drive
     { id: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', displayName: 'Granite 4.0 Micro 3B (WebGPU)', tags: ['local', 'small', 'webgpu'], downloadSize: '~3.2GB' },
     { id: 'transformers:onnx-community/LFM2-1.2B-Tool-ONNX',        displayName: 'LFM2 1.2B Tool (WebGPU)',       tags: ['local', 'small', 'webgpu'], downloadSize: '~1.2GB' },
     { id: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',  displayName: 'Granite 4.0 350M (WebGPU)',     tags: ['local', 'small', 'webgpu'], downloadSize: '~350MB' },
