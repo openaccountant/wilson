@@ -64,7 +64,11 @@ describe('layer 1: webgpu tags agree with WEBGPU_MODEL_PATTERNS', () => {
 
 describe('layer 2: capability probe', () => {
   test('checkWebGpuAvailable() returns a boolean and never throws', async () => {
-    expect(typeof (await checkWebGpuAvailable())).toBe('boolean');
+    const available = await checkWebGpuAvailable();
+    // Logged on purpose: CI runners have no GPU, so this line is the only
+    // place the probe's `false` branch is observable (see #38).
+    console.log(`[webgpu-model-path] checkWebGpuAvailable() -> ${available} on ${process.platform}/${process.arch}`);
+    expect(typeof available).toBe('boolean');
   });
 
   test('the result is cached, so repeat calls agree', async () => {
