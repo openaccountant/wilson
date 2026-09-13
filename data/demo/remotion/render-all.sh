@@ -9,7 +9,7 @@ OUTDIR="../final"; mkdir -p "$OUTDIR" public
 
 # name | source mp4 | title | subtitle | speed
 clips=(
-  "hero|$RAW/boe-demo.mp4|CASE FILE: AUGUST 2026|Follow the money.|4"
+  "hero|$RAW/boe-demo-v2-final.mp4|CASE FILE: AUGUST 2026|Follow the money.|4"
   "sovereignty|$RAW/sovereignty.mp4|PRIVATE BY DESIGN|gemma4:31b - fully local|3"
   "orchestration|$RAW/orchestration.mp4|ONE COMMAND. A FULL AUDIT.|Autonomous, on-device|4"
   "flow1-import|$RAW/flow1-help-import.mp4|IMPORT IN SECONDS|/help - slash palette - import|3"
