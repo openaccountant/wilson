@@ -1,0 +1,37 @@
+{
+  "name": "flow3-budget",
+  "width": 1400,
+  "height": 860,
+  "fontSize": 18,
+  "typingSpeedMs": 120,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "output": "data/demo/flow3-budget.mp4",
+  "steps": [
+    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "sleep", "seconds": 8 },
+    { "type": "shot", "file": "f3-00-boot.png" },
+
+    { "type": "type", "text": "/budget", "enter": true },
+    { "type": "sleep", "seconds": 3 },
+    { "type": "shot", "file": "f3-01-budget-view.png" },
+
+    { "type": "type", "text": "/budget set Dining 200", "enter": true },
+    { "type": "sleep", "seconds": 2 },
+    { "type": "shot", "file": "f3-02-budget-set.png" },
+
+    { "type": "type", "text": "/budget set Groceries 400", "enter": true },
+    { "type": "sleep", "seconds": 2 },
+
+    { "type": "type", "text": "How am I tracking against my budgets for August 2026? Use the budget check tool with month set to 2026-08.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "f3-03-tracking.png" },
+
+    { "type": "sleep", "seconds": 2 }
+  ]
+}
