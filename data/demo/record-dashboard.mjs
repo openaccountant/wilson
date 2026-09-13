@@ -37,15 +37,22 @@ const slowScroll = async (page, total = 1600, step = 180) => {
   for (let y = 0; y < total; y += step) { await page.mouse.wheel(0, step); await sleep(600); }
 };
 
-// ── Scene 1: Overview — Month then YTD only, then click the 2026-05-01 heatmap cell ──
+// ── Scene 1: Overview — Month preset stepped back to August 2026 (hero month), ──
+// ── then click the 2026-08-17 heatmap cell (Harborview Hotel duplicate-charge day) ──
+const prevMonth = async (page, ms = 2600) => {
+  try { await page.getByRole('button', { name: '←' }).click({ timeout: 4000 }); await sleep(ms); return true; }
+  catch (e) { console.log(`    (prev-month arrow: ${e.message})`); return false; }
+};
+
 await scene('overview', async (page) => {
   await page.goto(`${BASE}/#overview`, { waitUntil: 'networkidle' });
   await sleep(3000);
-  await click(page, 'Month', 2600);
-  await click(page, 'YTD', 3000);
-  // click the May 1 heatmap square (SVG <rect> whose <title> starts 2026-05-01)
+  await click(page, 'Month', 1800);   // reset to the current calendar month
+  await prevMonth(page, 3000);        // step back one month -> August 2026
+  await sleep(1000);
+  // click the Aug 17 heatmap square (SVG <rect> whose <title> starts 2026-08-17)
   try {
-    const cell = page.locator('svg rect').filter({ hasText: '2026-05-01' }).first();
+    const cell = page.locator('svg rect').filter({ hasText: '2026-08-17' }).first();
     await cell.scrollIntoViewIfNeeded();
     await cell.click({ timeout: 4000, force: true });
     await sleep(3000);
@@ -82,7 +89,24 @@ await scene('training', async (page) => {
   await click(page, 'Save Annotation', 2500);
 });
 
-// ── Scene 3: Goals (view the goal set from the CLI) ──
+// ── Scene 3: Transactions — August 2026, filter down to the Harborview duplicate ──
+await scene('transactions', async (page) => {
+  await page.goto(`${BASE}/#transactions`, { waitUntil: 'networkidle' });
+  await sleep(2500);
+  await click(page, 'Month', 1500);   // reset to the current calendar month
+  await prevMonth(page, 2800);        // step back one month -> August 2026
+  await sleep(1200);
+  // filter to the Harborview Hotel duplicate charge (Aug 17 & Aug 20, $318.00 each)
+  try {
+    const search = page.getByPlaceholder('Search by merchant or description...');
+    await search.click();
+    await search.type('harborview', { delay: 45 });
+    await sleep(2500);
+  } catch (e) { console.log(`    (search: ${e.message})`); }
+  await sleep(1500);
+});
+
+// ── Scene 4: Goals (view the goal set from the CLI) ──
 await scene('goals', async (page) => {
   await page.goto(`${BASE}/#goals`, { waitUntil: 'networkidle' });
   await sleep(3000);
@@ -90,7 +114,7 @@ await scene('goals', async (page) => {
   await sleep(1500);
 });
 
-// ── Scene 4: Settings — switch profile, add entity, add memory ──
+// ── Scene 5: Settings — switch profile, add entity, add memory ──
 await scene('settings', async (page) => {
   await page.goto(`${BASE}/#settings`, { waitUntil: 'networkidle' });
   await sleep(2500);
@@ -117,7 +141,7 @@ await scene('settings', async (page) => {
   await sleep(1500);
 });
 
-// ── Scene 5: Chat — open a previous chat and interact ──
+// ── Scene 6: Chat — open a previous chat and interact ──
 await scene('chat', async (page) => {
   await page.goto(`${BASE}/#chat`, { waitUntil: 'networkidle' });
   await sleep(2500);
