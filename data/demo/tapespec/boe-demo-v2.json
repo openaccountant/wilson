@@ -1,0 +1,41 @@
+{
+  "name": "boe-demo-v2",
+  "width": 1400,
+  "height": 860,
+  "fontSize": 18,
+  "typingSpeedMs": 55,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "output": "data/demo/boe-demo-v2.mp4",
+  "steps": [
+    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "sleep", "seconds": 14 },
+    { "type": "shot", "file": "shot-v2-00-boot.png" },
+
+    { "type": "type", "text": "Scan my transactions for duplicate charges using the anomaly tool.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 5 },
+    { "type": "shot", "file": "shot-v2-01-anomalies.png" },
+
+    { "type": "type", "text": "Use the transaction search tool to find all recurring transactions, then list only the merchant names and amounts it returns. Do not add any merchant that is not in the tool results.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 6 },
+    { "type": "shot", "file": "shot-v2-02-recurring.png" },
+
+    { "type": "type", "text": "Give me a spending summary for August 2026 using the spending summary tool.", "enter": true },
+    { "type": "idle", "timeout": 300 },
+    { "type": "sleep", "seconds": 8 },
+    { "type": "shot", "file": "shot-v2-03-summary.png" },
+
+    { "type": "type", "text": "Using only the duplicate charges and recurring charges you already found above, name the top 2 money-saving actions and the exact dollar amount each saves. Do not introduce any new transactions. Keep it to 2 short bullets.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 8 },
+    { "type": "shot", "file": "shot-v2-04-verdict.png" },
+
+    { "type": "sleep", "seconds": 3 }
+  ]
+}
