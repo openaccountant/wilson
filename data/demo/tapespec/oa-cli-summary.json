@@ -1,0 +1,26 @@
+{
+  "name": "oa-cli-summary",
+  "width": 1200,
+  "height": 820,
+  "fontSize": 18,
+  "typingSpeedMs": 45,
+  "theme": {
+    "background": "#1e1e2e",
+    "foreground": "#cdd6f4",
+    "cursor": "#f5e0dc",
+    "selection": "#585b70"
+  },
+  "cmd": ["bash", "-il"],
+  "output": "data/demo/oa-cli-summary.mp4",
+  "steps": [
+    { "type": "type", "text": "# Open Accountant - where did my money go in August? (local gemma4:31b)", "enter": true },
+    { "type": "sleep", "seconds": 0.8 },
+
+    { "type": "type", "text": "wilson --profile demo --run 'give me a summary of my August 2026 spending by category'", "enter": true },
+    { "type": "wait", "pattern": "Groceries", "timeout": 180 },
+    { "type": "sleep", "seconds": 4.5 },
+    { "type": "shot", "file": "oa-cli-00-summary.png" },
+
+    { "type": "sleep", "seconds": 1 }
+  ]
+}

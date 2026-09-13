@@ -24,7 +24,7 @@
 // }
 
 import { spawn } from 'node:child_process';
-import { readFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
@@ -84,9 +84,19 @@ await page.waitForSelector('.xterm-rows', { timeout: 10000 });
 const bufferText = () =>
   page.evaluate(() => document.querySelector('.xterm-rows')?.innerText ?? '');
 
+// Wall-clock timeline sidecar: post-processing (tighten-by-timing.ts) needs the
+// real armed/fired boundaries of 'idle'/'wait' steps to speed-ramp the think
+// pause without relying on freezedetect (an animated spinner defeats it, and
+// it ends up cutting the answer reveal instead of the dead air).
+const t0 = Date.now();
+const elapsed = () => (Date.now() - t0) / 1000;
+const timeline = [];
+
 let stepNum = 0;
 for (const step of steps) {
   stepNum++;
+  const tStart = elapsed();
+  let armedAt, firedAt;
   if (step.type === 'type' || step.text !== undefined) {
     await page.keyboard.type(step.text, { delay: typingSpeedMs });
     if (step.enter !== false) await page.keyboard.press('Enter');
@@ -109,6 +119,7 @@ for (const step of steps) {
       if (busyRe.test(await bufferText())) armed = true;
       else await sleep(0.25);
     }
+    if (armed) armedAt = elapsed();
     if (!armed) console.log('  idle: never saw busy marker; assuming already done');
     let clean = 0;
     let ok = !armed; // if never armed, don't sit through the whole timeout
@@ -117,6 +128,7 @@ for (const step of steps) {
       else if (++clean >= 3) ok = true;
       if (!ok) await sleep(0.5);
     }
+    if (ok && armed) firedAt = elapsed();
     if (!ok) console.log('  IDLE TIMEOUT (continuing)');
   } else if (step.type === 'wait') {
     const re = new RegExp(step.pattern);
@@ -133,14 +145,18 @@ for (const step of steps) {
       await sleep(0.5);
       armed = !re.test(tailOf(await bufferText()));
     }
+    if (armed) armedAt = elapsed();
     if (!armed) console.log('  wait: arm phase expired (previous stats still in tail); watching anyway');
     let ok = false;
     while (Date.now() < deadline) {
       if (re.test(tailOf(await bufferText()))) { ok = true; break; }
       await sleep(0.5);
     }
+    if (ok) firedAt = elapsed();
     if (!ok) console.log(`  WAIT TIMEOUT on /${step.pattern}/ (continuing)`);
   }
+  const tEnd = elapsed();
+  timeline.push({ i: stepNum, type: step.type ?? (step.text !== undefined ? 'type' : 'sleep'), tStart, tEnd, armedAt, firedAt });
 }
 
 const video = page.video();
@@ -159,4 +175,8 @@ if (output && existsSync(namedWebm)) {
   execSync(`ffmpeg -y -loglevel error -i "${namedWebm}" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "${output}"`);
   console.log(`wrote ${output}`);
 }
+
+const timingPath = `${OUTDIR}/${name}.timing.json`;
+writeFileSync(timingPath, JSON.stringify({ name, steps: timeline }, null, 2));
+console.log(`wrote ${timingPath}`);
 console.log('DONE');

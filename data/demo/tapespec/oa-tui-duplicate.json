@@ -1,0 +1,26 @@
+{
+  "name": "oa-tui-duplicate",
+  "width": 1200,
+  "height": 820,
+  "fontSize": 18,
+  "typingSpeedMs": 45,
+  "theme": {
+    "background": "#1e1e2e",
+    "foreground": "#cdd6f4",
+    "cursor": "#f5e0dc",
+    "selection": "#585b70"
+  },
+  "cmd": ["./data/demo/run-demo.sh"],
+  "output": "data/demo/oa-tui-duplicate.mp4",
+  "steps": [
+    { "type": "sleep", "seconds": 6 },
+    { "type": "shot", "file": "oa-dup-00-boot.png" },
+
+    { "type": "type", "text": "find any duplicate charges in my August transactions", "enter": true },
+    { "type": "idle", "timeout": 180 },
+    { "type": "sleep", "seconds": 3.5 },
+    { "type": "shot", "file": "oa-dup-01-answer.png" },
+
+    { "type": "sleep", "seconds": 1 }
+  ]
+}
