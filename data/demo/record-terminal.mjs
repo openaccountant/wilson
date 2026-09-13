@@ -100,6 +100,11 @@ for (const step of steps) {
   if (step.type === 'type' || step.text !== undefined) {
     await page.keyboard.type(step.text, { delay: typingSpeedMs });
     if (step.enter !== false) await page.keyboard.press('Enter');
+  } else if (step.type === 'key') {
+    // Raw key press(es) for pure UI navigation (arrow keys through a palette,
+    // Escape to dismiss, etc.) that isn't literal typed text.
+    const keys = Array.isArray(step.key) ? step.key : [step.key];
+    for (const k of keys) await page.keyboard.press(k);
   } else if (step.type === 'sleep' || step.seconds !== undefined) {
     await sleep(step.seconds ?? 1);
   } else if (step.type === 'shot') {

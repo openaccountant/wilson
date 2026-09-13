@@ -1,0 +1,46 @@
+{
+  "name": "flow2-skill",
+  "width": 1400,
+  "height": 860,
+  "fontSize": 18,
+  "typingSpeedMs": 120,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "output": "data/demo/flow2-skill.mp4",
+  "steps": [
+    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "sleep", "seconds": 8 },
+    { "type": "shot", "file": "f2-00-boot.png" },
+
+    { "type": "type", "text": "/", "enter": false },
+    { "type": "sleep", "seconds": 0.7 },
+    { "type": "key", "key": "ArrowDown" },
+    { "type": "sleep", "seconds": 0.5 },
+    { "type": "key", "key": "ArrowDown" },
+    { "type": "sleep", "seconds": 0.5 },
+    { "type": "key", "key": "ArrowDown" },
+    { "type": "sleep", "seconds": 0.5 },
+    { "type": "shot", "file": "f2-01-palette.png" },
+
+    { "type": "key", "key": "Escape" },
+    { "type": "sleep", "seconds": 0.3 },
+    { "type": "key", "key": "Backspace" },
+    { "type": "sleep", "seconds": 0.5 },
+
+    { "type": "type", "text": "/skill spending-review", "enter": false },
+    { "type": "sleep", "seconds": 0.8 },
+    { "type": "type", "text": "", "enter": true },
+
+    { "type": "sleep", "seconds": 3 },
+    { "type": "shot", "file": "f2-02-running.png" },
+
+    { "type": "idle", "timeout": 180 },
+    { "type": "sleep", "seconds": 2 },
+    { "type": "shot", "file": "f2-03-report.png" },
+    { "type": "sleep", "seconds": 2 }
+  ]
+}
