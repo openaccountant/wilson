@@ -17,7 +17,7 @@ Set BorderRadius 10
 Hide
 Type "export PATH=/Users/jdfiscus/.bun/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 Enter
-Type "cd /Users/jdfiscus/dev/ce/openaccountant/wilson"
+Type "cd /Users/jdfiscus/dev/oss/openaccoutant/wilson"
 Enter
 Type "clear"
 Enter
