@@ -25,11 +25,11 @@ Type "clear"
 Enter
 Show
 
-Type "# Open Accountant - where did my money go in May? (local granite4.1:8b)"
+Type "# Open Accountant - where did my money go in August? (local gemma4:31b)"
 Sleep 700ms
 Enter
 Sleep 800ms
-Type "wilson --profile demo --run 'give me a summary of my May 2026 spending by category'"
+Type "wilson --profile demo --run 'give me a summary of my August 2026 spending by category'"
 Sleep 500ms
 Enter
 Wait+Screen@180s /Groceries/

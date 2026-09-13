@@ -5,7 +5,10 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
 run(){ bun run src/index.tsx --profile demo --run "$1" 2>/dev/null; }
 
 echo "### prewarm ###"
-curl -s http://127.0.0.1:11434/api/generate -d '{"model":"granite4.1:8b","prompt":"hi","keep_alive":"20m","stream":false}' >/dev/null
+# Warm whatever model the demo profile is actually configured with.
+MODEL=$(grep -o '"modelId"[^,}]*' ~/.openaccountant/profiles/demo/settings.json | sed 's/.*ollama://;s/"//g')
+echo "prewarming ${MODEL:-<unknown>}"
+[ -n "$MODEL" ] && curl -s http://127.0.0.1:11434/api/generate -d "{\"model\":\"$MODEL\",\"prompt\":\"hi\",\"keep_alive\":\"20m\",\"stream\":false}" >/dev/null
 
 beat(){ # label | prompt
   echo "==================== $1 ===================="

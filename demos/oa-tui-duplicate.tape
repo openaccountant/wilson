@@ -1,4 +1,4 @@
-# Beat 1 — "follow the money": catch a duplicate charge (interactive TUI, granite4.1:8b)
+# Beat 1 — "follow the money": catch a duplicate charge (interactive TUI, gemma4:31b · Aug 2026 ledger)
 # Render:  vhs demos/oa-tui-duplicate.tape   then   bun demos/tighten.ts demos/raw/oa-tui-duplicate.mp4 demos/oa-tui-duplicate.mp4
 
 Output demos/raw/oa-tui-duplicate.mp4
@@ -27,7 +27,7 @@ Type "wilson --profile demo"
 Enter
 Sleep 6s
 
-Type "find any duplicate charges in my May transactions"
+Type "find any duplicate charges in my August transactions"
 Sleep 500ms
 Enter
 # Wait for the per-response stats line ("... tokens · (... tok/s)") = answer complete.

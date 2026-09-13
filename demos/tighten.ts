@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // Tighten a VHS demo clip by jump-cutting the dead "model is thinking" pause.
 //
-// granite runs locally, so a real query leaves ~15-30s of near-static spinner in
+// The model runs locally, so a real query leaves ~15-30s of near-static spinner in
 // the recording. This finds the longest gap between on-screen scene changes
 // (= the think-pause) and cuts most of it out, keeping a brief honest beat of
 // "thinking" plus the full typing intro and answer reveal.

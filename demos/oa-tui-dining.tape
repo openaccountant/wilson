@@ -1,4 +1,4 @@
-# Beat 3 — a focused question: dining + coffee spend (interactive TUI, granite4.1:8b)
+# Beat 3 — a focused question: dining + coffee spend (interactive TUI, gemma4:31b · Aug 2026 ledger)
 # Render:  vhs demos/oa-tui-dining.tape   then   bun demos/tighten.ts demos/raw/oa-tui-dining.mp4 demos/oa-tui-dining.mp4
 
 Output demos/raw/oa-tui-dining.mp4
@@ -27,7 +27,7 @@ Type "wilson --profile demo"
 Enter
 Sleep 6s
 
-Type "how much did I spend on dining and coffee in May 2026?"
+Type "how much did I spend on dining and coffee in August 2026?"
 Sleep 500ms
 Enter
 # Wait for the per-response stats line ("... tokens · (... tok/s)") = answer complete.

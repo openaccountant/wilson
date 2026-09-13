@@ -1,4 +1,4 @@
-# Beat 2 — where did the money go? spending by category (interactive TUI, granite4.1:8b)
+# Beat 2 — where did the money go? spending by category (interactive TUI, gemma4:31b · Aug 2026 ledger)
 # Render:  vhs demos/oa-tui-summary.tape   then   bun demos/tighten.ts demos/raw/oa-tui-summary.mp4 demos/oa-tui-summary.mp4
 
 Output demos/raw/oa-tui-summary.mp4
@@ -31,7 +31,7 @@ Enter
 Wait+Screen@60s /Profile/
 Sleep 1200ms
 
-Type "give me a summary of my May 2026 spending by category"
+Type "give me a summary of my August 2026 spending by category"
 Sleep 500ms
 Enter
 # Wait for the per-response stats line ("... tokens · (... tok/s)") = answer complete,
