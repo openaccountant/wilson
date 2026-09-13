@@ -48,9 +48,9 @@ refute "no fabricated Stitcher" "$S" "Stitcher"
 echo ""
 
 echo "--- [3/3] Spending summary (deterministic) ---"
-P=$(run "Give me a spending summary for May 2026.")
+P=$(run "Give me a spending summary for August 2026.")
 print -r -- "$P" | tail -10
-check "references May / a total" "$P" "May"
+check "references August / a total" "$P" "August"
 echo ""
 
 echo "============================================================"
