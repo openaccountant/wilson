@@ -1,0 +1,36 @@
+{
+  "name": "orchestration",
+  "width": 1400,
+  "height": 880,
+  "fontSize": 18,
+  "typingSpeedMs": 55,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "cmd": ["./data/demo/run-demo.sh"],
+  "output": "data/demo/orchestration.mp4",
+  "steps": [
+    { "type": "sleep", "seconds": 12 },
+    { "type": "shot", "file": "orch-00-boot.png" },
+
+    { "type": "type", "text": "Scan my transactions for duplicate charges using the anomaly tool.", "enter": true },
+    { "type": "idle", "timeout": 180 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "orch-01-anomalies.png" },
+
+    { "type": "type", "text": "Use the transaction search tool to find all recurring transactions, then list only the merchant names and amounts it returns. Do not add any merchant that is not in the tool results.", "enter": true },
+    { "type": "idle", "timeout": 180 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "orch-02-recurring.png" },
+
+    { "type": "type", "text": "Using only the duplicate charges and recurring charges you already found above, name the top 2 money-saving actions and the exact dollar amount each saves. Do not introduce any new transactions. Keep it to 2 short bullets.", "enter": true },
+    { "type": "idle", "timeout": 180 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "orch-03-verdict.png" },
+
+    { "type": "sleep", "seconds": 3 }
+  ]
+}
