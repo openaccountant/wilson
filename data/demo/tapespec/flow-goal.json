@@ -1,0 +1,36 @@
+{
+  "name": "flow-goal",
+  "width": 1400,
+  "height": 860,
+  "fontSize": 18,
+  "typingSpeedMs": 120,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "output": "data/demo/flow-goal.mp4",
+  "steps": [
+    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "sleep", "seconds": 8 },
+    { "type": "shot", "file": "fg-00-boot.png" },
+
+    { "type": "type", "text": "Create a savings goal titled Emergency Fund with a target amount of 10000 dollars and target date 2026-12-31. Use the goal management tool to save it.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 5 },
+    { "type": "shot", "file": "fg-01-goal-set.png" },
+
+    { "type": "type", "text": "I've saved 2500 dollars toward the Emergency Fund goal so far. Use the goal management tool to record that progress.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 5 },
+    { "type": "shot", "file": "fg-02-progress-set.png" },
+
+    { "type": "type", "text": "Show me my progress on the Emergency Fund goal, including the percent complete, using the goal management tool.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 5 },
+    { "type": "shot", "file": "fg-03-tracking.png" },
+
+    { "type": "sleep", "seconds": 3 }
+  ]
+}
