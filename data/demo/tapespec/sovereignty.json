@@ -1,0 +1,31 @@
+{
+  "name": "sovereignty",
+  "width": 1400,
+  "height": 820,
+  "fontSize": 18,
+  "typingSpeedMs": 55,
+  "theme": {
+    "background": "#0a0f1a",
+    "foreground": "#e5e7eb",
+    "cursor": "#22c55e",
+    "selection": "#166534"
+  },
+  "output": "data/demo/sovereignty.mp4",
+  "steps": [
+    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "sleep", "seconds": 12 },
+    { "type": "shot", "file": "sov-00-boot.png" },
+
+    { "type": "type", "text": "Scan my transactions for duplicate charges using the anomaly tool.", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "sov-01-local-catch.png" },
+
+    { "type": "type", "text": "Is any of my financial data sent to the cloud or any external server when you analyze it?", "enter": true },
+    { "type": "idle", "timeout": 240 },
+    { "type": "sleep", "seconds": 4 },
+    { "type": "shot", "file": "sov-02-privacy.png" },
+
+    { "type": "sleep", "seconds": 3 }
+  ]
+}
