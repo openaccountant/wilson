@@ -10,9 +10,9 @@
     "cursor": "#22c55e",
     "selection": "#166534"
   },
-  "output": "data/demo/flow1-help-import.mp4",
+  "output": "demos/tape-video/flow1-help-import.mp4",
   "steps": [
-    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "type", "text": "./demos/scripts/run-demo.sh", "enter": true },
     { "type": "sleep", "seconds": 8 },
     { "type": "shot", "file": "f1-00-boot.png" },
 
@@ -24,7 +24,7 @@
     { "type": "sleep", "seconds": 2.5 },
     { "type": "shot", "file": "f1-02-palette.png" },
 
-    { "type": "type", "text": "import data/demo/august-2026-chase.csv", "enter": false },
+    { "type": "type", "text": "import demos/fixtures/august-2026-chase.csv", "enter": false },
     { "type": "sleep", "seconds": 0.8 },
     { "type": "type", "text": "", "enter": true },
     { "type": "sleep", "seconds": 22 },

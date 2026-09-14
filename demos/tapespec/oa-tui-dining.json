@@ -1,5 +1,5 @@
 {
-  "name": "oa-tui-duplicate",
+  "name": "oa-tui-dining",
   "width": 1200,
   "height": 820,
   "fontSize": 18,
@@ -10,16 +10,16 @@
     "cursor": "#f5e0dc",
     "selection": "#585b70"
   },
-  "cmd": ["./data/demo/run-demo.sh"],
-  "output": "data/demo/oa-tui-duplicate.mp4",
+  "cmd": ["./demos/scripts/run-demo.sh"],
+  "output": "demos/tape-video/oa-tui-dining.mp4",
   "steps": [
     { "type": "sleep", "seconds": 6 },
-    { "type": "shot", "file": "oa-dup-00-boot.png" },
+    { "type": "shot", "file": "oa-dining-00-boot.png" },
 
-    { "type": "type", "text": "find any duplicate charges in my August transactions", "enter": true },
+    { "type": "type", "text": "how much did I spend on dining and coffee in August 2026?", "enter": true },
     { "type": "idle", "timeout": 180 },
     { "type": "sleep", "seconds": 3.5 },
-    { "type": "shot", "file": "oa-dup-01-answer.png" },
+    { "type": "shot", "file": "oa-dining-01-answer.png" },
 
     { "type": "sleep", "seconds": 1 }
   ]

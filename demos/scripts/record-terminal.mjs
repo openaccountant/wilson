@@ -3,17 +3,20 @@
 // machine with current Chrome; Playwright recordVideo does the same job and
 // already powers record-dashboard.mjs / make-cards.mjs here.
 //
-// Usage:  bun data/demo/record-terminal.mjs <spec.json>
-// Output: data/demo/tape-video/<name>.webm + per-step screenshots (PNG),
-// then ffmpeg converts to <spec.output> (default data/demo/<name>.mp4).
+// Usage:  bun demos/scripts/record-terminal.mjs <spec.json>
+// Output: demos/tape-video/<name>.webm + per-step screenshots (PNG) - all
+// scratch/raw, kept out of demos/media/ (shippable deliverables only) - then
+// ffmpeg converts to <spec.output> (default demos/tape-video/<name>.mp4; tighten
+// with demos/scripts/tighten-by-timing.ts and copy the polished result into
+// demos/media/ yourself, same as every clip in this repo was produced).
 //
 // Spec format (JSON):
 // {
 //   "name": "boe-demo-v2",
 //   "width": 1400, "height": 860, "fontSize": 18, "typingSpeedMs": 55,
 //   "theme": { "background": "#0a0f1a", ... ttyd xterm theme },
-//   "cmd": ["./data/demo/run-demo.sh"],          // what ttyd serves (default: zsh)
-//   "output": "data/demo/boe-demo-v2.mp4",
+//   "cmd": ["./demos/scripts/run-demo.sh"],      // what ttyd serves (default: zsh)
+//   "output": "demos/tape-video/boe-demo-v2.mp4",
 //   "steps": [
 //     { "type": "type", "text": "...", "enter": true },   // type into the shell
 //     { "type": "sleep", "seconds": 14 },
@@ -30,7 +33,7 @@ import { chromium } from 'playwright';
 
 const specPath = process.argv[2];
 if (!specPath) {
-  console.error('Usage: bun data/demo/record-terminal.mjs <spec.json>');
+  console.error('Usage: bun demos/scripts/record-terminal.mjs <spec.json>');
   process.exit(1);
 }
 const spec = JSON.parse(readFileSync(specPath, 'utf8'));
@@ -42,14 +45,14 @@ const {
   typingSpeedMs = 55,
   theme = { background: '#0a0f1a', foreground: '#e5e7eb', cursor: '#22c55e', selection: '#166534' },
   cmd,
-  output = `data/demo/${name}.mp4`,
+  output = `demos/tape-video/${name}.mp4`,
   steps = [],
 } = spec;
 if (!name) { console.error('spec needs a "name"'); process.exit(1); }
 
 const PORT = 17683;
-const OUTDIR = 'data/demo/tape-video';
-const SHOTDIR = 'data/demo';
+const OUTDIR = 'demos/tape-video';
+const SHOTDIR = 'demos/tape-video';
 mkdirSync(OUTDIR, { recursive: true });
 
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));

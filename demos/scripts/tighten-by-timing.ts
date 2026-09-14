@@ -13,7 +13,7 @@
 //                            -> speed-ramped (setpts), factor solved for targetSec
 //   [revealStart, dur]       the answer settling (reveal hold) -> kept at real time
 //
-// Usage:  bun data/demo/tighten-by-timing.ts <raw.mp4> <timing.json> <out.mp4> [targetSec=13] [holdSec=2.5] [maxSpeed=14] [bootTrimSec=1.5] [tailCapSec=3.0]
+// Usage:  bun demos/scripts/tighten-by-timing.ts <raw.mp4> <timing.json> <out.mp4> [targetSec=13] [holdSec=2.5] [maxSpeed=14] [bootTrimSec=1.5] [tailCapSec=3.0]
 
 import { spawnSync } from 'bun';
 import { readFileSync } from 'node:fs';
@@ -21,7 +21,7 @@ import { readFileSync } from 'node:fs';
 const [raw, timingPath, out, targetArg = '13', holdArg = '2.5', maxSpeedArg = '14', bootTrimArg = '1.5', tailCapArg = '3.0'] =
   process.argv.slice(2);
 if (!raw || !timingPath || !out) {
-  console.error('Usage: bun data/demo/tighten-by-timing.ts <raw.mp4> <timing.json> <out.mp4> [targetSec] [holdSec] [maxSpeed] [bootTrimSec] [tailCapSec]');
+  console.error('Usage: bun demos/scripts/tighten-by-timing.ts <raw.mp4> <timing.json> <out.mp4> [targetSec] [holdSec] [maxSpeed] [bootTrimSec] [tailCapSec]');
   process.exit(1);
 }
 const target = parseFloat(targetArg);

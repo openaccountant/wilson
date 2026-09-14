@@ -10,8 +10,8 @@
     "cursor": "#22c55e",
     "selection": "#166534"
   },
-  "cmd": ["./data/demo/run-demo.sh"],
-  "output": "data/demo/orchestration.mp4",
+  "cmd": ["./demos/scripts/run-demo.sh"],
+  "output": "demos/tape-video/orchestration.mp4",
   "steps": [
     { "type": "sleep", "seconds": 12 },
     { "type": "shot", "file": "orch-00-boot.png" },

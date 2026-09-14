@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 import { rename } from 'node:fs/promises';
 
 const BASE = 'http://localhost:3141';
-const W = 1400, H = 860, OUT = 'data/demo/dash-video';
+const W = 1400, H = 860, OUT = 'demos/tape-video/dash-video';
 const want = process.argv.slice(2);
 const run = (n) => want.length === 0 || want.includes(n);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

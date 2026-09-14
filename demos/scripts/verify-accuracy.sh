@@ -4,7 +4,7 @@
 #  Runs the demo's key prompts headless (--run) and checks each answer against
 #  ground truth. Catches the granite-3b-style hallucination automatically.
 #
-#  Usage:  ./data/demo/verify-accuracy.sh
+#  Usage:  ./demos/scripts/verify-accuracy.sh
 #  Safe:   refuses to run if a wilson process is already active (avoids collision).
 # ============================================================================
 export PATH="$HOME/.bun/bin:$PATH"

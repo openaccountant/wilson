@@ -10,9 +10,9 @@
     "cursor": "#22c55e",
     "selection": "#166534"
   },
-  "output": "data/demo/boe-demo-v2.mp4",
+  "output": "demos/tape-video/boe-demo-v2.mp4",
   "steps": [
-    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "type", "text": "./demos/scripts/run-demo.sh", "enter": true },
     { "type": "sleep", "seconds": 14 },
     { "type": "shot", "file": "shot-v2-00-boot.png" },
 

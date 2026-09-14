@@ -4,7 +4,7 @@
 #  Title/end cards are PNGs rendered by make-cards.mjs (headless Chrome), so we
 #  get real brand fonts without an ffmpeg libfreetype build.
 #
-#  Usage:  ./data/demo/polish.sh <in.mp4> <out.mp4> <speed> <title.png> <end.png>
+#  Usage:  ./demos/scripts/polish.sh <in.mp4> <out.mp4> <speed> <title.png> <end.png>
 # ============================================================================
 set -e
 IN="$1"; OUT="$2"; SPEED="${3:-3}"; TITLE_PNG="$4"; END_PNG="$5"

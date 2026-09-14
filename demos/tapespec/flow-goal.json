@@ -10,9 +10,9 @@
     "cursor": "#22c55e",
     "selection": "#166534"
   },
-  "output": "data/demo/flow-goal.mp4",
+  "output": "demos/tape-video/flow-goal.mp4",
   "steps": [
-    { "type": "type", "text": "./data/demo/run-demo.sh", "enter": true },
+    { "type": "type", "text": "./demos/scripts/run-demo.sh", "enter": true },
     { "type": "sleep", "seconds": 8 },
     { "type": "shot", "file": "fg-00-boot.png" },
 

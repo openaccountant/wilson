@@ -11,7 +11,7 @@
     "selection": "#585b70"
   },
   "cmd": ["bash", "-il"],
-  "output": "data/demo/oa-cli-summary.mp4",
+  "output": "demos/tape-video/oa-cli-summary.mp4",
   "steps": [
     { "type": "type", "text": "# Open Accountant - where did my money go in August? (local gemma4:31b)", "enter": true },
     { "type": "sleep", "seconds": 0.8 },

@@ -1,6 +1,6 @@
 // Render Forensic-Noir title/end cards as PNGs via headless Chrome (no ffmpeg
 // drawtext needed). Usage:
-//   bun data/demo/make-cards.mjs "<title>" "<subtitle>" <out.png> [kind]
+//   bun demos/scripts/make-cards.mjs "<title>" "<subtitle>" <out.png> [kind]
 // kind: "title" (green title) or "end" (end card). Defaults to title.
 import { chromium } from 'playwright';
 
