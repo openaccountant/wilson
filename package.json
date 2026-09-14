@@ -42,6 +42,7 @@
     "js-yaml": "^4.1.0",
     "monarch-money-api": "^0.0.6",
     "plaid": "^41.3.0",
+    "playwright": "^1.60.0",
     "winston": "^3.19.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.13"
