@@ -4,8 +4,8 @@
 set -e
 export PATH="$HOME/.bun/bin:$PATH"
 cd "$(dirname "$0")"
-RAW=".."          # data/demo
-OUTDIR="../final"; mkdir -p "$OUTDIR" public
+RAW=".."              # data/demo
+OUTDIR="../../demos"; mkdir -p public   # every shipped demo asset lives here now
 
 # name | source mp4 | title | subtitle | speed
 clips=(
