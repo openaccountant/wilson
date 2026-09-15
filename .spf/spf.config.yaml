@@ -1,0 +1,29 @@
+# .spf/spf.config.yaml — wilson CLI (Bun runtime, separate repo from `app/`)
+
+quality:
+  checks:
+    - { name: typecheck, operation: typecheck, argv: ["bun", "run", "typecheck"], timeout_seconds: 60 }
+    - { name: test,      operation: build,      argv: ["bun", "test"],            timeout_seconds: 300 }
+  suites:
+    test: [test]
+    all: [typecheck, test]
+
+protected_files:
+  - .spf/
+  - spf.config.yaml
+  # Real provider keys live in .env — never something an agent should edit,
+  # and env.example is the committed template it should touch instead.
+  - .env
+  - .env.*
+
+watch:
+  repo: openaccountant/wilson       # git@github.com:openaccountant/wilson.git
+  base_branch: main
+  label_prefix: spf
+  chain: plan-build-test-quality    # gates on the `all` suite (typecheck + test) — single
+                                    # package, so unlike app/ there's no per-package cost tradeoff
+  concurrency: 2
+  poll_ms: 60000
+  fanout:
+    n: 1
+    concurrency: 2
