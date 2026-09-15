@@ -1,5 +1,22 @@
 # .spf/spf.config.yaml — wilson CLI (Bun runtime, separate repo from `app/`)
 
+# See app/.spf/spf.config.yaml for the full rationale: no fireworks/gemini/
+# openai keys on gertie, so everything routes through gertie's own Ollama
+# Cloud (glm-5.3-flash:cloud, confirmed reachable 2026-09-14). planner/
+# reviewer/documenter are pinned in the packaged default roster and need
+# their own override — an agent's own model: always wins over defaults.model.
+defaults:
+  coding_agent: flue
+  model: ollama/glm-5.3-flash:cloud
+
+agents:
+  - name: planner
+    model: ollama/glm-5.3-flash:cloud
+  - name: reviewer
+    model: ollama/glm-5.3-flash:cloud
+  - name: documenter
+    model: ollama/glm-5.3-flash:cloud
+
 quality:
   checks:
     - { name: typecheck, operation: typecheck, argv: ["bun", "run", "typecheck"], timeout_seconds: 60 }
