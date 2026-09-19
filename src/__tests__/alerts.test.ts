@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { checkAlerts } from '../alerts/engine.js';
-import { setBudget, insertTransactions } from '../db/queries.js';
+import { setBudget, insertTransactions, getBudgetVsActual } from '../db/queries.js';
 import { createTestDb, seedTestData } from './helpers.js';
 
 describe('alerts', () => {
@@ -13,16 +13,30 @@ describe('alerts', () => {
   });
 
   test('no alerts when budgets are healthy', () => {
-    // Default seed: Groceries $200 budget, $85.50 actual (43%)
+    // Seeded dates are relative to today, so Groceries' in-month actual varies
+    // with the day of month ($0–$177.50 against the seeded $200 budget — up to
+    // 89%, which would trip the 80% warning). Raise the budget so the ratio
+    // stays healthy no matter when this runs (Dining: $45/$100 = 45%).
+    setBudget(db, 'Groceries', 500);
     const alerts = checkAlerts(db);
     const budgetAlerts = alerts.filter((a) => a.type.startsWith('budget_'));
-    // Groceries at 43%, Dining at 45% — both under 80%
+    // Groceries and Dining both stay under 80%
     expect(budgetAlerts).toHaveLength(0);
   });
 
   test('budget_warning at 80%+', () => {
-    // Set Groceries budget to $100 — $85.50 actual = 86%
-    setBudget(db, 'Groceries', 100);
+    // Groceries' in-month actual varies with the day of month (seeded dates are
+    // relative to today). Anchor a transaction to today (always in the current
+    // UTC month) and calibrate the budget so usage lands at ~86%, inside the
+    // 80–100% warning band, on any date.
+    const today = new Date().toISOString().slice(0, 10);
+    insertTransactions(db, [
+      { date: today, description: 'Grocery Store', amount: -100, category: 'Groceries' },
+    ]);
+    const month = new Date().toISOString().slice(0, 7);
+    const actual =
+      getBudgetVsActual(db, month).find((b) => b.category === 'Groceries')?.actual ?? 0;
+    setBudget(db, 'Groceries', Math.max(actual / 0.86, 0.01));
     const alerts = checkAlerts(db);
     const warning = alerts.find((a) => a.type === 'budget_warning' && a.category === 'Groceries');
     expect(warning).toBeDefined();

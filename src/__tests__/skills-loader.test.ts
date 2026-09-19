@@ -1,7 +1,16 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { writeFileSync, unlinkSync } from 'fs';
-import { parseSkillFile, loadSkillFromPath, extractSkillMetadata } from '../skills/loader.js';
 import { makeTmpPath } from './helpers.js';
+
+// Bun shares one module registry across all test files in a `bun test` run, so
+// mock.module('../skills/index.js') in other files (agent.test.ts,
+// skill-tool.test.ts) leaks into this file's import — index.ts re-exports
+// ./loader.js and the mock replaces the loader record too. A cache-busted
+// specifier forces a fresh, unmocked module record (the same isolation CI gets
+// by running each test file in its own process — see .github/workflows/ci.yml).
+const loaderModule: string = '../skills/loader.js?victim';
+const loader = (await import(loaderModule)) as typeof import('../skills/loader.js');
+const { parseSkillFile, loadSkillFromPath, extractSkillMetadata } = loader;
 
 const VALID_SKILL = `---
 name: monthly-report

@@ -180,9 +180,14 @@ describe('plaid sync modified/removed', () => {
     expect(inserted!.amount).toBe(-15.00);
   });
 
-  test('ITEM_LOGIN_REQUIRED error sets needsReauth flag', () => {
-    // Import PlaidError to verify it can be constructed and identified
-    const { PlaidError } = require('../plaid/client.js');
+  test('ITEM_LOGIN_REQUIRED error sets needsReauth flag', async () => {
+    // Cache-busted import: Bun shares one module registry across all test files
+    // in a `bun test` run, so mock.module('../plaid/client.js') in sync.test.ts
+    // / plaid-balances-tool.test.ts leaks into a plain require here. The query
+    // forces a fresh, unmocked module record (same isolation CI gets by running
+    // each test file in its own process — see .github/workflows/ci.yml).
+    const plaidClientPath: string = '../plaid/client.js?victim';
+    const { PlaidError } = (await import(plaidClientPath)) as typeof import('../plaid/client.js');
 
     const err = new PlaidError(
       'the login details of this item have changed',

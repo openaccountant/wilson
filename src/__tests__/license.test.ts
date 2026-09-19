@@ -2,7 +2,17 @@ import { describe, expect, test, beforeAll, afterAll, beforeEach, afterEach, spy
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { hasLicense, getLicenseInfo, deactivateLicense, validateLicense, type LicenseCache } from '../licensing/license.js';
+import type { LicenseCache } from '../licensing/license.js';
+
+// Cache-busted runtime import: Bun shares one module registry across all test
+// files in a `bun test` run, so mock.module('../licensing/license.js') in
+// skill-tool.test.ts (which only exports hasLicense) leaks into this file's
+// import and breaks the remaining named exports. The query forces a fresh,
+// unmocked module record (the same isolation CI gets by running each test file
+// in its own process — see .github/workflows/ci.yml).
+const licenseModulePath: string = '../licensing/license.js?victim';
+const license = (await import(licenseModulePath)) as typeof import('../licensing/license.js');
+const { hasLicense, getLicenseInfo, deactivateLicense, validateLicense } = license;
 
 const LICENSE_DIR = join(homedir(), '.openaccountant');
 const LICENSE_FILE = join(LICENSE_DIR, 'license.json');

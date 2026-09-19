@@ -15,7 +15,7 @@ import {
   printNetWorth,
   runReport,
 } from "../reports.js";
-import { flagTaxDeduction, getTransactions } from "../db/queries.js";
+import { flagTaxDeduction, getTransactions, insertTransactions } from "../db/queries.js";
 import { insertAccount } from "../db/net-worth-queries.js";
 import { createTestDb, seedTestData, makeTmpPath, daysAgo, currentMonth } from "./helpers.js";
 
@@ -78,9 +78,22 @@ describe("reports", () => {
     });
 
     test("offset shifts period", async () => {
+      // Seed dates are relative to today, so the previous month is only
+      // populated near the start of a month. Insert data dated in the previous
+      // month explicitly so this test is deterministic on any date.
+      const now = new Date();
+      const prevMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15));
+      insertTransactions(db, [
+        {
+          date: prevMonthDate.toISOString().slice(0, 10),
+          description: "Prev Month Store",
+          amount: -50,
+          category: "Groceries",
+        },
+      ]);
       await printSummary(["--summary", "month", "--offset", "-1"], db);
       const output = allOutput();
-      // Should show previous month's data — should have spending data from Feb
+      // Should show previous month's data
       expect(output).toContain("Spending Summary:");
     });
 
