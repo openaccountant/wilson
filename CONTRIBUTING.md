@@ -109,6 +109,26 @@ test: add tests for OFX parser
 - Use descriptive test names
 - Mock external APIs
 
+#### GPU-gated tests
+
+`src/__tests__/webgpu-model-path.test.ts` covers the WebGPU model path in four
+layers. The first two need no GPU and run in CI on both Linux and macOS: they
+check that the `webgpu` device resolves to the WebGPU execution provider, that
+every `webgpu`-tagged model matches the dispatch patterns, and that the
+capability probe returns a boolean without throwing.
+
+Layers 3 and 4 download roughly 600 MB and need a working GPU, so they are
+skipped unless you opt in:
+
+```bash
+WILSON_GPU_TESTS=1 bun test src/__tests__/webgpu-model-path.test.ts
+```
+
+Layer 3 loads `onnx-community/Qwen3-0.6B-ONNX` on the WebGPU device and
+generates 16 tokens. Layer 4 runs 30 generations and asserts that the mean RSS
+delta over the last 10 stays under 1 MB, which guards against a regression of
+the FFI leak in oven-sh/bun#19322.
+
 ### Documentation
 
 - Update README.md for user-facing changes
