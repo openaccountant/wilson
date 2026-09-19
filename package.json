@@ -33,7 +33,6 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@opentelemetry/winston-transport": "^0.30.0",
     "ai": "^6.0.116",
-    "bun-webgpu": "^0.1.5",
     "chalk": "^5.4.1",
     "csv-parse": "^5.6.0",
     "dotenv": "^17.2.3",
