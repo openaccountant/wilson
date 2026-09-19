@@ -15,7 +15,7 @@
     "start": "bun run src/index.tsx",
     "dev": "bun --watch run src/index.tsx",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --isolate",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage"
   },

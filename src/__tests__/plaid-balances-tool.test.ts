@@ -22,7 +22,14 @@ mock.module('../plaid/store.js', () => ({
 mock.module('../plaid/client.js', () => ({
   getBalances: async () => mockBalances,
   hasLocalPlaidCreds: () => !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
-  PlaidError: class PlaidError extends Error {},
+  // Faithful shape: other test files (e.g. plaid-sync-modified-removed.test.ts)
+  // read this class through the shared module registry, so it must accept the
+  // real constructor arguments (message, errorType, errorCode, statusCode).
+  PlaidError: class PlaidError extends Error {
+    constructor(message: string, public errorType: string, public errorCode: string, public statusCode: number) {
+      super(message);
+    }
+  },
 }));
 
 import { initPlaidBalancesTool, plaidBalancesTool } from '../tools/import/plaid-balances.js';

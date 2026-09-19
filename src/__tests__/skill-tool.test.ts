@@ -1,27 +1,28 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
+import * as skillsIndex from '../skills/index.js';
+import * as licenseModule from '../licensing/license.js';
 
-// Mock the skills module before importing the skill tool
-const mockGetSkill = mock(() => Promise.resolve(null as any));
-const mockDiscoverSkills = mock(() => [] as any[]);
-
-mock.module('../skills/index.js', () => ({
-  getSkill: mockGetSkill,
-  discoverSkills: mockDiscoverSkills,
-  buildSkillMetadataSection: mock(() => ''),
-  clearSkillCache: mock(() => {}),
-  parseSkillFile: mock(() => null),
-  loadSkillFromPath: mock(() => null),
-  extractSkillMetadata: mock(() => null),
-}));
-
+// Spy on the real modules instead of mock.module: bun's module mocks cannot be
+// undone and leak into other test files (module registries are shared across
+// files within a single `bun test` run), which would poison test files that
+// exercise the real skills/loader and licensing/license modules.
+const mockGetSkill = mock((): Promise<any> => Promise.resolve(null as any));
+const mockDiscoverSkills = mock((): any[] => []);
 const mockHasLicense = mock(() => false);
-mock.module('../licensing/license.js', () => ({
-  hasLicense: mockHasLicense,
-}));
 
-// Import after mocks are set up
+const getSkillSpy = spyOn(skillsIndex, 'getSkill').mockImplementation(mockGetSkill as any);
+const discoverSkillsSpy = spyOn(skillsIndex, 'discoverSkills').mockImplementation(mockDiscoverSkills as any);
+const hasLicenseSpy = spyOn(licenseModule, 'hasLicense').mockImplementation(mockHasLicense as any);
+
+// Import after spies are set up
 const { skillTool } = await import('../tools/skill.js');
+
+afterAll(() => {
+  getSkillSpy.mockRestore();
+  discoverSkillsSpy.mockRestore();
+  hasLicenseSpy.mockRestore();
+});
 
 describe('skillTool', () => {
   beforeEach(() => {

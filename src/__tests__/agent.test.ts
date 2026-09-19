@@ -1,6 +1,8 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile, collectEvents, mockTool } from './helpers.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
+import * as skillsIndex from '../skills/index.js';
+import * as orchestrationRegistry from '../orchestration/registry.js';
 
 // --- Mocks: only mock leaf dependencies, NOT callLlm or registry ---
 
@@ -32,6 +34,20 @@ mock.module('../agent/prompts.js', () => ({
   DEFAULT_SYSTEM_PROMPT: 'You are a financial assistant.',
 }));
 
+// Skill discovery + orchestration tools are spied (restorable) instead of
+// mock.module — bun's module mocks cannot be undone and leak into other test
+// files sharing this process (module registries are per-process), which would
+// poison skills-loader.test.ts and orchestration-registry.test.ts.
+const agentSkillsSpies = [
+  spyOn(skillsIndex, 'getSkill').mockImplementation(async () => null as any),
+  spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => [] as any),
+  spyOn(skillsIndex, 'buildSkillMetadataSection').mockImplementation(() => '' as any),
+  spyOn(skillsIndex, 'clearSkillCache').mockImplementation(() => undefined as any),
+];
+const agentOrchestrationSpy = spyOn(orchestrationRegistry, 'getOrchestrationTools').mockImplementation(
+  async () => [] as any,
+);
+
 // NOTE: Do NOT mock trace-store.js or interaction-store.js here.
 // They are harmless in-memory stores, and mocking them globally would
 // poison dashboard-api.test.ts and interaction-store.test.ts.
@@ -41,23 +57,12 @@ mock.module('../mcp/adapter.js', () => ({
   getCachedMcpTools: mock(() => []),
 }));
 
-// Mock orchestration registry (used by tool registry)
-mock.module('../orchestration/registry.js', () => ({
-  getOrchestrationTools: mock(async () => []),
-}));
-
-// Mock skill discovery (used by tool registry)
-mock.module('../skills/index.js', () => ({
-  discoverSkills: mock(() => []),
-  getSkill: mock(async () => null),
-  buildSkillMetadataSection: mock(() => ''),
-  clearSkillCache: mock(() => {}),
-  parseSkillFile: mock(() => null),
-  loadSkillFromPath: mock(() => null),
-  extractSkillMetadata: mock(() => null),
-}));
-
 const { Agent } = await import('../agent/agent.js');
+
+afterAll(() => {
+  for (const spy of agentSkillsSpies) spy.mockRestore();
+  agentOrchestrationSpy.mockRestore();
+});
 
 function makeResponse(content: string, toolCalls: LlmResponse['toolCalls'] = []): LlmResponse {
   return {
