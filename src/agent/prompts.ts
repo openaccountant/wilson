@@ -9,7 +9,7 @@ import { getBudgetVsActual } from '../db/queries.js';
 import { getActiveProfileName, listProfiles, DEFAULT_PROFILE } from '../profile/index.js';
 import { checkAlerts } from '../alerts/engine.js';
 import { getNetWorthSummary } from '../db/net-worth-queries.js';
-import { getActiveGoals } from '../db/goal-queries.js';
+import { getActiveGoals, resolveGoalTarget } from '../db/goal-queries.js';
 import { getActiveMemories, pruneExpiredMemories } from '../db/memory-queries.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -420,14 +420,24 @@ export function initGoalContext(db: Database): void {
 export function buildGoalContext(): string | null {
   if (!goalDb) return null;
 
+  const db = goalDb;
   try {
-    const goals = getActiveGoals(goalDb);
+    const goals = getActiveGoals(db);
     if (goals.length === 0) return null;
 
     const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
     const lines = goals.map((g) => {
       const type = g.goal_type === 'financial' ? 'Financial' : 'Behavioral';
+      if (g.goal_type === 'financial' && g.target_percent != null) {
+        const resolved = resolveGoalTarget(db, g);
+        const period = g.income_period ?? 'month';
+        const date = g.target_date ? `, target: ${g.target_date}` : '';
+        if (resolved && resolved.income > 0) {
+          return `${type}: "${g.title}" — ${fmt(resolved.progress)} of ${fmt(resolved.target)} this ${period} (${g.target_percent}% of ${resolved.label} income ${fmt(resolved.income)}${date})`;
+        }
+        return `${type}: "${g.title}" — ${g.target_percent}% of ${period} income (no income recorded for ${resolved ? resolved.label : `the current ${period}`} yet${date})`;
+      }
       if (g.goal_type === 'financial' && g.target_amount) {
         const pct = Math.round((g.current_amount / g.target_amount) * 100);
         const target = g.target_date ? `, target: ${g.target_date}` : '';

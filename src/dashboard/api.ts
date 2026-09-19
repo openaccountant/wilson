@@ -34,7 +34,7 @@ import {
   getBudgetCountdown,
 } from '../db/daily-queries.js';
 import { checkAlerts } from '../alerts/engine.js';
-import { getActiveGoals, getGoalSnapshots, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
+import { getActiveGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
@@ -261,7 +261,17 @@ export function apiSpendingByInstitution(db: Database, params: URLSearchParams) 
 
 export function apiGoals(db: Database) {
   try {
-    return getActiveGoals(db);
+    return getActiveGoals(db).map((g: GoalRow) => {
+      if (g.target_percent != null) {
+        const resolved = resolveGoalTarget(db, g);
+        return {
+          ...g,
+          effective_target: resolved?.target ?? null,
+          period_income: resolved?.income ?? null,
+        };
+      }
+      return { ...g, effective_target: null, period_income: null };
+    });
   } catch {
     return [];
   }
