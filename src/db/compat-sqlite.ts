@@ -65,8 +65,23 @@ class CompatStatement {
 export class Database {
   private db: InstanceType<typeof BunDatabase>;
 
-  constructor(path: string) {
+  constructor(path: string, opts?: { key?: string }) {
     this.db = new BunDatabase(path);
+
+    // Encrypt-at-rest via SQLCipher. `:memory:` DBs are never keyed (they hold
+    // no at-rest data and keying them would break the test-suite invariant).
+    // Requires the SQLCipher dylib to have been activated via initSqlcipher()
+    // before this constructor ran; with plain bun:sqlite these pragmas are no-ops.
+    if (opts?.key && path !== ':memory:') {
+      // PRAGMA key MUST be the first statement on the connection. Raw-hex form
+      // (`x'...'`, 64 hex chars) skips passphrase KDF derivation.
+      (this.db as any).exec(`PRAGMA key = "x'${opts.key}'"`);
+      (this.db as any).exec('PRAGMA cipher_compatibility = 4');
+      // PRAGMA key is lazy — it does not validate until a page is read. Force a
+      // read now so a wrong/missing key fails fast here as a SQLiteError
+      // ("file is not a database") rather than at some later query.
+      this.db.prepare('SELECT count(*) FROM sqlite_master').get();
+    }
   }
 
   /** Execute a PRAGMA statement (e.g., `pragma('journal_mode = WAL')`). */

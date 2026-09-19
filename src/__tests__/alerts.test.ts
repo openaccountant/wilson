@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, beforeAll, afterAll, setSystemTime } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { checkAlerts } from '../alerts/engine.js';
 import { setBudget, insertTransactions } from '../db/queries.js';
@@ -6,6 +6,19 @@ import { createTestDb, seedTestData } from './helpers.js';
 
 describe('alerts', () => {
   let db: Database;
+
+  // Freeze the clock to a fixed mid-month date so "current month" budget
+  // math is deterministic regardless of what day the suite runs on. Without
+  // this, seedTestData's daysAgo(10)/daysAgo(2..8) offsets can straddle a
+  // real month boundary and silently change how much "current month"
+  // Groceries spend checkAlerts sees (see #23).
+  beforeAll(() => {
+    setSystemTime(new Date('2026-06-15T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    setSystemTime(); // restore real system time
+  });
 
   beforeEach(() => {
     db = createTestDb();

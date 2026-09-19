@@ -1,5 +1,47 @@
 # Changelog
 
+## [v0.5.0] — 2026-07-05
+
+### Features
+
+- feat: upgrade @huggingface/transformers to 4.0.1 (#26) (12c1550)
+
+
+## [v0.4.3] — 2026-07-05
+
+### Fixes
+
+- fix: drop ./ prefix from bin path so npm 11 keeps it (#30) (9071216)
+
+
+## [v0.4.2] — 2026-07-04
+
+### Fixes
+
+- fix: restore installable wilson bin under npm 11 (#29) (5c56f64)
+
+
+## [v0.4.1] — 2026-07-04
+
+### Fixes
+
+- fix: wire agent tools to database in dashboard chat (#25) (ecb22ea)
+
+
+## [v0.4.0] — 2026-07-04
+
+### Features
+
+- feat: SQLCipher encryption at rest via bun:sqlite setCustomSQLite (#24) (4771db9)
+
+
+## [v0.3.0] — 2026-04-09
+
+### Features
+
+- feat: auto-version releases, recursive skill discovery, OSS best practices (fbae552)
+
+
 ## [v0.2.0] — 2026-04-08
 
 - feat: merge npm publish into release-on-merge workflow (182bb85)
