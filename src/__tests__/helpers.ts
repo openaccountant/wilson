@@ -75,7 +75,13 @@ export function seedTestData(db: Database): void {
     { date: daysAgo(8), description: 'Electric Company', amount: -120.00, category: 'Utilities' },
     { date: daysAgo(6), description: 'Restaurant', amount: -45.00, category: 'Dining' },
     { date: daysAgo(4), description: 'Unknown Purchase', amount: -30.00 },
-    { date: daysAgo(3), description: 'Grocery Store', amount: -92.00, category: 'Groceries' },
+    // Deliberately placed in the *previous* calendar month (not `daysAgo(N)`)
+    // so this transaction never lands in the current month regardless of
+    // which day of the month the suite runs on — it exists specifically to
+    // give "previous month" assertions (budget/report offset tests) real
+    // data to find. See #23: two `daysAgo()` offsets both close to "today"
+    // are not guaranteed to stay on opposite sides of a month boundary.
+    { date: `${previousMonth()}-20`, description: 'Grocery Store', amount: -92.00, category: 'Groceries' },
     { date: daysAgo(2), description: 'Gas Station', amount: -55.00, category: 'Transportation' },
     { date: daysAgo(30), description: 'Paycheck', amount: 3500.00, category: 'Income' },
   ]);
