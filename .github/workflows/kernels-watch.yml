@@ -1,0 +1,136 @@
+name: Kernels Upstreaming Watch
+
+# Recurring watch for issue #41: check whether Hugging Face's
+# @huggingface/kernels WebGPU kernels are being upstreamed into
+# ONNX Runtime Web / transformers.js. See CONTRIBUTING.md for details
+# on what this checks and how to bump the baseline file.
+
+on:
+  schedule:
+    - cron: '0 14 1 * *' # 14:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Search onnxruntime issues/PRs for kernels mentions
+        run: |
+          set -euo pipefail
+          HITS_FILE="$RUNNER_TEMP/hits.md"
+          : > "$HITS_FILE"
+
+          SINCE=$(date -u -d '35 days ago' +%Y-%m-%d)
+          QUERY='repo:microsoft/onnxruntime ("huggingface/kernels" OR "webgpu-kernels" OR "@huggingface/kernels") updated:>='"$SINCE"
+
+          RESULTS=$(gh api -X GET search/issues -f q="$QUERY" -f per_page=50 2>/dev/null || echo '{"items":[]}')
+          COUNT=$(echo "$RESULTS" | jq -r '.items | length' 2>/dev/null || echo 0)
+
+          if [ "${COUNT:-0}" -gt 0 ] 2>/dev/null; then
+            echo "$RESULTS" | jq -r '.items[] | "- [\(.title)](\(.html_url)) (\(.state), updated \(.updated_at))"' >> "$HITS_FILE"
+          fi
+
+      - name: Search onnxruntime PRs by watched authors touching WebGPU paths
+        run: |
+          set -euo pipefail
+          HITS_FILE="$RUNNER_TEMP/hits.md"
+
+          SINCE=$(date -u -d '35 days ago' +%Y-%m-%d)
+
+          for AUTHOR in nico-martin xenova; do
+            QUERY='repo:microsoft/onnxruntime is:pr author:'"$AUTHOR"' updated:>='"$SINCE"
+            RESULTS=$(gh api -X GET search/issues -f q="$QUERY" -f per_page=50 2>/dev/null || echo '{"items":[]}')
+            NUMBERS=$(echo "$RESULTS" | jq -r '.items[]?.number // empty' 2>/dev/null || true)
+
+            for N in $NUMBERS; do
+              FILES=$(gh api "repos/microsoft/onnxruntime/pulls/$N/files" --paginate 2>/dev/null || echo '[]')
+              MATCH=$(echo "$FILES" | jq -r '[.[] | select(.filename | test("^js/web|onnxruntime/core/providers/webgpu"))] | length' 2>/dev/null || echo 0)
+
+              if [ "${MATCH:-0}" -gt 0 ] 2>/dev/null; then
+                echo "- [PR #$N by $AUTHOR touches WebGPU paths](https://github.com/microsoft/onnxruntime/pull/$N)" >> "$HITS_FILE"
+              fi
+            done
+          done
+
+      - name: Check transformers.js releases mentioning kernels
+        run: |
+          set -euo pipefail
+          HITS_FILE="$RUNNER_TEMP/hits.md"
+
+          SINCE_EPOCH=$(date -u -d '35 days ago' +%s)
+
+          RELEASES=$(gh api repos/huggingface/transformers.js/releases --paginate 2>/dev/null || echo '[]')
+
+          echo "$RELEASES" | jq -c '.[]?' 2>/dev/null | while read -r REL; do
+            PUB=$(echo "$REL" | jq -r '.published_at // empty')
+            [ -z "$PUB" ] && continue
+
+            PUB_EPOCH=$(date -u -d "$PUB" +%s 2>/dev/null || echo 0)
+            if [ "${PUB_EPOCH:-0}" -ge "$SINCE_EPOCH" ] 2>/dev/null; then
+              BODY=$(echo "$REL" | jq -r '.body // ""')
+              if echo "$BODY" | grep -qi 'kernels'; then
+                NAME=$(echo "$REL" | jq -r '.tag_name // .name // "release"')
+                URL=$(echo "$REL" | jq -r '.html_url // empty')
+                echo "- [transformers.js $NAME mentions \"kernels\"]($URL)" >> "$HITS_FILE"
+              fi
+            fi
+          done
+
+      - name: Check npm registry for new @huggingface/kernels versions
+        run: |
+          set -euo pipefail
+          HITS_FILE="$RUNNER_TEMP/hits.md"
+          LAST_SEEN_FILE=".github/kernels-watch/last-seen.json"
+
+          REGISTRY=$(curl -fsSL https://registry.npmjs.org/@huggingface/kernels 2>/dev/null || echo '{}')
+          CURRENT_VERSIONS=$(echo "$REGISTRY" | jq -r '.versions // {} | keys[]' 2>/dev/null || true)
+          LATEST_TAG=$(echo "$REGISTRY" | jq -r '."dist-tags".latest // empty' 2>/dev/null || true)
+          KNOWN_VERSIONS=$(jq -r '.npmVersions[]?' "$LAST_SEEN_FILE" 2>/dev/null || true)
+
+          NEW_VERSIONS=""
+          for V in $CURRENT_VERSIONS; do
+            if ! grep -qxF "$V" <<< "$KNOWN_VERSIONS"; then
+              NEW_VERSIONS="$NEW_VERSIONS $V"
+            fi
+          done
+
+          if [ -n "$(echo "$NEW_VERSIONS" | tr -d '[:space:]')" ]; then
+            LAST_KNOWN=$(echo "$KNOWN_VERSIONS" | tr '\n' ' ')
+            echo "- New @huggingface/kernels npm version(s) published:${NEW_VERSIONS} (latest dist-tag: ${LATEST_TAG:-unknown}, last known: ${LAST_KNOWN}). See https://www.npmjs.com/package/@huggingface/kernels" >> "$HITS_FILE"
+          fi
+
+      - name: Open or update watch issue with findings
+        run: |
+          set -euo pipefail
+          HITS_FILE="$RUNNER_TEMP/hits.md"
+          ISSUE_TITLE="watch: @huggingface/kernels upstreaming activity detected"
+
+          if [ ! -s "$HITS_FILE" ]; then
+            echo "No @huggingface/kernels upstreaming activity detected this run ($(date -u +%Y-%m-%d))." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          BODY=$(printf 'Automated monthly watch (see .github/workflows/kernels-watch.yml, issue #41) found activity potentially related to upstreaming @huggingface/kernels into ONNX Runtime Web / transformers.js:\n\n%s\n' "$(cat "$HITS_FILE")")
+
+          EXISTING=$(gh issue list --search "\"$ISSUE_TITLE\" in:title" --label enhancement --state open --json number --jq '.[0].number' 2>/dev/null || true)
+
+          if [ -n "${EXISTING:-}" ] && [ "$EXISTING" != "null" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$ISSUE_TITLE" --label enhancement --body "$BODY"
+          fi
+
+          {
+            echo "@huggingface/kernels watch found activity:"
+            echo ""
+            cat "$HITS_FILE"
+          } >> "$GITHUB_STEP_SUMMARY"
