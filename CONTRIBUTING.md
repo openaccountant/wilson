@@ -144,6 +144,49 @@ Releases are automated via GitHub Actions:
 3. Package is published to npm
 4. Monorepo is notified to update documentation
 
+## Automated Watches
+
+### `@huggingface/kernels` upstreaming watch
+
+`.github/workflows/kernels-watch.yml` runs monthly (`workflow_dispatch` also
+available) to check whether Hugging Face's `@huggingface/kernels` WebGPU
+kernels are being upstreamed into ONNX Runtime Web / transformers.js. See
+[issue #41](../../issues/41) and `docs/research/webgpu-kernels/` in the
+monorepo for background — if this lands, wilson inherits the speedups
+through the existing `@huggingface/transformers` dependency with no
+integration work.
+
+Each run checks, via `gh api` (bash + `jq` only):
+
+- `microsoft/onnxruntime` issues/PRs (updated in the last 35 days) mentioning
+  `huggingface/kernels`, `webgpu-kernels`, or `@huggingface/kernels`, plus PRs
+  by `nico-martin` / `xenova` that touch `js/web` or
+  `onnxruntime/core/providers/webgpu`.
+- `huggingface/transformers.js` releases (last 35 days) whose body mentions
+  "kernels".
+- The npm registry for `@huggingface/kernels`, comparing published versions
+  against the baseline recorded in `.github/kernels-watch/last-seen.json`.
+
+If it finds a hit, it opens (or comments on an existing open) issue titled
+`watch: @huggingface/kernels upstreaming activity detected` with the
+`enhancement` label. If nothing is found, it exits quietly with a one-line
+job summary.
+
+**Bumping the baseline:** once you've triaged a new `@huggingface/kernels`
+npm release (so it stops being reported as "new" every run), update
+`.github/kernels-watch/last-seen.json`:
+
+```json
+{
+  "npmVersions": ["0.0.1-preview.1", "0.0.1-preview.2"],
+  "checkedAt": "2026-10-01"
+}
+```
+
+Append the new version(s) to `npmVersions` (don't remove old ones — the
+workflow only checks for versions *not* in the list) and set `checkedAt` to
+today's date, then commit the file.
+
 ## Community
 
 - Be respectful and constructive
