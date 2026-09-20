@@ -16,7 +16,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import type { Database } from '../db/compat-sqlite.js';
-import { MCP_TOOL_CATALOG, isMutatingCall } from './tool-catalog.js';
+import { MCP_TOOL_CATALOG, isMutatingCall, toolAnnotations } from './tool-catalog.js';
 import { listGrantsForSession } from './store.js';
 import { waitForOperationResolution } from './store.js';
 import { callReadTool, prepareOperation, type RequestScope } from './engine.js';
@@ -92,7 +92,7 @@ function buildServerForRequest(db: Database, token: string | null): McpServer {
 
     server.registerTool(
       def.name,
-      { description: def.description, inputSchema: def.zodShape },
+      { description: def.description, inputSchema: def.zodShape, annotations: toolAnnotations(def.name) },
       async (args: Record<string, unknown>) => {
         if (!isMutatingCall(def.name, args)) {
           const result = await callReadTool(db, scope, grantId, def.name, args);

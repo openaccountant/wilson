@@ -156,6 +156,21 @@ export function schemaDigest(name: string): string {
   return createHash('sha256').update(JSON.stringify(schema)).digest('hex').slice(0, 16);
 }
 
+/**
+ * WebMCP's own `ToolAnnotations` dictionary (readOnlyHint / consequentialHint
+ * / untrustedContentHint / debugging — see the spec's index.bs) is the
+ * platform-native way to tell a browser-integrated agent "this needs
+ * confirmation", separate from and in addition to our own grant/prepare/
+ * commit gate. Annotations are per-registration, not per-call, so tax_flag
+ * (mutating only for flag/unflag) is conservatively marked consequential —
+ * it CAN mutate, even though some calls to it don't.
+ */
+export function toolAnnotations(name: string): { readOnlyHint: boolean; consequentialHint: boolean } {
+  const def = getToolDef(name);
+  const mutating = def?.classification === 'mutating';
+  return { readOnlyHint: !mutating, consequentialHint: mutating };
+}
+
 /** tax_flag is read-only for summary/list and mutating for flag/unflag — everything else is static. */
 export function isMutatingCall(toolName: string, args: Record<string, unknown>): boolean {
   const def = getToolDef(toolName);

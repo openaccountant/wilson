@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createTestDb, seedTestData } from './helpers.js';
 import type { Database } from '../db/compat-sqlite.js';
 import {
-  MCP_TOOL_CATALOG, isMutatingCall, jsonSchemaFor, schemaDigest,
+  MCP_TOOL_CATALOG, isMutatingCall, jsonSchemaFor, schemaDigest, toolAnnotations,
   prepareMutation, commitMutation, executeRead, PrepareError,
 } from '../mcp/tool-catalog.js';
 
@@ -43,6 +43,21 @@ describe('tool catalog definition', () => {
   test('read tools are never mutating', () => {
     expect(isMutatingCall('transaction_search', { query: 'x' })).toBe(false);
     expect(isMutatingCall('forecast', {})).toBe(false);
+  });
+
+  test('toolAnnotations maps our classification onto WebMCP\'s spec-native ToolAnnotations', () => {
+    // consequentialHint is the spec's own signal to a browser-integrated
+    // agent that a tool call needs care — every mutating tool must set it.
+    for (const name of ['categorize_transaction', 'edit_transaction', 'tax_flag']) {
+      const a = toolAnnotations(name);
+      expect(a.consequentialHint).toBe(true);
+      expect(a.readOnlyHint).toBe(false);
+    }
+    for (const name of ['transaction_search', 'spending_summary', 'profit_loss', 'net_worth', 'forecast']) {
+      const a = toolAnnotations(name);
+      expect(a.consequentialHint).toBe(false);
+      expect(a.readOnlyHint).toBe(true);
+    }
   });
 });
 

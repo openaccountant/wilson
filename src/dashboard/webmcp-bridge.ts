@@ -16,11 +16,17 @@
 
 export {}; // makes this a module so `declare global` below is valid
 
+interface ToolAnnotations {
+  readOnlyHint: boolean;
+  consequentialHint: boolean;
+}
+
 interface CatalogTool {
   name: string;
   description: string;
   classification: 'read' | 'mutating';
   inputSchema: unknown;
+  annotations: ToolAnnotations;
 }
 
 interface Grant {
@@ -228,15 +234,26 @@ async function executeMutatingTool(sessionGeneration: string, grantId: string, n
   };
 }
 
+// Matches the WICG WebMCP spec (webmachinelearning/webmcp index.bs) as of
+// this writing: `execute` is a two-argument callback — `(inputObject,
+// { signal })` — and `registerTool()` resolves `Promise<undefined>`, not a
+// handle. Unregistration is exclusively via the AbortSignal passed in
+// `options`; there is no `.remove()` or similar returned from registerTool.
 interface ModelContextTool {
   name: string;
   description: string;
-  inputSchema: unknown;
-  execute: (args: Record<string, unknown>) => Promise<unknown>;
+  inputSchema?: unknown;
+  annotations?: ToolAnnotations;
+  execute: (inputObject: Record<string, unknown>, options: { signal: AbortSignal }) => Promise<unknown>;
+}
+
+interface ModelContextRegisterToolOptions {
+  exposedTo?: string[];
+  signal?: AbortSignal;
 }
 
 interface ModelContext {
-  registerTool(tool: ModelContextTool): { remove?: () => void } | void;
+  registerTool(tool: ModelContextTool, options?: ModelContextRegisterToolOptions): Promise<undefined>;
 }
 
 declare global {
@@ -245,13 +262,16 @@ declare global {
   }
 }
 
-const registeredTools = new Map<string, { remove?: () => void }>();
+// One AbortController per currently-registered tool name — aborting it is
+// the *only* spec-defined way to unregister (see the index.bs example under
+// "tool execute steps": unregister via ac.abort(), then re-register fresh).
+const registeredTools = new Map<string, AbortController>();
 
 async function syncRegisteredTools(): Promise<void> {
   if (!document.modelContext) return; // No WebMCP support in this browser — nothing to do.
 
   const sessionGeneration = getSessionGeneration();
-  let tools: Array<{ name: string; description: string; inputSchema: unknown; grantId: string }>;
+  let tools: CatalogTool[] & Array<{ grantId: string }>;
   try {
     const res = await api<{ tools: typeof tools }>(`/api/mcp/tools?sessionGeneration=${encodeURIComponent(sessionGeneration)}`);
     tools = res.tools;
@@ -260,30 +280,41 @@ async function syncRegisteredTools(): Promise<void> {
   }
 
   const currentNames = new Set(tools.map((t) => t.name));
-  for (const [name, handle] of registeredTools) {
+  for (const [name, controller] of registeredTools) {
     if (!currentNames.has(name)) {
-      handle.remove?.();
+      controller.abort();
       registeredTools.delete(name);
     }
   }
 
   for (const tool of tools) {
     if (registeredTools.has(tool.name)) continue;
-    const handle = document.modelContext.registerTool({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      execute: async (args: Record<string, unknown>) => {
-        // Reads execute immediately once granted; mutations always go
-        // through prepare + a human confirmation before anything commits.
-        const isRead = !['categorize_transaction', 'edit_transaction'].includes(tool.name) &&
-          !(tool.name === 'tax_flag' && (args.action === 'flag' || args.action === 'unflag'));
-        return isRead
-          ? executeReadTool(sessionGeneration, tool.grantId, tool.name, args)
-          : executeMutatingTool(sessionGeneration, tool.grantId, tool.name, args);
+    const controller = new AbortController();
+    registeredTools.set(tool.name, controller);
+
+    await document.modelContext.registerTool(
+      {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        // Native, spec-level signal for "this needs a confirmation" —
+        // separate from, and in addition to, our own prepare/commit gate.
+        annotations: tool.annotations,
+        execute: async (args: Record<string, unknown>) => {
+          // Reads execute immediately once granted; mutations always go
+          // through prepare + a human confirmation before anything commits.
+          const isRead = !['categorize_transaction', 'edit_transaction'].includes(tool.name) &&
+            !(tool.name === 'tax_flag' && (args.action === 'flag' || args.action === 'unflag'));
+          return isRead
+            ? executeReadTool(sessionGeneration, tool.grantId, tool.name, args)
+            : executeMutatingTool(sessionGeneration, tool.grantId, tool.name, args);
+        },
       },
+      { signal: controller.signal }
+    ).catch(() => {
+      // NotAllowedError (permissions policy) or similar — leave unregistered.
+      registeredTools.delete(tool.name);
     });
-    registeredTools.set(tool.name, handle ?? {});
   }
 }
 

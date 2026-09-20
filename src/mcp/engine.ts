@@ -32,6 +32,7 @@ import {
   executeRead,
   prepareMutation,
   commitMutation,
+  toolAnnotations,
   PrepareError,
 } from './tool-catalog.js';
 
@@ -60,12 +61,13 @@ function grantScopeParams(scope: RequestScope) {
 }
 
 /** Static catalog metadata for the dashboard's grant picker UI — not the same as what's exposed to an agent. */
-export function listCatalog(): Array<{ name: string; description: string; classification: string; inputSchema: unknown }> {
+export function listCatalog(): Array<{ name: string; description: string; classification: string; inputSchema: unknown; annotations: ReturnType<typeof toolAnnotations> }> {
   return MCP_TOOL_CATALOG.map((def) => ({
     name: def.name,
     description: def.description,
     classification: def.classification,
     inputSchema: jsonSchemaFor(def.name),
+    annotations: toolAnnotations(def.name),
   }));
 }
 
@@ -108,16 +110,30 @@ export function revokeAllForSession(db: Database, sessionGeneration: string): nu
   return revokeGrantsForSession(db, sessionGeneration);
 }
 
+export interface ExposedTool {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  annotations: ReturnType<typeof toolAnnotations>;
+  grantId: string;
+}
+
 /** What the WebMCP bridge / HTTP-MCP client should actually register — empty until grants exist. */
-export function exposedTools(db: Database, scope: RequestScope): Array<{ name: string; description: string; inputSchema: unknown; grantId: string }> {
+export function exposedTools(db: Database, scope: RequestScope): ExposedTool[] {
   const grants = listGrantsForSession(db, scope.sessionGeneration).filter(
     (g) => g.profile === scope.profile && g.origin === scope.origin && g.role === scope.role && g.user_id === scope.userId
   );
-  const out: Array<{ name: string; description: string; inputSchema: unknown; grantId: string }> = [];
+  const out: ExposedTool[] = [];
   for (const grant of grants) {
     const def = getToolDef(grant.tool_name);
     if (!def) continue;
-    out.push({ name: def.name, description: def.description, inputSchema: jsonSchemaFor(def.name), grantId: grant.id });
+    out.push({
+      name: def.name,
+      description: def.description,
+      inputSchema: jsonSchemaFor(def.name),
+      annotations: toolAnnotations(def.name),
+      grantId: grant.id,
+    });
   }
   return out;
 }
