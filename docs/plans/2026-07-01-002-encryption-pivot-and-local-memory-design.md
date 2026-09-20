@@ -3,20 +3,25 @@
 **Status:** Draft v2 — pending review. Decisions D1–D6 below are recommendations, not yet confirmed.
 **Supersedes:** the approach (not the goals) of `2026-04-12-001-feat-sqlcipher-encryption-plan.md`.
 
+**Revision 2026-09-12:** the Bun-pin rationale below is obsolete — Bun is now `1.4.2` (`.bun-version`, both CI workflows) and the two issues that justified staying on 1.2.x are closed: oven-sh/bun#30431 (onnxruntime-node crash under `bun test`, fixed by upstream #29981 + #30291) and oven-sh/bun#19322 (Dawn/JSCallback FFI leak in `bun-webgpu`). `bun-webgpu` itself has been removed from the tree. `checkWebGpuAvailable()` now verifies the WebGPU execution provider end-to-end (EP resolution + ORT capability listing + a real inference run) instead of relying on it; server-side WebGPU under Bun is measured working on macOS arm64. Track B's D5 default now conflicts with the Ollama-primary embedding plan — flagged open below. "Runtime constraints" and Track D are rewritten accordingly; other tracks are unchanged. See openaccountant/wilson#36, #37, #38, #39, #41.
+
 ## Vision
 
 Wilson's differentiator: **your financial data and the models that read it never leave your machine.** Everything below serves that story — encrypted-at-rest SQLite, local embeddings, small local models on WebGPU, and narrowly-scoped micro-agents ("imps") that are secure by construction. Wilson's moat is its tool surface + local data, not its chat loop; MCP exposes that surface to external agent platforms (OpenWork-style).
 
 ## Runtime constraints (govern everything)
 
-**Bun stays on 1.2.x; bump 1.2.22 → 1.2.23.**
-- Bun 1.3.x has a confirmed open regression crashing `onnxruntime-node` ([oven-sh/bun#30431](https://github.com/oven-sh/bun/issues/30431), [#26081](https://github.com/oven-sh/bun/issues/26081)); 1.2.23 is certified clean in #30431 and is the last 1.2.x patch.
-- Enforce: pin `1.2.23` in both CI workflows + `.bun-version`. Re-evaluate 1.3 only after #30431 closes (test transformers path under `bun test` AND `bun run`, macOS-arm64 + linux-x64).
+**Bun is 1.4.2; both pin blockers are closed.** (openaccountant/wilson#36)
+- oven-sh/bun#30431 (onnxruntime-node crash under `bun test`) was fixed upstream by oven-sh/bun#29981 + #30291 on 2026-07-24. oven-sh/bun#19322 (the Dawn/JSCallback FFI leak underlying `bun-webgpu`) was independently verified fixed on 2026-07-25.
+- Verified on this branch: the full test suite passes identically on 1.2.22 and 1.4.2, apart from three pre-existing, unrelated date-sensitive failures (issue #23).
+- Enforce: `.bun-version` and both CI workflows pin `1.4.2`.
 
-**transformers.js v3 → v4 upgrade is a prerequisite for Tracks D/E and improves B.**
-- v4 (Feb 2026) rewrote WebGPU in C++ on ONNX Runtime's native WebGPU EP; runs in Node/Bun/Deno; adds GraniteMoeHybrid/Mamba/MoE architectures and ~4x faster BERT-family embeddings ([v4 blog](https://huggingface.co/blog/transformersjs-v4)).
-- Must be spiked under Bun 1.2.23 (v4's onnxruntime-node version could interact with the Bun NAPI surface — unverified).
-- `bun-webgpu` is **not** a foundation to build on: the Dawn FFI memory leak ([oven-sh/bun#19322](https://github.com/oven-sh/bun/issues/19322)) is open with no workaround — disqualifying for a long-running process. v4's native EP replaces its role; keep bun-webgpu only as an experimental fallback.
+**transformers.js v3 → v4 upgrade is done; `bun-webgpu` is removed.** (openaccountant/wilson#37, #38)
+- v4.0.1 (Feb 2026) rewrote WebGPU in C++ on ONNX Runtime's native WebGPU EP; runs in Node/Bun/Deno; adds GraniteMoeHybrid/Mamba/MoE architectures and ~4x faster BERT-family embeddings ([v4 blog](https://huggingface.co/blog/transformersjs-v4)).
+- `bun-webgpu` has been removed outright (#38) — its only purpose was standing in for the EP that v4 now bundles, and the Dawn FFI leak made it unfit for a long-running process even before the fix landed.
+- `checkWebGpuAvailable()` (`src/model/providers/transformers.ts`) no longer trusts static capability lists. It (1) confirms transformers.js 4.0.1 resolves the `webgpu` device to the `['webgpu']` execution provider, (2) confirms the installed onnxruntime-node (1.24.3) actually lists `webgpu` among its supported backends, and (3) builds and runs a 110-byte embedded MatMul ONNX model on the WebGPU EP end-to-end — because `deviceToExecutionProviders`/`listSupportedBackends` are static lists, not hardware checks, and a stale `node_modules` tree previously passed both while still throwing `Unsupported device` at inference time (#37). The full probe runs once per process (~186ms) and is cached; it never throws, only resolves `false`.
+- Server-side WebGPU under Bun, once assumed unproven (ORT#26216), is now measured working: transformers.js 4.0.1 + onnxruntime-node 1.24.3's WebGPU EP sustained ~105 tok/s on `onnx-community/Qwen3-0.6B-ONNX` q4 over 14 iterations with a decaying RSS delta, macOS arm64 (research spike 2026-09-07, company monorepo `docs/research/webgpu-kernels/2026-09-07-webgpu-kernels-synthesis.md`). This supersedes ORT#26216's premise for macOS arm64 specifically — Linux x64 and Windows remain unverified.
+- Regression coverage: `src/__tests__/transformers-webgpu-ep.test.ts` and `src/__tests__/webgpu-model-path.test.ts` (#39) — EP-resolution unit tests, an assertion that the capability probe never throws, and a `WILSON_GPU_TESTS=1`-gated smoke test plus RSS soak.
 
 **Cleanup:** remove uncommitted `@journeyapps/sqlcipher` + `better-sqlite3-multiple-ciphers` deps and `trustedDependencies` from `package.json` (NAPI route dead at every Bun version — Node-ABI prebuilts).
 
@@ -38,12 +43,12 @@ Gemma 4 caveat: native function calling is new and unbenchmarked; Gemma has hist
 
 | # | Decision | Default | Alternative |
 |---|----------|---------|-------------|
-| D1 | Track order | A → B → C(MCP) → D(WebGPU) → E(imps), with the v4-upgrade spike run early (prereq for D/E, improves B) | Reorder per showcase deadlines |
+| D1 | Track order | A → B → C(MCP) → D(WebGPU) → E(imps); the v4-upgrade spike (D/E prereq, improves B) is now done (#36, #37) | Reorder per showcase deadlines |
 | D2 | Linux encryption | Defer; macOS-first with documented warning | bun:ffi binding to libsqlcipher.so |
 | D3 | Dylib distribution v1 | Require `brew install sqlcipher`, clear error | Bundle prebuilt dylibs day one |
 | D4 | Default loop model | Switch default `qwen3:8b` → `qwen3:4b` | Keep 8b default, 4b for imps only |
-| D5 | Embedding model | granite-embedding-small-english-r2 | nomic-embed-text |
-| D6 | WebGPU showcase surface | Dashboard in-browser first; server-side Bun WebGPU as gated experiment | Server-side first |
+| D5 | Embedding model | **OPEN — blocked on decision.** `granite-embedding-small-english-r2` is not available on Ollama (only r1 `granite-embedding:30m`/`:278m`), so it's incompatible with "Ollama primary via `/v1/embeddings`" as written in Track B. Option A: move D5 to `granite-embedding:30m` on Ollama (server-side backfill, no client download). Option B: keep r2 and make transformers.js the mandatory local embedder (~99.5MB fp16 download) | nomic-embed-text |
+| D6 | WebGPU showcase surface | Dashboard in-browser stays primary; server-side Bun WebGPU is no longer just a gated experiment — measured working on macOS arm64 (~105 tok/s, Qwen3-0.6B q4, 2026-09-07 spike) | Server-side first |
 
 ## Track A — SQLCipher via `Database.setCustomSQLite` (macOS)
 
@@ -98,10 +103,11 @@ Story: "the model reads your finances on your GPU, in your browser — nothing l
 
 - **Primary surface: dashboard in-browser inference** (mature path; WebGPU ~83% of browsers). Ladder: Llama-3.2-1B/Qwen3-0.6B q4 first (proven) → Gemma 4 E2B q4 as the wow model (multimodal, function calling). Use cases: NL transaction Q&A, categorization, monthly-summary narration — client-side.
 - **First-load UX is mandatory:** 300MB–2GB download + 3–10s shader compile → progress UI, Cache API with versioned keys, WASM fallback behind capability check. Safari per-buffer limits → default ≤3B q4.
-- **Server-side Bun WebGPU (v4 native EP): gated experiment.** onnxruntime-node WebGPU EP maturity on macOS under Bun is unproven ([ORT#26216](https://github.com/microsoft/onnxruntime/issues/26216)); capability probe + WASM fallback; benchmark before adopting. Do not build on bun-webgpu (open Dawn FFI leak #19322).
+- **Server-side Bun WebGPU (v4 native EP): now a measured yes, not just a gated experiment.** The premise behind ORT#26216 — WebGPU EP maturity on macOS under Bun is unproven — is superseded for macOS arm64: a 2026-09-07 spike measured ~105 tok/s on `onnx-community/Qwen3-0.6B-ONNX` q4 with a decaying RSS delta over 14 iterations (transformers.js 4.0.1 + onnxruntime-node 1.24.3). Linux x64 and Windows are still unverified, so the capability probe (`checkWebGpuAvailable()`) and WASM fallback stay in place regardless of platform. `bun-webgpu` is gone (#38); it is no longer a fallback option, gated or otherwise. Full research and extension proposals: company monorepo `docs/research/webgpu-kernels/2026-09-07-webgpu-kernels-synthesis.md` and `2026-09-07-webgpu-extension-proposals.md`.
 - **Granite 4.0 Micro in-browser** (needs v4's GraniteMoeHybrid): stretch demo tying WebGPU + security narrative together.
+- **Note on `@huggingface/kernels`:** Hugging Face's `@huggingface/kernels` package (0.0.1-preview.1, 2026-09-01, 207 WebGPU kernels) is browser-only and not wired into transformers.js or ONNX Runtime Web today. A monthly watch workflow (`.github/workflows/kernels-watch.yml`, openaccountant/wilson#41) tracks whether/when it gets upstreamed as a possible future accelerator for this track's existing dependency chain — no integration work is planned against it now.
 
-**Spike (early, shared prereq):** upgrade `@huggingface/transformers` ^3.8.1 → v4 under Bun 1.2.23; run existing `transformers:` provider tests; hello-world `device:'webgpu'` in dashboard; verify no regression in local ONNX text-gen path.
+**Spike (done, shared prereq):** `@huggingface/transformers` upgraded ^3.8.1 → 4.0.1 under Bun 1.4.2 (openaccountant/wilson#36, #37); existing `transformers:` provider tests pass; `device:'webgpu'` verified end-to-end via `checkWebGpuAvailable()`; no regression in the local ONNX text-gen path.
 
 ## Track E — Imps: scoped micro-agents (headless harness)
 
@@ -127,7 +133,7 @@ Adopt the concepts, not the dependencies (references: [claude-imps](https://gith
 - Tapes checkpoints/branching/replay; session→skill generation
 - Desktop (Tauri/Electron — each dissolves encryption differently; revisit if desktop committed within a quarter, affects D3), mobile (blocked on sync architecture), marketing-site WASM demo tier
 - Warm-pool/prewarmed imp processes; imp evolution system (both post-MVP of Track E)
-- Bun 1.3 migration (blocked on oven-sh/bun#30431)
+- ~~Bun 1.3 migration (blocked on oven-sh/bun#30431)~~ — done; Bun is 1.4.2 (see Revision note)
 
 ## Sources
 

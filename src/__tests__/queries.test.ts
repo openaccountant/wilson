@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, beforeAll, afterAll, setSystemTime } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import {
   getTransactions,
@@ -25,6 +25,20 @@ import { createTestDb, seedTestData, currentMonth, currentMonthStart, currentMon
 
 describe('queries', () => {
   let db: Database;
+
+  // Freeze the clock to a fixed mid-month date so tests asserting on
+  // "current month" (currentMonth/currentMonthStart/currentMonthEnd) stay
+  // consistent with seedTestData's daysAgo()-based fixture regardless of
+  // what day the suite runs on — near the start of a real month, daysAgo(10)
+  // can roll into the previous month while currentMonthStart() still points
+  // at "this" month, emptying out "current month" results. See #23.
+  beforeAll(() => {
+    setSystemTime(new Date('2026-06-15T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    setSystemTime(); // restore real system time
+  });
 
   beforeEach(() => {
     db = createTestDb();

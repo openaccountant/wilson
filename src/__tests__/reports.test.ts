@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach, beforeAll, afterAll, spyOn, setSystemTime } from "bun:test";
 import * as os from "os";
 import * as path from "path";
 import * as fs from "fs";
@@ -22,6 +22,17 @@ import { createTestDb, seedTestData, makeTmpPath, daysAgo, currentMonth, previou
 describe("reports", () => {
   let db: Database;
   let logSpy: ReturnType<typeof spyOn>;
+
+  // Freeze the clock to a fixed mid-month date so "current month" / "previous
+  // month" period math (printSummary, printBudget, etc.) is deterministic
+  // regardless of what day the suite runs on. See #23.
+  beforeAll(() => {
+    setSystemTime(new Date("2026-06-15T12:00:00Z"));
+  });
+
+  afterAll(() => {
+    setSystemTime(); // restore real system time
+  });
 
   beforeEach(() => {
     db = createTestDb();
@@ -86,6 +97,9 @@ describe("reports", () => {
       await printSummary(["--summary", "month", "--offset", "-1"], db);
       const output = allOutput();
       // Should show previous month's data
+      // seedTestData() plants a Groceries transaction explicitly in the
+      // previous calendar month (relative to the frozen clock above), so
+      // the previous-month period always has spending data to show.
       expect(output).toContain("Spending Summary:");
     });
 
