@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
-  apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
+  apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
@@ -258,6 +258,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         }
         if (path === '/api/transactions') {
           return Response.json(apiTransactions(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/transactions/search') {
+          return Response.json(await apiSemanticSearch(activeDb, url.searchParams), { headers });
         }
 
         // Transaction edit/delete (RBAC: admin only)

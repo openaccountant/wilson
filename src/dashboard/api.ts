@@ -36,6 +36,12 @@ import {
 import { checkAlerts } from '../alerts/engine.js';
 import { getActiveGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
+import {
+  countMissingTransactionTargets,
+  searchTransactionsSemantic,
+  type SemanticTransactionFilters,
+} from '../db/embedding-queries.js';
+import { DEFAULT_EMBEDDING_MODEL, embedTexts } from '../utils/embeddings.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 
@@ -130,6 +136,96 @@ export function apiTransactions(db: Database, params: URLSearchParams) {
 export function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
   const success = updateTransaction(db, id, updates);
   return { success, id };
+}
+
+// ── Semantic search ─────────────────────────────────────────────────────────
+
+/** Injectable embed seam: same shape as embedTexts (tests pass a fake; production uses the local engine). */
+export type EmbedFn = (texts: string[]) => Promise<Float32Array[]>;
+
+export interface SemanticSearchResponse {
+  /** Full transaction rows (same shape as /api/transactions) with the similarity score merged on, ranked by dot product. */
+  results: Array<Record<string, unknown> & { score: number }>;
+  /** Transactions that have an embedding for the model (total minus missing — never the raw embeddings count, which can include orphans). */
+  indexed: number;
+  /** Total transaction count. */
+  total: number;
+  model: string;
+}
+
+/**
+ * GET /api/transactions/search?q=…&start&end&category&accountId&entityId&limit
+ *
+ * Embeds the query text with the local embedding engine (in-process — query
+ * text never leaves the machine), prefilters candidates with the same SQL
+ * filters the transactions endpoint accepts, ranks by dot product over the
+ * L2-normalized vectors (i.e. cosine similarity), and returns full transaction
+ * rows + score. Document vectors are never computed here — they were indexed
+ * ahead of time by `wilson --index`.
+ *
+ * `embed` is the test seam: inject a fake embedder so no test ever loads the
+ * real ONNX pipeline. The server route passes nothing and gets the local engine.
+ */
+export async function apiSemanticSearch(
+  db: Database,
+  params: URLSearchParams,
+  embed?: EmbedFn
+): Promise<SemanticSearchResponse> {
+  const total = (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c;
+  const missing = countMissingTransactionTargets(db, DEFAULT_EMBEDDING_MODEL);
+  const indexed = Math.max(0, total - missing);
+  const model = DEFAULT_EMBEDDING_MODEL;
+
+  const q = (params.get('q') ?? '').trim();
+  if (!q) {
+    return { results: [], indexed, total, model };
+  }
+
+  const parsedLimit = parseInt(params.get('limit') ?? '25', 10);
+  const limit = Number.isFinite(parsedLimit) && parsedLimit >= 1 ? parsedLimit : 25;
+
+  // Same filter set (and param names) as apiTransactions.
+  const filters: SemanticTransactionFilters = {};
+  const start = params.get('start');
+  const end = params.get('end');
+  const category = params.get('category');
+  const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
+  if (start) filters.dateStart = start;
+  if (end) filters.dateEnd = end;
+  if (category) filters.category = category;
+  if (accountId !== undefined) filters.accountId = accountId;
+  if (entityId !== undefined) filters.entityId = entityId;
+
+  // Exactly one embed call, one text: the query. (Transaction text is embedded
+  // only by `wilson --index`, never here.)
+  const embedFn = embed ?? embedTexts;
+  const [queryVec] = await embedFn([q]);
+
+  const hits = searchTransactionsSemantic(db, queryVec, filters, limit, model);
+
+  // Enrich the narrow DB-layer projection into full transaction rows, one
+  // query, in ranked order. The compat-sqlite wrapper only accepts named
+  // params, so build @id0, @id1, … dynamically.
+  const results: Array<Record<string, unknown> & { score: number }> = [];
+  if (hits.length > 0) {
+    const placeholders = hits.map((_, i) => `@id${i}`).join(',');
+    const sqlParams: Record<string, unknown> = {};
+    hits.forEach((h, i) => { sqlParams[`id${i}`] = h.sourceId; });
+    const rows = db
+      .prepare(`SELECT * FROM transactions WHERE id IN (${placeholders})`)
+      .all(sqlParams) as Array<Record<string, unknown>>;
+    const byId = new Map<number, Record<string, unknown>>();
+    for (const row of rows) byId.set(row.id as number, row);
+    for (const h of hits) {
+      const row = byId.get(h.sourceId);
+      // Skip defensively: a transaction deleted mid-flight between search and
+      // enrichment has no row to return.
+      if (row) results.push({ ...row, score: h.score });
+    }
+  }
+
+  return { results, indexed, total, model };
 }
 
 export function apiDeleteTransaction(db: Database, id: number) {
