@@ -14,6 +14,7 @@ import {
   apiMemories, apiAddMemory, apiDeactivateMemory,
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
+  apiImport, type ImportRequestBody,
 } from './api.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
@@ -318,6 +319,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             }
             return Response.json(apiDeleteEntity(activeDb, id), { headers });
           }
+        }
+
+        // ── Import ──────────────────────────────────────────────────
+
+        if (path === '/api/import' && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as ImportRequestBody;
+          const result = apiImport(activeDb, body);
+          return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
         }
 
         // ── Memories ─────────────────────────────────────────────────
