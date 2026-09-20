@@ -882,7 +882,8 @@ export function getDashboardHtml(port: number): string {
         var card = document.createElement('div');
         card.className = 'card';
         card.style.marginBottom = '12px';
-        var pct = g.target_amount ? Math.min(Math.round((g.current_amount / g.target_amount) * 100), 100) : 0;
+        var effectiveTarget = (g.effective_target != null) ? g.effective_target : g.target_amount;
+        var pct = effectiveTarget ? Math.min(Math.round((g.current_amount / effectiveTarget) * 100), 100) : 0;
         var barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#eab308' : '#ef4444';
 
         // Header row
@@ -906,11 +907,16 @@ export function getDashboardHtml(port: number): string {
         card.appendChild(header);
 
         // Progress bar for financial goals
-        if (g.goal_type === 'financial' && g.target_amount) {
+        if (g.goal_type === 'financial' && effectiveTarget) {
           var progressLabel = document.createElement('div');
           progressLabel.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;color:#8b949e;margin-bottom:4px;';
           var amtSpan = document.createElement('span');
-          amtSpan.textContent = '$' + fmtN(g.current_amount) + ' / $' + fmtN(g.target_amount);
+          var amtLabel = '$' + fmtN(g.current_amount) + ' / $' + fmtN(effectiveTarget);
+          if (g.target_percent != null) {
+            var periodWord = g.income_period === 'quarter' ? 'quarterly' : g.income_period === 'year' ? 'yearly' : 'monthly';
+            amtLabel += ' (' + g.target_percent + '% of ' + periodWord + ' income)';
+          }
+          amtSpan.textContent = amtLabel;
           progressLabel.appendChild(amtSpan);
           var pctSpan = document.createElement('span');
           pctSpan.textContent = pct + '%';

@@ -256,6 +256,8 @@ export interface Goal {
   title: string;
   goal_type: 'financial' | 'behavioral';
   target_amount: number | null;
+  target_percent: number | null;
+  income_period: string | null;
   current_amount: number;
   target_date: string | null;
   category: string | null;
@@ -264,12 +266,15 @@ export interface Goal {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  effective_target?: number | null;
+  period_income?: number | null;
 }
 
 export interface GoalSnapshot {
   id: number;
   goal_id: number;
   amount: number;
+  resolved_target?: number | null;
   snapshot_date: string;
   created_at: string;
 }

@@ -25,17 +25,33 @@ describe('alerts', () => {
     seedTestData(db);
   });
 
+  /**
+   * Current-month Groceries spend from the seed data. Varies with the calendar
+   * (daysAgo(10) can fall into the previous month), so tests derive budgets
+   * from it instead of assuming a fixed dollar figure.
+   */
+  function groceriesActual(): number {
+    const month = new Date().toISOString().slice(0, 7);
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(amount), 0) AS total FROM transactions
+         WHERE category = 'Groceries' AND substr(date, 1, 7) = @month`
+      )
+      .get({ month }) as { total: number };
+    return Math.abs(row.total);
+  }
+
   test('no alerts when budgets are healthy', () => {
-    // Default seed: Groceries $200 budget, $85.50 actual (43%)
+    // Keep Groceries at 50% of actual and Dining at 45% — both under 80%
+    setBudget(db, 'Groceries', Math.max(1, Math.ceil(groceriesActual() / 0.5)));
     const alerts = checkAlerts(db);
     const budgetAlerts = alerts.filter((a) => a.type.startsWith('budget_'));
-    // Groceries at 43%, Dining at 45% — both under 80%
     expect(budgetAlerts).toHaveLength(0);
   });
 
   test('budget_warning at 80%+', () => {
-    // Set Groceries budget to $100 — $85.50 actual = 86%
-    setBudget(db, 'Groceries', 100);
+    // Budget Groceries at ~90% of actual spend — warning territory (80–100%)
+    setBudget(db, 'Groceries', Math.max(1, Math.ceil(groceriesActual() / 0.9)));
     const alerts = checkAlerts(db);
     const warning = alerts.find((a) => a.type === 'budget_warning' && a.category === 'Groceries');
     expect(warning).toBeDefined();

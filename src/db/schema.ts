@@ -391,6 +391,18 @@ CREATE INDEX IF NOT EXISTS idx_accounts_entity_id ON accounts(entity_id);
 CREATE INDEX IF NOT EXISTS idx_budgets_entity_id ON budgets(entity_id);
 `;
 
+// ── Goal Percentage-of-Income Columns (migration v22) ───────────────────────
+// NOTE: these columns live only in this migration, not in the GOALS_TABLE /
+// GOAL_SNAPSHOTS_TABLE CREATE statements above — fresh installs run all
+// migrations in order, and re-adding them in the CREATE would make this
+// ALTER fail with "duplicate column" (see ENTITY_ID_COLUMNS precedent).
+
+export const GOAL_TARGET_PERCENT_COLUMNS = `
+ALTER TABLE goals ADD COLUMN target_percent REAL;
+ALTER TABLE goals ADD COLUMN income_period TEXT;
+ALTER TABLE goal_snapshots ADD COLUMN resolved_target REAL;
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `
