@@ -14,6 +14,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3141',
+      // Prebuilt hybrid chunk + ort binaries are served by the API server.
+      '/assets': 'http://localhost:3141',
     },
   },
   build: {

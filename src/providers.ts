@@ -27,6 +27,11 @@ export const PROVIDERS: ProviderDef[] = [
     id: 'transformers',
     displayName: 'Transformers.js (local)',
     modelPrefix: 'transformers:',
+    // Browser (WebGPU) fast model for hybrid dashboard chat. Must be a
+    // webgpu-tagged id from the model catalog (src/utils/model.ts) — a test
+    // cross-checks this, and the local-chat config endpoint exposes it to the
+    // browser verbatim, so this is the single place to change the model.
+    fastModel: 'transformers:onnx-community/Qwen3-0.6B-ONNX',
   },
   // Cloud providers
   {
