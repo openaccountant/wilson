@@ -85,6 +85,13 @@ Switch providers at any time with `/model`.
 
 Type `exit` or `quit` to close. Press `Esc` to cancel a running operation.
 
+### Headless Flags
+
+| Command | Description |
+|---|---|
+| `wilson --sync` | Sync all linked accounts (Plaid, Monarch, Firefly III) — cron-friendly |
+| `wilson --index` | Build the local semantic index over existing transactions. Embeddings are computed and stored entirely on-device; only the embedding model itself is downloaded once, then cached in `~/.openaccountant/models/` |
+
 ## Configuration
 
 ### Environment Variables
