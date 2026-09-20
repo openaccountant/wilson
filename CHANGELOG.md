@@ -5,6 +5,7 @@
 ### Features
 
 - feat: percentage-of-income targets for goal_manage — financial goals accept an optional `targetPercent` (plus `incomePeriod`, default month) alongside the fixed `targetAmount`; the dollar target is resolved from actual period income via profit-loss totals, progress defaults to the period's net savings, and goal snapshots record the resolved target (#34)
+- feat: dashboard import endpoint — POST /api/import commits client-parsed statement rows into the active profile with file-hash + per-row external_id dedup (sharing the CLI's id derivation, so one statement dedups across both paths) and an imports-ledger record; admin-gated like other dashboard writes (#71)
 
 
 ## [v0.5.0] — 2026-07-05
