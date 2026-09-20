@@ -4,7 +4,7 @@
 
 ### Features
 
-- feat: percentage-of-income targets for goal_manage — financial goals accept an optional `targetPercent` (plus `incomePeriod`, default month) alongside the fixed `targetAmount`; the dollar target is resolved from actual period income via profit-loss totals, progress defaults to the period's net savings, and goal snapshots record the resolved target (#34)
+- feat: below-threshold AI categorization suggestions are routed to a persistent review queue instead of being auto-applied — the categorize tool now applies a suggestion only at or above the confidence threshold (default 0.7, per-profile via "categorizationConfidenceThreshold"); lower-confidence suggestions leave the transaction uncategorized and land as pending rows in the new categorization_reviews table (migration v23 also backfills historical low-confidence model categorizations into the queue while keeping their applied category) (#84)
 
 
 ## [v0.5.0] — 2026-07-05

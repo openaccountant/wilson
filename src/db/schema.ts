@@ -403,6 +403,41 @@ ALTER TABLE goals ADD COLUMN income_period TEXT;
 ALTER TABLE goal_snapshots ADD COLUMN resolved_target REAL;
 `;
 
+// ── Categorization Review Queue (migration v23) ─────────────────────────────
+// Below-threshold AI categorization suggestions are never applied to
+// transactions.category — they are held here as pending rows until a human
+// reviews them. The partial unique index makes duplicate pending rows for the
+// same transaction impossible at the storage level (INSERT OR IGNORE relies
+// on it). The backfill flags historically auto-applied low-confidence model
+// categorizations into the queue WITHOUT touching their applied category —
+// reports stay undistorted until a human acts. The 0.7 literal is the
+// default threshold; migrations cannot read the per-profile settings file.
+// Rows with NULL category_confidence are bank/import-provided categories, not
+// model output, and deliberately stay out of the queue.
+
+export const CATEGORIZATION_REVIEWS_TABLE = `
+CREATE TABLE IF NOT EXISTS categorization_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  transaction_id INTEGER NOT NULL,
+  suggested_category TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_categorization_reviews_txn ON categorization_reviews(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_categorization_reviews_status ON categorization_reviews(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categorization_reviews_pending_txn
+  ON categorization_reviews(transaction_id) WHERE status = 'pending';
+INSERT INTO categorization_reviews (transaction_id, suggested_category, confidence, status)
+SELECT id, category, category_confidence, 'pending'
+FROM transactions
+WHERE category IS NOT NULL
+  AND category_confidence IS NOT NULL
+  AND category_confidence < 0.7
+  AND COALESCE(user_verified, 0) = 0;
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `
