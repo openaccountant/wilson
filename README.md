@@ -34,6 +34,13 @@ Named after [Frank J. Wilson](https://en.wikipedia.org/wiki/Frank_J._Wilson), th
 - **Skills** — Multi-step workflows like subscription audits, extensible with custom skills
 - **Semantic transaction search** — The dashboard Transactions search understands meaning, not just substrings: a query with no exact matches falls back to on-device embedding search (`wilson --index` builds the vectors) with ranked, scored results — nothing but the one-time model download ever leaves the machine
 - **9 LLM providers** — OpenAI, Anthropic, Google, xAI, Moonshot, DeepSeek, OpenRouter, LiteLLM, and Ollama (local)
+- **Offline dashboard transactions** — the dashboard keeps a sync-fed local mirror (wa-sqlite on OPFS, inlined in the single-file build); when the server is unreachable you can still browse, search, and filter transactions with the same results, and entity assignment shows an explicit "requires connection" state instead of failing silently
+
+## Offline transactions
+
+The React dashboard stores a read-only mirror of the active profile's transactions and entities in the browser (wa-sqlite on OPFS, keyed per profile). While the server is reachable the mirror stays fresh via a periodic full pull; when the server is unreachable, the transactions tab serves browsing, search, and filtering from the last-synced mirror — the same results the server would return for the same query. Entity assignment (and every other write) stays online-only: offline it shows a "requires connection" state rather than failing silently, and nothing is queued.
+
+Privacy note: the browser mirror is **unencrypted at rest** (browser origin storage holds plaintext, unlike the SQLCipher-encrypted CLI database). It mirrors exactly what the dashboard already renders in that same browser, it can be dropped and re-synced at any time, and full-disk encryption (e.g. FileVault) protects it at the OS layer.
 
 ## Quick Start
 

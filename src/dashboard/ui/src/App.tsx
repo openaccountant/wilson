@@ -4,6 +4,7 @@ import { TabBar, type TabId } from '@/components/TabBar';
 import { AppContext, type AppState } from '@/state';
 import { useDateRange } from '@/hooks/useDateRange';
 import { useApi } from '@/hooks/useApi';
+import { useMirrorSync } from '@/hooks/useMirrorSync';
 import type { Account, SpendingSummaryItem, Entity } from '@/types';
 import { OverviewTab } from '@/tabs/OverviewTab';
 import { TransactionsTab } from '@/tabs/TransactionsTab';
@@ -32,6 +33,7 @@ const TAB_COMPONENTS: Record<TabId, React.FC> = {
 };
 
 export function App() {
+  useMirrorSync();
   const [activeTab, setActiveTab] = useState<TabId>(getHashTab);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [category, setCategory] = useState<string | null>(null);
