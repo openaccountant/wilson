@@ -6,6 +6,10 @@
 
 - feat: percentage-of-income targets for goal_manage — financial goals accept an optional `targetPercent` (plus `incomePeriod`, default month) alongside the fixed `targetAmount`; the dollar target is resolved from actual period income via profit-loss totals, progress defaults to the period's net savings, and goal snapshots record the resolved target (#34)
 
+### Fixes
+
+- fix: validate structured LLM output at the `callLlm` boundary — a response violating its `outputSchema` gets exactly one schema-aware repair re-prompt, then the call rejects with a typed `LlmValidationError` instead of returning unvalidated data; categorization and entity-classification batches land in their errors channel with nothing written (no more NaN confidences or junk categories from malformed local-model JSON), chat-history relevance degrades to no injected history, and team dispatch falls back to the dispatcher's direct answer; both tool schemas now constrain `confidence` to [0, 1] (#65)
+
 
 ## [v0.5.0] — 2026-07-05
 
