@@ -30,6 +30,10 @@ import {
   ENTITIES_TABLE,
   ENTITY_ID_COLUMNS,
   GOAL_TARGET_PERCENT_COLUMNS,
+  TRANSACTION_REVISION_COLUMN,
+  MCP_GRANTS_TABLE,
+  MCP_OPERATIONS_TABLE,
+  MCP_APPROVAL_TOKENS_TABLE,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -65,6 +69,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 20, name: 'create_entities', up: ENTITIES_TABLE },
   { version: 21, name: 'add_entity_id_columns', up: ENTITY_ID_COLUMNS },
   { version: 22, name: 'add_goal_target_percent', up: GOAL_TARGET_PERCENT_COLUMNS },
+  { version: 23, name: 'add_transaction_revision', up: TRANSACTION_REVISION_COLUMN },
+  { version: 24, name: 'create_mcp_tables', up: MCP_GRANTS_TABLE + MCP_OPERATIONS_TABLE + MCP_APPROVAL_TOKENS_TABLE },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

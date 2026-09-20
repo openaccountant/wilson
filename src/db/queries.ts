@@ -44,6 +44,7 @@ export interface TransactionRow {
   pending: number;
   authorized_date: string | null;
   entity_id: number | null;
+  revision: number;
   created_at: string;
   updated_at: string;
 }
@@ -782,11 +783,21 @@ export interface TransactionUpdate {
 
 /**
  * Update specific fields on a transaction.
+ *
+ * When `expectedRevision` is provided, the write is gated on the row's
+ * `revision` still matching it (optimistic-concurrency precondition for the
+ * WebMCP mutation prepare/commit protocol — see src/mcp/store.ts). A mismatch
+ * (row changed since the caller last read it, or row no longer exists)
+ * returns `false` without writing anything. Every successful write bumps
+ * `revision` by one, whether or not a precondition was requested, so callers
+ * that never pass `expectedRevision` still keep the counter accurate for
+ * whoever checks it next.
  */
 export function updateTransaction(
   db: Database,
   id: number,
-  updates: TransactionUpdate
+  updates: TransactionUpdate,
+  expectedRevision?: number
 ): boolean {
   const sets: string[] = [];
   const params: Record<string, unknown> = { id };
@@ -801,15 +812,33 @@ export function updateTransaction(
   if (sets.length === 0) return false;
 
   sets.push("updated_at = datetime('now')");
-  const result = db.prepare(`UPDATE transactions SET ${sets.join(', ')} WHERE id = @id`).run(params);
+  sets.push('revision = revision + 1');
+  let where = 'id = @id';
+  if (expectedRevision !== undefined) {
+    where += ' AND revision = @expectedRevision';
+    params.expectedRevision = expectedRevision;
+  }
+  const result = db.prepare(`UPDATE transactions SET ${sets.join(', ')} WHERE ${where}`).run(params);
   return (result as { changes: number }).changes > 0;
 }
 
 /**
  * Delete a transaction by ID.
+ *
+ * `expectedRevision`, when provided, gates the delete on the row's current
+ * `revision` (see updateTransaction above). Not currently exercised by any
+ * caller — delete_transaction is deliberately excluded from the WebMCP v1
+ * catalog — but the precondition is wired up now so a future dedicated
+ * one-shot delete permission can use it without another schema/query change.
  */
-export function deleteTransaction(db: Database, id: number): boolean {
-  const result = db.prepare('DELETE FROM transactions WHERE id = @id').run({ id });
+export function deleteTransaction(db: Database, id: number, expectedRevision?: number): boolean {
+  const params: Record<string, unknown> = { id };
+  let where = 'id = @id';
+  if (expectedRevision !== undefined) {
+    where += ' AND revision = @expectedRevision';
+    params.expectedRevision = expectedRevision;
+  }
+  const result = db.prepare(`DELETE FROM transactions WHERE ${where}`).run(params);
   return (result as { changes: number }).changes > 0;
 }
 
