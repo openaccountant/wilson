@@ -2,17 +2,9 @@ import { useState, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useAppState } from '@/state';
 import { api } from '@/api';
+import { formatAmount, formatDate } from '@/format';
+import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
 import type { Transaction, Entity } from '@/types';
-
-function formatAmount(amount: number): string {
-  const abs = Math.abs(amount);
-  return `${amount < 0 ? '-' : ''}$${abs.toFixed(2)}`;
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function EntityCell({
   txId,
@@ -70,7 +62,11 @@ function EntityCell({
 export function TransactionsTab() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const { dateRange, accountId, category: globalCategory, entityId } = useAppState();
+  const [importOpen, setImportOpen] = useState(false);
+  const [seedFile, setSeedFile] = useState<File | null>(null);
+  const [banner, setBanner] = useState('');
+  const [zoneDragOver, setZoneDragOver] = useState(false);
+  const { dateRange, setDateRange, accountId, category: globalCategory, entityId } = useAppState();
 
   const apiPath = useMemo(() => {
     const parts = [`start=${dateRange.startDate}`, `end=${dateRange.endDate}`, 'limit=500'];
@@ -116,17 +112,55 @@ export function TransactionsTab() {
     }
   }
 
+  function openImporter() {
+    setSeedFile(null);
+    setImportOpen(true);
+  }
+
+  function dropStatement(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    // One file at a time; extension/format validation (and the error path)
+    // lives in the dialog, so an unsupported file shows its inline error.
+    setSeedFile(file);
+    setImportOpen(true);
+  }
+
+  function handleImported(result: ImportResponse) {
+    setImportOpen(false);
+    refetch();
+    // Switch the visible window to the imported dates when the current range
+    // doesn't cover them (ISO strings compare lexicographically), so fresh rows
+    // aren't hidden under the default current-month filter.
+    if (
+      result.transactionsImported > 0 &&
+      result.dateRange &&
+      (dateRange.startDate > result.dateRange.start || dateRange.endDate < result.dateRange.end)
+    ) {
+      setDateRange({ startDate: result.dateRange.start, endDate: result.dateRange.end });
+    }
+    setBanner(result.message);
+  }
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Fixed header + filters */}
       <div className="shrink-0 p-6 pb-0 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text">Transactions</h2>
-          {data && (
-            <span className="text-xs text-text-muted font-mono">
-              {filtered.length} of {data.length} transactions
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-text">Transactions</h2>
+            {data && (
+              <span className="text-xs text-text-muted font-mono">
+                {filtered.length} of {data.length} transactions
+              </span>
+            )}
+          </div>
+          <button
+            onClick={openImporter}
+            className="bg-green-700 hover:bg-green-600 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors cursor-pointer border-none"
+          >
+            Import statement
+          </button>
         </div>
 
         <div className="flex gap-3">
@@ -150,6 +184,19 @@ export function TransactionsTab() {
             ))}
           </select>
         </div>
+
+        {banner && (
+          <div className="flex items-center justify-between border border-green-700/50 bg-green-900/30 text-text rounded-md px-3 py-2 text-sm">
+            <span className="break-words">{banner}</span>
+            <button
+              onClick={() => setBanner('')}
+              className="text-text-muted hover:text-text bg-transparent border-none text-base cursor-pointer ml-3 shrink-0"
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Scrollable table area */}
@@ -167,11 +214,35 @@ export function TransactionsTab() {
         )}
 
         {!loading && !error && filtered.length === 0 && (
-          <div className="bg-surface-raised border border-border rounded-lg p-8 text-center">
-            <p className="text-sm text-text-muted">
-              {data && data.length > 0 ? 'No transactions match your filters.' : 'No transactions found.'}
-            </p>
-          </div>
+          data && data.length > 0 ? (
+            <div className="bg-surface-raised border border-border rounded-lg p-8 text-center">
+              <p className="text-sm text-text-muted">No transactions match your filters.</p>
+            </div>
+          ) : (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setZoneDragOver(true);
+              }}
+              onDragLeave={() => setZoneDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setZoneDragOver(false);
+                dropStatement(e.dataTransfer.files);
+              }}
+              onClick={openImporter}
+              className={`rounded-lg border-2 border-dashed p-10 text-center cursor-pointer transition-colors ${
+                zoneDragOver ? 'border-green bg-green/10' : 'border-border bg-surface-raised hover:border-green'
+              }`}
+            >
+              <div className="text-3xl mb-2">📥</div>
+              <p className="text-sm text-text">Drop a bank statement here</p>
+              <p className="text-xs text-text-muted mt-1">
+                CSV, OFX, or QIF — or click to browse. Preview the parse before anything is imported.
+              </p>
+              <p className="text-xs text-text-muted mt-4">No transactions found.</p>
+            </div>
+          )
         )}
 
         {!loading && !error && filtered.length > 0 && (
@@ -247,6 +318,14 @@ export function TransactionsTab() {
           </div>
         )}
       </div>
+
+      <ImportStatementDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        seedFile={seedFile}
+        onSeedConsumed={() => setSeedFile(null)}
+        onImported={handleImported}
+      />
     </div>
   );
 }
