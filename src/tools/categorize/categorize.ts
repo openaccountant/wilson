@@ -32,7 +32,7 @@ const categorizationOutputSchema = z.object({
     z.object({
       id: z.number(),
       category: z.string(),
-      confidence: z.number(),
+      confidence: z.number().min(0).max(1),
     })
   ),
 });
@@ -129,17 +129,11 @@ export const categorizeTool = defineTool({
           model,
         });
 
-        // Parse the result — with structured output, response.structured is the parsed object
-        let categorizations: z.infer<typeof categorizationOutputSchema>;
-
-        if (result.response.structured && typeof result.response.structured === 'object' && 'transactions' in result.response.structured) {
-          categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
-        } else if (result.response.content) {
-          categorizations = categorizationOutputSchema.parse(JSON.parse(result.response.content));
-        } else {
-          errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: Unexpected LLM response format`);
-          continue;
-        }
+        // callLlm validated the structured output against categorizationOutputSchema
+        // (with one repair re-prompt) or threw — result.response.structured is guaranteed
+        // to satisfy the schema, so a rejected batch lands in the catch below and this
+        // batch's transactions stay uncategorized.
+        const categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
 
         // 4. Update categories in database
         for (const cat of categorizations.transactions) {

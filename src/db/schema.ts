@@ -403,6 +403,34 @@ ALTER TABLE goals ADD COLUMN income_period TEXT;
 ALTER TABLE goal_snapshots ADD COLUMN resolved_target REAL;
 `;
 
+// ── Embeddings Table (migration v23) ────────────────────────────────────────
+// Track B of the local-memory design: locally-computed semantic vectors for
+// chat turns, transactions, and memories. `vec` holds a serialized
+// L2-normalized Float32Array; `dim` is recorded per row so a future model
+// switch is diagnosable. The UNIQUE triple makes upserts idempotent per
+// (source_type, source_id, model) and lets a re-index with a new model
+// coexist with the old one.
+// No FK to source tables — embeddings are deleted via the explicit
+// deleteEmbeddings hook, and the table stays generic over source types.
+
+export const EMBEDDINGS_TABLE = `
+CREATE TABLE IF NOT EXISTS embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_type TEXT NOT NULL CHECK(source_type IN ('chat','transaction','memory')),
+  source_id INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vec BLOB NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(source_type, source_id, model)
+);
+`;
+
+export const EMBEDDINGS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `
