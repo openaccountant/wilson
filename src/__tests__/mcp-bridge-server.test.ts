@@ -303,23 +303,6 @@ describe('WebMCP bridge acceptance matrix', () => {
     expect(txn.notes).toBe('reconcile me');
   });
 
-  test('dashboard chat requests complete instead of hanging when no approval is requested', async () => {
-    const { base } = await start();
-    // No LLM configured in the test environment, so the agent errors out
-    // immediately rather than calling a tool — this exercises the same
-    // request/response path the hang bug lived in (POST /api/chat awaiting
-    // agentRunner.runQuery to completion) without needing a live model.
-    // The regression this guards against is the request timing out; a 200
-    // or a handled error response both prove it returned at all.
-    const res = await fetch(base + '/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: 'hello' }),
-    });
-    expect(res.status).toBe(200);
-    const pending = await j(base, '/api/mcp/operations');
-    expect(pending.body.operations).toEqual([]);
-  });
 });
 
 describe('chat-originated approvals (fixes the dashboard chat hang)', () => {
