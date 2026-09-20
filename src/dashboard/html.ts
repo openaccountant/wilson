@@ -14,6 +14,9 @@ export function getDashboardHtml(port: number): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Open Accountant Dashboard</title>
+<!-- Prebuilt hybrid chat chunk (transformers.js WebGPU). 404s silently when
+     the hybrid build is absent — chat then behaves as today (server path). -->
+<script type="module" src="/assets/hybrid-chat.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { height:100%; overflow:hidden; }
@@ -440,6 +443,18 @@ export function getDashboardHtml(port: number): string {
     return fetch(url, opts);
   }
 
+  // ── Hybrid (local-first WebGPU) chat ─────────────────────────────────────
+  // The prebuilt chunk at /assets/hybrid-chat.js (loaded by the module script
+  // above) exposes window.WilsonHybridChat when the hybrid build exists. A 404
+  // leaves it undefined and the dashboard behaves exactly as before. Idempotent
+  // and cheap, so it is safe to call from onAuthReady and from every send.
+  var hybridInited = false;
+  function hybridInit() {
+    if (hybridInited || !window.WilsonHybridChat) return;
+    window.WilsonHybridChat.init({ baseUrl: BASE, fetchImpl: authFetch });
+    hybridInited = true;
+  }
+
   // ── Auth ─────────────────────────────────────────────────────────────────
   var authOverlay = document.getElementById('authOverlay');
   var authBox = document.getElementById('authBox');
@@ -565,6 +580,7 @@ export function getDashboardHtml(port: number): string {
       badge.classList.remove('hidden'); logoutBtn.classList.remove('hidden');
       if (currentUser.role === 'admin') settingsBtn.classList.remove('hidden');
     }
+    hybridInit();
     loadProfiles(); loadAccountOptions(); loadCategoryOptions(); initRouter();
   }
 
@@ -1155,15 +1171,39 @@ export function getDashboardHtml(port: number): string {
     var q = chatInput.value.trim(); if (!q) return;
     chatInput.value = ''; chatSend.disabled = true;
     addChatMsg('You',q,false); var pending = addChatMsg('Wilson','Thinking...',false);
-    try {
-      var payload = activeSessionId?{query:q,sessionId:activeSessionId}:{query:q};
-      var res = await authFetch(BASE+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      var data = await res.json(); var answer = data.answer||'No response.';
-      if (data.sessionId) { activeSessionId = data.sessionId; isLiveSession = true; }
+    var pendingText = pending.querySelector('.text');
+    // ── Local-first: try the on-device WebGPU path ────────────────────────
+    // Every hybrid failure (no WebGPU, model load/generation failure, tool-call
+    // attempt, question outside the pre-fetched bundle) resolves {ok:false} and
+    // falls through to the server agent silently — hybrid failures must never
+    // render an error bubble. The catch below stays reserved for genuine
+    // server-path failures.
+    var localAnswer = null;
+    hybridInit();
+    if (window.WilsonHybridChat) {
+      try {
+        var r = await window.WilsonHybridChat.tryLocal(q, function(label){ pendingText.textContent = label; }, activeSessionId);
+        if (r && r.ok) {
+          localAnswer = r.answer;
+          if (r.sessionId) { activeSessionId = r.sessionId; isLiveSession = true; }
+        }
+      } catch(e) { /* silent: any local failure falls through to the server path */ }
+    }
+    if (localAnswer != null) {
       // Safe: renderMd escapes all HTML entities before applying markdown transforms
-      pending.querySelector('.text').innerHTML = renderMd(answer);
+      pendingText.innerHTML = renderMd(localAnswer);
       loadSessions();
-    } catch(e) { pending.querySelector('.text').textContent = 'Error: '+e.message; }
+    } else {
+      try {
+        var payload = activeSessionId?{query:q,sessionId:activeSessionId}:{query:q};
+        var res = await authFetch(BASE+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        var data = await res.json(); var answer = data.answer||'No response.';
+        if (data.sessionId) { activeSessionId = data.sessionId; isLiveSession = true; }
+        // Safe: renderMd escapes all HTML entities before applying markdown transforms
+        pendingText.innerHTML = renderMd(answer);
+        loadSessions();
+      } catch(e) { pendingText.textContent = 'Error: '+e.message; }
+    }
     chatSend.disabled = false; chatMessages.scrollTop = chatMessages.scrollHeight;
   }
   chatSend.addEventListener('click',sendChat);

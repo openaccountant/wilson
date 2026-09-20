@@ -1,9 +1,11 @@
 import type { Database } from '../db/compat-sqlite.js';
+import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
   apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
+  apiLocalChatConfig, apiRecordLocalChatMessage,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -28,6 +30,51 @@ import {
 } from './db-manager.js';
 
 const DEFAULT_PORT = 3141;
+
+// ── Static hybrid-chat assets ───────────────────────────────────────────────
+
+/** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
+export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+
+const ASSET_MIME_TYPES: Record<string, string> = {
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
+  '.json': 'application/json',
+};
+
+/**
+ * Serve a file from the hybrid build output under /assets/.
+ *
+ * These must be public (no auth): the hybrid chunk is loaded as a module
+ * script and the onnxruntime-web binaries are fetched by ORT itself — neither
+ * can attach an Authorization header. A 404 is the normal "hybrid not built"
+ * state; the client treats a failed chunk load as capability-unavailable and
+ * silently uses the server path.
+ *
+ * Rejects path traversal: the resolved path must stay inside `dir`.
+ */
+export async function serveDashboardAsset(
+  pathname: string,
+  dir: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const notFound = () => new Response('Not Found', { status: 404, headers });
+
+  const rel = pathname.slice('/assets/'.length);
+  if (!rel || rel.includes('\0')) return notFound();
+
+  const root = resolvePath(dir);
+  const resolved = resolvePath(root, rel);
+  if (resolved !== root && !resolved.startsWith(root + pathSep)) return notFound();
+
+  const file = Bun.file(resolved);
+  if (!(await file.exists())) return notFound();
+
+  const ext = resolved.slice(resolved.lastIndexOf('.'));
+  const contentType = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
+  return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+}
 
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +133,14 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
       try {
         // Get active DB (may change after profile switch)
         const activeDb = getActiveDb();
+
+        // ── Static hybrid-chat assets (public) ────────────────────────
+        // Module scripts and ORT's own wasm fetches cannot send auth headers,
+        // so /assets/* is served without the auth middleware (same treatment
+        // as the HTML page). Contents are build artifacts only.
+        if (path.startsWith('/assets/')) {
+          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers);
+        }
 
         // ── Auth middleware ──────────────────────────────────────────
         let currentUser: DashboardUser | null = null;
@@ -455,6 +510,21 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
           const result = await handleChatMessage(body.query, body.sessionId);
+          return Response.json(result, { headers });
+        }
+
+        // ── Hybrid (local-first WebGPU) chat ────────────────────────
+
+        if (path === '/api/config/local-chat') {
+          return Response.json(apiLocalChatConfig(), { headers });
+        }
+
+        if (path === '/api/chat/local' && req.method === 'POST') {
+          const body = await req.json() as { query?: string; answer?: string; sessionId?: string };
+          const result = apiRecordLocalChatMessage(activeDb, body);
+          if ('error' in result) {
+            return Response.json(result, { status: 400, headers });
+          }
           return Response.json(result, { headers });
         }
 

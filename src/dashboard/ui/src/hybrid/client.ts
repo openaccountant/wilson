@@ -1,0 +1,325 @@
+/**
+ * Hybrid chat client — browser-only orchestration for local-first WebGPU chat.
+ *
+ * Bundled ONLY into the prebuilt hybrid chunk (dist-hybrid/hybrid-chat.js via
+ * vite.hybrid.config.ts); never into the singlefile React HTML, which loads
+ * this chunk at runtime from /assets/hybrid-chat.js.
+ *
+ * Hard contract for the UIs: every failure path — no WebGPU, config/bundle
+ * fetch failure, model load/download failure, generation error, tool-call or
+ * NEED_MORE_DATA output — resolves {ok:false} (→ silent server path). Nothing
+ * here ever throws into a UI catch block, so no hybrid-eligible failure can
+ * surface as an error bubble.
+ */
+
+import {
+  buildBundle,
+  buildLocalSystemPrompt,
+  buildLocalUserMessage,
+  classifyLocalOutput,
+  isoDaysAgo,
+  projectTransactions,
+  shouldAttemptLocal,
+  type BundleParams,
+  type BundleTxnInput,
+  type BundleWeekly,
+  type HybridCapability,
+  type HybridResult,
+} from './core.js';
+
+export type { HybridResult } from './core.js';
+
+/**
+ * Structural fetch type — decouples the browser client from whichever global
+ * fetch typing wins (DOM lib vs bun-types leaking into the UI tsconfig).
+ */
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export interface HybridOpts {
+  baseUrl: string;
+  fetchImpl: FetchLike;
+}
+
+/** GET /api/config/local-chat response. */
+export interface LocalChatConfigResponse {
+  enabled: boolean;
+  id: string;
+  repo: string;
+  displayName: string;
+  downloadSize: string;
+  bundle: BundleParams;
+}
+
+/** Session-storage key for the per-session capability verdict (Track D). */
+export const CAPABILITY_STORAGE_KEY = 'wilson-hybrid-capability';
+
+type ProgressCb = (label: string) => void;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPipeline = any;
+
+interface ProgressEvent {
+  status?: string;
+  progress?: number;
+  file?: string;
+}
+
+export function createHybridChat(opts: HybridOpts) {
+  const fetchImpl = opts.fetchImpl;
+  const base = opts.baseUrl.replace(/\/+$/, '');
+
+  // ── Session-cached capability verdict ──────────────────────────────────
+  // Layered-probe philosophy (never trust static lists): the verdict is only
+  // cached after real probes, and only for the rest of the browser session.
+  let verdict: HybridCapability = 'unknown';
+  let provenRepo: string | null = null;
+  try {
+    const raw = sessionStorage.getItem(CAPABILITY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { verdict?: HybridCapability; repo?: string | null };
+      if (parsed.verdict === 'ready' || parsed.verdict === 'unavailable' || parsed.verdict === 'failed') {
+        verdict = parsed.verdict;
+        provenRepo = parsed.repo ?? null;
+      }
+    }
+  } catch {
+    // storage unavailable — start from 'unknown'
+  }
+
+  function persist(): void {
+    try {
+      sessionStorage.setItem(CAPABILITY_STORAGE_KEY, JSON.stringify({ verdict, repo: provenRepo }));
+    } catch {
+      // storage unavailable — session-only behavior degrades gracefully
+    }
+  }
+
+  // ── Config (model choice rides the server's fastModel field) ───────────
+  let configPromise: Promise<LocalChatConfigResponse | null> | null = null;
+  function fetchConfig(): Promise<LocalChatConfigResponse | null> {
+    configPromise ??= (async () => {
+      try {
+        const res = await fetchImpl(`${base}/api/config/local-chat`);
+        if (!res.ok) return null;
+        const data = (await res.json()) as LocalChatConfigResponse;
+        return data?.enabled && data.repo ? data : null;
+      } catch {
+        return null;
+      }
+    })();
+    return configPromise;
+  }
+
+  // ── Capability probe (layers 1 and 2; layer 3 is loadModel) ────────────
+  async function probe(): Promise<'ready' | 'unavailable' | 'failed'> {
+    if (verdict !== 'unknown') return verdict;
+
+    const nav = globalThis.navigator as Navigator | undefined;
+    // Structural typing: WebGPU types may not be in every tsconfig's lib set.
+    const gpu = (nav as { gpu?: { requestAdapter?: () => Promise<unknown> } } | undefined)?.gpu;
+    if (!gpu || typeof gpu.requestAdapter !== 'function') {
+      verdict = 'unavailable';
+      persist();
+      return 'unavailable';
+    }
+    try {
+      const adapter = await gpu.requestAdapter();
+      if (!adapter) {
+        verdict = 'unavailable';
+        persist();
+        return 'unavailable';
+      }
+    } catch {
+      verdict = 'unavailable';
+      persist();
+      return 'unavailable';
+    }
+    // Optimistic: layers 1-2 passed. The real-generation layer (loadModel)
+    // downgrades to 'failed' if the GPU cannot actually run the model
+    // (e.g. adapter without shader-f16 fails fp16 session creation).
+    verdict = 'ready';
+    persist();
+    return 'ready';
+  }
+
+  // ── Model load + real-generation proof (layer 3) ────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let pipelinePromise: Promise<AnyPipeline> | null = null;
+
+  async function loadModel(onProgress?: ProgressCb): Promise<AnyPipeline | null> {
+    const cfg = await fetchConfig();
+    if (!cfg) return null;
+
+    if (!pipelinePromise || provenRepo !== cfg.repo) {
+      pipelinePromise = (async () => {
+        const { pipeline, env } = await import('@huggingface/transformers');
+        // Same-origin static ort binaries (scripts/copy-ort-web-assets.ts);
+        // the library default points at a public CDN, which we must not need.
+        // Main-thread inference (proxy=false) matches the server-side adapter.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const onnx = (env as any).backends?.onnx;
+        if (onnx?.wasm) {
+          onnx.wasm.wasmPaths = `${base}/assets/ort/`;
+          onnx.wasm.proxy = false;
+        }
+        env.allowLocalModels = false;
+
+        const progress = (p: ProgressEvent) => {
+          if (p.status === 'progress' && typeof p.progress === 'number') {
+            onProgress?.(`Downloading local model… ${Math.round(p.progress)}%`);
+          } else if (p.status === 'initiate') {
+            onProgress?.('Downloading local model…');
+          }
+        };
+
+        const pipe: AnyPipeline = await pipeline('text-generation', cfg.repo, {
+          device: 'webgpu',
+          dtype: 'fp16',
+          progress_callback: progress,
+        });
+
+        // Layer 3 — a real generation doubles as warmup and is the only proof
+        // that counts. An adapter that passes requestAdapter() but cannot run
+        // the model fails here → capability 'failed' for the session.
+        onProgress?.('Warming up local model…');
+        await pipe([{ role: 'user', content: 'Reply with the single word OK.' }], {
+          max_new_tokens: 16,
+          do_sample: false,
+        });
+        return pipe;
+      })();
+    }
+
+    try {
+      const pipe = await pipelinePromise;
+      provenRepo = cfg.repo;
+      verdict = 'ready';
+      persist();
+      return pipe;
+    } catch {
+      pipelinePromise = null;
+      verdict = 'failed';
+      persist();
+      return null;
+    }
+  }
+
+  // ── Local attempt ───────────────────────────────────────────────────────
+  async function tryLocal(
+    query: string,
+    onProgress?: ProgressCb,
+    sessionId?: string | null,
+  ): Promise<HybridResult> {
+    try {
+      if (!shouldAttemptLocal(verdict)) return { ok: false };
+      if (verdict === 'unknown') await probe();
+      if (!shouldAttemptLocal(verdict)) return { ok: false };
+
+      const cfg = await fetchConfig();
+      if (!cfg) return { ok: false };
+
+      // ── Pre-fetched context bundle (localhost only, existing endpoints) ──
+      onProgress?.('Fetching your recent transactions…');
+      const start = isoDaysAgo(cfg.bundle.days);
+      const end = isoDaysAgo(0);
+      const [txnRes, weeklyRes] = await Promise.all([
+        fetchImpl(`${base}/api/transactions?start=${start}&end=${end}&limit=${cfg.bundle.limit}`),
+        fetchImpl(`${base}/api/weekly-summary`),
+      ]);
+      if (!txnRes.ok || !weeklyRes.ok) return { ok: false };
+
+      const txnRows = (await txnRes.json()) as BundleTxnInput[];
+      const weeklyRaw = (await weeklyRes.json()) as {
+        thisWeek: { total: number; byCategory?: { category: string }[] };
+        lastWeek: { total: number; byCategory?: { category: string }[] };
+        change: { amount: number; percent: number };
+      };
+      const weekly: BundleWeekly = {
+        thisWeek: {
+          total: Number(weeklyRaw.thisWeek?.total) || 0,
+          topCategory: weeklyRaw.thisWeek?.byCategory?.[0]?.category ?? null,
+        },
+        lastWeek: {
+          total: Number(weeklyRaw.lastWeek?.total) || 0,
+          topCategory: weeklyRaw.lastWeek?.byCategory?.[0]?.category ?? null,
+        },
+        change: {
+          amount: Number(weeklyRaw.change?.amount) || 0,
+          percent: Number(weeklyRaw.change?.percent) || 0,
+        },
+      };
+
+      // Project to the narrow field subset + window/limit, then render with
+      // the size guard for the 0.6B context window.
+      const projected = projectTransactions(txnRows, {
+        days: cfg.bundle.days,
+        limit: cfg.bundle.limit,
+      });
+      const bundle = buildBundle(projected, weekly, cfg.bundle);
+
+      // ── Model + generation ──────────────────────────────────────────────
+      onProgress?.('Loading local model…');
+      const pipe = await loadModel(onProgress);
+      if (!pipe) return { ok: false };
+
+      onProgress?.('Thinking locally…');
+      const messages = [
+        { role: 'system', content: buildLocalSystemPrompt(isoDaysAgo(0)) },
+        { role: 'user', content: buildLocalUserMessage(bundle.text, query) },
+      ];
+      const result = await pipe(messages, { max_new_tokens: 256, do_sample: false });
+
+      // Extract the assistant turn the same way the server-side adapter does.
+      const generated = result?.[0]?.generated_text;
+      let rawOutput = '';
+      if (Array.isArray(generated)) {
+        const last = generated[generated.length - 1];
+        rawOutput =
+          typeof last === 'object' && last !== null && 'content' in last
+            ? String((last as { content: unknown }).content)
+            : String(last ?? '');
+      } else if (typeof generated === 'string') {
+        rawOutput = generated;
+      }
+
+      const classified = classifyLocalOutput(rawOutput);
+      if (classified.kind === 'handoff') {
+        return { ok: false, reason: classified.reason };
+      }
+
+      // ── Record the locally-answered exchange (best-effort) ─────────────
+      // Losing a history row must never become a user-facing error, so this
+      // failure path still returns the answer.
+      let recordedSessionId: string | null = null;
+      try {
+        const body: Record<string, unknown> = { query, answer: classified.text };
+        const sid = sessionId ?? null;
+        if (sid) body.sessionId = sid;
+        const res = await fetchImpl(`${base}/api/chat/local`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { sessionId?: string | null };
+          recordedSessionId = data?.sessionId ?? null;
+        }
+      } catch {
+        // best-effort only
+      }
+
+      return { ok: true, answer: classified.text, sessionId: recordedSessionId, source: 'local' };
+    } catch {
+      // Any unexpected failure silently hands off to the server path.
+      return { ok: false, reason: 'error' };
+    }
+  }
+
+  return {
+    probe,
+    loadModel,
+    tryLocal,
+  };
+}
+
+export type HybridChat = ReturnType<typeof createHybridChat>;
