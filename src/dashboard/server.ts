@@ -5,7 +5,7 @@ import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
   apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
-  apiLocalChatConfig, apiRecordLocalChatMessage,
+  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -529,6 +529,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
 
         if (path === '/api/config/local-chat') {
           return Response.json(apiLocalChatConfig(), { headers });
+        }
+
+        // ── Models panel (Settings) ─────────────────────────────────
+
+        if (path === '/api/models') {
+          return Response.json(await apiModels(), { headers });
         }
 
         if (path === '/api/chat/local' && req.method === 'POST') {
