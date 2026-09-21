@@ -12,6 +12,7 @@ import {
   type ParsedDecision,
 } from '@/demo/core';
 import { AgentTraceSection } from '@/demo/AgentTraceSection';
+import { PrivacyValidatorSection } from '@/demo/PrivacyValidatorSection';
 
 /**
  * Speed Showdown (issue #92) — pick a synthetic sample transaction and watch
@@ -32,6 +33,11 @@ import { AgentTraceSection } from '@/demo/AgentTraceSection';
  * same tab: drop a bank statement and watch Wilson's offline chain — import →
  * embedding lookup → category prediction → reconciliation hint — run as a
  * live four-node flow diagram with real per-step timing.
+ *
+ * Below both sits the Privacy Validator (issue #95): a live provider ledger
+ * proving every model/agent request during the run stayed on localhost (or is
+ * clearly marked simulated), next to the would-be cloud payload for the
+ * picked sample — built from the synthetic fixtures only.
  */
 
 interface SampleRow {
@@ -521,6 +527,9 @@ export function DemoTab() {
             </div>
           )}
         </div>
+
+        {/* ── Privacy Validator (#95): live ledger + would-be cloud payload ── */}
+        <PrivacyValidatorSection selectedSlug={selectedSlug} />
       </div>
     </div>
   );

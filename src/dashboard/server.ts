@@ -20,6 +20,7 @@ import {
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
   apiReviewQueue, apiConfirmReview, apiCorrectReview,
+  apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
 } from './api.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
@@ -779,6 +780,38 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             const result = apiDemoShowdownBrowserTrace(body);
             return Response.json(result, { headers });
           } catch (err) {
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        // ── Demo: Privacy Validator (issue #95) ─────────────────────
+
+        if (path === '/api/demo/privacy/start' && req.method === 'POST') {
+          return Response.json(apiDemoPrivacyStart(activeDb), { headers });
+        }
+
+        if (path === '/api/demo/privacy/ledger') {
+          try {
+            return Response.json(apiDemoPrivacyLedger(activeDb, url.searchParams), { headers });
+          } catch (err) {
+            // Unknown/null run id (e.g. the server restarted and wiped run
+            // state) — the panel re-arms. Writes no DB rows, so no canWrite
+            // gate, exactly like the browser-trace recorder above.
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/privacy/exhibit') {
+          try {
+            return Response.json(apiDemoPrivacyExhibit(url.searchParams), { headers });
+          } catch (err) {
+            // Unknown slug → 400 (fixture slugs only, same guard as the arms).
             return Response.json(
               { error: err instanceof Error ? err.message : String(err) },
               { status: 400, headers },
