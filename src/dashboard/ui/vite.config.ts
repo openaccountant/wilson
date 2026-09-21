@@ -9,11 +9,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Browser-safe statement-import helpers shared with the CLI
+      // (src/tools/import/client-import.ts + parsers it pulls in).
+      '@import-tools': path.resolve(__dirname, '../../tools/import'),
     },
   },
   server: {
     proxy: {
       '/api': 'http://localhost:3141',
+      // Prebuilt hybrid chunk + ort binaries are served by the API server.
+      '/assets': 'http://localhost:3141',
     },
   },
   build: {

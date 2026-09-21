@@ -61,7 +61,7 @@ function NetWorthChart({ data }: { data: NetWorthTrendPoint[] }) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#2a2d37" />
             <XAxis
-              dataKey="month"
+              dataKey="date"
               tick={{ fill: '#71717a', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
@@ -109,7 +109,7 @@ function NetWorthChart({ data }: { data: NetWorthTrendPoint[] }) {
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const isPositive = account.balance >= 0;
+  const isPositive = account.current_balance >= 0;
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4 flex items-center justify-between">
@@ -120,8 +120,8 @@ function AccountCard({ account }: { account: Account }) {
         )}
       </div>
       <div className={`text-sm font-bold font-mono ${isPositive ? 'text-green' : 'text-red'}`}>
-        {account.balance < 0 && '-'}
-        {fmt(account.balance)}
+        {account.current_balance < 0 && '-'}
+        {fmt(account.current_balance)}
       </div>
     </div>
   );
@@ -138,7 +138,7 @@ export function AccountsTab() {
     if (!accounts) return {};
     const groups: Record<string, Account[]> = {};
     for (const acct of accounts) {
-      const key = acct.type || 'Other';
+      const key = acct.account_type;
       if (!groups[key]) groups[key] = [];
       groups[key].push(acct);
     }

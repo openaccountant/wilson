@@ -29,6 +29,14 @@ import {
   GOALS_INDEXES,
   ENTITIES_TABLE,
   ENTITY_ID_COLUMNS,
+  GOAL_TARGET_PERCENT_COLUMNS,
+  CATEGORIZATION_REVIEWS_TABLE,
+  EMBEDDINGS_TABLE,
+  EMBEDDINGS_INDEXES,
+  TRANSACTION_REVISION_COLUMN,
+  MCP_GRANTS_TABLE,
+  MCP_OPERATIONS_TABLE,
+  MCP_APPROVAL_TOKENS_TABLE,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +71,11 @@ export const MIGRATIONS: Migration[] = [
   { version: 19, name: 'create_goals_indexes', up: GOALS_INDEXES },
   { version: 20, name: 'create_entities', up: ENTITIES_TABLE },
   { version: 21, name: 'add_entity_id_columns', up: ENTITY_ID_COLUMNS },
+  { version: 22, name: 'add_goal_target_percent', up: GOAL_TARGET_PERCENT_COLUMNS },
+  { version: 23, name: 'create_embeddings', up: EMBEDDINGS_TABLE + EMBEDDINGS_INDEXES },
+  { version: 24, name: 'create_categorization_reviews', up: CATEGORIZATION_REVIEWS_TABLE },
+  { version: 25, name: 'add_transaction_revision', up: TRANSACTION_REVISION_COLUMN },
+  { version: 26, name: 'create_mcp_tables', up: MCP_GRANTS_TABLE + MCP_OPERATIONS_TABLE + MCP_APPROVAL_TOKENS_TABLE },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────
