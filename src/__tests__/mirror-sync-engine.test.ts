@@ -158,7 +158,7 @@ describe('browser statement imports reach the mirror only via sync', () => {
     expect(await rows(db)).toHaveLength(1);
 
     // The browser statement importer writes to the SERVER db only.
-    const imported = apiImport(serverDb, {
+    const imported = await apiImport(serverDb, {
       filename: 'browser.csv',
       transactions: [
         { date: '2026-03-02', description: 'Imported row', amount: -7.5, external_id: 'ext-imported-1' },

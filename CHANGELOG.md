@@ -21,6 +21,8 @@
 
 - feat: per-response provenance indicator in both dashboard chat UIs — each live answer is badged `answered locally · on-device`, `server fallback`, or a neutral `server agent` when the hybrid layer is absent; derived at send time from the exchange's actual path (never from message text), not persisted, so history-loaded messages show no badge (#69)
 
+- feat: embed-on-write — every import (CSV/OFX/QIF, Monarch, Firefly, dashboard /api/import), sync (Plaid insert/update/remove, Coinbase), description edit (agent tool + dashboard PATCH), and delete keeps the semantic index fresh immediately, so search reflects changes without ever running `wilson --index`; embedding failures degrade to a logged warning and leave rows for the next backfill instead of failing the import or edit, and `--index` now also sweeps orphaned vectors whose transaction is gone (#63)
+
 ### Other
 
 - Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)

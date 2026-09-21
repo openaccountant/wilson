@@ -445,7 +445,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
             const body = await req.json() as Record<string, unknown>;
-            return Response.json(apiUpdateTransaction(activeDb, id, body), { headers });
+            return Response.json(await apiUpdateTransaction(activeDb, id, body), { headers });
           }
           if (req.method === 'DELETE') {
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
@@ -503,7 +503,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const body = await req.json() as ImportRequestBody;
-          const result = apiImport(activeDb, body);
+          const result = await apiImport(activeDb, body);
           return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
         }
 

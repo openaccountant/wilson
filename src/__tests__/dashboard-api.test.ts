@@ -155,13 +155,13 @@ describe('apiChatSessionHistory', () => {
 });
 
 describe('apiUpdateTransaction', () => {
-  test('updates fields and returns success', () => {
+  test('updates fields and returns success', async () => {
     const db = createTestDb();
     seedTestData(db);
     // Get first transaction ID
     const rows = db.prepare('SELECT id FROM transactions LIMIT 1').all() as { id: number }[];
     const id = rows[0].id;
-    const result = apiUpdateTransaction(db, id, { category: 'Updated Category' });
+    const result = await apiUpdateTransaction(db, id, { category: 'Updated Category' });
     expect(result.success).toBe(true);
     expect(result.id).toBe(id);
     // Verify the update persisted

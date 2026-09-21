@@ -70,6 +70,7 @@ import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
+import { embedTransactionIds } from '../utils/embed-on-write.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 import {
@@ -164,8 +165,13 @@ export function apiTransactions(db: Database, params: URLSearchParams) {
   return txns.slice(0, limit);
 }
 
-export function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
+export async function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
   const success = updateTransaction(db, id, updates);
+  // Description is part of the embed text — refresh the stored vector.
+  // Never fails the edit (degrade, never error).
+  if (success && updates.description !== undefined) {
+    await embedTransactionIds(db, [id]);
+  }
   return { success, id };
 }
 
@@ -982,7 +988,7 @@ function failedImport(error: string): ImportResult {
  * and optional account auto-link. The server trusts the parsed rows — it never
  * re-parses raw file content.
  */
-export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
+export async function apiImport(db: Database, body: ImportRequestBody): Promise<ImportResult> {
   // 1. Validate the payload
   if (!body.filename || typeof body.filename !== 'string' || body.filename.trim() === '') {
     return failedImport('filename is required');
@@ -1071,7 +1077,10 @@ export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
     authorized_date: t.authorized_date,
     account_last4: t.account_last4,
   }));
-  const count = insertTransactions(db, txns);
+  const { count, ids } = insertTransactions(db, txns);
+
+  // Embed-on-write: index the new rows immediately (never fails the import).
+  await embedTransactionIds(db, ids);
 
   // Date range (mirrors CLI step 9: lexicographic sort works for YYYY-MM-DD)
   const dates = newRows.map((t) => t.date).sort();

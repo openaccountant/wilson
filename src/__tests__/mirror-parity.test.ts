@@ -76,20 +76,21 @@ serverDb.prepare(`
   )
 `).run({ accountId, entityId: bizEntityId });
 
-// A statement imported through the browser importer (POST /api/import path) —
-// the mirror must see these rows on its next sync pull, never via a direct write.
-apiImport(serverDb, {
-  filename: 'browser-statement.csv',
-  bank: 'Browser Bank',
-  transactions: [
-    { date: '2026-03-10', description: 'BROWSER IMPORT A', amount: -12.0, external_id: 'ext-browser-1' },
-    { date: '2026-03-11', description: 'BROWSER IMPORT B', amount: -34.5, external_id: 'ext-browser-2' },
-  ],
-});
 
 // The mirror is seeded in beforeAll, exactly the way the sync engine does it:
 // from the server's own unbounded apiTransactions/apiEntities responses.
 beforeAll(async () => {
+  // A statement imported through the browser importer (POST /api/import path) —
+  // the mirror must see these rows on its next sync pull, never via a direct write.
+  await apiImport(serverDb, {
+    filename: 'browser-statement.csv',
+    bank: 'Browser Bank',
+    transactions: [
+      { date: '2026-03-10', description: 'BROWSER IMPORT A', amount: -12.0, external_id: 'ext-browser-1' },
+      { date: '2026-03-11', description: 'BROWSER IMPORT B', amount: -34.5, external_id: 'ext-browser-2' },
+    ],
+  });
+
   // The mirror store carries its own schema (server DDL constants + the
   // entity_id/sync_key ALTERs) — a bare database, not a migrated server db.
   mirrorBinding = new MirrorTestBinding(new Database(':memory:'));

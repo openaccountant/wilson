@@ -100,7 +100,7 @@ export interface TraceDeps {
   /** Defaults to (texts) => embedTexts(texts). Inject the fake embedder in tests. */
   embed?: EmbedFn;
   /** Defaults to apiImport. Injectable for tests. */
-  importFn?: (db: Database, body: ImportRequestBody) => ImportResult;
+  importFn?: (db: Database, body: ImportRequestBody) => ImportResult | Promise<ImportResult>;
 }
 
 /** One parsed statement row as sent by the browser substrate (client-import). */
@@ -236,7 +236,7 @@ export async function importStep(
       fileHash: input.fileHash,
       transactions: input.transactions.map(toImportRow),
     };
-    const result = (deps.importFn ?? apiImport)(deps.db, body);
+    const result = await (deps.importFn ?? apiImport)(deps.db, body);
 
     if (result.status === 'failed') {
       return finish({
