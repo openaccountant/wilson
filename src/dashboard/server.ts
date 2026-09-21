@@ -7,6 +7,7 @@ import {
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
   type SetTaskModelBody,
+  apiDemoShowdownSamples, apiDemoShowdownCloud, apiDemoShowdownLocal, apiDemoShowdownBrowserTrace,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -666,6 +667,54 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             return Response.json(result, { status: 400, headers });
           }
           return Response.json(result, { headers });
+        }
+
+        // ── Demo: Speed Showdown (issue #92) ────────────────────────
+
+        if (path === '/api/demo/showdown/samples') {
+          return Response.json(apiDemoShowdownSamples(), { headers });
+        }
+
+        if (path === '/api/demo/showdown/cloud' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = await apiDemoShowdownCloud(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            // Bad input only (missing/unknown slug). Arm failures resolve
+            // above as { ok:false, error } with HTTP 200 so the demo degrades
+            // inline instead of showing a broken panel.
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/showdown/local' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = await apiDemoShowdownLocal(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/showdown/browser-trace' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = apiDemoShowdownBrowserTrace(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
         }
 
         // ── Interactions (Training Data) ─────────────────────────────

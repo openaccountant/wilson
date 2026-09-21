@@ -106,6 +106,8 @@ export function mockCallLlm(responses: Partial<LlmResult>[]): () => Promise<LlmR
       response: res.response ?? { content: '', toolCalls: [] },
       usage: res.usage,
       interactionId: res.interactionId ?? null,
+      traceId: res.traceId ?? 'mock-trace',
+      durationMs: res.durationMs ?? 0,
     };
   };
 }

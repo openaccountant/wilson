@@ -62,6 +62,14 @@ import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
+import {
+  getShowdownSamples,
+  runShowdownCloudArm,
+  runShowdownLocalServerArm,
+  recordBrowserLocalTrace,
+  type BrowserTraceBody,
+} from '../demo/showdown.js';
+import { getSampleBySlug } from '../demo/samples.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -593,6 +601,49 @@ export function apiRecordLocalChatMessage(
   insertChatMessage(db, query, answer, null, sessionId);
   logger.info(`Dashboard local chat recorded`, { sessionId, queryChars: query.length });
   return { success: true, sessionId };
+}
+
+// ── Demo: Speed Showdown (issue #92) ────────────────────────────────────────
+
+/** GET /api/demo/showdown/samples — fixtures + prompts + model config. */
+export function apiDemoShowdownSamples() {
+  return getShowdownSamples();
+}
+
+export interface ShowdownSlugBody {
+  slug?: unknown;
+}
+
+function requireDemoSlug(body: ShowdownSlugBody): string {
+  const slug = typeof body?.slug === 'string' ? body.slug.trim() : '';
+  if (!slug) {
+    throw new Error('slug is required');
+  }
+  // Throws on unknown slug → the route answers 400. This is the structural
+  // synthetic-only guard: only in-repo fixture slugs reach the arms.
+  getSampleBySlug(slug);
+  return slug;
+}
+
+/**
+ * POST /api/demo/showdown/cloud — cloud arm for one sample.
+ * Bad input (missing/unknown slug) throws → 400; arm-internal failures
+ * resolve to { ok:false, error } at HTTP 200 so the UI degrades inline.
+ */
+export async function apiDemoShowdownCloud(body: ShowdownSlugBody) {
+  const slug = requireDemoSlug(body);
+  return runShowdownCloudArm(slug);
+}
+
+/** POST /api/demo/showdown/local — server-side local arm. Same posture. */
+export async function apiDemoShowdownLocal(body: ShowdownSlugBody) {
+  const slug = requireDemoSlug(body);
+  return runShowdownLocalServerArm(slug);
+}
+
+/** POST /api/demo/showdown/browser-trace — record the browser arm's measured time. */
+export function apiDemoShowdownBrowserTrace(body: BrowserTraceBody) {
+  return recordBrowserLocalTrace(body);
 }
 
 // ── Traces ──────────────────────────────────────────────────────────────────

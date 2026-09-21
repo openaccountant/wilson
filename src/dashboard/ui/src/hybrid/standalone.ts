@@ -10,6 +10,9 @@
 
 import { createHybridChat, type HybridOpts, type HybridChat } from './client.js';
 import type { HybridResult } from './core.js';
+import type { CategorizeSampleResult, CategorizeSampleOpts } from './client.js';
+
+export type { CategorizeSampleResult, CategorizeSampleOpts } from './client.js';
 
 export interface WilsonHybridChatGlobal {
   /** Configure (call once with the app's base URL before first use). */
@@ -21,6 +24,8 @@ export interface WilsonHybridChatGlobal {
     onProgress?: (label: string) => void,
     sessionId?: string | null,
   ): Promise<HybridResult>;
+  /** Speed Showdown browser arm: single-row categorization on the GPU. */
+  categorizeSample(opts: CategorizeSampleOpts): Promise<CategorizeSampleResult>;
 }
 
 let chat: HybridChat | null = null;
@@ -50,6 +55,10 @@ export function tryLocal(
   return get().tryLocal(query, onProgress, sessionId);
 }
 
+export function categorizeSample(opts: CategorizeSampleOpts): Promise<CategorizeSampleResult> {
+  return get().categorizeSample(opts);
+}
+
 declare global {
   interface Window {
     WilsonHybridChat?: WilsonHybridChatGlobal;
@@ -57,5 +66,5 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  window.WilsonHybridChat = { init, probe, loadModel, tryLocal };
+  window.WilsonHybridChat = { init, probe, loadModel, tryLocal, categorizeSample };
 }

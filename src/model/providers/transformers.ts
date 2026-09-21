@@ -113,6 +113,23 @@ async function getOrCreatePipeline(modelName: string) {
 }
 
 /**
+ * Warm the transformers pipeline for `modelName` and measure the load
+ * separately from any generation call.
+ *
+ * On a cold machine this includes the first-run HuggingFace Hub download —
+ * that is honest, and it is exactly why the Speed Showdown renders model load
+ * time on its own line, never folded into the decision timer.
+ */
+export async function warmTransformersPipeline(
+  modelName: string,
+): Promise<{ loadMs: number; loadedFresh: boolean }> {
+  const loadStart = Date.now();
+  const loadedFresh = !pipelineCache.has(modelName);
+  await getOrCreatePipeline(modelName);
+  return { loadMs: Date.now() - loadStart, loadedFresh };
+}
+
+/**
  * A complete 110-byte ONNX model: one MatMul over two 1x1 float32 inputs.
  * Small enough to build a session and run it in well under a second, and it
  * forces the WebGPU execution provider to actually reach the GPU — registering
@@ -238,7 +255,7 @@ export class TransformersAdapter implements ProviderAdapter {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await pipe(messages as any, {
-      max_new_tokens: 512,
+      max_new_tokens: options.maxTokens ?? 512,
       do_sample: false,
     });
 

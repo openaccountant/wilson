@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authedFetch, getBaseUrl } from '@/api';
 import type { HybridResult } from '@/hybrid/core';
-import type { WilsonHybridChatGlobal } from '@/hybrid/standalone';
+import type {
+  WilsonHybridChatGlobal,
+  CategorizeSampleResult,
+  CategorizeSampleOpts,
+} from '@/hybrid/standalone';
 
 /**
  * React binding for the prebuilt hybrid chat chunk (/assets/hybrid-chat.js).
@@ -39,6 +43,8 @@ export interface UseHybridChatResult {
     onProgress?: (label: string) => void,
     sessionId?: string | null,
   ): Promise<HybridResult>;
+  /** Speed Showdown browser arm; resolves {ok:false, reason:'unavailable'} without a chunk. */
+  categorizeSample(opts: CategorizeSampleOpts): Promise<CategorizeSampleResult>;
   /** Whether the hybrid chunk itself is loadable (not GPU capability). */
   status: ChunkStatus;
 }
@@ -82,5 +88,25 @@ export function useHybridChat(): UseHybridChatResult {
     [ensure],
   );
 
-  return { tryLocal, status };
+  const categorizeSample = useCallback(
+    async (opts: CategorizeSampleOpts): Promise<CategorizeSampleResult> => {
+      const hybrid = await ensure();
+      if (!hybrid) {
+        return {
+          ok: false,
+          model: '',
+          raw: '',
+          decision: null,
+          decisionMs: 0,
+          loadMs: 0,
+          loadFresh: false,
+          reason: 'unavailable',
+        };
+      }
+      return hybrid.categorizeSample(opts);
+    },
+    [ensure],
+  );
+
+  return { tryLocal, categorizeSample, status };
 }
