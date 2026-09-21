@@ -5,14 +5,33 @@ import { Database } from '../db/compat-sqlite.js';
 import { runMigrations } from '../db/migrations.js';
 import { insertTransactions, setBudget } from '../db/queries.js';
 import { setActiveProfilePaths, getActiveProfile } from '../profile/index.js';
+import { setEmbedOnWriteEmbedder } from '../utils/embed-on-write.js';
+import { fakeEmbedText } from './fake-embedder.js';
 import type { LlmResponse, ToolDef } from '../model/types.js';
 import type { LlmResult } from '../model/llm.js';
+
+/**
+ * Embed-on-write hooks fire on every import/sync/edit test now. Install the
+ * deterministic fake embedder once per process so those hooks get instant,
+ * model-free vectors with zero churn in existing test files. Tests that need
+ * to observe embed calls set their own recording fake
+ * (`setEmbedOnWriteEmbedder(createFakeEmbedder().embed)`) — never reset to
+ * null, which would leak the real engine into the rest of the suite.
+ */
+let embedOnWriteEmbedderInstalled = false;
+
+function installDefaultEmbedOnWriteEmbedder(): void {
+  if (embedOnWriteEmbedderInstalled) return;
+  embedOnWriteEmbedderInstalled = true;
+  setEmbedOnWriteEmbedder(async (texts) => texts.map(fakeEmbedText));
+}
 
 /**
  * Ensure a test profile is set so modules that call getActiveProfile() don't throw.
  * Uses a temp directory. Safe to call multiple times (idempotent).
  */
 export function ensureTestProfile(): void {
+  installDefaultEmbedOnWriteEmbedder();
   try {
     getActiveProfile();
   } catch {

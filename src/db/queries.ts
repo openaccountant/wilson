@@ -1,5 +1,6 @@
 import type { Database } from './compat-sqlite.js';
 import { buildTransactionWhere, type TransactionFilters } from './transaction-where.js';
+import { deleteEmbeddings } from './embedding-queries.js';
 
 // The filters interface moved to transaction-where.ts (shared with the offline
 // dashboard mirror); re-exported here so existing imports keep working.
@@ -84,11 +85,13 @@ export interface ImportRow {
 
 /**
  * Bulk-insert transactions using a prepared statement inside a transaction.
+ * Returns the row count and the exact inserted ids (in input order) so callers
+ * can run embed-on-write hooks without re-deriving ids by matching.
  */
 export function insertTransactions(
   db: Database,
   txns: TransactionInsert[]
-): number {
+): { count: number; ids: number[] } {
   const stmt = db.prepare(`
     INSERT INTO transactions (date, description, amount, category, category_confidence,
       source_file, bank, account_last4, is_recurring, tags, notes,
@@ -99,9 +102,9 @@ export function insertTransactions(
   `);
 
   const insertMany = db.transaction((items: TransactionInsert[]) => {
-    let count = 0;
+    const ids: number[] = [];
     for (const txn of items) {
-      stmt.run({
+      const result = stmt.run({
         date: txn.date,
         description: txn.description,
         amount: txn.amount,
@@ -121,12 +124,13 @@ export function insertTransactions(
         authorized_date: txn.authorized_date ?? null,
         account_name: txn.account_name ?? null,
       });
-      count++;
+      ids.push((result as { lastInsertRowid: number }).lastInsertRowid);
     }
-    return count;
+    return ids;
   });
 
-  return insertMany(txns);
+  const ids = insertMany(txns);
+  return { count: ids.length, ids };
 }
 
 /**
@@ -825,7 +829,8 @@ export function updateTransaction(
 }
 
 /**
- * Delete a transaction by ID.
+ * Delete a transaction by ID. On success the transaction's semantic vectors
+ * (all model variants) are removed too, so the index never holds ghosts.
  *
  * `expectedRevision`, when provided, gates the delete on the row's current
  * `revision` (see updateTransaction above). Not currently exercised by any
@@ -841,7 +846,11 @@ export function deleteTransaction(db: Database, id: number, expectedRevision?: n
     params.expectedRevision = expectedRevision;
   }
   const result = db.prepare(`DELETE FROM transactions WHERE ${where}`).run(params);
-  return (result as { changes: number }).changes > 0;
+  const deleted = (result as { changes: number }).changes > 0;
+  if (deleted) {
+    deleteEmbeddings(db, 'transaction', id);
+  }
+  return deleted;
 }
 
 /**

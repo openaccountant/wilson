@@ -114,7 +114,8 @@ export function upsertEmbeddings(db: Database, rows: EmbeddingUpsert[]): number 
 
 /**
  * Delete every model-variant embedding for one source row.
- * (Transaction-deletion call sites come in a later slice; the primitive ships now.)
+ * (Called from deleteTransaction so a deleted transaction never leaves a
+ * ghost vector behind.)
  * Returns the number of rows removed.
  */
 export function deleteEmbeddings(
@@ -126,6 +127,22 @@ export function deleteEmbeddings(
     DELETE FROM embeddings
     WHERE source_type = @sourceType AND source_id = @sourceId
   `).run({ sourceType, sourceId });
+  return (result as { changes: number }).changes;
+}
+
+/**
+ * Delete transaction embeddings whose transaction row no longer exists.
+ * Structural safety net for the delete-on-write hook: even if a future delete
+ * site misses its vector cleanup, the next `--index` run reclaims the stale
+ * vectors so the indexed-vs-total counts stay truthful.
+ * Returns the number of rows removed.
+ */
+export function deleteOrphanedTransactionEmbeddings(db: Database): number {
+  const result = db.prepare(`
+    DELETE FROM embeddings
+    WHERE source_type = 'transaction'
+      AND source_id NOT IN (SELECT id FROM transactions)
+  `).run();
   return (result as { changes: number }).changes;
 }
 

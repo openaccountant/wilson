@@ -20,9 +20,12 @@ mock.module('../db/database.js', () => ({
   initDatabase: () => testDb,
 }));
 
-// Mock Plaid modules
+// Mock Plaid modules. The store factory must carry every export plaid-sync.js
+// named-imports (updatePlaidCursor included) — a missing one breaks the named
+// import link for any later first-time instantiation of the real module.
 mock.module('../plaid/store.js', () => ({
   getPlaidItems: () => [],
+  updatePlaidCursor: () => {},
   updatePlaidItemError: () => {},
   clearPlaidItemError: () => {},
   isReauthRequired: () => false,
