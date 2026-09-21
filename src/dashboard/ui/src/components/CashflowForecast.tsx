@@ -1,7 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApi } from '@/hooks/useApi';
-import { runCashflowForecast } from '@/lib/cashflowForecast';
+import {
+  runCashflowForecast,
+  WHATIF_MIN_PCT,
+  WHATIF_MAX_PCT,
+  WHATIF_STEP,
+} from '@/lib/cashflowForecast';
 import type { MonthlyCashflowRow, Account } from '@/types';
 
 // Liquid asset subtypes from the account taxonomy
@@ -63,6 +68,18 @@ function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
+/** Signed what-if label: '+25%', '-25%', '0%'. */
+function pctLabel(pct: number): string {
+  if (pct === 100) return '0%';
+  return pct > 100 ? `+${pct - 100}%` : `-${100 - pct}%`;
+}
+
+const HORIZON_OPTIONS = [
+  { id: 6, label: '6m' },
+  { id: 12, label: '12m' },
+  { id: 24, label: '24m' },
+] as const;
+
 export function CashflowForecast() {
   // No useFilterParams(): the projection starts from now, so the header's
   // global month/account filters don't apply (same posture as the net-worth
@@ -80,12 +97,27 @@ export function CashflowForecast() {
     [accounts],
   );
 
+  // What-if controls: pure client state — adjusting them re-runs the already-
+  // fetched history through the seeded engine in place (no refetch ever
+  // happens; the data deps of the memo below are unchanged).
+  const [horizon, setHorizon] = useState(12);
+  const [incomePct, setIncomePct] = useState(100); // percent, 50..150
+  const [expensePct, setExpensePct] = useState(100);
+  const atBaseline = horizon === 12 && incomePct === 100 && expensePct === 100;
+
   const forecast = useMemo(
     () =>
       history
-        ? runCashflowForecast({ history, startBalance, startMonth: currentMonth() })
+        ? runCashflowForecast({
+            history,
+            startBalance,
+            startMonth: currentMonth(),
+            horizonMonths: horizon,
+            incomeScale: incomePct / 100,
+            expenseScale: expensePct / 100,
+          })
         : null,
-    [history, startBalance],
+    [history, startBalance, horizon, incomePct, expensePct],
   );
 
   if (loading) {
@@ -128,9 +160,88 @@ export function CashflowForecast() {
     `Median cash in ${last.label}: ${fmtUsd(last.p50)}` +
     (lowIdx >= 0 ? ` — pessimistic path runs low around ${forecast.points[lowIdx].label}` : '');
 
+  // When assumptions are off-baseline, say so on the takeaway line so the
+  // numbers stay self-describing.
+  const adjustments: string[] = [];
+  if (incomePct !== 100)
+    adjustments.push(`income ${incomePct > 100 ? '+' : '-'}${Math.abs(incomePct - 100)}%`);
+  if (expensePct !== 100)
+    adjustments.push(`expenses ${expensePct > 100 ? '+' : '-'}${Math.abs(expensePct - 100)}%`);
+  const takeawayFull =
+    adjustments.length > 0 ? `${takeaway} · assuming ${adjustments.join(', ')}` : takeaway;
+
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4">
       <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-2">Cash Forecast</h3>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-0.5 bg-surface border border-border rounded-md p-0.5">
+          {HORIZON_OPTIONS.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              aria-pressed={horizon === opt.id}
+              onClick={() => setHorizon(opt.id)}
+              className={`px-2 py-1 text-xs font-medium rounded cursor-pointer border-none transition-colors ${
+                horizon === opt.id
+                  ? 'bg-green/20 text-green'
+                  : 'bg-transparent text-text-muted hover:text-text'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setHorizon(12);
+            setIncomePct(100);
+            setExpensePct(100);
+          }}
+          disabled={atBaseline}
+          className="bg-transparent text-text-muted border border-border px-2 py-1 text-xs rounded cursor-pointer hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Reset
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 mb-1">
+        <div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-text-muted">Income</span>
+            <span className={incomePct !== 100 ? 'text-green' : 'text-text-muted'}>
+              {pctLabel(incomePct)}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={WHATIF_MIN_PCT}
+            max={WHATIF_MAX_PCT}
+            step={WHATIF_STEP}
+            value={incomePct}
+            onChange={(e) => setIncomePct(Number(e.target.value))}
+            className="w-full accent-green cursor-pointer"
+            aria-label="Assumed monthly income, percent of history"
+          />
+        </div>
+        <div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-text-muted">Expenses</span>
+            <span className={expensePct !== 100 ? 'text-green' : 'text-text-muted'}>
+              {pctLabel(expensePct)}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={WHATIF_MIN_PCT}
+            max={WHATIF_MAX_PCT}
+            step={WHATIF_STEP}
+            value={expensePct}
+            onChange={(e) => setExpensePct(Number(e.target.value))}
+            className="w-full accent-green cursor-pointer"
+            aria-label="Assumed monthly expense, percent of history"
+          />
+        </div>
+      </div>
       <div className="h-[160px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
@@ -161,7 +272,7 @@ export function CashflowForecast() {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <p className="text-sm text-text mt-2">{takeaway}</p>
+      <p className="text-sm text-text mt-2">{takeawayFull}</p>
       <p className="text-xs text-text-muted mt-2">
         Transfers between accounts and debt payments aren&apos;t modeled.
       </p>
