@@ -274,6 +274,21 @@ export interface DateRange {
   endDate: string;
 }
 
+// Matches GET /api/transactions/search response
+export interface SemanticSearchMatch extends Transaction {
+  /** Cosine similarity in [-1, 1] (both vectors L2-normalized). */
+  score: number;
+}
+
+export interface SemanticSearchResponse {
+  results: SemanticSearchMatch[];
+  /** Transactions that have an embedding for the model. */
+  indexed: number;
+  /** Total transaction count. */
+  total: number;
+  model: string;
+}
+
 export interface Entity {
   id: number;
   name: string;

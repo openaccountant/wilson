@@ -1,10 +1,39 @@
 # Changelog
 
+## [v0.6.0] — 2026-09-21
+
+### Features
+
+- feat: dashboard Settings Models panel — per-task model rows with local/server badges and tool call-type tagging (#88) (#104) (c39981c)
+
+### Fixes
+
+- fix: align dashboard UI account types with the real wire format so Accounts and Liabilities render real balances (#79) (#103) (83fa52b)
+
+### Other
+
+- Show model confidence badge in dashboard transaction list Category cell (#109) (ccb545c)
+- Add local-first WebGPU hybrid chat to the dashboard with silent server fallback (#68) (#98) (d29e69e)
+- Add dashboard POST /api/import endpoint with CLI-shared external_id dedup and imports ledger (#96) (35b0783)
+- Validate tool-call arguments against each tool's zod schema in defineTool (#66) (#90) (c840e7f)
+- Add local embedding engine, embeddings store, and batched backfill (#82) (64a4763)
+- Validate structured LLM output in callLlm with one repair re-prompt and typed rejection (#65) (#77) (72d40eb)
+- Add percentage-of-income targets to goal_manage financial goals (#46) (7b34ab3)
+- Route SPF roster through gertie's Ollama Cloud (ebe2dd6)
+- Add SPF quality/protected_files/watch config (4a3d645)
+
+
 ## [Unreleased]
 
 ### Features
 
 - feat: client-side Monte Carlo cash forecast card on Overview, beside Savings Rate — a new read-only `GET /api/cashflow/monthly` series classified exactly like the P&L (transfers between accounts excluded so card payments aren't double-counted, complete calendar months only so the partial current month never skews sampling), a seeded in-browser bootstrap of 500 twelve-month paths over the user's own history (mulberry32 PRNG, deterministic under test), a recharts fan chart of translucent p10–p90 bands around the median liquid-cash line starting from checking/savings/cash balances, a plain-language takeaway naming the median cash at the horizon (and roughly when the pessimistic path runs low, if it does), and an empty state until a couple of months of history exist (#80)
+
+- feat: below-threshold AI categorization suggestions are routed to a persistent review queue instead of being auto-applied — the categorize tool now applies a suggestion only at or above the confidence threshold (default 0.7, per-profile via "categorizationConfidenceThreshold"); lower-confidence suggestions leave the transaction uncategorized and land as pending rows in the new categorization_reviews table (migration v24 also backfills historical low-confidence model categorizations into the queue while keeping their applied category) (#84)
+
+- feat: dashboard statement importer — the Transactions tab gains a drag-and-drop/file-picker importer that reads CSV/OFX/QIF statements entirely in the browser (shared parse + WebCrypto-hash modules bundle with the UI via the @import-tools alias), previews detected bank/format, row count, date range and first rows in a dialog, and only POSTs to /api/import on explicit confirm; commit is admin-gated following the settings tab's auth-status pattern and re-imports surface the duplicates-skipped result (#72)
+
+- feat: semantic search in the dashboard Transactions view — a new `GET /api/transactions/search` embeds the query with the local on-device engine, prefilters candidates with the same SQL filters the transactions endpoint accepts (date range, account, category, entity), ranks by dot product, and returns full transaction rows with similarity scores plus indexed/total coverage counts; the Transactions tab keeps today's instant substring matching whenever it produces results and only falls back to semantic matches on a zero-match query (score chips, `semantic` marker, and a one-line hint naming `wilson --index` when vectors lag the transaction count); query and transaction text are embedded in-process — nothing but the one-time model download ever leaves the machine (#62)
 
 - feat: dashboard Settings "Models" panel — a read endpoint (`GET /api/models`) and Settings section showing which model handles each AI task (chat, categorization, entity classification) with friendly model names, "runs on this device" vs "runs on a cloud server" badges derived from a new `isLocal` flag on the provider registry, the server-side WebGPU capability probe, and an embeddings row marked "Not in use — no embeddings task in this build"; categorization and entity-classification LLM calls are also tagged with their own call types so the Training per-task view groups them truthfully instead of lumping them into `standalone` (#88)
 
