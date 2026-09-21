@@ -47,10 +47,18 @@ export interface UseHybridChatResult {
   categorizeSample(opts: CategorizeSampleOpts): Promise<CategorizeSampleResult>;
   /** Whether the hybrid chunk itself is loadable (not GPU capability). */
   status: ChunkStatus;
+  /**
+   * Always-current `status`, readable inside send closures where the React
+   * `status` state can be stale. Updated the moment the chunk load resolves.
+   */
+  getStatus(): ChunkStatus;
 }
 
 export function useHybridChat(): UseHybridChatResult {
   const [status, setStatus] = useState<ChunkStatus>('unknown');
+  // Ref mirror of `status`: React state is stale inside handleSend closures,
+  // so provenance derivation must read the ref via getStatus() instead.
+  const statusRef = useRef<ChunkStatus>('unknown');
   // The chunk is configured exactly once per loaded instance — init() replaces
   // the internal client, which would drop an already-loaded model.
   const initedRef = useRef<WilsonHybridChatGlobal | null>(null);
@@ -62,6 +70,9 @@ export function useHybridChat(): UseHybridChatResult {
       hybrid.init({ baseUrl: base, fetchImpl: authedFetch });
       initedRef.current = hybrid;
     }
+    // Keep the ref accurate the moment any tryLocal resolves, independent of
+    // re-renders.
+    statusRef.current = hybrid ? 'available' : 'unavailable';
     return hybrid;
   }, []);
 
@@ -108,5 +119,7 @@ export function useHybridChat(): UseHybridChatResult {
     [ensure],
   );
 
-  return { tryLocal, categorizeSample, status };
+  const getStatus = useCallback((): ChunkStatus => statusRef.current, []);
+
+  return { tryLocal, categorizeSample, status, getStatus };
 }
