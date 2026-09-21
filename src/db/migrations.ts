@@ -37,6 +37,7 @@ import {
   MCP_GRANTS_TABLE,
   MCP_OPERATIONS_TABLE,
   MCP_APPROVAL_TOKENS_TABLE,
+  MCP_OPERATION_SUMMARY_COLUMN,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 24, name: 'create_categorization_reviews', up: CATEGORIZATION_REVIEWS_TABLE },
   { version: 25, name: 'add_transaction_revision', up: TRANSACTION_REVISION_COLUMN },
   { version: 26, name: 'create_mcp_tables', up: MCP_GRANTS_TABLE + MCP_OPERATIONS_TABLE + MCP_APPROVAL_TOKENS_TABLE },
+  { version: 27, name: 'add_mcp_operation_summary', up: MCP_OPERATION_SUMMARY_COLUMN },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

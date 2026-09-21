@@ -14,7 +14,8 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@import-tools/*": ["../../tools/import/*"]
+      "@import-tools/*": ["../../tools/import/*"],
+      "@webmcp-session": ["../../dashboard/webmcp-session"]
     },
     "baseUrl": "."
   },

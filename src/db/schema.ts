@@ -543,6 +543,17 @@ CREATE TABLE IF NOT EXISTS mcp_approval_tokens (
 CREATE INDEX IF NOT EXISTS idx_mcp_approval_tokens_operation ON mcp_approval_tokens(operation_id);
 `;
 
+// ── MCP Operation Summary Column (migration v27) ────────────────────────────
+// Server-computed one-liner from prepareMutation (src/mcp/tool-catalog.ts)
+// naming the exact change a prepared mutation would make — which transaction,
+// from/to — so the confirmation card carries semantic context for a financial
+// mutation, not just a key/value field delta. Same ALTER-only convention as
+// TRANSACTION_REVISION_COLUMN above — never add this to MCP_OPERATIONS_TABLE.
+
+export const MCP_OPERATION_SUMMARY_COLUMN = `
+ALTER TABLE mcp_operations ADD COLUMN summary TEXT;
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

@@ -113,6 +113,10 @@ describe('WebMCP bridge acceptance matrix', () => {
     expect(prepared.body.operation.status).toBe('pending');
     expect(prepared.body.operation.before_json).toContain('null');
     expect(prepared.body.operation.after_json).toContain('confirmed via test');
+    // The pending operation carries the server-computed summary the
+    // confirmation card renders — semantic context, not just a field delta.
+    expect(typeof prepared.body.operation.summary).toBe('string');
+    expect(prepared.body.operation.summary).toContain(`#${txnId}`);
 
     const approved = await j(base, `/api/mcp/operations/${prepared.body.operation.id}/approve`, { method: 'POST' });
     expect(approved.body.outcome).toBe('committed');

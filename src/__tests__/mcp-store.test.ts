@@ -162,6 +162,35 @@ describe('mcp operations + approval tokens', () => {
     expect(listPendingOperations(db).map((o) => o.id)).toContain(op.id);
   });
 
+  test('createOperation persists the server-computed summary (what the confirmation card names the change by)', () => {
+    const db = createTestDb();
+    const op = createOperation(db, {
+      source: 'webmcp',
+      grantId: 'grant-1',
+      toolName: 'categorize_transaction',
+      args: { id: 1, category: 'Home' },
+      before: { category: null },
+      after: { category: 'Home' },
+      summary: 'Categorize "MAPLE AVE APARTMENTS RENT" (2026-08-01) as "Home"',
+      transactionId: 1,
+      revisionAtPrepare: 1,
+      profile: 'default',
+      origin: 'http://localhost:3141',
+      sessionGeneration: 'tab-a',
+      userId: 1,
+      role: 'admin',
+    });
+    expect(op.summary).toBe('Categorize "MAPLE AVE APARTMENTS RENT" (2026-08-01) as "Home"');
+    // Chat-shaped ops pass no summary — it persists as null, not a crash.
+    const bare = createOperation(db, {
+      source: 'chat', grantId: null, toolName: 'categorize', args: {},
+      before: null, after: null, transactionId: null, revisionAtPrepare: null,
+      profile: 'default', origin: 'dashboard-chat', sessionGeneration: 'chat',
+      userId: null, role: 'admin',
+    });
+    expect(bare.summary).toBeNull();
+  });
+
   test('marking an operation resolved removes it from the pending queue', () => {
     const db = createTestDb();
     const op = makeOperation(db);

@@ -27,6 +27,8 @@
 
 - feat: offline overview — the eight approved overview cards (heatmap, streak, weekly summary, budget countdown, savings, donut, P&L, budget bars) compute from the sync-fed local mirror without a server; the mirror now also carries budgets + categories, and out-of-scope cards (alerts, net worth, cash forecast) show an explicit unavailable-offline state (#76)
 
+- feat: auto-book through the visible confirmation gate — the Demo tab's agent trace gains an explicit "Auto-book this" action on a predicted transaction; tapping it requires opting the tab's agent session in via the Agent access panel (zero tools exposed by default, revocable any time), then a confirmation card names the exact change (which transaction, from/to category, server-computed delta) and the booking write — the same updateTransaction path as the transactions editor — lands only on explicit approval; denying leaves the data untouched and says so (#94)
+
 ### Other
 
 - Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)
