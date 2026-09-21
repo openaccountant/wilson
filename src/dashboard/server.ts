@@ -3,7 +3,7 @@ import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
-  apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
+  apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels,
   apiUpdateTransaction, apiDeleteTransaction,
@@ -314,6 +314,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         }
         if (path === '/api/transactions') {
           return Response.json(apiTransactions(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/transactions/search') {
+          return Response.json(await apiSemanticSearch(activeDb, url.searchParams), { headers });
         }
 
         // Transaction edit/delete (RBAC: admin only)

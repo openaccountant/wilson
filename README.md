@@ -32,6 +32,7 @@ Named after [Frank J. Wilson](https://en.wikipedia.org/wiki/Frank_J._Wilson), th
 - **MCP extensibility** — Add tools via Model Context Protocol servers
 - **Orchestration** — Chain tools sequentially or run parallel teams for complex workflows
 - **Skills** — Multi-step workflows like subscription audits, extensible with custom skills
+- **Semantic transaction search** — The dashboard Transactions search understands meaning, not just substrings: a query with no exact matches falls back to on-device embedding search (`wilson --index` builds the vectors) with ranked, scored results — nothing but the one-time model download ever leaves the machine
 - **9 LLM providers** — OpenAI, Anthropic, Google, xAI, Moonshot, DeepSeek, OpenRouter, LiteLLM, and Ollama (local)
 
 ## Quick Start
