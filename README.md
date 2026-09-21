@@ -33,14 +33,14 @@ Named after [Frank J. Wilson](https://en.wikipedia.org/wiki/Frank_J._Wilson), th
 - **Orchestration** — Chain tools sequentially or run parallel teams for complex workflows
 - **Skills** — Multi-step workflows like subscription audits, extensible with custom skills
 - **Semantic transaction search** — The dashboard Transactions search understands meaning, not just substrings: a query with no exact matches falls back to on-device embedding search (`wilson --index` builds the vectors) with ranked, scored results — nothing but the one-time model download ever leaves the machine
-- **9 LLM providers** — OpenAI, Anthropic, Google, xAI, Moonshot, DeepSeek, OpenRouter, LiteLLM, and Ollama (local)
+- **10 LLM providers** — OpenAI, Anthropic, Google, xAI, Moonshot, DeepSeek, OpenRouter, LiteLLM, Ollama (local), and any OpenAI-compatible server (llama.cpp, LM Studio, vLLM, …)
 
 ## Quick Start
 
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.1+
-- An LLM provider: either [Ollama](https://ollama.com) running locally **or** an API key for a cloud provider
+- An LLM provider: [Ollama](https://ollama.com) or any OpenAI-compatible server running locally **or** an API key for a cloud provider
 
 ### Install & Run
 
@@ -72,8 +72,22 @@ bun start
 | OpenRouter | `openrouter:` | `OPENROUTER_API_KEY` |
 | LiteLLM | `litellm:` | `LITELLM_API_KEY` |
 | Ollama | `ollama:` | None (local) |
+| OpenAI-compatible server | `openai-compatible:` | None (`OPENAI_COMPATIBLE_API_KEY` if your server requires one) |
 
 Switch providers at any time with `/model`.
+
+### OpenAI-compatible servers
+
+Any server exposing the OpenAI REST API works — llama.cpp's `llama-server`, LM Studio,
+vLLM, TabbyAPI, KoboldCpp, text-generation-webui, or a remote gateway. Pick
+**OpenAI-compatible server** in `/model`, enter the base URL (saved to `.env` as
+`OPENAI_COMPATIBLE_BASE_URL`), and Wilson lists the models the server reports from
+`GET /v1/models`. If it doesn't implement that endpoint, type the model name instead.
+
+```bash
+# Example: llama.cpp
+llama-server -m model.gguf --port 8080   # base URL: http://localhost:8080/v1
+```
 
 ## CLI Commands
 
@@ -97,7 +111,7 @@ Type `exit` or `quit` to close. Press `Esc` to cancel a running operation.
 
 ### Environment Variables
 
-Copy `env.example` to `.env` and set at least one provider API key. See the file for all options including web search keys and Ollama base URL.
+Copy `env.example` to `.env` and set at least one provider API key. See the file for all options including web search keys and local server base URLs.
 
 ### MCP Servers
 

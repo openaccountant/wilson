@@ -108,6 +108,28 @@ describe('callLlm', () => {
     await callLlm('test', { model: 'ollama:llama3' });
     expect(receivedModel).toBe('llama3');
   });
+
+  test('strips openai-compatible prefix from model name', async () => {
+    let receivedModel = '';
+    mockAdapterFn = async (opts: any) => {
+      receivedModel = opts.model;
+      return makeLlmResponse();
+    };
+
+    await callLlm('test', { model: 'openai-compatible:Qwen/Qwen3-8B' });
+    expect(receivedModel).toBe('Qwen/Qwen3-8B');
+  });
+
+  test('keeps dash-prefixed model names intact', async () => {
+    let receivedModel = '';
+    mockAdapterFn = async (opts: any) => {
+      receivedModel = opts.model;
+      return makeLlmResponse();
+    };
+
+    await callLlm('test', { model: 'claude-sonnet-4-6' });
+    expect(receivedModel).toBe('claude-sonnet-4-6');
+  });
 });
 
 describe('callLlm structured-output validation', () => {

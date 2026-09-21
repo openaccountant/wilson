@@ -18,6 +18,7 @@ import type {
 } from './agent/index.js';
 import { getModelDisplayName } from './utils/model.js';
 import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js';
+import { getOpenAiCompatibleBaseUrl } from './utils/openai-compatible.js';
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
 import { traceStore } from './utils/trace-store.js';
@@ -1423,11 +1424,30 @@ export async function runCli() {
       const input = new ApiKeyInputComponent();
       input.onSubmit = (value) => modelSelection.handleModelInputSubmit(value);
       input.onCancel = () => modelSelection.handleModelInputSubmit(null);
+      const isOpenAiCompatible = state.pendingProvider === 'openai-compatible';
       renderScreenView(
         `Enter model name for ${getProviderDisplayName(state.pendingProvider)}`,
-        'Type or paste the model name from openrouter.ai/models',
+        isOpenAiCompatible
+          ? `The server at ${getOpenAiCompatibleBaseUrl()} did not list any models — type the name it serves.`
+          : 'Type or paste the model name from openrouter.ai/models',
         input,
-        'Examples: anthropic/claude-3.5-sonnet, openai/gpt-4-turbo, meta-llama/llama-3-70b\nEnter to confirm · esc to go back',
+        isOpenAiCompatible
+          ? 'Examples: qwen3-8b, Qwen/Qwen3-8B, local-model\nEnter to confirm · esc to go back'
+          : 'Examples: anthropic/claude-3.5-sonnet, openai/gpt-4-turbo, meta-llama/llama-3-70b\nEnter to confirm · esc to go back',
+        input,
+      );
+      return;
+    }
+
+    if (state.appState === 'base_url_input' && state.pendingProvider) {
+      const input = new ApiKeyInputComponent();
+      input.onSubmit = (value) => void modelSelection.handleBaseUrlSubmit(value ?? '');
+      input.onCancel = () => void modelSelection.handleBaseUrlSubmit(null);
+      renderScreenView(
+        'OpenAI-compatible server URL',
+        `Address of your llama.cpp, LM Studio, vLLM, … server. Current: ${getOpenAiCompatibleBaseUrl()}`,
+        input,
+        'Examples: http://localhost:8080/v1, http://localhost:1234/v1\nEnter to confirm (empty keeps current) · esc to go back',
         input,
       );
       return;

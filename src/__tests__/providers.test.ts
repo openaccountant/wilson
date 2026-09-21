@@ -20,6 +20,10 @@ describe('resolveProvider', () => {
     expect(resolveProvider('ollama:llama3').id).toBe('ollama');
   });
 
+  test('routes openai-compatible: prefix to the OpenAI-compatible provider', () => {
+    expect(resolveProvider('openai-compatible:qwen3-8b').id).toBe('openai-compatible');
+  });
+
   test('routes deepseek- prefix to DeepSeek', () => {
     expect(resolveProvider('deepseek-chat').id).toBe('deepseek');
   });
@@ -63,6 +67,10 @@ describe('getModelDisplayName', () => {
   test('strips ollama: prefix for lookup', () => {
     // Unknown model after stripping prefix — returns the normalized ID
     expect(getModelDisplayName('ollama:llama3')).toBe('llama3');
+  });
+
+  test('strips openai-compatible: prefix for lookup', () => {
+    expect(getModelDisplayName('openai-compatible:qwen3-8b')).toBe('qwen3-8b');
   });
 
   test('returns model ID for unknown model', () => {

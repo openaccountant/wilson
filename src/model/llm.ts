@@ -71,17 +71,11 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
 
   const provider = resolveProvider(model);
 
-  // Strip prefix for providers that use it for routing but not for the API call
-  let apiModel = model;
-  if (provider.id === 'openrouter') {
-    apiModel = model.replace(/^openrouter:/, '');
-  } else if (provider.id === 'litellm') {
-    apiModel = model.replace(/^litellm:/, '');
-  } else if (provider.id === 'ollama') {
-    apiModel = model.replace(/^ollama:/, '');
-  } else if (provider.id === 'transformers') {
-    apiModel = model.replace(/^transformers:/, '');
-  }
+  // Strip the slug prefix (e.g. "ollama:") used for routing but not by the API itself.
+  // Dash prefixes like "claude-" are part of the real model name and stay.
+  const apiModel = provider.modelPrefix.endsWith(':')
+    ? model.slice(provider.modelPrefix.length)
+    : model;
 
   const adapter = getAdapter(provider.id);
   const startTime = Date.now();
