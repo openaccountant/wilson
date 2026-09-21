@@ -404,8 +404,8 @@ export async function runCli() {
   // (pi-tui's built-in @ only uses fd; without it, @ returns nothing)
   if (!fdPath) {
     const origGetSuggestions = baseAutocomplete.getSuggestions.bind(baseAutocomplete);
-    baseAutocomplete.getSuggestions = (lines, cursorLine, cursorCol) => {
-      const result = origGetSuggestions(lines, cursorLine, cursorCol);
+    baseAutocomplete.getSuggestions = async (lines, cursorLine, cursorCol, options) => {
+      const result = await origGetSuggestions(lines, cursorLine, cursorCol, options);
       if (result) return result;
 
       // Check if user typed @something — fall back to directory-based completion

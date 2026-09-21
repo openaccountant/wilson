@@ -23,7 +23,7 @@ export function createOtelTransport(): OpenTelemetryTransportV3 | null {
 
     loggerProvider = new LoggerProvider({
       resource,
-      processors: [new SimpleLogRecordProcessor(exporter)],
+      processors: [new SimpleLogRecordProcessor({ exporter })],
     });
 
     // Register globally so the Winston transport can find it
