@@ -13,7 +13,8 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@import-tools/*": ["../../tools/import/*"]
     },
     "baseUrl": "."
   },
