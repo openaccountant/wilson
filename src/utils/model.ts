@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { PROVIDERS as PROVIDER_DEFS } from '../providers.js';
 
 export type ModelTag = 'paid' | 'open' | 'local' | 'cloud' | 'small' | 'large' | 'reasoning' | 'webgpu';
@@ -92,4 +95,15 @@ export function getModelDisplayName(modelId: string): string {
   }
 
   return normalizedId;
+}
+
+/**
+ * Returns true if the model has already been downloaded to the local cache.
+ * Takes the bare repo id ("HuggingFaceTB/SmolLM3-3B-ONNX" — no `transformers:`
+ * prefix): the transformers.js cache lives at
+ * ~/.openaccountant/models/models--{org}--{name}/.
+ */
+export function isTransformersModelCached(modelId: string): boolean {
+  const cacheName = `models--${modelId.replace('/', '--')}`;
+  return existsSync(join(homedir(), '.openaccountant', 'models', cacheName));
 }
