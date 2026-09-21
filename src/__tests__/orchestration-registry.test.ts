@@ -4,7 +4,16 @@ import * as loader from '../orchestration/loader.js';
 import * as licenseModule from '../licensing/license.js';
 import * as chainModule from '../orchestration/chain.js';
 import * as teamModule from '../orchestration/team.js';
-import { chainToTool, teamToTool, getOrchestrationTools, clearOrchestrationCache } from '../orchestration/registry.js';
+// Cache-busted runtime import: Bun shares one module registry across all test
+// files in a `bun test` run, so mock.module('../orchestration/registry.js') in
+// agent.test.ts / tool-registry.test.ts leaks into this file's import. The
+// query forces a fresh, unmocked module record (the same isolation CI gets by
+// running each test file in its own process — see .github/workflows/ci.yml).
+// Note: licenseModule is intentionally NOT busted — the real registry's
+// internal hasLicense binding must resolve to the same record this file spies on.
+const registryModule: string = '../orchestration/registry.js?victim';
+const registry = (await import(registryModule)) as typeof import('../orchestration/registry.js');
+const { chainToTool, teamToTool, getOrchestrationTools, clearOrchestrationCache } = registry;
 
 describe('orchestration/registry', () => {
   let discoverChainsSpy: ReturnType<typeof spyOn>;
