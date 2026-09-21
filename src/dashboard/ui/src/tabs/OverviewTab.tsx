@@ -4,6 +4,7 @@ import { SpendingHeatmap } from '@/components/SpendingHeatmap';
 import { StreakCounter } from '@/components/StreakCounter';
 import { BudgetCountdown } from '@/components/BudgetCountdown';
 import { SavingsSparkline } from '@/components/SavingsSparkline';
+import { CashflowForecast } from '@/components/CashflowForecast';
 import { DonutChart } from '@/components/DonutChart';
 import { PnlCard } from '@/components/PnlCard';
 import { BudgetBars } from '@/components/BudgetBars';
@@ -36,10 +37,11 @@ export function OverviewTab() {
         <StreakCounter />
       </div>
 
-      {/* Budget countdown + Savings sparkline */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Budget countdown + Savings sparkline + Cash forecast */}
+      <div className="grid grid-cols-3 gap-4">
         <BudgetCountdown />
         <SavingsSparkline />
+        <CashflowForecast />
       </div>
 
       {/* Donut + P&L */}

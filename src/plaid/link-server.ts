@@ -1,11 +1,39 @@
 import { createServer, type Server } from 'http';
-import { createLinkToken, createUpdateLinkToken, exchangePublicToken, getItemInfo, getItemInstitutionId, hasLocalPlaidCreds } from './client.js';
+import { createLinkToken, createUpdateLinkToken, exchangePublicToken, getItemInfo, hasLocalPlaidCreds } from './client.js';
 import { openBrowser } from '../utils/browser.js';
-import { savePlaidItem, getPlaidItems, clearPlaidItemError } from './store.js';
+import { savePlaidItem, getPlaidItems, removePlaidItemById, clearPlaidItemError } from './store.js';
 import type { PlaidItem } from './store.js';
 import { logger } from '../utils/logger.js';
 
 const PORT = 53781;
+
+/**
+ * Find an existing Plaid Item that duplicates a newly linked one.
+ *
+ * Detection order:
+ *  1. Items sharing the same `itemId` are never duplicates (re-linking the same
+ *     Item is an upsert).
+ *  2. If the new Item has a Plaid institution_id, an existing Item with the same
+ *     institution_id is a duplicate — even when the display names differ. Existing
+ *     Items without a truthy institution_id (legacy or null) are skipped here.
+ *  3. Fallback for records lacking institution ids on either side: case-insensitive
+ *     institution name match (legacy behavior).
+ */
+export function findDuplicateItem(
+  existingItems: PlaidItem[],
+  newItem: { institutionId: string | null; institutionName: string; itemId: string },
+): PlaidItem | undefined {
+  return existingItems.find((existing) => {
+    if (existing.itemId === newItem.itemId) return false;
+
+    if (newItem.institutionId && existing.institutionId) {
+      return existing.institutionId === newItem.institutionId;
+    }
+
+    // Legacy / id-less Items: fall back to name comparison
+    return existing.institutionName.toLowerCase() === newItem.institutionName.toLowerCase();
+  });
+}
 
 /**
  * HTML page that embeds Plaid Link for in-browser bank connection.
@@ -142,22 +170,33 @@ export async function startPlaidLinkServer(useProxy = false): Promise<PlaidItem 
             const info = await getItemInfo(accessToken, useProxy);
 
             // Duplicate Item detection: check if institution is already linked
-            const existingItems = getPlaidItems();
-            const duplicate = existingItems.find(
-              (existing) => existing.institutionName.toLowerCase() === info.institutionName.toLowerCase()
-                && existing.itemId !== itemId
-            );
+            const duplicate = findDuplicateItem(getPlaidItems(), {
+              itemId,
+              institutionId: info.institutionId,
+              institutionName: info.institutionName,
+            });
 
             const item: PlaidItem = {
               itemId,
               accessToken,
               institutionName: info.institutionName,
+              institutionId: info.institutionId,
               accounts: info.accounts,
               cursor: duplicate?.cursor ?? null, // preserve cursor if replacing a duplicate
               linkedAt: new Date().toISOString(),
             };
 
             savePlaidItem(item);
+
+            // The link replaces the duplicate (its cursor was inherited) — remove
+            // the old Item so it doesn't keep syncing alongside the new one.
+            if (duplicate) {
+              removePlaidItemById(duplicate.itemId);
+              logger.info('plaid:link:replaced-duplicate', {
+                replacedItemId: duplicate.itemId,
+                institutionId: info.institutionId,
+              });
+            }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({

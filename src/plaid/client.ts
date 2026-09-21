@@ -298,6 +298,7 @@ export async function getItemInfo(
   useProxy = false,
 ): Promise<{
   institutionName: string;
+  institutionId: string | null;
   accounts: Array<{ id: string; name: string; mask: string }>;
 }> {
   if (useProxy) {
@@ -331,7 +332,7 @@ export async function getItemInfo(
       }
     }
 
-    return { institutionName, accounts };
+    return { institutionName, institutionId: instId ?? null, accounts };
   }
 
   const plaid = getClient();
@@ -367,7 +368,7 @@ export async function getItemInfo(
     }
   }
 
-  return { institutionName, accounts };
+  return { institutionName, institutionId: instId ?? null, accounts };
 }
 
 /**
