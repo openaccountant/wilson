@@ -7,6 +7,8 @@
 
 import { applySync, type ApplySyncResult } from './mirror-schema.js';
 import type {
+  MirrorBudgetRow,
+  MirrorCategoryRow,
   MirrorEntityRow,
   MirrorTransactionRow,
   SqliteBinding,
@@ -24,6 +26,8 @@ export interface SyncFetcher {
   fetchActiveProfile(): Promise<string>;
   fetchAllTransactions(): Promise<MirrorTransactionRow[]>;
   fetchAllEntities(): Promise<MirrorEntityRow[]>;
+  fetchAllBudgets(): Promise<MirrorBudgetRow[]>;
+  fetchAllCategories(): Promise<MirrorCategoryRow[]>;
 }
 
 export type SyncResult =
@@ -41,10 +45,10 @@ function isSqliteBinding(target: SyncTarget): target is SqliteBinding {
 }
 
 /**
- * Fetch profile + full transactions + entities, then apply them to the mirror
- * in one transaction. On any fetch rejection the mirror is NOT mutated — it
- * keeps serving its last good set while offline — and `{ ok: false }` is
- * returned (the client flips its online flag).
+ * Fetch profile + full transactions + entities + budgets + categories, then
+ * apply them to the mirror in one transaction. On any fetch rejection the
+ * mirror is NOT mutated — it keeps serving its last good set while offline —
+ * and `{ ok: false }` is returned (the client flips its online flag).
  *
  * A profile change is handled by applySync's meta gate: the client rekeys the
  * pool first when it knows the profile changed, and the gate drops + re-seeds
@@ -53,11 +57,13 @@ function isSqliteBinding(target: SyncTarget): target is SqliteBinding {
 export async function runSync(target: SyncTarget, fetcher: SyncFetcher): Promise<SyncResult> {
   try {
     const profile = await fetcher.fetchActiveProfile();
-    const [transactions, entities] = await Promise.all([
+    const [transactions, entities, budgets, categories] = await Promise.all([
       fetcher.fetchAllTransactions(),
       fetcher.fetchAllEntities(),
+      fetcher.fetchAllBudgets(),
+      fetcher.fetchAllCategories(),
     ]);
-    const payload: SyncPayload = { profile, transactions, entities };
+    const payload: SyncPayload = { profile, transactions, entities, budgets, categories };
     const result = isSqliteBinding(target)
       ? await applySync(target, payload)
       : await target(payload);

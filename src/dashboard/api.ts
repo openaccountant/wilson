@@ -14,6 +14,8 @@ import {
   getSpendingSummary,
   getProfitLoss,
   getBudgetVsActual,
+  getBudgets,
+  getCategories,
   getMonthlySavingsData,
   getMonthlyCashflowData,
   getTransactions,
@@ -78,6 +80,14 @@ import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
 import { embedTransactionIds } from '../utils/embed-on-write.js';
 import { CATEGORIES } from '../tools/categorize/categories.js';
+import {
+  parseAccountId,
+  parseEntityId,
+  parseDateRange,
+  parseSavingsMonths,
+  parseBudgetCountdownMonth,
+  parseDailySpendingRange,
+} from './overview-params.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 import {
@@ -91,29 +101,8 @@ import { getSampleBySlug } from '../demo/samples.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function parseAccountId(params: URLSearchParams): number | undefined {
-  const val = params.get('accountId');
-  return val ? parseInt(val, 10) : undefined;
-}
-
-function parseEntityId(params: URLSearchParams): number | undefined {
-  const val = params.get('entityId');
-  return val ? parseInt(val, 10) : undefined;
-}
-
-function parseDateRange(params: URLSearchParams) {
-  const directStart = params.get('startDate');
-  const directEnd = params.get('endDate');
-  if (directStart && directEnd) {
-    const month = directStart.slice(0, 7);
-    return { month, startDate: directStart, endDate: directEnd };
-  }
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
-  const [year, mon] = month.split('-').map(Number);
-  const startDate = `${month}-01`;
-  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
-  return { month, startDate, endDate };
-}
+// The overview param parsers moved to overview-params.ts (shared with the
+// offline dashboard mirror); imported above so both sides parse identically.
 
 function escapeCsv(v: string): string {
   if (v.includes(',') || v.includes('"') || v.includes('\n')) {
@@ -146,7 +135,7 @@ export function apiBudgets(db: Database, params: URLSearchParams) {
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
-  const months = parseInt(params.get('months') ?? '6', 10);
+  const months = parseSavingsMonths(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
   return getMonthlySavingsData(db, undefined, months, accountId, entityId);
@@ -162,6 +151,25 @@ export function apiCashflowMonthly(db: Database, params: URLSearchParams) {
 
 export function apiAlerts(db: Database) {
   return checkAlerts(db);
+}
+
+/**
+ * Raw budget limit rows. Unlike /api/budgets (the vs-actual aggregation), this
+ * returns the budgets table as-is. Read-only; exists to feed the dashboard
+ * mirror's sync pull (the offline mirror needs budgets for the streak's daily
+ * budget and the budget cards).
+ */
+export function apiBudgetLimits(db: Database) {
+  return getBudgets(db);
+}
+
+/**
+ * Raw category rows (flat list). Read-only; exists to feed the dashboard
+ * mirror's sync pull (budget-vs-actual rolls spending up the category
+ * hierarchy, which the mirror recomputes locally).
+ */
+export function apiCategories(db: Database) {
+  return getCategories(db);
 }
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -862,12 +870,11 @@ export function apiAnnotateInteraction(db: Database, id: number, annotation: {
 // ── Daily / Gamification ─────────────────────────────────────────────────────
 
 export function apiDailySpending(db: Database, params: URLSearchParams) {
-  const startDate = params.get('startDate');
-  const endDate = params.get('endDate');
-  if (!startDate || !endDate) {
-    return { error: 'startDate and endDate required' };
+  const range = parseDailySpendingRange(params);
+  if ('error' in range) {
+    return range;
   }
-  return getDailySpending(db, startDate, endDate);
+  return getDailySpending(db, range.startDate, range.endDate);
 }
 
 export function apiStreak(db: Database) {
@@ -879,7 +886,7 @@ export function apiWeeklySummary(db: Database) {
 }
 
 export function apiBudgetCountdown(db: Database, params: URLSearchParams) {
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
+  const month = parseBudgetCountdownMonth(params);
   return getBudgetCountdown(db, month);
 }
 

@@ -13,6 +13,8 @@ import {
   apiPnl,
   apiBudgets,
   apiSavings,
+  apiBudgetLimits,
+  apiCategories,
   apiAccounts,
   apiNetWorth,
   apiNetWorthTrend,
@@ -32,7 +34,7 @@ import {
   apiConfirmReview,
   apiCorrectReview,
 } from '../dashboard/api.js';
-import { createChatSession, insertChatMessage, insertTransactions } from '../db/queries.js';
+import { createChatSession, insertChatMessage, insertTransactions, getBudgets, getCategories } from '../db/queries.js';
 import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { traceStore } from '../utils/trace-store.js';
@@ -693,6 +695,36 @@ describe('apiSavings', () => {
     seedTestData(db);
     const result = apiSavings(db, new URLSearchParams({ months: '6' }));
     expect(Array.isArray(result)).toBe(true);
+  });
+});
+
+describe('apiBudgetLimits / apiCategories (mirror sync feed)', () => {
+  test('apiBudgetLimits returns the raw budgets rows, equal to getBudgets', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const limits = apiBudgetLimits(db) as unknown as Array<Record<string, unknown>>;
+    expect(limits).toEqual(getBudgets(db) as unknown as Array<Record<string, unknown>>);
+    // The wire carries entity_id via SELECT * even though BudgetRow predates
+    // migration 21 — the mirror upsert needs the full row.
+    for (const row of limits) {
+      expect(Object.keys(row)).toContain('entity_id');
+      expect(Object.keys(row).sort()).toEqual(
+        ['category', 'created_at', 'entity_id', 'id', 'monthly_limit', 'updated_at']
+      );
+    }
+  });
+
+  test('apiCategories returns the flat category rows, equal to getCategories', () => {
+    const db = createTestDb();
+    const rows = apiCategories(db) as unknown as Array<Record<string, unknown>>;
+    expect(rows).toEqual(getCategories(db) as unknown as Array<Record<string, unknown>>);
+    // System taxonomy is seeded by migrations; the sync pull carries it whole.
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(Object.keys(row).sort()).toEqual(
+        ['created_at', 'description', 'id', 'is_system', 'name', 'parent_id', 'slug', 'sort_order', 'updated_at']
+      );
+    }
   });
 });
 

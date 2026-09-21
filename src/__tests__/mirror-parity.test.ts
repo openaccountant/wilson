@@ -1,14 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { createTestDb } from './helpers.js';
 import { Database } from '../db/compat-sqlite.js';
-import { apiTransactions, apiEntities, apiImport } from '../dashboard/api.js';
+import { apiTransactions, apiEntities, apiBudgetLimits, apiCategories, apiImport } from '../dashboard/api.js';
 import { insertTransactions } from '../db/queries.js';
 import { createEntity, updateEntity } from '../db/entity-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { applySync, createMirrorSchema } from '../dashboard/ui/src/store/mirror-schema.js';
 import { serveApiPath } from '../dashboard/ui/src/store/mirror-reads.js';
 import { MirrorTestBinding } from './mirror-helpers.js';
-import type { MirrorTransactionRow, MirrorEntityRow } from '../dashboard/ui/src/store/types.js';
+import type { MirrorTransactionRow, MirrorEntityRow, MirrorBudgetRow, MirrorCategoryRow } from '../dashboard/ui/src/store/types.js';
 
 /**
  * THE offline-parity gate: for a matrix of queries, the mirror must return
@@ -100,7 +100,9 @@ beforeAll(async () => {
     new URLSearchParams({ limit: String(10_000_000) })
   ) as unknown as MirrorTransactionRow[];
   const entities = apiEntities(serverDb) as unknown as MirrorEntityRow[];
-  await applySync(mirrorBinding, { profile: 'default', transactions, entities });
+  const budgets = apiBudgetLimits(serverDb) as unknown as MirrorBudgetRow[];
+  const categories = apiCategories(serverDb) as unknown as MirrorCategoryRow[];
+  await applySync(mirrorBinding, { profile: 'default', transactions, entities, budgets, categories });
 });
 
 const parityQueries: string[] = [
@@ -152,7 +154,9 @@ describe('mirror entity list tracks the server', () => {
     updateEntity(serverDb, bizEntityId, { name: 'Consulting LLC' });
     const transactions = apiTransactions(serverDb, new URLSearchParams({ limit: String(10_000_000) })) as unknown as MirrorTransactionRow[];
     const entities = apiEntities(serverDb) as unknown as MirrorEntityRow[];
-    await applySync(mirrorBinding, { profile: 'default', transactions, entities });
+    const budgets = apiBudgetLimits(serverDb) as unknown as MirrorBudgetRow[];
+    const categories = apiCategories(serverDb) as unknown as MirrorCategoryRow[];
+    await applySync(mirrorBinding, { profile: 'default', transactions, entities, budgets, categories });
 
     const fromMirror = (await serveApiPath(mirrorBinding, '/api/entities')) as MirrorEntityRow[];
     expect(fromMirror).toEqual(apiEntities(serverDb));

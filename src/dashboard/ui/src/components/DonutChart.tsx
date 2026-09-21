@@ -1,6 +1,7 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { SpendingSummaryItem } from '@/types';
 
 const COLORS = [
@@ -11,7 +12,7 @@ const COLORS = [
 
 export function DonutChart() {
   const params = useFilterParams();
-  const { data, loading } = useApi<SpendingSummaryItem[]>(`/api/summary?${params}`, [params]);
+  const { data, loading, offline } = useApi<SpendingSummaryItem[]>(`/api/summary?${params}`, [params]);
 
   if (loading) {
     return (
@@ -19,6 +20,11 @@ export function DonutChart() {
         <div className="h-[220px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than "No spending data."
+    return <OfflineUnavailable title="Spending by Category" />;
   }
 
   if (!data || data.length === 0) {

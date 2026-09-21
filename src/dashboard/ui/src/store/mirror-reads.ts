@@ -1,16 +1,36 @@
 // ── Offline mirror: read layer ───────────────────────────────────────────────
 //
-// Serves the two endpoints the transactions tab reads, with byte-parity to the
-// server: the SQL composition is identical to getTransactions (shared
-// buildTransactionWhere) and the param parsing is identical to apiTransactions
-// (shared parseTransactionListParams). The parity is pinned by
-// src/__tests__/mirror-parity.test.ts, which deep-equals serveApiPath output
-// against the real server functions for a matrix of queries.
+// Serves the endpoints the dashboard tabs read offline, with parity to the
+// server: the transactions SQL composition is identical to getTransactions
+// (shared buildTransactionWhere), the overview aggregations run the SAME shared
+// SQL constants + pure math as the server (mirror-overview.ts over
+// overview-sql.ts), and the param parsing is identical (shared
+// parseTransactionListParams / overview-params.ts). Parity is pinned by
+// src/__tests__/mirror-parity.test.ts and overview-parity.test.ts, which
+// deep-equal serveApiPath output against the real server functions.
 //
 // Pure module — no browser glue, no bun:sqlite import.
 
 import { buildTransactionWhere, type TransactionFilters } from '../../../../db/transaction-where.js';
 import { parseTransactionListParams } from '../../../../dashboard/transactions-query.js';
+import {
+  parseAccountId,
+  parseEntityId,
+  parseDateRange,
+  parseSavingsMonths,
+  parseBudgetCountdownMonth,
+  parseDailySpendingRange,
+} from '../../../../dashboard/overview-params.js';
+import {
+  mirrorGetDailySpending,
+  mirrorGetStreak,
+  mirrorGetWeeklySummary,
+  mirrorGetBudgetCountdown,
+  mirrorGetSpendingSummary,
+  mirrorGetProfitLoss,
+  mirrorGetMonthlySavingsData,
+  mirrorGetBudgetVsActual,
+} from './mirror-overview.js';
 import type { MirrorEntityRow, MirrorTransactionRow, SqliteBinding, SqlRow } from './types.js';
 
 /**
@@ -53,10 +73,11 @@ export async function mirrorGetEntities(db: SqliteBinding): Promise<MirrorEntity
 /**
  * Serve a dashboard API path from the mirror.
  *
- * Routes exactly the paths this slice mirrors — `/api/transactions?…` and
- * `/api/entities` — replicating the server handlers (including the
- * slice-to-limit, NaN limit included). Anything else returns null: the caller
- * keeps the original network error instead of inventing a response.
+ * Routes exactly the paths mirrored so far — the transactions tab's two reads
+ * plus the eight approved overview cards — replicating the server handlers
+ * (including the slice-to-limit and the /api/daily-spending `{ error }` shape).
+ * Anything else returns null: the caller turns that into an explicit
+ * "requires connection" state instead of inventing a response.
  */
 export async function serveApiPath(db: SqliteBinding, path: string): Promise<unknown | null> {
   const queryIndex = path.indexOf('?');
@@ -71,6 +92,48 @@ export async function serveApiPath(db: SqliteBinding, path: string): Promise<unk
   }
   if (pathname === '/api/entities') {
     return mirrorGetEntities(db);
+  }
+  // ── Overview cards (the eight approved offline aggregations) ──────────────
+  if (pathname === '/api/daily-spending') {
+    const range = parseDailySpendingRange(params);
+    if ('error' in range) {
+      return range;
+    }
+    return mirrorGetDailySpending(db, range.startDate, range.endDate);
+  }
+  if (pathname === '/api/streak') {
+    return mirrorGetStreak(db);
+  }
+  if (pathname === '/api/weekly-summary') {
+    return mirrorGetWeeklySummary(db);
+  }
+  if (pathname === '/api/budget-countdown') {
+    const month = parseBudgetCountdownMonth(params);
+    return mirrorGetBudgetCountdown(db, month);
+  }
+  if (pathname === '/api/summary') {
+    const { startDate, endDate } = parseDateRange(params);
+    const accountId = parseAccountId(params);
+    const entityId = parseEntityId(params);
+    return mirrorGetSpendingSummary(db, startDate, endDate, accountId, entityId);
+  }
+  if (pathname === '/api/pnl') {
+    const { startDate, endDate } = parseDateRange(params);
+    const accountId = parseAccountId(params);
+    const entityId = parseEntityId(params);
+    return mirrorGetProfitLoss(db, startDate, endDate, accountId, entityId);
+  }
+  if (pathname === '/api/savings') {
+    const months = parseSavingsMonths(params);
+    const accountId = parseAccountId(params);
+    const entityId = parseEntityId(params);
+    return mirrorGetMonthlySavingsData(db, undefined, months, accountId, entityId);
+  }
+  if (pathname === '/api/budgets') {
+    const { month } = parseDateRange(params);
+    const accountId = parseAccountId(params);
+    const entityId = parseEntityId(params);
+    return mirrorGetBudgetVsActual(db, month, accountId, entityId);
   }
   return null;
 }

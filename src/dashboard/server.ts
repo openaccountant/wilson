@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiBudgetLimits, apiCategories, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
@@ -408,6 +408,16 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
         if (path === '/api/budgets') {
           return Response.json(apiBudgets(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/budgets/limits') {
+          // Raw budget rows (sync feed for the offline mirror) — distinct from
+          // /api/budgets, the vs-actual aggregation. Exact-match check, so the
+          // two routes never collide.
+          return Response.json(apiBudgetLimits(activeDb), { headers });
+        }
+        if (path === '/api/categories') {
+          // Raw category rows (sync feed for the offline mirror).
+          return Response.json(apiCategories(activeDb), { headers });
         }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });

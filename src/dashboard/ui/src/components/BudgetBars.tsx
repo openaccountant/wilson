@@ -1,5 +1,6 @@
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { BudgetVsActualRow } from '@/types';
 
 function barColor(pct: number): string {
@@ -10,7 +11,7 @@ function barColor(pct: number): string {
 
 export function BudgetBars() {
   const params = useFilterParams();
-  const { data, loading } = useApi<BudgetVsActualRow[]>(`/api/budgets?${params}`, [params]);
+  const { data, loading, offline } = useApi<BudgetVsActualRow[]>(`/api/budgets?${params}`, [params]);
 
   if (loading) {
     return (
@@ -18,6 +19,11 @@ export function BudgetBars() {
         <div className="h-[120px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than "No budgets configured."
+    return <OfflineUnavailable title="Budgets" />;
   }
 
   if (!data || data.length === 0) {

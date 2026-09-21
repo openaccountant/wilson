@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { DailySpendingRow, StreakData } from '@/types';
 
 interface SpendingHeatmapProps {
@@ -39,10 +40,10 @@ function getYearRange(): { startDate: string; endDate: string } {
 
 export function SpendingHeatmap({ onDayClick }: SpendingHeatmapProps) {
   const { startDate, endDate } = useMemo(getYearRange, []);
-  const { data: dailyData, loading: loadingDaily } = useApi<DailySpendingRow[]>(
+  const { data: dailyData, loading: loadingDaily, offline: offlineDaily } = useApi<DailySpendingRow[]>(
     `/api/daily-spending?startDate=${startDate}&endDate=${endDate}`,
   );
-  const { data: streakData, loading: loadingStreak } = useApi<StreakData>('/api/streak');
+  const { data: streakData, loading: loadingStreak, offline: offlineStreak } = useApi<StreakData>('/api/streak');
 
   const { weeks, months, underBudgetDays, totalDays } = useMemo(() => {
     const spendingMap = new Map<string, number>();
@@ -103,6 +104,11 @@ export function SpendingHeatmap({ onDayClick }: SpendingHeatmapProps) {
         <div className="h-[140px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if ((offlineDaily && !dailyData) || (offlineStreak && !streakData)) {
+    // Mirror unavailable or never seeded — say so rather than an all-zero grid.
+    return <OfflineUnavailable title="Spending Heatmap" />;
   }
 
   const svgWidth = LABEL_WIDTH + weeks.length * TOTAL;

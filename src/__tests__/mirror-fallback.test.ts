@@ -3,6 +3,7 @@ import {
   RequiresConnectionError,
   classifyWriteError,
   isNetworkError,
+  isRequiresConnectionError,
   resolveFetchOutcome,
 } from '../dashboard/ui/src/store/offline-writes.js';
 import { serveApiPath } from '../dashboard/ui/src/store/mirror-reads.js';
@@ -56,8 +57,11 @@ describe('resolveFetchOutcome', () => {
     expect(resolveFetchOutcome({ isWrite: false, networkError: true, mirrored: [] })).toBe('return-mirror');
   });
 
-  test('GET + network error + mirror cannot serve → rethrow the original', () => {
-    expect(resolveFetchOutcome({ isWrite: false, networkError: true, mirrored: null })).toBe('rethrow');
+  test('GET + network error + mirror cannot serve → throw-requires-connection', () => {
+    // An offline GET the mirror cannot serve (unmirrored path, or the mirror is
+    // unavailable/never seeded) is "requires connection", not a raw TypeError —
+    // the UI renders those as explicitly unavailable offline.
+    expect(resolveFetchOutcome({ isWrite: false, networkError: true, mirrored: null })).toBe('throw-requires-connection');
     expect(resolveFetchOutcome({ isWrite: false, networkError: false, mirrored: rows })).toBe('rethrow');
   });
 
@@ -68,6 +72,16 @@ describe('resolveFetchOutcome', () => {
   });
 });
 
+describe('isRequiresConnectionError', () => {
+  test('true only for the seam\'s explicit error', () => {
+    expect(isRequiresConnectionError(new RequiresConnectionError())).toBe(true);
+    expect(isRequiresConnectionError(new TypeError('Failed to fetch'))).toBe(false);
+    expect(isRequiresConnectionError(new Error('API 500: boom'))).toBe(false);
+    expect(isRequiresConnectionError(null)).toBe(false);
+    expect(isRequiresConnectionError('offline')).toBe(false);
+  });
+});
+
 describe('serveApiPath routing', () => {
   test('returns null for unmirrored paths so the caller keeps the original error', async () => {
     const db = await createMirrorDb();
@@ -75,12 +89,15 @@ describe('serveApiPath routing', () => {
       profile: 'default',
       transactions: [mirrorTxn({ id: 1, external_id: 'e' }) as never],
       entities: [mirrorEntity() as never],
+      budgets: [],
+      categories: [],
     });
     for (const path of [
-      '/api/summary?startDate=2026-03-01&endDate=2026-03-31',
+      '/api/alerts',          // engine is server-side → unavailable offline
+      '/api/net-worth',       // accounts table is not mirrored
+      '/api/cashflow/monthly',// out of approved offline scope
       '/api/entities/1',
       '/api/transactions/12', // single-row write path, not the list route
-      '/api/pnl',
       '/unknown',
     ]) {
       expect(await serveApiPath(db, path)).toBeNull();

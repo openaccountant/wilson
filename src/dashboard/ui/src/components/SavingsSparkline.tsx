@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { SavingsPoint } from '@/types';
 
 export function SavingsSparkline() {
-  const { data, loading } = useApi<SavingsPoint[]>('/api/savings');
+  const { data, loading, offline } = useApi<SavingsPoint[]>('/api/savings');
 
   const { chartData, currentRate, trending } = useMemo(() => {
     if (!data || data.length === 0) {
@@ -32,6 +33,11 @@ export function SavingsSparkline() {
         <div className="h-[60px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than a fake 0% rate.
+    return <OfflineUnavailable title="Savings Rate" />;
   }
 
   const color = trending === 'up' ? '#22c55e' : '#ef4444';

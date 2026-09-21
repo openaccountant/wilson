@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import {
   runCashflowForecast,
   WHATIF_MIN_PCT,
@@ -84,9 +85,12 @@ export function CashflowForecast() {
   // No useFilterParams(): the projection starts from now, so the header's
   // global month/account filters don't apply (same posture as the net-worth
   // surfaces and the savings sparkline).
-  const { data: history, loading } = useApi<MonthlyCashflowRow[]>(
+  const { data: history, loading, offline: offlineHistory } = useApi<MonthlyCashflowRow[]>(
     '/api/cashflow/monthly?months=24',
   );
+  // The projection needs the accounts table for its liquid-cash start balance —
+  // also server-side only (its offline failure shows through the same guard
+  // below, since history is never served from the mirror).
   const { data: accounts } = useApi<Account[]>('/api/accounts');
 
   const startBalance = useMemo(
@@ -126,6 +130,10 @@ export function CashflowForecast() {
         <div className="h-[120px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offlineHistory && !history) {
+    return <OfflineUnavailable title="Cash Forecast" />;
   }
 
   if (!forecast) {
