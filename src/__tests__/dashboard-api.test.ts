@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
 import { createTestDb, seedTestData, daysAgo } from './helpers.js';
 import {
   apiTransactions,
@@ -32,8 +32,9 @@ import {
 import { createChatSession, insertChatMessage, insertTransactions } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { traceStore } from '../utils/trace-store.js';
-import { apiModels } from '../dashboard/api.js';
+import { apiModels, apiSetTaskModel } from '../dashboard/api.js';
 import { setSetting, saveConfig, getConfiguredModel } from '../utils/config.js';
+import { getTaskOverride } from '../model/task-models.js';
 
 describe('apiTransactions', () => {
   test('returns transactions with filters', () => {
@@ -719,5 +720,92 @@ describe('apiModels', () => {
       saveConfig({});
     }
     expect(getConfiguredModel().model).not.toBe('gpt-5.2');
+  });
+
+  test('response carries the model catalog with full per-entry shape', async () => {
+    const { tasks, catalog } = await apiModels(false);
+    expect(tasks).toHaveLength(4);
+    expect(Array.isArray(catalog)).toBe(true);
+    expect(catalog.length).toBeGreaterThan(0);
+    for (const entry of catalog) {
+      expect(typeof entry.id).toBe('string');
+      expect(typeof entry.displayName).toBe('string');
+      expect(typeof entry.provider).toBe('string');
+      expect(typeof entry.providerName).toBe('string');
+      expect(typeof entry.isLocal).toBe('boolean');
+      expect(typeof entry.cached).toBe('boolean');
+      expect(entry.downloadSize === null || typeof entry.downloadSize === 'string').toBe(true);
+      if (!entry.isLocal) expect(entry.cached).toBe(true);
+    }
+    // The catalog contains the known friendly names (ids, not display names, are the values).
+    expect(catalog.some((m) => m.id === 'gpt-5.2')).toBe(true);
+    expect(catalog.some((m) => m.id === 'ollama:qwen3:0.6b')).toBe(true);
+    // webgpuOverride=false: no WebGPU-tagged transformers entry survives.
+    for (const entry of catalog) {
+      if (entry.provider === 'transformers') {
+        expect(entry.id.includes('-web') || entry.id.includes('WebGPU')).toBe(false);
+      }
+    }
+  });
+});
+
+describe('apiSetTaskModel', () => {
+  afterEach(() => {
+    saveConfig({});
+  });
+
+  test('pins a model to categorization; the panel shows the pin while the other task follows chat', async () => {
+    setSetting('modelId', 'gpt-5.2');
+    setSetting('provider', 'openai');
+    const result = apiSetTaskModel({ task: 'categorization', model: 'ollama:qwen3:0.6b' });
+    expect(result).toEqual({ success: true, task: 'categorization', model: 'ollama:qwen3:0.6b' });
+
+    const { tasks } = await apiModels(false);
+    const categorization = tasks.find((t) => t.task === 'categorization')!;
+    const entity = tasks.find((t) => t.task === 'entity-classification')!;
+    expect(categorization.model).toBe('ollama:qwen3:0.6b');
+    expect(categorization.assignment).toBe('override');
+    expect(entity.model).toBe('gpt-5.2');
+    expect(entity.assignment).toBe('default');
+  });
+
+  test('resetting a pin returns the row to following the chat model', async () => {
+    setSetting('modelId', 'gpt-5.2');
+    setSetting('provider', 'openai');
+    apiSetTaskModel({ task: 'categorization', model: 'ollama:qwen3:0.6b' });
+    const reset = apiSetTaskModel({ task: 'categorization', model: null });
+    expect(reset).toEqual({ success: true, task: 'categorization', model: null });
+
+    const { tasks } = await apiModels(false);
+    const categorization = tasks.find((t) => t.task === 'categorization')!;
+    expect(categorization.model).toBe('gpt-5.2');
+    expect(categorization.assignment).toBe('default');
+    expect(getTaskOverride('categorization')).toBeNull();
+  });
+
+  test('chat write is the global model setting (same keys the TUI /model switch persists)', () => {
+    const result = apiSetTaskModel({ task: 'chat', model: 'gpt-5.2' });
+    expect(result).toEqual({ success: true, task: 'chat', model: 'gpt-5.2' });
+    expect(getConfiguredModel()).toEqual({ model: 'gpt-5.2', provider: 'openai' });
+  });
+
+  test('chat with model null is an error (no reset concept for the global setting)', () => {
+    const result = apiSetTaskModel({ task: 'chat', model: null });
+    expect('error' in result && result.error).toBeTruthy();
+  });
+
+  test('unknown task and the not-in-use embeddings task are errors', () => {
+    expect('error' in apiSetTaskModel({ task: 'summarize', model: 'gpt-5.2' })).toBe(true);
+    expect('error' in apiSetTaskModel({ task: 'embeddings', model: 'gpt-5.2' })).toBe(true);
+    expect('error' in apiSetTaskModel({})).toBe(true);
+  });
+
+  test('invalid model ids are rejected for both task kinds', () => {
+    expect('error' in apiSetTaskModel({ task: 'categorization', model: 'garbage-id' })).toBe(true);
+    expect('error' in apiSetTaskModel({ task: 'entity-classification', model: '' })).toBe(true);
+    expect('error' in apiSetTaskModel({ task: 'chat', model: 'garbage-id' })).toBe(true);
+    // Nothing was persisted.
+    expect(getTaskOverride('categorization')).toBeNull();
+    expect(getTaskOverride('entity-classification')).toBeNull();
   });
 });

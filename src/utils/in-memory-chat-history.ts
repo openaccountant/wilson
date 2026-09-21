@@ -107,6 +107,11 @@ export class InMemoryChatHistory {
     this.model = model;
   }
 
+  /** The model the background consumers (summarize/relevance) will call with. */
+  get currentModel(): string {
+    return this.model;
+  }
+
   /**
    * Generates a brief summary of an answer for later relevance matching
    */

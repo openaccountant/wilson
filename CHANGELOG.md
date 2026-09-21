@@ -4,6 +4,8 @@
 
 ### Features
 
+- feat: admin per-task model overrides, applied live — the Settings Models panel becomes controllable: an admin-gated `POST /api/models` pins a model from the catalog to categorization or entity classification (or resets it to follow the chat model), and the panel's Chat row is the global model setting itself; tool call sites resolve their pinned model per call and the dashboard chat applies chat-model changes through the same live-update path the TUI's `/model` switch uses (agent runner + background summarize/relevance), so every change lands on the next run with no restart; the dropdown lists friendly names, offers no WebGPU model the capability probe says can't run on this machine, and marks uncached local models with their download size (#89)
+
 - feat: dashboard Settings "Models" panel — a read endpoint (`GET /api/models`) and Settings section showing which model handles each AI task (chat, categorization, entity classification) with friendly model names, "runs on this device" vs "runs on a cloud server" badges derived from a new `isLocal` flag on the provider registry, the server-side WebGPU capability probe, and an embeddings row marked "Not in use — no embeddings task in this build"; categorization and entity-classification LLM calls are also tagged with their own call types so the Training per-task view groups them truthfully instead of lumping them into `standalone` (#88)
 
 - feat: local-first hybrid dashboard chat — WebGPU-capable browsers answer from a pre-fetched transaction bundle via transformers.js (Qwen3-0.6B, fastModel-driven) with silent server fallback, bundle framing/hand-off classification, and browser-originated history recording (#68)

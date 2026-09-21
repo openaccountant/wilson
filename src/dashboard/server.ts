@@ -5,7 +5,8 @@ import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
   apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
-  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels,
+  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
+  type SetTaskModelBody,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -532,6 +533,20 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         }
 
         // ── Models panel (Settings) ─────────────────────────────────
+
+        if (path === '/api/models' && req.method === 'POST') {
+          // Same posture as every other settings write: admin-only when auth
+          // is on, allowed in single-user local mode (auth disabled).
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as SetTaskModelBody;
+          const result = apiSetTaskModel(body);
+          if ('error' in result) {
+            return Response.json(result, { status: 400, headers });
+          }
+          return Response.json(result, { headers });
+        }
 
         if (path === '/api/models') {
           return Response.json(await apiModels(), { headers });
