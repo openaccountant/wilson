@@ -13,6 +13,7 @@ import { parseOfx } from './parsers/ofx.js';
 import { parseQif } from './parsers/qif.js';
 import { parseBofA } from './parsers/bofa.js';
 import type { ParsedTransaction } from './parsers/chase.js';
+import { computeExternalId } from './external-id.js';
 import {
   insertTransactions,
   checkImported,
@@ -41,14 +42,6 @@ function getDb(): Database {
     throw new Error('file_import tool not initialized. Call initImportTool(database) first.');
   }
   return db;
-}
-
-/**
- * Compute a per-row external_id for CSV transactions that don't have one.
- * Uses SHA-256 of date+description+amount to enable per-transaction dedup.
- */
-function computeExternalId(t: ParsedTransaction): string {
-  return `csv-${createHash('sha256').update(`${t.date}|${t.description}|${t.amount}`).digest('hex').slice(0, 16)}`;
 }
 
 /**

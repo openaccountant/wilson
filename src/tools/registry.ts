@@ -110,6 +110,9 @@ Categorize transactions using AI-powered classification.
 ## Usage Notes
 
 - Call ONCE with the full batch — it handles multiple transactions internally
+- Suggestions below the confidence threshold (default 0.7; setting "categorizationConfidenceThreshold")
+  are NOT applied to transactions — they are routed to the persistent review queue
+  (categorization_reviews table) and reported as "routed for human review"
 - Uses local LLM (Ollama) for privacy-first categorization
 - Categories include: Groceries, Dining, Transport, Housing, Utilities, Entertainment, Shopping, Health, Travel, Income, Transfer, and more
 - This is a bulk operation that requires user approval before execution
@@ -319,6 +322,7 @@ Manage financial and behavioral goals — add, update, track progress, list, or 
 ## When to Use
 
 - When the user wants to set a financial goal ("save $10K for emergency fund by December")
+- When the user wants to set a percentage-of-income goal ("save 10% of every paycheck")
 - When the user wants to set a behavioral goal ("reduce dining to $200/month")
 - When the user says "update my goal", "how are my goals", "I reached my goal"
 - When tracking progress toward savings targets, debt payoff, or spending reduction
@@ -331,6 +335,7 @@ Manage financial and behavioral goals — add, update, track progress, list, or 
 ## Usage Notes
 
 - Financial goals have a target_amount and track current_amount progress
+- Financial goals use target_amount for fixed figures, or target_percent + income_period for a share of actual period income — the dollar target is computed from real income each period (a goal carries one or the other, never both)
 - Behavioral goals track spending patterns relative to a category target
 - Goals can be linked to accounts (e.g., savings account for emergency fund)
 - Status transitions: active → completed/paused/abandoned
