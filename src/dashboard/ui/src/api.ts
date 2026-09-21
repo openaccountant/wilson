@@ -33,7 +33,10 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     });
   } catch (err) {
     // Connection-level failure only (server unreachable). HTTP errors below
-    // mean the server answered, so they never fall back to the mirror.
+    // mean the server answered, so they never fall back to the mirror. An
+    // offline GET the mirror cannot serve becomes RequiresConnectionError —
+    // the UI's explicit "unavailable offline" signal — instead of a raw
+    // TypeError; mirrored GETs return the mirror's rows.
     if (isNetworkError(err)) {
       const method = (options?.method ?? 'GET').toUpperCase();
       const isWrite = method !== 'GET';

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { createTestDb } from './helpers.js';
-import { apiTransactions, apiEntities, apiImport } from '../dashboard/api.js';
-import { insertTransactions } from '../db/queries.js';
+import { apiTransactions, apiEntities, apiBudgetLimits, apiCategories, apiImport } from '../dashboard/api.js';
+import { insertTransactions, setBudget } from '../db/queries.js';
 import { runSync, SYNC_PULL_LIMIT, type SyncFetcher } from '../dashboard/ui/src/store/sync-engine.js';
 import { serveApiPath } from '../dashboard/ui/src/store/mirror-reads.js';
-import { createMirrorDb, mirrorTxn, mirrorEntity } from './mirror-helpers.js';
-import type { MirrorTransactionRow, MirrorEntityRow } from '../dashboard/ui/src/store/types.js';
+import { createMirrorDb, mirrorTxn, mirrorEntity, mirrorBudget, mirrorCategory } from './mirror-helpers.js';
+import type { MirrorTransactionRow, MirrorEntityRow, MirrorBudgetRow, MirrorCategoryRow } from '../dashboard/ui/src/store/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 /**
@@ -22,6 +22,8 @@ class FakeFetcher implements SyncFetcher {
     private transactions: () => MirrorTransactionRow[],
     private entities: () => MirrorEntityRow[],
     private failOnCall?: number,
+    private budgets: () => MirrorBudgetRow[] = () => [],
+    private categories: () => MirrorCategoryRow[] = () => [],
   ) {}
 
   async fetchActiveProfile(): Promise<string> {
@@ -36,6 +38,14 @@ class FakeFetcher implements SyncFetcher {
   async fetchAllEntities(): Promise<MirrorEntityRow[]> {
     if (this.failOnCall === this.calls) throw new TypeError('Failed to fetch');
     return this.entities();
+  }
+  async fetchAllBudgets(): Promise<MirrorBudgetRow[]> {
+    if (this.failOnCall === this.calls) throw new TypeError('Failed to fetch');
+    return this.budgets();
+  }
+  async fetchAllCategories(): Promise<MirrorCategoryRow[]> {
+    if (this.failOnCall === this.calls) throw new TypeError('Failed to fetch');
+    return this.categories();
   }
 }
 
@@ -53,6 +63,12 @@ function serverFetcher(serverDb: Database, profile = 'default'): SyncFetcher & {
     },
     async fetchAllEntities() {
       return apiEntities(serverDb) as unknown as MirrorEntityRow[];
+    },
+    async fetchAllBudgets() {
+      return apiBudgetLimits(serverDb) as unknown as MirrorBudgetRow[];
+    },
+    async fetchAllCategories() {
+      return apiCategories(serverDb) as unknown as MirrorCategoryRow[];
     },
   };
 }
@@ -191,10 +207,51 @@ describe('browser statement imports reach the mirror only via sync', () => {
       fetchAllTransactions: async () =>
         apiTransactions(serverDbB, new URLSearchParams({ limit: String(SYNC_PULL_LIMIT) })) as unknown as MirrorTransactionRow[],
       fetchAllEntities: async () => apiEntities(serverDbB) as unknown as MirrorEntityRow[],
+      fetchAllBudgets: async () => apiBudgetLimits(serverDbB) as unknown as MirrorBudgetRow[],
+      fetchAllCategories: async () => apiCategories(serverDbB) as unknown as MirrorCategoryRow[],
     });
     expect(result).toMatchObject({ ok: true, profile: 'profile-b', seeded: true });
     const after = await rows(db);
     expect(after).toHaveLength(1);
     expect(after[0].description).toBe('B row');
+  });
+});
+
+describe('budgets and categories ride the same sync path', () => {
+  test('a full pull seeds the mirror with budgets and categories from the server', async () => {
+    const serverDb = createTestDb();
+    insertTransactions(serverDb, [
+      { date: '2026-03-05', description: 'Groceries run', amount: -50, category: 'Groceries' },
+    ]);
+    setBudget(serverDb, 'Groceries', 200);
+    const db = await createMirrorDb();
+
+    const result = await runSync(db, serverFetcher(serverDb));
+    expect(result).toMatchObject({ ok: true, seeded: true });
+
+    // The budget card aggregation works offline from the synced tables.
+    const vsActual = (await serveApiPath(db, '/api/budgets?month=2026-03')) as Array<Record<string, unknown>>;
+    expect(vsActual).toEqual([{ category: 'Groceries', monthly_limit: 200, actual: 50, remaining: 150, percent_used: 25, over: false }]);
+  });
+
+  test('a failing budgets/categories pull leaves the mirror on its last good set', async () => {
+    const db = await createMirrorDb();
+    const goodBudget = mirrorBudget({ category: 'Groceries', monthly_limit: 200 });
+    const fetcher = new FakeFetcher(
+      () => 'alice',
+      () => [mirrorTxn({ id: 1, external_id: 'ext-1', amount: -1 }) as unknown as MirrorTransactionRow],
+      () => [mirrorEntity() as unknown as MirrorEntityRow],
+      2, // second runSync's budgets pull throws a fetch-style TypeError
+      () => [goodBudget],
+      () => [mirrorCategory()],
+    );
+
+    await runSync(db, fetcher);
+    const before = (await serveApiPath(db, '/api/budgets')) as unknown[];
+    expect(before).toHaveLength(1);
+
+    const failed = await runSync(db, fetcher);
+    expect(failed).toEqual({ ok: false, error: 'Failed to fetch' });
+    expect(((await serveApiPath(db, '/api/budgets')) as unknown[])).toEqual(before);
   });
 });

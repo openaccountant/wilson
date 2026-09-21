@@ -1,10 +1,33 @@
 import type { Database } from './compat-sqlite.js';
 import { buildTransactionWhere, type TransactionFilters } from './transaction-where.js';
 import { deleteEmbeddings } from './embedding-queries.js';
+import {
+  BUDGETS_ALL_SQL,
+  HAS_CATEGORIES_PROBE_SQL,
+  composeSpendingSummarySql,
+  composePnlSql,
+  composeSavingsSql,
+  composeBudgetActualClauses,
+  composeBudgetRollupSql,
+  composeBudgetFallbackSql,
+  budgetMonthWindow,
+  summarizePnl,
+  toMonthlyIncomeExpense,
+  savingsWindow,
+  budgetActualRow,
+  type SpendingSummaryRow,
+  type ProfitLossRow,
+  type MonthlyIncomeExpense,
+  type BudgetVsActualRow,
+} from './overview-sql.js';
 
 // The filters interface moved to transaction-where.ts (shared with the offline
 // dashboard mirror); re-exported here so existing imports keep working.
 export type { TransactionFilters };
+
+// The overview row interfaces moved to overview-sql.ts (shared with the
+// offline dashboard mirror); re-exported here so existing imports keep working.
+export type { SpendingSummaryRow, ProfitLossRow, MonthlyIncomeExpense, BudgetVsActualRow };
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -55,11 +78,7 @@ export interface TransactionRow {
   updated_at: string;
 }
 
-export interface SpendingSummaryRow {
-  category: string;
-  total: number;
-  count: number;
-}
+// SpendingSummaryRow moved to overview-sql.ts (see re-export above).
 
 export interface ImportRecord {
   file_path: string;
@@ -177,26 +196,8 @@ export function getSpendingSummary(
   accountId?: number,
   entityId?: number
 ): SpendingSummaryRow[] {
-  const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
-  const params: Record<string, unknown> = { startDate, endDate };
-  if (accountId !== undefined) {
-    conditions.push('account_id = @accountId');
-    params.accountId = accountId;
-  }
-  if (entityId !== undefined) {
-    conditions.push('entity_id = @entityId');
-    params.entityId = entityId;
-  }
-  return db.prepare(`
-    SELECT
-      COALESCE(category, 'Uncategorized') AS category,
-      SUM(amount) AS total,
-      COUNT(*) AS count
-    FROM transactions
-    WHERE ${conditions.join(' AND ')}
-    GROUP BY category
-    ORDER BY total ASC
-  `).all(params) as SpendingSummaryRow[];
+  const { sql, params } = composeSpendingSummarySql(startDate, endDate, accountId, entityId);
+  return db.prepare(sql).all(params) as SpendingSummaryRow[];
 }
 
 /**
@@ -273,13 +274,7 @@ export function getUncategorizedTransactions(
 
 // ── P&L queries ──────────────────────────────────────────────────────────────
 
-export interface ProfitLossRow {
-  totalIncome: number;
-  totalExpenses: number;
-  netProfitLoss: number;
-  incomeByCategory: SpendingSummaryRow[];
-  expensesByCategory: SpendingSummaryRow[];
-}
+// ProfitLossRow moved to overview-sql.ts (see re-export above).
 
 /**
  * Get a profit & loss breakdown for a date range.
@@ -291,48 +286,17 @@ export function getProfitLoss(
   accountId?: number,
   entityId?: number
 ): ProfitLossRow {
-  const baseParams: Record<string, unknown> = { startDate, endDate };
-  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
-  if (accountId !== undefined) baseParams.accountId = accountId;
-  const entityFilter = entityId !== undefined ? ' AND entity_id = @entityId' : '';
-  if (entityId !== undefined) baseParams.entityId = entityId;
+  const { incomeSql, expensesSql, params } = composePnlSql(startDate, endDate, accountId, entityId);
 
-  const incomeByCategory = db.prepare(`
-    SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
-    FROM transactions
-    WHERE date >= @startDate AND date <= @endDate AND (amount > 0 OR category = 'Income')${acctFilter}${entityFilter}
-    GROUP BY category ORDER BY total DESC
-  `).all(baseParams) as SpendingSummaryRow[];
+  const incomeByCategory = db.prepare(incomeSql).all(params) as SpendingSummaryRow[];
+  const expensesByCategory = db.prepare(expensesSql).all(params) as SpendingSummaryRow[];
 
-  const expensesByCategory = db.prepare(`
-    SELECT COALESCE(category, 'Uncategorized') AS category, SUM(amount) AS total, COUNT(*) AS count
-    FROM transactions
-    WHERE date >= @startDate AND date <= @endDate AND amount < 0
-      AND COALESCE(category, '') NOT IN ('Income', 'Transfer')${acctFilter}${entityFilter}
-    GROUP BY category ORDER BY total ASC
-  `).all(baseParams) as SpendingSummaryRow[];
-
-  const totalIncome = incomeByCategory.reduce((sum, r) => sum + r.total, 0);
-  const totalExpenses = expensesByCategory.reduce((sum, r) => sum + r.total, 0);
-
-  return {
-    totalIncome,
-    totalExpenses,
-    netProfitLoss: totalIncome + totalExpenses,
-    incomeByCategory,
-    expensesByCategory,
-  };
+  return summarizePnl(incomeByCategory, expensesByCategory);
 }
 
 // ── Savings queries ──────────────────────────────────────────────────────────
 
-export interface MonthlyIncomeExpense {
-  month: string;
-  income: number;
-  expenses: number;
-  savings: number;
-  savingsRate: number;
-}
+// MonthlyIncomeExpense moved to overview-sql.ts (see re-export above).
 
 /**
  * Get monthly income/expense/savings data for the last N months.
@@ -344,34 +308,12 @@ export function getMonthlySavingsData(
   accountId?: number,
   entityId?: number
 ): MonthlyIncomeExpense[] {
-  const end = endMonth ?? new Date().toISOString().slice(0, 7);
-  const [endYear, endMon] = end.split('-').map(Number);
-  const endDate = new Date(endYear, endMon, 0).toISOString().slice(0, 10);
+  const { startDate, endDate } = savingsWindow(endMonth, months);
+  const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId);
 
-  const startDate = (() => {
-    const d = new Date(endYear, endMon - months, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-  })();
+  const rows = db.prepare(sql).all(params) as { month: string; income: number; expenses: number }[];
 
-  const params: Record<string, unknown> = { startDate, endDate };
-  const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
-  if (accountId !== undefined) params.accountId = accountId;
-  const entityFilter = entityId !== undefined ? ' AND entity_id = @entityId' : '';
-  if (entityId !== undefined) params.entityId = entityId;
-
-  const rows = db.prepare(`
-    SELECT strftime('%Y-%m', date) AS month,
-      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS income,
-      COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS expenses
-    FROM transactions WHERE date >= @startDate AND date <= @endDate${acctFilter}${entityFilter}
-    GROUP BY strftime('%Y-%m', date) ORDER BY month
-  `).all(params) as { month: string; income: number; expenses: number }[];
-
-  return rows.map((r) => {
-    const savings = r.income - r.expenses;
-    const savingsRate = r.income > 0 ? (savings / r.income) * 100 : 0;
-    return { ...r, savings, savingsRate };
-  });
+  return toMonthlyIncomeExpense(rows);
 }
 
 export interface MonthlyCashflowRow {
@@ -574,14 +516,7 @@ export interface BudgetRow {
   updated_at: string;
 }
 
-export interface BudgetVsActualRow {
-  category: string;
-  monthly_limit: number;
-  actual: number;
-  remaining: number;
-  percent_used: number;
-  over: boolean;
-}
+// BudgetVsActualRow moved to overview-sql.ts (see re-export above).
 
 /**
  * Set or update a budget limit for a category.
@@ -612,11 +547,15 @@ export function clearBudget(db: Database, category: string): boolean {
  * Get all budget limits.
  */
 export function getBudgets(db: Database): BudgetRow[] {
-  return db.prepare('SELECT * FROM budgets ORDER BY category').all() as BudgetRow[];
+  return db.prepare(BUDGETS_ALL_SQL).all() as BudgetRow[];
 }
 
 /**
  * Compare budgets vs actual spending for a given month (YYYY-MM).
+ *
+ * The per-budget loop stays inline (server glue is synchronous); the SQL it
+ * runs is composed from the shared overview-sql.ts constants so the offline
+ * mirror aggregates identically.
  */
 export function getBudgetVsActual(
   db: Database,
@@ -624,10 +563,7 @@ export function getBudgetVsActual(
   accountId?: number,
   entityId?: number
 ): BudgetVsActualRow[] {
-  const startDate = `${month}-01`;
-  // Compute end of month
-  const [year, mon] = month.split('-').map(Number);
-  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
+  const { startDate, endDate } = budgetMonthWindow(month);
 
   const budgets = getBudgets(db);
   if (budgets.length === 0) return [];
@@ -635,15 +571,14 @@ export function getBudgetVsActual(
   // Check if categories table exists (backward compat)
   const hasCategories = (() => {
     try {
-      db.prepare("SELECT 1 FROM categories LIMIT 1").get();
+      db.prepare(HAS_CATEGORIES_PROBE_SQL).get();
       return true;
     } catch {
       return false;
     }
   })();
 
-  const acctFilter = accountId !== undefined ? ' AND t.account_id = @accountId' : '';
-  const entityFilter = entityId !== undefined ? ' AND t.entity_id = @entityId' : '';
+  const { acctFilter, entityFilter } = composeBudgetActualClauses(accountId, entityId);
   const results: BudgetVsActualRow[] = [];
 
   for (const budget of budgets) {
@@ -651,49 +586,12 @@ export function getBudgetVsActual(
     if (accountId !== undefined) params.accountId = accountId;
     if (entityId !== undefined) params.entityId = entityId;
 
-    let actual: number;
+    const sql = hasCategories
+      ? composeBudgetRollupSql(acctFilter, entityFilter)
+      : composeBudgetFallbackSql(acctFilter, entityFilter);
+    const row = db.prepare(sql).get(params) as { actual: number };
 
-    if (hasCategories) {
-      // Use recursive CTE to sum spending from this category + all descendants
-      const row = db.prepare(`
-        WITH RECURSIVE descendants AS (
-          SELECT id, name FROM categories WHERE LOWER(name) = LOWER(@category)
-          UNION ALL
-          SELECT c.id, c.name FROM categories c
-          JOIN descendants d ON c.parent_id = d.id
-        )
-        SELECT COALESCE(SUM(ABS(t.amount)), 0) AS actual
-        FROM transactions t
-        JOIN descendants d ON LOWER(t.category) = LOWER(d.name)
-        WHERE t.date >= @startDate
-          AND t.date <= @endDate
-          AND t.amount < 0${acctFilter}${entityFilter}
-      `).get(params) as { actual: number };
-      actual = row.actual;
-    } else {
-      // Fallback: case-insensitive exact match
-      const row = db.prepare(`
-        SELECT COALESCE(SUM(ABS(t.amount)), 0) AS actual
-        FROM transactions t
-        WHERE LOWER(t.category) = LOWER(@category)
-          AND t.date >= @startDate
-          AND t.date <= @endDate
-          AND t.amount < 0${acctFilter}${entityFilter}
-      `).get(params) as { actual: number };
-      actual = row.actual;
-    }
-
-    const remaining = budget.monthly_limit - actual;
-    const percentUsed = budget.monthly_limit > 0 ? Math.round((actual / budget.monthly_limit) * 100) : 0;
-
-    results.push({
-      category: budget.category,
-      monthly_limit: budget.monthly_limit,
-      actual,
-      remaining,
-      percent_used: percentUsed,
-      over: actual > budget.monthly_limit,
-    });
+    results.push(budgetActualRow(budget, row.actual));
   }
 
   return results;

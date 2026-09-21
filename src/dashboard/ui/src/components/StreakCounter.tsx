@@ -1,8 +1,9 @@
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { StreakData } from '@/types';
 
 export function StreakCounter() {
-  const { data, loading } = useApi<StreakData>('/api/streak');
+  const { data, loading, offline } = useApi<StreakData>('/api/streak');
 
   if (loading) {
     return (
@@ -10,6 +11,11 @@ export function StreakCounter() {
         <div className="h-[80px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than showing a fake 0-day streak.
+    return <OfflineUnavailable title="Streak" />;
   }
 
   const current = data?.current ?? 0;

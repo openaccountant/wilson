@@ -9,7 +9,14 @@
 // the awaited fn, which is correct for a single connection with no interleaving
 // (exactly the wa-sqlite adapter's semantics).
 import { Database } from '../db/compat-sqlite.js';
-import type { MirrorEntityRow, MirrorTransactionRow, SqliteBinding, SqliteStatement } from '../dashboard/ui/src/store/types.js';
+import type {
+  MirrorBudgetRow,
+  MirrorCategoryRow,
+  MirrorEntityRow,
+  MirrorTransactionRow,
+  SqliteBinding,
+  SqliteStatement,
+} from '../dashboard/ui/src/store/types.js';
 
 export class MirrorTestBinding implements SqliteBinding {
   constructor(private readonly db: Database) {}
@@ -101,4 +108,33 @@ export function mirrorEntity(overrides: Partial<MirrorEntityRow> = {}): MirrorEn
     updated_at: '2026-01-15 12:00:00',
     ...overrides,
   } as MirrorEntityRow;
+}
+
+/** Full-shape MirrorBudgetRow with per-test overrides. */
+export function mirrorBudget(overrides: Partial<MirrorBudgetRow> = {}): MirrorBudgetRow {
+  return {
+    id: 1,
+    category: 'Groceries',
+    monthly_limit: 200,
+    entity_id: null,
+    created_at: '2026-01-15 12:00:00',
+    updated_at: '2026-01-15 12:00:00',
+    ...overrides,
+  } as MirrorBudgetRow;
+}
+
+/** Full-shape MirrorCategoryRow with per-test overrides. */
+export function mirrorCategory(overrides: Partial<MirrorCategoryRow> = {}): MirrorCategoryRow {
+  return {
+    id: 1,
+    name: 'Groceries',
+    slug: 'groceries',
+    parent_id: null,
+    description: 'Supermarkets, grocery stores',
+    is_system: 1,
+    sort_order: 2,
+    created_at: '2026-01-15 12:00:00',
+    updated_at: '2026-01-15 12:00:00',
+    ...overrides,
+  } as MirrorCategoryRow;
 }

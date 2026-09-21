@@ -10,7 +10,15 @@
 
 import MirrorWorkerCtor from './mirror-worker.ts?worker&inline';
 import { SYNC_PULL_LIMIT, type SyncApplier } from './sync-engine.js';
-import type { MirrorState, MirrorStatus, MirrorTransactionRow, MirrorEntityRow, SyncPayload } from './types.js';
+import type {
+  MirrorState,
+  MirrorStatus,
+  MirrorTransactionRow,
+  MirrorEntityRow,
+  MirrorBudgetRow,
+  MirrorCategoryRow,
+  SyncPayload,
+} from './types.js';
 
 const MIRROR_PROFILE_KEY = 'wilson_mirror_profile';
 const READY_TIMEOUT_MS = 4_000; // offline reload waits out worker/wasm boot
@@ -187,6 +195,12 @@ const syncFetcher = {
   async fetchAllEntities(): Promise<MirrorEntityRow[]> {
     return fetchJson<MirrorEntityRow[]>('/api/entities');
   },
+  async fetchAllBudgets(): Promise<MirrorBudgetRow[]> {
+    return fetchJson<MirrorBudgetRow[]>('/api/budgets/limits');
+  },
+  async fetchAllCategories(): Promise<MirrorCategoryRow[]> {
+    return fetchJson<MirrorCategoryRow[]>('/api/categories');
+  },
 };
 
 /** The mirror, reached over worker RPC, as a SyncApplier for the sync engine. */
@@ -213,9 +227,11 @@ async function doSync(): Promise<void> {
     // Fetch everything BEFORE touching the pool: if any pull fails, the old
     // mirror stays intact and keeps serving its last good set.
     const profile = await syncFetcher.fetchActiveProfile();
-    const [transactions, entities] = await Promise.all([
+    const [transactions, entities, budgets, categories] = await Promise.all([
       syncFetcher.fetchAllTransactions(),
       syncFetcher.fetchAllEntities(),
+      syncFetcher.fetchAllBudgets(),
+      syncFetcher.fetchAllCategories(),
     ]);
 
     // Per-profile keying: when the server's active profile differs from the
@@ -227,7 +243,7 @@ async function doSync(): Promise<void> {
       setMirrorState({ profile: opened.profile, seeded: opened.seeded, lastSyncedAt: opened.lastSyncedAt });
     }
 
-    await rpcSyncTarget()({ profile, transactions, entities });
+    await rpcSyncTarget()({ profile, transactions, entities, budgets, categories });
 
     setMirrorState({ online: true, seeded: true, lastSyncedAt: new Date().toISOString() });
     persistProfile(profile);

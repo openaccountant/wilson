@@ -55,7 +55,10 @@ export interface FetchOutcomeInput {
 /**
  * Decide what the fetch seam does after a failed fetch. Writes always require a
  * connection (the mirror is read-only); reads return the mirror's rows only
- * when the mirror actually has an answer for that path.
+ * when the mirror actually has an answer for that path. A GET the mirror cannot
+ * serve is ALSO "requires connection" — the UI renders those paths (e.g. the
+ * server-side alerts engine) as explicitly unavailable offline rather than
+ * surfacing a raw TypeError.
  */
 export function resolveFetchOutcome({
   isWrite,
@@ -65,5 +68,10 @@ export function resolveFetchOutcome({
   if (!networkError) return 'rethrow';
   if (isWrite) return 'throw-requires-connection';
   if (mirrored !== null) return 'return-mirror';
-  return 'rethrow';
+  return 'throw-requires-connection';
+}
+
+/** True when the error is the seam's explicit requires-connection signal. */
+export function isRequiresConnectionError(err: unknown): boolean {
+  return err instanceof RequiresConnectionError;
 }

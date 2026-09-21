@@ -7,17 +7,21 @@ import {
   isMirrorSeeded,
   resetMirrorSchema,
   setMeta,
+  MIRROR_BUDGET_COLUMNS,
+  MIRROR_CATEGORY_COLUMNS,
   MIRROR_SCHEMA_VERSION,
 } from '../dashboard/ui/src/store/mirror-schema.js';
 import { serveApiPath } from '../dashboard/ui/src/store/mirror-reads.js';
-import type { MirrorTransactionRow, MirrorEntityRow, SyncPayload } from '../dashboard/ui/src/store/types.js';
-import { createMirrorDb, mirrorTxn, mirrorEntity } from './mirror-helpers.js';
+import type { MirrorTransactionRow, MirrorEntityRow, MirrorBudgetRow, MirrorCategoryRow, SyncPayload } from '../dashboard/ui/src/store/types.js';
+import { createMirrorDb, mirrorTxn, mirrorEntity, mirrorBudget, mirrorCategory } from './mirror-helpers.js';
 
 function payload(overrides: Partial<SyncPayload> = {}): SyncPayload {
   return {
     profile: 'default',
     transactions: [],
     entities: [mirrorEntity() as unknown as MirrorEntityRow],
+    budgets: [mirrorBudget() as unknown as MirrorBudgetRow],
+    categories: [mirrorCategory() as unknown as MirrorCategoryRow],
     ...overrides,
   };
 }
@@ -205,7 +209,7 @@ describe('applySync — restored mirror (offline reload)', () => {
     // connection, so only the persistent tables exist — recreate them WITHOUT
     // the temp tables, then sync again.
     const restored = await createMirrorDb();
-    await restored.exec('DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS entities; DROP TABLE IF EXISTS mirror_meta;');
+    await restored.exec('DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS budgets; DROP TABLE IF EXISTS categories; DROP TABLE IF EXISTS entities; DROP TABLE IF EXISTS mirror_meta;');
     await createPersistentMirrorSchema(restored);
 
     const result = await applySync(restored, payload({
@@ -226,5 +230,130 @@ describe('resetMirrorSchema', () => {
     const rows = await serveTransactions(db);
     expect(rows).toHaveLength(1);
     expect(rows[0].external_id).toBe('f');
+  });
+});
+// ── Budgets + categories tables (schema v3) ─────────────────────────────────
+
+describe('applySync — budgets', () => {
+  test('seeds budgets and serves them on the vs-actual path', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({
+      budgets: [
+        mirrorBudget({ id: 1, category: 'Groceries', monthly_limit: 200 }) as unknown as MirrorBudgetRow,
+        mirrorBudget({ id: 2, category: 'Dining', monthly_limit: 100.5 }) as unknown as MirrorBudgetRow,
+      ],
+      categories: [mirrorCategory({ name: 'Groceries', slug: 'groceries' }) as unknown as MirrorCategoryRow],
+    }));
+
+    const rows = (await serveApiPath(db, '/api/budgets?month=2026-01')) as Array<Record<string, unknown>>;
+    expect(rows.map((r) => r.category).sort()).toEqual(['Dining', 'Groceries']);
+    expect(rows.find((r) => r.category === 'Groceries')).toEqual({
+      category: 'Groceries',
+      monthly_limit: 200,
+      actual: 0,
+      remaining: 200,
+      percent_used: 0,
+      over: false,
+    });
+  });
+
+  test('monthly_limit change upserts in place (keyed on category, not id)', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({
+      budgets: [mirrorBudget({ id: 1, category: 'Groceries', monthly_limit: 200 }) as unknown as MirrorBudgetRow],
+    }));
+
+    // Server-side setBudget keeps the row's id but rewrites the limit; the pull
+    // must UPDATE the existing row, not duplicate it.
+    await applySync(db, payload({
+      budgets: [mirrorBudget({ id: 1, category: 'Groceries', monthly_limit: 350 }) as unknown as MirrorBudgetRow],
+    }));
+
+    const raw = await db.prepare('SELECT id, category, monthly_limit FROM budgets').all();
+    expect(raw).toHaveLength(1);
+    expect(raw[0]).toEqual({ id: 1, category: 'Groceries', monthly_limit: 350 });
+  });
+
+  test('server-side budget deletion reconciles away on the next full pull', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({
+      budgets: [
+        mirrorBudget({ category: 'Groceries' }) as unknown as MirrorBudgetRow,
+        mirrorBudget({ id: 2, category: 'Dining' }) as unknown as MirrorBudgetRow,
+      ],
+    }));
+    await applySync(db, payload({
+      budgets: [mirrorBudget({ category: 'Groceries' }) as unknown as MirrorBudgetRow],
+    }));
+    const raw = await db.prepare('SELECT category FROM budgets ORDER BY category').all();
+    expect(raw).toEqual([{ category: 'Groceries' }]);
+  });
+});
+
+describe('applySync — categories', () => {
+  test('seeds categories and serves a renamed row after the next full pull', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({
+      categories: [mirrorCategory({ id: 1, name: 'Groceries', slug: 'groceries' }) as unknown as MirrorCategoryRow],
+    }));
+    let raw = await db.prepare('SELECT name FROM categories').all();
+    expect(raw).toEqual([{ name: 'Groceries' }]);
+
+    await applySync(db, payload({
+      categories: [mirrorCategory({ id: 1, name: 'Supermarket', slug: 'supermarket' }) as unknown as MirrorCategoryRow],
+    }));
+    raw = await db.prepare('SELECT name FROM categories').all();
+    expect(raw).toEqual([{ name: 'Supermarket' }]);
+  });
+
+  test('category deletion reconciles away, parent/child order does not matter', async () => {
+    const db = await createMirrorDb();
+    // Child (id 2) arrives BEFORE its parent — foreign_keys is OFF in the mirror.
+    await applySync(db, payload({
+      categories: [
+        mirrorCategory({ id: 2, name: 'Coffee', slug: 'coffee', parent_id: 1, is_system: 0 }) as unknown as MirrorCategoryRow,
+        mirrorCategory({ id: 1, name: 'Dining', slug: 'dining' }) as unknown as MirrorCategoryRow,
+      ],
+    }));
+    let raw = await db.prepare('SELECT id FROM categories ORDER BY id').all();
+    expect(raw).toEqual([{ id: 1 }, { id: 2 }]);
+
+    await applySync(db, payload({
+      categories: [mirrorCategory({ id: 1, name: 'Dining', slug: 'dining' }) as unknown as MirrorCategoryRow],
+    }));
+    raw = await db.prepare('SELECT id FROM categories ORDER BY id').all();
+    expect(raw).toEqual([{ id: 1 }]);
+  });
+});
+
+describe('applySync — schema v3', () => {
+  test('the version marker still drives the re-seed gate', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({ transactions: [mirrorTxn({ id: 1, external_id: 'old-1' }) as unknown as MirrorTransactionRow] }));
+    await setMeta(db, 'schema_version', String(MIRROR_SCHEMA_VERSION - 1));
+
+    const result = await applySync(db, payload({
+      transactions: [mirrorTxn({ id: 2, external_id: 'new-1' }) as unknown as MirrorTransactionRow],
+    }));
+    expect(result.seeded).toBe(true);
+    expect(await getMeta(db, 'schema_version')).toBe(String(MIRROR_SCHEMA_VERSION));
+    // Budgets survive the re-seed too (the payload is the full set).
+    const budgets = await db.prepare('SELECT category FROM budgets').all();
+    expect(budgets).toEqual([{ category: 'Groceries' }]);
+  });
+
+  test('column lists cover every mirror column (full-column rows round-trip)', async () => {
+    const db = await createMirrorDb();
+    const budget = mirrorBudget();
+    const category = mirrorCategory({ description: 'desc' });
+    await applySync(db, payload({
+      budgets: [budget as unknown as MirrorBudgetRow],
+      categories: [category as unknown as MirrorCategoryRow],
+    }));
+
+    const budgetCols = (await db.prepare('SELECT * FROM budgets LIMIT 1').all())[0];
+    expect(Object.keys(budgetCols).sort()).toEqual([...MIRROR_BUDGET_COLUMNS].sort());
+    const categoryCols = (await db.prepare('SELECT * FROM categories LIMIT 1').all())[0];
+    expect(Object.keys(categoryCols).sort()).toEqual([...MIRROR_CATEGORY_COLUMNS].sort());
   });
 });

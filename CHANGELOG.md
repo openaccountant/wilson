@@ -25,6 +25,8 @@
 
 - feat: dashboard Review tab for the categorization queue — lists every pending review with the transaction's date, amount, description, the suggested category and its confidence (plus the currently applied category for backfilled historical rows); Confirm applies the suggested category and Correct applies a user-picked one from the existing category list, and either action atomically applies the category, marks the transaction user-verified, and resolves the queue entry (`GET /api/reviews` readable by any authenticated user, `POST /api/reviews/:id/confirm|correct` admin-only; `PATCH /api/transactions/:id` can now also carry `user_verified`) (#86)
 
+- feat: offline overview — the eight approved overview cards (heatmap, streak, weekly summary, budget countdown, savings, donut, P&L, budget bars) compute from the sync-fed local mirror without a server; the mirror now also carries budgets + categories, and out-of-scope cards (alerts, net worth, cash forecast) show an explicit unavailable-offline state (#76)
+
 ### Other
 
 - Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)

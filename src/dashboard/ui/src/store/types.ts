@@ -93,6 +93,38 @@ export interface MirrorEntityRow {
 }
 
 /**
+ * Mirrors the server `budgets` table (see BUDGETS_TABLE, plus the entity_id
+ * column from migration 21's ENTITY_ID_COLUMNS budgets line — the BudgetRow
+ * interface server-side predates that migration, but SELECT * carries it).
+ * The offline overview needs budgets for the streak's daily budget
+ * (SUM(monthly_limit)/days-in-month) and the budget cards.
+ */
+export interface MirrorBudgetRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
+  entity_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Mirrors the server `categories` table (see CATEGORIES_TABLE). Budget-vs-actual
+ * rolls spending up through this hierarchy (recursive CTE) on both sides.
+ */
+export interface MirrorCategoryRow {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description: string | null;
+  is_system: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * One full pull from the server, applied to the mirror in a single transaction.
  * The schema version is a store constant (MIRROR_SCHEMA_VERSION), not wire data.
  */
@@ -100,6 +132,8 @@ export interface SyncPayload {
   profile: string;
   transactions: MirrorTransactionRow[];
   entities: MirrorEntityRow[];
+  budgets: MirrorBudgetRow[];
+  categories: MirrorCategoryRow[];
 }
 
 /** Status of the browser-side mirror, consumed by the UI. */

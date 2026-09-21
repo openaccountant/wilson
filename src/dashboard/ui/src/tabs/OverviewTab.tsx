@@ -12,10 +12,12 @@ import { AlertList } from '@/components/AlertList';
 import { LiabilitiesCard } from '@/components/LiabilitiesCard';
 import { Dialog } from '@/components/Dialog';
 import { useApi } from '@/hooks/useApi';
+import { useMirrorStatus } from '@/hooks/useMirrorSync';
 import type { Transaction } from '@/types';
 
 export function OverviewTab() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const mirror = useMirrorStatus();
 
   const { data: dayTransactions, loading: dayLoading } = useApi<Transaction[]>(
     `/api/transactions?start=${selectedDate}&end=${selectedDate}&limit=50`,
@@ -28,6 +30,18 @@ export function OverviewTab() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      {/* Offline pill — same affordance as the transactions tab */}
+      {mirror.available && mirror.seeded && !mirror.online && (
+        <div className="flex items-center gap-2">
+          <span
+            data-testid="offline-pill"
+            className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-500 uppercase tracking-wide"
+          >
+            Offline — showing synced data
+          </span>
+        </div>
+      )}
+
       {/* Weekly narrative */}
       <WeeklySummary />
 
