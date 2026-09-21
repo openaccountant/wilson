@@ -1,6 +1,16 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { createHash } from 'crypto';
 import {
+  importStep,
+  embeddingStep,
+  predictStep,
+  reconcileStep,
+  type TraceDeps,
+  type TraceStepId,
+  type TraceStepResult,
+  type TraceTransaction,
+} from '../demo/statement-trace.js';
+import {
   getSpendingSummary,
   getProfitLoss,
   getBudgetVsActual,
@@ -1105,4 +1115,96 @@ export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
     dateRange: { start: dateRangeStart, end: dateRangeEnd },
     message,
   };
+}
+
+// ── Demo trace (statement-to-dashboard agent chain) ─────────────────────────
+
+const MAX_TRACE_ROWS = 2000;
+
+function traceError(step: TraceStepId, error: string): TraceStepResult {
+  return {
+    step,
+    status: 'error',
+    durationMs: 0,
+    detail: { bank: '', format: '', rowCount: 0, imported: 0, skippedRows: 0, importedIds: [], message: '' },
+    error,
+  };
+}
+
+/**
+ * One step of the Demo tab's statement agent chain. A thin validating
+ * dispatcher over the chain's step functions (src/demo/statement-trace.ts):
+ * `import` commits through apiImport (the only write), `embed`/`predict`/
+ * `reconcile` are reads/inference. Validation failures come back as
+ * status:'error' results (the route maps them to 400).
+ */
+export async function apiDemoTraceStep(db: Database, body: unknown, deps?: Partial<TraceDeps>): Promise<TraceStepResult> {
+  const step = (body as { step?: unknown } | null)?.step;
+
+  if (step !== 'import' && step !== 'embed' && step !== 'predict' && step !== 'reconcile') {
+    return { step: 'import', status: 'error', durationMs: 0, detail: { bank: '', format: '', rowCount: 0, imported: 0, skippedRows: 0, importedIds: [], message: '' }, error: `unknown step: ${String(step)}` };
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    return traceError(step, 'request body must be an object');
+  }
+  const b = body as Record<string, unknown>;
+  const traceDeps: TraceDeps = { db, ...(deps ?? {}) };
+
+  if (step === 'import') {
+    if (typeof b.filename !== 'string' || b.filename.trim() === '') {
+      return traceError('import', 'filename is required');
+    }
+    if (typeof b.fileHash !== 'string' || b.fileHash.trim() === '') {
+      return traceError('import', 'fileHash is required');
+    }
+    if (!Array.isArray(b.transactions) || b.transactions.length === 0) {
+      return traceError('import', 'transactions must be a non-empty array');
+    }
+    return importStep(
+      {
+        filename: b.filename,
+        bank: typeof b.bank === 'string' ? b.bank : undefined,
+        format: typeof b.format === 'string' ? b.format : undefined,
+        fileHash: b.fileHash,
+        transactions: b.transactions as TraceTransaction[],
+      },
+      traceDeps,
+    );
+  }
+
+  if (step === 'embed') {
+    if (!Array.isArray(b.transactions) || b.transactions.length === 0) {
+      return traceError('embed', 'transactions must be a non-empty array');
+    }
+    if (b.transactions.length > MAX_TRACE_ROWS) {
+      return traceError('embed', `transactions must not exceed ${MAX_TRACE_ROWS} rows`);
+    }
+    const rows = b.transactions as unknown[];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] as { description?: unknown } | null;
+      if (typeof r !== 'object' || r === null || typeof r.description !== 'string' || r.description.trim() === '') {
+        return traceError('embed', `transactions[${i}].description must be a non-empty string`);
+      }
+    }
+    return embeddingStep(rows as { description: string }[], traceDeps);
+  }
+
+  if (step === 'predict') {
+    if (typeof b.description !== 'string' || b.description.trim() === '') {
+      return traceError('predict', 'description must be a non-empty string');
+    }
+    return predictStep(b.description, traceDeps);
+  }
+
+  // step === 'reconcile'
+  if (!Array.isArray(b.importedIds) || b.importedIds.length === 0) {
+    return traceError('reconcile', 'importedIds must be a non-empty array of transaction ids');
+  }
+  for (const id of b.importedIds) {
+    if (typeof id !== 'number' || !Number.isInteger(id)) {
+      return traceError('reconcile', 'importedIds must be a non-empty array of transaction ids');
+    }
+  }
+  return reconcileStep(b.importedIds as number[], traceDeps);
 }
