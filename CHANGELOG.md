@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.8.0] — 2026-09-21
+
+### Features
+
+- feat: offline dashboard transactions — sync-fed local mirror serves the transactions tab without a server (#105) (4ff32f3)
+
+### Other
+
+- Add what-if controls to the Cash Forecast card: 6/12/24-month horizon and ±50% income/expense assumption sliders (#81) (#114) (c834456)
+
+
 ## [Unreleased]
 
 ### Other
