@@ -4,7 +4,9 @@ import { startDashboardServer, stopDashboardServer } from '../dashboard/server.j
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth } from '../dashboard/auth.js';
 import { insertTransactions } from '../db/queries.js';
-import { insertAccount } from '../db/net-worth-queries.js';
+import { insertAccount, insertBalanceSnapshot } from '../db/net-worth-queries.js';
+import { apiAccounts, apiNetWorth, apiNetWorthTrend } from '../dashboard/api.js';
+import type { Account, NetWorthResponse, NetWorthTrendPoint } from '../dashboard/ui/src/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 /** Spin up a fresh server with an in-memory DB. */
@@ -356,6 +358,34 @@ describe('dashboard server', () => {
   // ── Accounts & Net Worth routes ──────────────────────────────────────────
 
   describe('accounts and net worth', () => {
+    // Canonical sorted field-name lists the UI types in
+    // src/dashboard/ui/src/types.ts must mirror exactly.
+    const UI_ACCOUNT_KEYS = [
+      'account_number_last4',
+      'account_subtype',
+      'account_type',
+      'created_at',
+      'currency',
+      'current_balance',
+      'entity_id',
+      'id',
+      'institution',
+      'is_active',
+      'name',
+      'notes',
+      'plaid_account_id',
+      'updated_at',
+    ].sort();
+    const UI_NET_WORTH_KEYS = [
+      'accounts',
+      'assetsBySubtype',
+      'liabilitiesBySubtype',
+      'netWorth',
+      'totalAssets',
+      'totalLiabilities',
+    ].sort();
+    const UI_TREND_KEYS = ['date', 'netWorth', 'totalAssets', 'totalLiabilities'].sort();
+
     test('GET /api/accounts returns active accounts', async () => {
       const { db, base } = await start();
       insertAccount(db, {
@@ -406,6 +436,107 @@ describe('dashboard server', () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(Array.isArray(data)).toBe(true);
+    });
+
+    // ── Wire-contract pins ──────────────────────────────────────────────────
+    // The dashboard UI types (src/dashboard/ui/src/types.ts) must declare the
+    // exact field names the API sends. The canonical lists below are the
+    // `accounts` table's column set and the query response shapes — they
+    // intentionally fail if a migration adds a column, forcing the UI type to
+    // be updated in the same slice.
+
+    test('GET /api/accounts rows carry exactly the field names the UI Account type declares', async () => {
+      const { db, base } = await start();
+      insertAccount(db, {
+        name: 'Checking',
+        account_type: 'asset',
+        account_subtype: 'checking',
+        current_balance: 5000,
+      });
+      insertAccount(db, {
+        name: 'Visa',
+        account_type: 'liability',
+        account_subtype: 'credit_card',
+        current_balance: 2000,
+      });
+
+      const res = await fetch(base + '/api/accounts');
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      for (const row of data) {
+        expect(Object.keys(row).sort()).toEqual(UI_ACCOUNT_KEYS);
+      }
+
+      const checking = data.find((r: { name: string }) => r.name === 'Checking');
+      const visa = data.find((r: { name: string }) => r.name === 'Visa');
+      expect(checking.account_type).toBe('asset');
+      expect(checking.account_subtype).toBe('checking');
+      expect(checking.current_balance).toBe(5000);
+      expect(checking.institution).toBeNull();
+      expect(checking.is_active).toBe(1);
+      expect(visa.account_type).toBe('liability');
+      expect(visa.current_balance).toBe(2000);
+
+      // Compile-time pin: API row shape must stay assignable to the UI type.
+      const uiAccounts: Account[] = apiAccounts(db);
+      expect(uiAccounts.length).toBe(2);
+    });
+
+    test('GET /api/net-worth matches the UI NetWorthResponse type', async () => {
+      const { db, base } = await start();
+      insertAccount(db, {
+        name: 'Checking',
+        account_type: 'asset',
+        account_subtype: 'checking',
+        current_balance: 10000,
+      });
+      insertAccount(db, {
+        name: 'Credit Card',
+        account_type: 'liability',
+        account_subtype: 'credit_card',
+        current_balance: 2000,
+      });
+
+      const res = await fetch(base + '/api/net-worth');
+      expect(res.status).toBe(200);
+      const data = await res.json();
+
+      expect(Object.keys(data).sort()).toEqual(UI_NET_WORTH_KEYS);
+      expect(Object.keys(data.accounts[0]).sort()).toEqual(UI_ACCOUNT_KEYS);
+
+      // Compile-time pin: summary shape must stay assignable to the UI type.
+      const uiNetWorth: NetWorthResponse = apiNetWorth(db);
+      expect(uiNetWorth.netWorth).toBe(8000);
+    });
+
+    test('GET /api/net-worth/trend rows match the UI NetWorthTrendPoint type', async () => {
+      const { db, base } = await start();
+      const accountId = insertAccount(db, {
+        name: 'Checking',
+        account_type: 'asset',
+        account_subtype: 'checking',
+        current_balance: 5000,
+      });
+      // Today's date is always inside the trend's 12-month window.
+      insertBalanceSnapshot(db, {
+        account_id: accountId,
+        balance: 5000,
+        snapshot_date: new Date().toISOString().slice(0, 10),
+      });
+
+      const res = await fetch(base + '/api/net-worth/trend?months=12');
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.length).toBeGreaterThan(0);
+      for (const row of data) {
+        expect(Object.keys(row).sort()).toEqual(UI_TREND_KEYS);
+        expect(typeof row.date).toBe('string');
+      }
+
+      // Compile-time pin: trend shape must stay assignable to the UI type.
+      const uiTrend: NetWorthTrendPoint[] = apiNetWorthTrend(db, new URLSearchParams());
+      expect(uiTrend.length).toBeGreaterThan(0);
     });
 
     test('GET /api/accounts/:id/transactions returns filtered txns', async () => {

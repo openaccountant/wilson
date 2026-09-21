@@ -6,10 +6,15 @@ import { hasLegacyData, migrateLegacyData, resolveProfile, type ProfilePaths } f
 
 describe('profile/migrate', () => {
   const tmpDir = join(os.tmpdir(), `migrate-test-${Date.now()}`);
-  let origCwd: string;
+  // Captured once, at describe scope. Reassigning this per-test would latch it
+  // onto tmpDir and leave the process sitting in a deleted directory, which
+  // makes every later test file fail process.cwd() with uv_cwd under Bun 1.4.
+  const origCwd = process.cwd();
 
   beforeEach(() => {
-    origCwd = process.cwd();
+    // Step out before removing tmpDir — rmSync on the current directory is what
+    // orphans the cwd.
+    process.chdir(origCwd);
     rmSync(tmpDir, { recursive: true, force: true });
     mkdirSync(tmpDir, { recursive: true });
     process.chdir(tmpDir);

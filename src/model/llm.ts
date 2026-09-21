@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { DEFAULT_SYSTEM_PROMPT } from '../agent/prompts.js';
 import type { LlmResponse, ToolDef } from './types.js';
 import { getAdapter } from './providers/index.js';
+import { buildRepairPrompt, LlmValidationError, validateStructuredOutput } from './structured-output.js';
 import { logger } from '../utils/logger.js';
 import { classifyError, isNonRetryableError } from '../utils/errors.js';
 import { resolveProvider, getProviderById } from '../providers.js';
@@ -97,11 +98,49 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       provider.displayName,
     );
 
+    // Structured-output gate: when a schema was supplied, validate what came back
+    // (falling back to parsing the response content) and give the model exactly one
+    // schema-aware repair re-prompt. If the repair still violates the schema, reject
+    // with a typed error instead of returning unvalidated data.
+    let finalResponse = response;
+    if (outputSchema) {
+      const first = validateStructuredOutput(response, outputSchema);
+      if (first.ok) {
+        finalResponse = first.response;
+      } else {
+        logger.warn(`Structured output failed schema validation; requesting one repair`, {
+          model: apiModel,
+          provider: provider.id,
+          issues: first.issues,
+        });
+        finalResponse = await withRetry(
+          () =>
+            adapter.call({
+              model: apiModel,
+              systemPrompt: finalSystemPrompt,
+              userPrompt: buildRepairPrompt(prompt, response, outputSchema, first.issues),
+              outputSchema,
+              signal,
+            }),
+          provider.displayName,
+        );
+        const second = validateStructuredOutput(finalResponse, outputSchema);
+        if (!second.ok) {
+          throw new LlmValidationError(
+            `LLM structured output failed schema validation after one repair attempt: ${second.issues.join('; ')}`,
+            second.issues,
+            finalResponse,
+          );
+        }
+        finalResponse = second.response;
+      }
+    }
+
     const durationMs = Date.now() - startTime;
-    const inputTokens = response.usage?.inputTokens ?? 0;
-    const outputTokens = response.usage?.outputTokens ?? 0;
-    const totalTokens = response.usage?.totalTokens ?? 0;
-    const toolCallCount = response.toolCalls?.length ?? 0;
+    const inputTokens = finalResponse.usage?.inputTokens ?? 0;
+    const outputTokens = finalResponse.usage?.outputTokens ?? 0;
+    const totalTokens = finalResponse.usage?.totalTokens ?? 0;
+    const toolCallCount = finalResponse.toolCalls?.length ?? 0;
 
     traceStore.record({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -109,7 +148,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       model: apiModel,
       provider: provider.id,
       promptLength: promptChars,
-      responseLength: response.content.length,
+      responseLength: finalResponse.content.length,
       inputTokens,
       outputTokens,
       totalTokens,
@@ -125,8 +164,8 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       provider: provider.id,
       systemPrompt: finalSystemPrompt,
       userPrompt: prompt,
-      responseContent: response.content,
-      toolCalls: response.toolCalls ?? [],
+      responseContent: finalResponse.content,
+      toolCalls: finalResponse.toolCalls ?? [],
       toolDefs: (tools ?? []).map(t => t.name),
       usage: { inputTokens, outputTokens, totalTokens },
       durationMs,
@@ -140,11 +179,11 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       inputTokens,
       outputTokens,
       totalTokens,
-      responseChars: response.content.length,
+      responseChars: finalResponse.content.length,
       toolCalls: toolCallCount,
     });
 
-    return { response, usage: response.usage, interactionId };
+    return { response: finalResponse, usage: finalResponse.usage, interactionId };
   } catch (error) {
     const durationMs = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);

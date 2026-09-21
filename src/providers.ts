@@ -14,6 +14,14 @@ export interface ProviderDef {
   apiKeyEnvVar?: string;
   /** Fast model variant for lightweight tasks like summarization. */
   fastModel?: string;
+  /**
+   * Where the model runs: on this device (local inference — Ollama,
+   * Transformers.js) or on a cloud server (API-keyed providers). The single
+   * place local-vs-server classification comes from — e.g. the Settings
+   * Models panel derives its "Runs on this device" / "Runs on a cloud
+   * server" badges from this.
+   */
+  isLocal: boolean;
 }
 
 export const PROVIDERS: ProviderDef[] = [
@@ -22,20 +30,29 @@ export const PROVIDERS: ProviderDef[] = [
     id: 'ollama',
     displayName: 'Ollama',
     modelPrefix: 'ollama:',
+    isLocal: true,
   },
   {
     id: 'openai-compatible',
     displayName: 'OpenAI-compatible server',
     modelPrefix: 'openai-compatible:',
+    isLocal: true,
   },
   {
     id: 'transformers',
     displayName: 'Transformers.js (local)',
     modelPrefix: 'transformers:',
+    isLocal: true,
+    // Browser (WebGPU) fast model for hybrid dashboard chat. Must be a
+    // webgpu-tagged id from the model catalog (src/utils/model.ts) — a test
+    // cross-checks this, and the local-chat config endpoint exposes it to the
+    // browser verbatim, so this is the single place to change the model.
+    fastModel: 'transformers:onnx-community/Qwen3-0.6B-ONNX',
   },
   // Cloud providers
   {
     id: 'openai',
+    isLocal: false,
     displayName: 'OpenAI',
     modelPrefix: '',
     apiKeyEnvVar: 'OPENAI_API_KEY',
@@ -43,6 +60,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'anthropic',
+    isLocal: false,
     displayName: 'Anthropic',
     modelPrefix: 'claude-',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
@@ -50,6 +68,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'google',
+    isLocal: false,
     displayName: 'Google',
     modelPrefix: 'gemini-',
     apiKeyEnvVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
@@ -57,6 +76,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'xai',
+    isLocal: false,
     displayName: 'xAI',
     modelPrefix: 'grok-',
     apiKeyEnvVar: 'XAI_API_KEY',
@@ -64,6 +84,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'moonshot',
+    isLocal: false,
     displayName: 'Moonshot',
     modelPrefix: 'kimi-',
     apiKeyEnvVar: 'MOONSHOT_API_KEY',
@@ -71,6 +92,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'deepseek',
+    isLocal: false,
     displayName: 'DeepSeek',
     modelPrefix: 'deepseek-',
     apiKeyEnvVar: 'DEEPSEEK_API_KEY',
@@ -78,6 +100,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'openrouter',
+    isLocal: false,
     displayName: 'OpenRouter',
     modelPrefix: 'openrouter:',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
@@ -85,6 +108,7 @@ export const PROVIDERS: ProviderDef[] = [
   },
   {
     id: 'litellm',
+    isLocal: false,
     displayName: 'LiteLLM',
     modelPrefix: 'litellm:',
     apiKeyEnvVar: 'LITELLM_API_KEY',

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, beforeAll, afterAll, spyOn, setSystemTime } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import {
   getCurrentDate,
@@ -21,6 +21,18 @@ import { setBudget, insertTransactions } from '../db/queries.js';
 import { createTestDb, seedTestData } from './helpers.js';
 
 describe('agent/prompts', () => {
+  // Freeze the clock to a fixed mid-month date so tests that seed data via
+  // seedTestData() and then check "current month" budget/alert context
+  // (buildBudgetContext, buildAlertContext) are deterministic regardless of
+  // what day the suite runs on — see #23.
+  beforeAll(() => {
+    setSystemTime(new Date('2026-06-15T12:00:00Z'));
+  });
+
+  afterAll(() => {
+    setSystemTime(); // restore real system time
+  });
+
   describe('getCurrentDate', () => {
     test('returns a formatted date string', () => {
       const date = getCurrentDate();
@@ -155,12 +167,12 @@ describe('agent/prompts', () => {
     test('shows OVER for exceeded budget', () => {
       const db = createTestDb();
       seedTestData(db);
-      // Current month's groceries: seed has $92 in March (2026-03-01)
+      // Current month's groceries: seed has $85.50 (see helpers.seedTestData)
       // Set budget low to trigger OVER
       setBudget(db, 'Groceries', 50);
       initBudgetPrompt(db);
       const ctx = buildBudgetContext();
-      // Should contain OVER since $92 > $50
+      // Should contain OVER since $85.50 > $50
       if (ctx && ctx.includes('Groceries')) {
         expect(ctx).toContain('OVER');
       }

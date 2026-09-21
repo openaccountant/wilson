@@ -566,8 +566,8 @@ export async function runCli() {
           if (data.ruleMatched > 0) {
             msg += ` (${data.ruleMatched} by rules, ${data.llmCategorized} by AI)`;
           }
-          if (data.needingReview > 0) {
-            msg += `\n${data.needingReview} need review (low confidence).`;
+          if (data.routedForReview > 0) {
+            msg += `\n${data.routedForReview} routed for human review (held in review queue).`;
           }
           if (data.categoriesApplied && Object.keys(data.categoriesApplied).length > 0) {
             msg += '\n\n**Categories:**\n';
