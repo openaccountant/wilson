@@ -16,6 +16,9 @@ export interface PlaidItem {
   itemId: string;
   accessToken: string;
   institutionName: string;
+  /** Plaid institution_id (e.g. "ins_109508") used for duplicate-Item detection.
+   *  undefined = legacy record pending migration; null = Plaid returned none. */
+  institutionId?: string | null;
   accounts: PlaidAccount[];
   /** Cursor for incremental transaction sync */
   cursor: string | null;
@@ -168,6 +171,23 @@ export function findPlaidItem(institutionName: string): PlaidItem | undefined {
   return store.items.find(
     (i) => i.institutionName.toLowerCase() === institutionName.toLowerCase()
   );
+}
+
+/**
+ * Remove a linked Plaid item by Plaid item_id.
+ * Returns true if an item was removed.
+ */
+export function removePlaidItemById(itemId: string): boolean {
+  const store = readStore();
+  const removed = store.items.filter((i) => i.itemId === itemId);
+  if (removed.length === 0) return false;
+  store.items = store.items.filter((i) => i.itemId !== itemId);
+  writeStore(store);
+  // Clean up keychain entries for removed items
+  for (const item of removed) {
+    deleteSecret(`plaid-${item.itemId}`);
+  }
+  return true;
 }
 
 /**

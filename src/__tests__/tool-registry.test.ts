@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
+import * as skillsIndex from '../skills/index.js';
 import * as realOrchRegistry from '../orchestration/registry.js';
 
 // Spy (not mock.module) on getOrchestrationTools so the tool registry stays
@@ -7,8 +8,12 @@ import * as realOrchRegistry from '../orchestration/registry.js';
 // mockRestore().
 const orchToolsSpy = spyOn(realOrchRegistry, 'getOrchestrationTools').mockImplementation(async () => []);
 
-// Re-mock registry.js to restore real behavior (may have been mocked by chain.test.ts)
-// We need the real module, so import and re-export the actual functions
+// Spy (not mock.module) on discoverSkills so building the registry doesn't
+// hit the filesystem here, without poisoning skills-loader.test.ts — bun's
+// module mocks cannot be undone, but spies can be restored.
+const discoverSkillsSpy = spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => [] as any);
+
+// Mock MCP adapter (used by registry) — no test file exercises the real one.
 mock.module('../mcp/adapter.js', () => ({
   getCachedMcpTools: mock(() => []),
 }));
@@ -22,6 +27,7 @@ const {
 
 afterAll(() => {
   orchToolsSpy.mockRestore();
+  discoverSkillsSpy.mockRestore();
 });
 
 describe('Tool Registry', () => {

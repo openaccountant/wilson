@@ -4,15 +4,33 @@ import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import type { TransactionInsert } from '../../db/queries.js';
 import { getAccountByPlaidId, upsertAccountFromPlaid } from '../../db/net-worth-queries.js';
-import { getPlaidItems, updatePlaidCursor, updatePlaidItemError, isReauthRequired } from '../../plaid/store.js';
-import { syncTransactions, getBalances, PlaidError } from '../../plaid/client.js';
+import { getPlaidItems, updatePlaidCursor, updatePlaidItemError, isReauthRequired, savePlaidItem } from '../../plaid/store.js';
+import { syncTransactions, getBalances, PlaidError, getItemInstitutionId } from '../../plaid/client.js';
 import type { SyncedTransaction } from '../../plaid/client.js';
 import type { PlaidItem } from '../../plaid/store.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
 import { hasLocalPlaidCreds } from '../../plaid/client.js';
+import { logger } from '../../utils/logger.js';
 
 let db: Database;
+
+/**
+ * One-time migration: backfill institution_id for legacy Items written before
+ * institutionId existed. No-ops for items that already have the field (string or null).
+ * Never throws — a failed backfill must not block the sync; it retries next sync.
+ */
+export async function ensureInstitutionId(item: PlaidItem, useProxy: boolean): Promise<void> {
+  if (item.institutionId !== undefined) return; // already migrated (or post-change item)
+  if (!item.accessToken || item.accessToken === '__keychain__') return; // can't call API; skip silently
+  try {
+    item.institutionId = (await getItemInstitutionId(item.accessToken, useProxy)) ?? null;
+    savePlaidItem(item); // upserts by itemId; keychain path idempotent
+  } catch (err) {
+    // Leave institutionId undefined so the backfill retries on the next sync
+    logger.info('plaid:backfill:institution-id-failed', { itemId: item.itemId });
+  }
+}
 
 export function initPlaidSyncTool(database: Database) {
   db = database;
@@ -39,6 +57,9 @@ export async function syncPlaidItem(
   item: PlaidItem,
   useProxy = false,
 ): Promise<PlaidSyncItemResult> {
+  // Backfill institution_id for legacy Items (migration — no-op once set)
+  await ensureInstitutionId(item, useProxy);
+
   // Check if reauth is recommended (approaching 12-month expiry)
   const reauthRecommended = isReauthRequired(item);
 
