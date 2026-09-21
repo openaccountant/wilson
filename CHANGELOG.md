@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.7.0] — 2026-09-21
+
+### Features
+
+- feat(plaid): dedup Items by institution_id; fix cross-file test mock pollution (#59) (013cc8b)
+
+### Other
+
+- Add client-side Monte Carlo cash forecast fan chart to Overview (#80) (#111) (15b6c0e)
+- Render markdown in dashboard chat replies via react-markdown + remark-gfm (#47) (747e36c)
+- Add admin per-task model overrides applied live via POST /api/models and the controllable Settings Models panel (#89) (#112) (a3d1a4d)
+- WebMCP bridge: browser-native + Streamable-HTTP tool access with prepare/commit confirmation (#99) (cc74c17)
+- Gate below-threshold categorization suggestions into a persistent review queue instead of auto-applying (#100) (6e2e7ca)
+- Add Transactions-tab statement importer: client-side parse preview with confirm-to-commit (#72) (#102) (5fd38ff)
+- Add dashboard Transactions semantic search endpoint and zero-match UI fallback (#62) (#101) (13c14a8)
+
+
 ## [v0.6.0] — 2026-09-21
 
 ### Features
