@@ -1,6 +1,20 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile, collectEvents, mockTool } from './helpers.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
+import * as realPrompts from '../agent/prompts.js';
+import * as skillsIndex from '../skills/index.js';
+import * as realSkillLoader from '../skills/loader.js';
+import * as realOrchRegistry from '../orchestration/registry.js';
+
+// Link the real modules BEFORE mock.module below so bun mutates them in place
+// (instead of wholesale-replacing them and their re-export graph) — keeps
+// ../skills/loader.js real for skills-loader.test.ts.
+void skillsIndex;
+
+// Spy (not mock.module) on getOrchestrationTools so the agent's tool registry
+// stays light while orchestration-registry.test.ts keeps the real function
+// after mockRestore().
+const orchToolsSpy = spyOn(realOrchRegistry, 'getOrchestrationTools').mockImplementation(async () => []);
 
 // --- Mocks: only mock leaf dependencies, NOT callLlm or registry ---
 
@@ -19,14 +33,19 @@ mock.module('../model/providers/index.js', () => ({
 }));
 
 // Mock prompts (reads filesystem)
+// Spread the real module first so DB-backed context helpers (initGoalContext /
+// buildGoalContext, etc.) stay available to other test files — only the
+// filesystem-reading functions are actually mocked here.
 mock.module('../agent/prompts.js', () => ({
+  ...realPrompts,
   buildSystemPrompt: mock(async () => 'You are a financial assistant.'),
   buildIterationPrompt: mock((_q: string, _results: string, _usage: string | null) => 'iteration prompt'),
   loadSoulDocument: mock(async () => ''),
   buildBudgetContext: mock(() => null),
   buildDataContext: mock(() => null),
   buildProfileContext: mock(() => null),
-  buildGoalContext: mock(() => null),
+  // buildGoalContext stays real (DB-backed, no filesystem) so other test files
+  // importing it after this mock resolves still exercise the implementation.
   buildMemoryContext: mock(() => null),
   buildCustomPromptContext: mock(() => null),
   DEFAULT_SYSTEM_PROMPT: 'You are a financial assistant.',
@@ -41,23 +60,29 @@ mock.module('../mcp/adapter.js', () => ({
   getCachedMcpTools: mock(() => []),
 }));
 
-// Mock orchestration registry (used by tool registry)
-mock.module('../orchestration/registry.js', () => ({
-  getOrchestrationTools: mock(async () => []),
-}));
+// Mock orchestration registry (used by tool registry) — see spy above.
 
-// Mock skill discovery (used by tool registry)
+// Mock skill discovery (used by tool registry). The factory carries the REAL
+// loader functions — mock.module follows index.js's re-export graph and would
+// otherwise replace ../skills/loader.js with null-throwing mocks, breaking
+// skills-loader.test.ts.
 mock.module('../skills/index.js', () => ({
   discoverSkills: mock(() => []),
   getSkill: mock(async () => null),
   buildSkillMetadataSection: mock(() => ''),
   clearSkillCache: mock(() => {}),
-  parseSkillFile: mock(() => null),
-  loadSkillFromPath: mock(() => null),
-  extractSkillMetadata: mock(() => null),
+  parseSkillFile: realSkillLoader.parseSkillFile,
+  loadSkillFromPath: realSkillLoader.loadSkillFromPath,
+  extractSkillMetadata: realSkillLoader.extractSkillMetadata,
 }));
 
 const { Agent } = await import('../agent/agent.js');
+
+afterAll(() => {
+  // Undo the orchestration spy so later-loading test files
+  // (orchestration-registry.test.ts) exercise the real implementation.
+  orchToolsSpy.mockRestore();
+});
 
 function makeResponse(content: string, toolCalls: LlmResponse['toolCalls'] = []): LlmResponse {
   return {
@@ -104,6 +129,30 @@ describe('Agent', () => {
     const doneEvent = events.find((e) => e.type === 'done')!;
     expect(doneEvent).toBeTruthy();
     expect((doneEvent as any).answer).toContain('maximum iterations');
+    expect((doneEvent as any).iterations).toBe(2);
+  });
+
+  test('validation failure is fed back and the loop continues to a final answer', async () => {
+    // Iteration 1: malformed tool call (csv_import requires filePath) → schema
+    // guard rejects it before the tool runs, and the error is fed back to the
+    // model. Iteration 2: the model recovers with a text-only answer.
+    adapterResponses = [
+      makeResponse('', [{ id: 'tc1', name: 'csv_import', args: {} }]),
+      makeResponse('Import failed: you must provide a file path.'),
+    ];
+
+    const agent = await Agent.create({ maxIterations: 5 });
+    const events = await collectEvents(agent.run('import my file'));
+
+    const toolError = events.find((e) => e.type === 'tool_error')!;
+    expect(toolError).toBeTruthy();
+    expect((toolError as any).error).toContain("Invalid arguments for tool 'csv_import'");
+    expect((toolError as any).error).toContain('filePath');
+
+    // The loop continues after the validation failure and finishes normally
+    const doneEvent = events.find((e) => e.type === 'done')!;
+    expect(doneEvent).toBeTruthy();
+    expect((doneEvent as any).answer).toBe('Import failed: you must provide a file path.');
     expect((doneEvent as any).iterations).toBe(2);
   });
 

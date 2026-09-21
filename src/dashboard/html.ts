@@ -14,6 +14,9 @@ export function getDashboardHtml(port: number): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Open Accountant Dashboard</title>
+<!-- Prebuilt hybrid chat chunk (transformers.js WebGPU). 404s silently when
+     the hybrid build is absent — chat then behaves as today (server path). -->
+<script type="module" src="/assets/hybrid-chat.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { height:100%; overflow:hidden; }
@@ -440,6 +443,18 @@ export function getDashboardHtml(port: number): string {
     return fetch(url, opts);
   }
 
+  // ── Hybrid (local-first WebGPU) chat ─────────────────────────────────────
+  // The prebuilt chunk at /assets/hybrid-chat.js (loaded by the module script
+  // above) exposes window.WilsonHybridChat when the hybrid build exists. A 404
+  // leaves it undefined and the dashboard behaves exactly as before. Idempotent
+  // and cheap, so it is safe to call from onAuthReady and from every send.
+  var hybridInited = false;
+  function hybridInit() {
+    if (hybridInited || !window.WilsonHybridChat) return;
+    window.WilsonHybridChat.init({ baseUrl: BASE, fetchImpl: authFetch });
+    hybridInited = true;
+  }
+
   // ── Auth ─────────────────────────────────────────────────────────────────
   var authOverlay = document.getElementById('authOverlay');
   var authBox = document.getElementById('authBox');
@@ -565,6 +580,7 @@ export function getDashboardHtml(port: number): string {
       badge.classList.remove('hidden'); logoutBtn.classList.remove('hidden');
       if (currentUser.role === 'admin') settingsBtn.classList.remove('hidden');
     }
+    hybridInit();
     loadProfiles(); loadAccountOptions(); loadCategoryOptions(); initRouter();
   }
 
@@ -823,7 +839,10 @@ export function getDashboardHtml(port: number): string {
     data.forEach(function(t) {
       var tr = document.createElement('tr'); tr.dataset.id = t.id;
       tr.appendChild(el('td',null,t.date)); tr.appendChild(el('td',null,t.description));
-      tr.appendChild(el('td',t.amount>=0?'amt-pos':'amt-neg',fmt(t.amount))); tr.appendChild(el('td',null,t.category||'\\u2014'));
+      var catTd = el('td',null,t.category||'\\u2014');
+      if (t.user_verified) { catTd.textContent += ' \\u2713'; }
+      else if (t.category_confidence != null) { catTd.textContent += ' (' + Math.round(t.category_confidence * 100) + '%)'; }
+      tr.appendChild(catTd);
       var acctLabel = ''; if (t.bank) { acctLabel = t.bank; if (t.account_last4) acctLabel += ' ****' + t.account_last4; } tr.appendChild(el('td',null,acctLabel||'\\u2014'));
       if (isAdmin()) {
         var act = el('td','txn-actions');
@@ -882,7 +901,8 @@ export function getDashboardHtml(port: number): string {
         var card = document.createElement('div');
         card.className = 'card';
         card.style.marginBottom = '12px';
-        var pct = g.target_amount ? Math.min(Math.round((g.current_amount / g.target_amount) * 100), 100) : 0;
+        var effectiveTarget = (g.effective_target != null) ? g.effective_target : g.target_amount;
+        var pct = effectiveTarget ? Math.min(Math.round((g.current_amount / effectiveTarget) * 100), 100) : 0;
         var barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#eab308' : '#ef4444';
 
         // Header row
@@ -906,11 +926,16 @@ export function getDashboardHtml(port: number): string {
         card.appendChild(header);
 
         // Progress bar for financial goals
-        if (g.goal_type === 'financial' && g.target_amount) {
+        if (g.goal_type === 'financial' && effectiveTarget) {
           var progressLabel = document.createElement('div');
           progressLabel.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;color:#8b949e;margin-bottom:4px;';
           var amtSpan = document.createElement('span');
-          amtSpan.textContent = '$' + fmtN(g.current_amount) + ' / $' + fmtN(g.target_amount);
+          var amtLabel = '$' + fmtN(g.current_amount) + ' / $' + fmtN(effectiveTarget);
+          if (g.target_percent != null) {
+            var periodWord = g.income_period === 'quarter' ? 'quarterly' : g.income_period === 'year' ? 'yearly' : 'monthly';
+            amtLabel += ' (' + g.target_percent + '% of ' + periodWord + ' income)';
+          }
+          amtSpan.textContent = amtLabel;
           progressLabel.appendChild(amtSpan);
           var pctSpan = document.createElement('span');
           pctSpan.textContent = pct + '%';
@@ -1149,15 +1174,39 @@ export function getDashboardHtml(port: number): string {
     var q = chatInput.value.trim(); if (!q) return;
     chatInput.value = ''; chatSend.disabled = true;
     addChatMsg('You',q,false); var pending = addChatMsg('Wilson','Thinking...',false);
-    try {
-      var payload = activeSessionId?{query:q,sessionId:activeSessionId}:{query:q};
-      var res = await authFetch(BASE+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      var data = await res.json(); var answer = data.answer||'No response.';
-      if (data.sessionId) { activeSessionId = data.sessionId; isLiveSession = true; }
+    var pendingText = pending.querySelector('.text');
+    // ── Local-first: try the on-device WebGPU path ────────────────────────
+    // Every hybrid failure (no WebGPU, model load/generation failure, tool-call
+    // attempt, question outside the pre-fetched bundle) resolves {ok:false} and
+    // falls through to the server agent silently — hybrid failures must never
+    // render an error bubble. The catch below stays reserved for genuine
+    // server-path failures.
+    var localAnswer = null;
+    hybridInit();
+    if (window.WilsonHybridChat) {
+      try {
+        var r = await window.WilsonHybridChat.tryLocal(q, function(label){ pendingText.textContent = label; }, activeSessionId);
+        if (r && r.ok) {
+          localAnswer = r.answer;
+          if (r.sessionId) { activeSessionId = r.sessionId; isLiveSession = true; }
+        }
+      } catch(e) { /* silent: any local failure falls through to the server path */ }
+    }
+    if (localAnswer != null) {
       // Safe: renderMd escapes all HTML entities before applying markdown transforms
-      pending.querySelector('.text').innerHTML = renderMd(answer);
+      pendingText.innerHTML = renderMd(localAnswer);
       loadSessions();
-    } catch(e) { pending.querySelector('.text').textContent = 'Error: '+e.message; }
+    } else {
+      try {
+        var payload = activeSessionId?{query:q,sessionId:activeSessionId}:{query:q};
+        var res = await authFetch(BASE+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        var data = await res.json(); var answer = data.answer||'No response.';
+        if (data.sessionId) { activeSessionId = data.sessionId; isLiveSession = true; }
+        // Safe: renderMd escapes all HTML entities before applying markdown transforms
+        pendingText.innerHTML = renderMd(answer);
+        loadSessions();
+      } catch(e) { pendingText.textContent = 'Error: '+e.message; }
+    }
     chatSend.disabled = false; chatMessages.scrollTop = chatMessages.scrollHeight;
   }
   chatSend.addEventListener('click',sendChat);
