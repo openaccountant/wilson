@@ -28,8 +28,12 @@ import {
   apiAnnotateInteraction,
   apiAnnotationStats,
   apiExportXlsx,
+  apiReviewQueue,
+  apiConfirmReview,
+  apiCorrectReview,
 } from '../dashboard/api.js';
 import { createChatSession, insertChatMessage, insertTransactions } from '../db/queries.js';
+import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { traceStore } from '../utils/trace-store.js';
 import { apiModels, apiSetTaskModel } from '../dashboard/api.js';
@@ -167,6 +171,210 @@ describe('apiUpdateTransaction', () => {
     // Verify the update persisted
     const row = db.prepare('SELECT category FROM transactions WHERE id = @id').get({ id }) as { category: string };
     expect(row.category).toBe('Updated Category');
+  });
+
+  test('carries the user_verified flag', async () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'Bank Categorized', amount: -20, category: 'Groceries' },
+      { date: '2026-03-02', description: 'Left Alone', amount: -5, category: 'Other' },
+    ]);
+    const rows = db.prepare('SELECT id FROM transactions ORDER BY date').all() as { id: number }[];
+    const target = rows[0].id;
+    const untouched = rows[1].id;
+
+    const result = await apiUpdateTransaction(db, target, { user_verified: 1 });
+    expect(result.success).toBe(true);
+    const flagged = db.prepare('SELECT user_verified FROM transactions WHERE id = @id').get({ id: target }) as { user_verified: number };
+    expect(flagged.user_verified).toBe(1);
+    const other = db.prepare('SELECT user_verified FROM transactions WHERE id = @id').get({ id: untouched }) as { user_verified: number };
+    expect(other.user_verified).toBe(0);
+  });
+});
+
+// ── Categorization review queue ─────────────────────────────────────────────
+
+describe('apiReviewQueue', () => {
+  test('lists pending reviews joined with transaction details', () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      // Newly routed shape: suggestion below threshold left the transaction uncategorized
+      { date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 },
+      // Backfilled historical shape: low-confidence category was applied at the time
+      { date: '2026-03-02', description: 'Old Low Conf', amount: -10, category: 'Shopping', category_confidence: 0.55 },
+    ]);
+    const txns = db.prepare('SELECT id FROM transactions ORDER BY date').all() as { id: number }[];
+    addPendingCategorizationReview(db, txns[0].id, 'Transport', 0.55);
+    addPendingCategorizationReview(db, txns[1].id, 'Dining', 0.4);
+
+    const queue = apiReviewQueue(db, new URLSearchParams());
+    expect(queue.length).toBe(2);
+
+    const fresh = queue.find((r) => r.transaction_id === txns[0].id)!;
+    expect(fresh.suggested_category).toBe('Transport');
+    expect(fresh.confidence).toBe(0.55);
+    expect(fresh.date).toBe('2026-03-01');
+    expect(fresh.description).toBe('Mystery Vendor');
+    expect(fresh.amount).toBe(-42.5);
+    expect(fresh.current_category).toBeNull();
+    expect(fresh.suggested_at).toBeTruthy();
+
+    const historical = queue.find((r) => r.transaction_id === txns[1].id)!;
+    expect(historical.suggested_category).toBe('Dining');
+    expect(historical.current_category).toBe('Shopping');
+  });
+
+  test('drops rows once resolved', () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'Confirm Me', amount: -20 },
+      { date: '2026-03-02', description: 'Correct Me', amount: -30 },
+    ]);
+    const txns = db.prepare('SELECT id FROM transactions ORDER BY date').all() as { id: number }[];
+    addPendingCategorizationReview(db, txns[0].id, 'Transport', 0.55);
+    addPendingCategorizationReview(db, txns[1].id, 'Health', 0.4);
+    const queue = apiReviewQueue(db, new URLSearchParams());
+    expect(queue.length).toBe(2);
+
+    const confirmResult = apiConfirmReview(db, queue.find((r) => r.transaction_id === txns[0].id)!.review_id);
+    expect(confirmResult.success).toBe(true);
+
+    const remaining = apiReviewQueue(db, new URLSearchParams());
+    expect(remaining.length).toBe(1);
+    expect(remaining[0].transaction_id).toBe(txns[1].id);
+  });
+});
+
+describe('apiConfirmReview', () => {
+  test('applies the suggested category, marks verified, and resolves the review atomically', () => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 }]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    const result = apiConfirmReview(db, reviewId);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.transactionId).toBe(txn.id);
+      expect(result.category).toBe('Transport');
+    }
+
+    const txnRow = db.prepare('SELECT category, category_confidence, user_verified FROM transactions WHERE id = @id')
+      .get({ id: txn.id }) as { category: string; category_confidence: number; user_verified: number };
+    expect(txnRow.category).toBe('Transport');
+    expect(txnRow.category_confidence).toBe(0.55);
+    expect(txnRow.user_verified).toBe(1);
+
+    const reviewRow = db.prepare('SELECT status FROM categorization_reviews WHERE id = @id')
+      .get({ id: reviewId }) as { status: string };
+    expect(reviewRow.status).toBe('resolved');
+
+    expect(apiReviewQueue(db, new URLSearchParams())).toEqual([]);
+  });
+
+  test('errors on unknown or already-resolved review id', () => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 }]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    const first = apiConfirmReview(db, reviewId);
+    expect(first.success).toBe(true);
+    const second = apiConfirmReview(db, reviewId);
+    expect(second.success).toBe(false);
+    if (!second.success) {
+      expect(second.error).toContain('already resolved');
+      expect(second.status).toBe(404);
+    }
+
+    const unknown = apiConfirmReview(db, 999999);
+    expect(unknown.success).toBe(false);
+    if (!unknown.success) expect(unknown.error).toContain('not found');
+  });
+});
+
+describe('apiCorrectReview', () => {
+  test('applies the chosen category, marks verified, and resolves the review', () => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 }]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    const result = apiCorrectReview(db, reviewId, { category: 'Health' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.transactionId).toBe(txn.id);
+      expect(result.category).toBe('Health');
+    }
+
+    const txnRow = db.prepare('SELECT category, category_confidence, user_verified FROM transactions WHERE id = @id')
+      .get({ id: txn.id }) as { category: string; category_confidence: number | null; user_verified: number };
+    expect(txnRow.category).toBe('Health');
+    expect(txnRow.category_confidence).toBeNull(); // human-chosen category carries no machine score
+    expect(txnRow.user_verified).toBe(1);
+
+    const reviewRow = db.prepare('SELECT status FROM categorization_reviews WHERE id = @id')
+      .get({ id: reviewId }) as { status: string };
+    expect(reviewRow.status).toBe('resolved');
+    expect(apiReviewQueue(db, new URLSearchParams())).toEqual([]);
+  });
+
+  test('clears a backfilled row\u2019s stale confidence', () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'Old Low Conf', amount: -10, category: 'Shopping', category_confidence: 0.55 },
+    ]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Dining', 0.5);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    const result = apiCorrectReview(db, reviewId, { category: 'Shopping' });
+    expect(result.success).toBe(true);
+
+    const txnRow = db.prepare('SELECT category, category_confidence, user_verified FROM transactions WHERE id = @id')
+      .get({ id: txn.id }) as { category: string; category_confidence: number | null; user_verified: number };
+    expect(txnRow.category).toBe('Shopping');
+    expect(txnRow.category_confidence).toBeNull();
+    expect(txnRow.user_verified).toBe(1);
+  });
+
+  test('rejects an unknown category and leaves the review pending', () => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 }]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    const result = apiCorrectReview(db, reviewId, { category: 'Nonsense' });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.status).toBe(400);
+
+    // Nothing changed: review still pending, transaction still uncategorized
+    const reviewRow = db.prepare('SELECT status FROM categorization_reviews WHERE id = @id')
+      .get({ id: reviewId }) as { status: string };
+    expect(reviewRow.status).toBe('pending');
+    const txnRow = db.prepare('SELECT category FROM transactions WHERE id = @id').get({ id: txn.id }) as { category: string | null };
+    expect(txnRow.category).toBeNull();
+  });
+
+  test('accepts a static-list category that is absent from the db categories table', () => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2026-03-01', description: 'Mystery Vendor', amount: -42.5 }]);
+    const txn = db.prepare('SELECT id FROM transactions').get() as { id: number };
+    addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+    const reviewId = apiReviewQueue(db, new URLSearchParams())[0].review_id;
+
+    // Remove 'Dining' from the db so only the static CATEGORIES list knows it —
+    // pinning the two-source validation (db categories first, static list fallback).
+    db.prepare("DELETE FROM categories WHERE name = 'Dining'").run();
+
+    const result = apiCorrectReview(db, reviewId, { category: 'Dining' });
+    expect(result.success).toBe(true);
+    const txnRow = db.prepare('SELECT category FROM transactions WHERE id = @id').get({ id: txn.id }) as { category: string | null };
+    expect(txnRow.category).toBe('Dining');
   });
 });
 

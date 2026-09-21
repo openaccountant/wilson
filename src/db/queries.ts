@@ -785,6 +785,8 @@ export interface TransactionUpdate {
   category?: string;
   notes?: string;
   entity_id?: number | null;
+  /** SQLite 0/1: user has personally verified the category. */
+  user_verified?: number;
 }
 
 /**
@@ -814,6 +816,7 @@ export function updateTransaction(
   if (updates.category !== undefined) { sets.push('category = @category'); params.category = updates.category; }
   if (updates.notes !== undefined) { sets.push('notes = @notes'); params.notes = updates.notes; }
   if (updates.entity_id !== undefined) { sets.push('entity_id = @entity_id'); params.entity_id = updates.entity_id; }
+  if (updates.user_verified !== undefined) { sets.push('user_verified = @user_verified'); params.user_verified = updates.user_verified; }
 
   if (sets.length === 0) return false;
 
