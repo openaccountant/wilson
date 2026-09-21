@@ -7,6 +7,7 @@ import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
 import { getConfiguredModel } from '../../utils/config.js';
+import { CALL_TYPE_CATEGORIZATION } from '../../model/task-models.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -127,6 +128,7 @@ export const categorizeTool = defineTool({
           systemPrompt: 'You are a precise financial transaction categorizer. Respond only with valid JSON.',
           outputSchema: categorizationOutputSchema,
           model,
+          callType: CALL_TYPE_CATEGORIZATION,
         });
 
         // callLlm validated the structured output against categorizationOutputSchema

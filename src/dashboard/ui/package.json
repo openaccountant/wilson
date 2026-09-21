@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:hybrid": "vite build --config vite.hybrid.config.ts && bun run ../../../scripts/copy-ort-web-assets.ts",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -8,18 +8,39 @@ export interface Transaction {
   amount: number;
   category: string | null;
   category_detailed: string | null;
+  /** Model-assigned categorization confidence (0–1); null when the category came from the bank/import. */
+  category_confidence: number | null;
+  /** SQLite 0/1 flag: the user has personally verified the category. */
+  user_verified: number;
   account_id: number | null;
   account_name: string | null;
   entity_id: number | null;
   pending: boolean;
 }
 
+// Mirrors AccountRow in src/db/net-worth-queries.ts — the GET /api/accounts wire format.
+// Field names must match the API exactly; pinned by wire-contract tests in
+// src/__tests__/dashboard-server.test.ts.
+export type AccountType = 'asset' | 'liability';
+
 export interface Account {
   id: number;
   name: string;
-  type: string;
+  account_type: AccountType;
+  account_subtype: string;
   institution: string | null;
-  balance: number;
+  account_number_last4: string | null;
+  current_balance: number;
+  currency: string;
+  is_active: number;
+  notes: string | null;
+  plaid_account_id: string | null;
+  // Added by the entities migration (ALTER TABLE accounts ADD COLUMN entity_id);
+  // always present on the wire, declared optional because the server-side
+  // AccountRow declaration predates the column.
+  entity_id?: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PnlSummary {
@@ -132,12 +153,14 @@ export interface AlertItem {
   category?: string;
 }
 
-// Matches GET /api/net-worth response (existing endpoint)
+// Matches GET /api/net-worth response (NetWorthSummary in src/db/net-worth-queries.ts)
 export interface NetWorthResponse {
   totalAssets: number;
   totalLiabilities: number;
   netWorth: number;
-  accounts: { name: string; type: string; balance: number }[];
+  assetsBySubtype: { subtype: string; total: number; count: number }[];
+  liabilitiesBySubtype: { subtype: string; total: number; count: number }[];
+  accounts: Account[];
 }
 
 export interface ChatMessage {
@@ -230,10 +253,11 @@ export interface AnnotationStats {
   sftReady: number;
 }
 
+// Matches GET /api/net-worth/trend response (NetWorthTrendPoint in src/db/net-worth-queries.ts)
 export interface NetWorthTrendPoint {
-  month: string;
-  assets: number;
-  liabilities: number;
+  date: string;
+  totalAssets: number;
+  totalLiabilities: number;
   netWorth: number;
 }
 
@@ -303,4 +327,21 @@ export interface Memory {
   expires_at: string | null;
   is_active: number;
   created_at: string;
+}
+
+// Matches GET /api/models response (see src/model/task-models.ts)
+export type TaskExecution = 'local' | 'server';
+
+export interface ModelTaskRow {
+  task: 'chat' | 'categorization' | 'entity-classification' | 'embeddings';
+  label: string;
+  inUse: boolean;
+  model: string | null;
+  modelName: string | null;
+  provider: string | null;
+  providerName: string | null;
+  execution: TaskExecution | null;
+  webgpu: boolean;
+  assignment: 'default' | 'override';
+  note: string | null;
 }

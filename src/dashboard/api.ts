@@ -1,4 +1,5 @@
 import type { Database } from '../db/compat-sqlite.js';
+import { createHash } from 'crypto';
 import {
   getSpendingSummary,
   getProfitLoss,
@@ -8,16 +9,26 @@ import {
   getRecentChatHistory,
   getChatSessions,
   getChatHistoryBySession,
+  createChatSession,
+  getChatSessionById,
+  updateSessionTitle,
+  insertChatMessage,
   updateTransaction,
   deleteTransaction,
+  insertTransactions,
+  checkImported,
+  checkExternalId,
+  recordImport,
   type TransactionFilters,
   type TransactionUpdate,
+  type TransactionInsert,
 } from '../db/queries.js';
 import {
   getAccounts,
   getNetWorthSummary,
   getNetWorthTrend,
   getAccountTransactionSummary,
+  linkTransactionsToAccount,
 } from '../db/net-worth-queries.js';
 import {
   getEntities,
@@ -42,6 +53,9 @@ import {
   type SemanticTransactionFilters,
 } from '../db/embedding-queries.js';
 import { DEFAULT_EMBEDDING_MODEL, embedTexts } from '../utils/embeddings.js';
+import { getLocalChatModelConfig } from '../model/local-chat.js';
+import { getModelTaskRows } from '../model/task-models.js';
+import { computeExternalId } from '../tools/import/external-id.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 
@@ -473,6 +487,64 @@ export function apiChatSessionHistory(db: Database, sessionId: string) {
   }
 }
 
+// ── Hybrid (local-first WebGPU) chat ────────────────────────────────────────
+
+/**
+ * Model choice + bundle bounds for the browser-side local chat path. Derived
+ * entirely from the provider registry / model catalog (see src/model/local-chat.ts).
+ */
+export function apiLocalChatConfig() {
+  return getLocalChatModelConfig();
+}
+
+// ── Models panel (Settings) ─────────────────────────────────────────────────
+
+/**
+ * Which model handles each AI task, local vs server. Read-only and
+ * config-derived (no db). The webgpuOverride param exists so tests can pin
+ * the probe result without loading onnxruntime-node; production passes
+ * nothing and the cached server-side probe runs on first hit.
+ */
+export async function apiModels(webgpuOverride?: boolean) {
+  return { tasks: await getModelTaskRows(webgpuOverride) };
+}
+
+export interface LocalChatRecordBody {
+  query?: string;
+  answer?: string;
+  sessionId?: string;
+}
+
+/**
+ * Record a locally-answered exchange in the same chat history the server path
+ * writes, so locally-answered turns survive a reload (Wilson records
+ * everything). Reuses the existing session/history shapes — no new schema.
+ * `summary` stays null: the LLM-summary pass is a server-agent behavior.
+ *
+ * OPERATOR VETO CANDIDATE: this is the only new write path added for hybrid
+ * chat (browser-originated history append, same auth posture as POST /api/chat).
+ */
+export function apiRecordLocalChatMessage(
+  db: Database,
+  body: LocalChatRecordBody,
+): { success: true; sessionId: string } | { error: string } {
+  const query = typeof body?.query === 'string' ? body.query.trim() : '';
+  const answer = typeof body?.answer === 'string' ? body.answer.trim() : '';
+  if (!query || !answer) {
+    return { error: 'query and answer are required' };
+  }
+
+  const supplied = typeof body?.sessionId === 'string' && body.sessionId ? body.sessionId : null;
+  const existing = supplied ? getChatSessionById(db, supplied) : null;
+  const sessionId = existing ? existing.id : createChatSession(db);
+  if (!existing) {
+    updateSessionTitle(db, sessionId, query.slice(0, 100));
+  }
+  insertChatMessage(db, query, answer, null, sessionId);
+  logger.info(`Dashboard local chat recorded`, { sessionId, queryChars: query.length });
+  return { success: true, sessionId };
+}
+
 // ── Traces ──────────────────────────────────────────────────────────────────
 
 export function apiTraces(db: Database, params: URLSearchParams) {
@@ -750,4 +822,186 @@ export function apiAnnotationStats(db: Database) {
   } catch {
     return { total: 0, annotated: 0, ratingCounts: [], dpoPairs: 0, sftReady: 0 };
   }
+}
+
+// ── Import ──────────────────────────────────────────────────────────────────
+
+export interface ImportTransactionInput {
+  date: string;
+  description: string;
+  amount: number;
+  external_id?: string;
+  bank?: string;
+  merchant_name?: string;
+  category?: string;
+  category_detailed?: string;
+  payment_channel?: string;
+  pending?: boolean;
+  authorized_date?: string;
+  account_last4?: string;
+}
+
+export interface ImportRequestBody {
+  filename?: string;
+  bank?: string;
+  fileHash?: string;
+  transactions?: ImportTransactionInput[];
+}
+
+export interface ImportResult {
+  status: 'imported' | 'skipped' | 'failed';
+  transactionsImported: number;
+  transactionsSkipped: number;
+  transactionsLinked?: number;
+  dateRange?: { start: string; end: string };
+  previouslyImported?: { filePath: string; importedAt: string; transactionCount: number | null };
+  message: string;
+  error?: string;
+}
+
+function failedImport(error: string): ImportResult {
+  return { status: 'failed', transactionsImported: 0, transactionsSkipped: 0, error, message: error };
+}
+
+/**
+ * Commit client-parsed statement rows to the active profile's database.
+ * Mirrors the commit steps of the CLI import pipeline (importSingleFile in
+ * tools/import/csv-import.ts): file-hash dedup, per-row external_id (client-supplied
+ * or derived identically to the CLI), row dedup, bulk insert, imports-ledger record,
+ * and optional account auto-link. The server trusts the parsed rows — it never
+ * re-parses raw file content.
+ */
+export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
+  // 1. Validate the payload
+  if (!body.filename || typeof body.filename !== 'string' || body.filename.trim() === '') {
+    return failedImport('filename is required');
+  }
+  if (!body.transactions) {
+    return failedImport('transactions is required');
+  }
+  if (!Array.isArray(body.transactions)) {
+    return failedImport('transactions must be an array');
+  }
+  if (body.transactions.length === 0) {
+    return failedImport('transactions must not be empty');
+  }
+  for (let i = 0; i < body.transactions.length; i++) {
+    const t = body.transactions[i] as unknown;
+    if (typeof t !== 'object' || t === null) {
+      return failedImport(`transactions[${i}] must include date, description, and amount`);
+    }
+    const row = t as Partial<ImportTransactionInput>;
+    if (!row.date || typeof row.date !== 'string' || row.date.trim() === ''
+      || !row.description || typeof row.description !== 'string' || row.description.trim() === ''
+      || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
+      return failedImport(`transactions[${i + 1}] must include date, description, and amount`);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
+      return failedImport(`transactions[${i + 1}].date must be YYYY-MM-DD`);
+    }
+    if (row.external_id !== undefined && (typeof row.external_id !== 'string' || row.external_id === '')) {
+      return failedImport(`transactions[${i + 1}].external_id must be a string`);
+    }
+  }
+
+  // 2. File-level dedup. When the client omits fileHash, hash the canonical JSON of
+  //    the transactions array — best-effort (key order from the sender can differ
+  //    between runs); row-level dedup via external_id is the real guarantee.
+  const fileHash = body.fileHash?.trim()
+    ?? createHash('sha256').update(JSON.stringify(body.transactions)).digest('hex');
+  const existing = checkImported(db, fileHash);
+  if (existing) {
+    return {
+      status: 'skipped',
+      transactionsImported: 0,
+      transactionsSkipped: existing.transaction_count ?? 0,
+      previouslyImported: {
+        filePath: existing.file_path,
+        importedAt: existing.imported_at,
+        transactionCount: existing.transaction_count,
+      },
+      message: `This file was already imported on ${existing.imported_at} (${existing.transaction_count} transactions).`,
+    };
+  }
+
+  // 3+4. Per-row external_id + row-level dedup (mirrors CLI steps 5–6)
+  const newRows: ImportTransactionInput[] = [];
+  let skipped = 0;
+  for (const t of body.transactions) {
+    const extId = t.external_id ?? computeExternalId({ date: t.date, description: t.description, amount: t.amount });
+    if (checkExternalId(db, extId)) {
+      skipped++;
+    } else {
+      newRows.push(t);
+    }
+  }
+  if (newRows.length === 0) {
+    return {
+      status: 'skipped',
+      transactionsImported: 0,
+      transactionsSkipped: skipped,
+      message: `All ${body.transactions.length} transactions already exist (skipped as duplicates).`,
+    };
+  }
+
+  // 5. Bulk insert (mirrors toInsert in csv-import.ts)
+  const txns: TransactionInsert[] = newRows.map((t) => ({
+    date: t.date,
+    description: t.description,
+    amount: t.amount,
+    bank: t.bank ?? body.bank,
+    source_file: body.filename,
+    external_id: t.external_id ?? computeExternalId({ date: t.date, description: t.description, amount: t.amount }),
+    merchant_name: t.merchant_name,
+    category: t.category,
+    category_detailed: t.category_detailed,
+    payment_channel: t.payment_channel,
+    pending: t.pending ? 1 : 0,
+    authorized_date: t.authorized_date,
+    account_last4: t.account_last4,
+  }));
+  const count = insertTransactions(db, txns);
+
+  // Date range (mirrors CLI step 9: lexicographic sort works for YYYY-MM-DD)
+  const dates = newRows.map((t) => t.date).sort();
+  const dateRangeStart = dates[0];
+  const dateRangeEnd = dates[dates.length - 1];
+
+  // Ledger record (mirrors CLI step 10)
+  const ledgerBanks = new Set(newRows.map((t) => t.bank).filter(Boolean)) as Set<string>;
+  const ledgerBank = body.bank ?? (ledgerBanks.size === 1 ? [...ledgerBanks][0] : undefined);
+  recordImport(db, {
+    file_path: body.filename,
+    file_hash: fileHash,
+    bank: ledgerBank,
+    transaction_count: count,
+    date_range_start: dateRangeStart,
+    date_range_end: dateRangeEnd,
+  });
+
+  // 6. Auto-link newly imported transactions to accounts by account_last4
+  //    (mirrors the CLI pipeline)
+  let autoLinked = 0;
+  const last4Values = [...new Set(txns.map((t) => t.account_last4 ?? null).filter(Boolean))] as string[];
+  for (const last4 of last4Values) {
+    const account = db.prepare(
+      'SELECT id FROM accounts WHERE account_number_last4 = @last4 AND is_active = 1'
+    ).get({ last4 }) as { id: number } | undefined;
+    if (account) {
+      autoLinked += linkTransactionsToAccount(db, account.id, { accountLast4: last4 });
+    }
+  }
+
+  // 7. Response (shape mirrors the CLI SingleFileResult)
+  let message = `Imported ${count} transactions from ${body.filename} (${dateRangeStart} to ${dateRangeEnd}).`;
+  if (skipped > 0) message += ` ${skipped} duplicates skipped.`;
+  if (autoLinked > 0) message += ` ${autoLinked} transactions auto-linked to accounts.`;
+  return {
+    status: 'imported',
+    transactionsImported: count,
+    transactionsSkipped: skipped,
+    transactionsLinked: autoLinked,
+    dateRange: { start: dateRangeStart, end: dateRangeEnd },
+    message,
+  };
 }
