@@ -19,6 +19,7 @@ import {
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
+  apiReviewQueue, apiConfirmReview, apiCorrectReview,
 } from './api.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
@@ -453,6 +454,26 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             }
             return Response.json(apiDeleteTransaction(activeDb, id), { headers });
           }
+        }
+
+        // ── Categorization review queue ─────────────────────────────
+        // Reads are open to any authenticated user (viewers see the queue
+        // read-only); mutations follow the standard admin-only canWrite guard.
+
+        if (path === '/api/reviews') {
+          return Response.json(apiReviewQueue(activeDb, url.searchParams), { headers });
+        }
+
+        const reviewMatch = path.match(/^\/api\/reviews\/(\d+)\/(confirm|correct)$/);
+        if (reviewMatch && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const id = parseInt(reviewMatch[1], 10);
+          const result = reviewMatch[2] === 'confirm'
+            ? apiConfirmReview(activeDb, id)
+            : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
 
         // ── Goals ──────────────────────────────────────────────────

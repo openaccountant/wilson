@@ -30,10 +30,16 @@ import {
   checkImported,
   checkExternalId,
   recordImport,
+  resolveCategory,
   type TransactionFilters,
   type TransactionUpdate,
   type TransactionInsert,
 } from '../db/queries.js';
+import {
+  getPendingReviewQueue,
+  resolveCategorizationReview,
+  type PendingReviewRow,
+} from '../db/categorization-review-queries.js';
 import {
   getAccounts,
   getNetWorthSummary,
@@ -71,6 +77,7 @@ import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
 import { embedTransactionIds } from '../utils/embed-on-write.js';
+import { CATEGORIES } from '../tools/categorize/categories.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 import {
@@ -173,6 +180,38 @@ export async function apiUpdateTransaction(db: Database, id: number, updates: Tr
     await embedTransactionIds(db, [id]);
   }
   return { success, id };
+}
+
+// ── Categorization review queue ─────────────────────────────────────────────
+
+/** GET /api/reviews — pending categorization reviews joined with their transactions (read-only; any authenticated user). */
+export function apiReviewQueue(db: Database, params: URLSearchParams): PendingReviewRow[] {
+  const limit = parseInt(params.get('limit') ?? '200', 10);
+  return getPendingReviewQueue(db, Number.isFinite(limit) && limit >= 1 ? limit : 200);
+}
+
+export type ReviewActionResult =
+  | { success: true; transactionId: number; category: string }
+  | { success: false; error: string; status: number };
+
+/** POST /api/reviews/:id/confirm — apply the suggested category (admin-only route). */
+export function apiConfirmReview(db: Database, reviewId: number): ReviewActionResult {
+  const result = resolveCategorizationReview(db, reviewId, { action: 'confirm' });
+  if (!result.ok) return { success: false, error: result.error, status: 404 };
+  return { success: true, transactionId: result.transactionId, category: result.category };
+}
+
+/** POST /api/reviews/:id/correct — apply a user-chosen category (admin-only route). */
+export function apiCorrectReview(db: Database, reviewId: number, body: { category?: unknown }): ReviewActionResult {
+  const raw = typeof body?.category === 'string' ? body.category.trim() : '';
+  if (!raw) return { success: false, error: 'category is required', status: 400 };
+  // Same two-source "existing category list" the categorize tool validates
+  // against: the DB categories table first, then the static CATEGORIES list.
+  const category = resolveCategory(db, raw) ?? (CATEGORIES.includes(raw) ? raw : null);
+  if (!category) return { success: false, error: `unknown category "${raw}"`, status: 400 };
+  const result = resolveCategorizationReview(db, reviewId, { action: 'correct', category });
+  if (!result.ok) return { success: false, error: result.error, status: 404 };
+  return { success: true, transactionId: result.transactionId, category: result.category };
 }
 
 // ── Semantic search ─────────────────────────────────────────────────────────
