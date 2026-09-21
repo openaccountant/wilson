@@ -1,23 +1,17 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
 import * as skillsIndex from '../skills/index.js';
-import * as orchestrationRegistry from '../orchestration/registry.js';
+import * as realOrchRegistry from '../orchestration/registry.js';
 
-// Spies (restorable) instead of mock.module for the skills barrel and
-// orchestration registry: bun's module mocks cannot be undone and would leak
-// into other test files sharing this process (e.g. skills-loader.test.ts and
-// orchestration-registry.test.ts, which exercise the real modules).
-const registrySkillsSpies = [
-  spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => [] as any),
-];
-const registryOrchestrationSpy = spyOn(orchestrationRegistry, 'getOrchestrationTools').mockImplementation(
-  async () => [] as any,
-);
+// Spy (not mock.module) on getOrchestrationTools so the tool registry stays
+// light while orchestration-registry.test.ts keeps the real function after
+// mockRestore().
+const orchToolsSpy = spyOn(realOrchRegistry, 'getOrchestrationTools').mockImplementation(async () => []);
 
-afterAll(() => {
-  for (const spy of registrySkillsSpies) spy.mockRestore();
-  registryOrchestrationSpy.mockRestore();
-});
+// Spy (not mock.module) on discoverSkills so building the registry doesn't
+// hit the filesystem here, without poisoning skills-loader.test.ts — bun's
+// module mocks cannot be undone, but spies can be restored.
+const discoverSkillsSpy = spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => [] as any);
 
 // Mock MCP adapter (used by registry) — no test file exercises the real one.
 mock.module('../mcp/adapter.js', () => ({
@@ -30,6 +24,11 @@ const {
   getToolsByNames,
   buildToolDescriptions,
 } = await import('../tools/registry.js');
+
+afterAll(() => {
+  orchToolsSpy.mockRestore();
+  discoverSkillsSpy.mockRestore();
+});
 
 describe('Tool Registry', () => {
   const savedEnv: Record<string, string | undefined> = {};

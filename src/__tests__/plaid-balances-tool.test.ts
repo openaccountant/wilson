@@ -1,7 +1,12 @@
 import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import * as license from '../licensing/license.js';
+import * as realPlaidClient from '../plaid/client.js';
 import { createTestDb } from './helpers.js';
 import type { Database } from '../db/compat-sqlite.js';
+
+// Link the real client module before mocking so bun mutates it in place —
+// keeps the real PlaidError class for plaid-sync-modified-removed.test.ts.
+void realPlaidClient;
 
 // Mock Plaid store and client
 let mockPlaidItems: Array<{ itemId: string; accessToken: string; institutionName: string; accounts: unknown[]; cursor: string | null; linkedAt: string }> = [];
@@ -20,16 +25,9 @@ mock.module('../plaid/store.js', () => ({
 }));
 
 mock.module('../plaid/client.js', () => ({
+  ...realPlaidClient,
   getBalances: async () => mockBalances,
   hasLocalPlaidCreds: () => !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
-  // Faithful shape: other test files (e.g. plaid-sync-modified-removed.test.ts)
-  // read this class through the shared module registry, so it must accept the
-  // real constructor arguments (message, errorType, errorCode, statusCode).
-  PlaidError: class PlaidError extends Error {
-    constructor(message: string, public errorType: string, public errorCode: string, public statusCode: number) {
-      super(message);
-    }
-  },
 }));
 
 import { initPlaidBalancesTool, plaidBalancesTool } from '../tools/import/plaid-balances.js';
