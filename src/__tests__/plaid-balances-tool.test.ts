@@ -1,7 +1,12 @@
 import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import * as license from '../licensing/license.js';
+import * as realPlaidClient from '../plaid/client.js';
 import { createTestDb } from './helpers.js';
 import type { Database } from '../db/compat-sqlite.js';
+
+// Link the real client module before mocking so bun mutates it in place —
+// keeps the real PlaidError class for plaid-sync-modified-removed.test.ts.
+void realPlaidClient;
 
 // Mock Plaid store and client
 let mockPlaidItems: Array<{ itemId: string; accessToken: string; institutionName: string; accounts: unknown[]; cursor: string | null; linkedAt: string }> = [];
@@ -20,9 +25,9 @@ mock.module('../plaid/store.js', () => ({
 }));
 
 mock.module('../plaid/client.js', () => ({
+  ...realPlaidClient,
   getBalances: async () => mockBalances,
   hasLocalPlaidCreds: () => !!(process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET),
-  PlaidError: class PlaidError extends Error {},
 }));
 
 import { initPlaidBalancesTool, plaidBalancesTool } from '../tools/import/plaid-balances.js';

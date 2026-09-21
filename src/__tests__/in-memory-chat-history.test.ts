@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import * as llmModule from '../model/llm.js';
+import { LlmValidationError } from '../model/structured-output.js';
 import { createTestDb } from './helpers.js';
 import { getChatSessions, getChatHistoryBySession } from '../db/queries.js';
 
@@ -284,6 +285,23 @@ describe('InMemoryChatHistory selectRelevantMessages', () => {
     llmSpy.mockRejectedValue(new Error('LLM unavailable'));
 
     const result = await history.selectRelevantMessages('will this work?');
+    expect(result).toEqual([]);
+  });
+
+  test('selectRelevantMessages returns [] when structured output is rejected by validation', async () => {
+    history.saveUserQuery('test query');
+    await history.saveAnswer('test answer');
+
+    llmSpy.mockRejectedValue(
+      new LlmValidationError(
+        'LLM structured output failed schema validation after one repair attempt: message_ids: Invalid input: expected array, received string',
+        ['message_ids: Invalid input: expected array, received string'],
+        { content: '"message_ids": "all of them"', toolCalls: [] },
+      ),
+    );
+
+    // Validation rejection degrades to no injected history
+    const result = await history.selectRelevantMessages('what changed?');
     expect(result).toEqual([]);
   });
 
