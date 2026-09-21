@@ -7,10 +7,18 @@ import {
   countPendingCategorizationReviews,
   getPendingCategorizationReviews,
 } from '../db/categorization-review-queries.js';
-import { setSetting, CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY, DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD } from '../utils/config.js';
+import {
+  setSetting,
+  saveConfig,
+  getConfiguredModel,
+  CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY,
+  DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD,
+} from '../utils/config.js';
 import { createTestDb } from './helpers.js';
 import * as llmModule from '../model/llm.js';
 import { LlmValidationError } from '../model/structured-output.js';
+import { setTaskOverride } from '../model/task-models.js';
+import { ensureTestProfile } from './helpers.js';
 
 describe('categorize tool', () => {
   let db: Database;
@@ -353,6 +361,65 @@ describe('categorize tool', () => {
       expect(txn.category).toBeNull();
       expect(txn.category_confidence).toBeNull();
       expect(Number.isNaN(txn.category_confidence as number)).toBe(false);
+    }
+  });
+
+  test('LLM model resolves the per-task pin at call time; reset restores the chat model', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'gpt-5.2');
+    setSetting('provider', 'openai');
+    try {
+      insertTransactions(db, [
+        { date: '2026-02-15', description: 'Mystery Store', amount: -50 },
+      ]);
+      initCategorizeTool(db);
+      const txns = getTransactions(db);
+      llmSpy.mockResolvedValue({
+        response: {
+          content: '',
+          structured: {
+            transactions: [{ id: txns[0].id, category: 'Shopping', confidence: 0.9 }],
+          },
+        },
+        metadata: {},
+      });
+
+      // Pin a different model to the task, run it: the very next call uses the pin.
+      setTaskOverride('categorization', 'ollama:qwen3:0.6b');
+      await categorizeTool.func({});
+      let calls = llmSpy.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { callType?: string })?.callType === 'categorization',
+      );
+      expect(calls).toHaveLength(1);
+      expect((calls[0][1] as { model?: string }).model).toBe('ollama:qwen3:0.6b');
+
+      // Reset: the next run follows the chat model again (fresh uncategorized
+      // txn so the LLM path actually runs).
+      setTaskOverride('categorization', null);
+      insertTransactions(db, [
+        { date: '2026-02-16', description: 'Second Mystery', amount: -20 },
+      ]);
+      initCategorizeTool(db);
+      const txns2 = getTransactions(db).filter((t) => t.category === null);
+      llmSpy.mockResolvedValue({
+        response: {
+          content: '',
+          structured: {
+            transactions: [{ id: txns2[0].id, category: 'Other', confidence: 0.9 }],
+          },
+        },
+        metadata: {},
+      });
+      await categorizeTool.func({});
+      calls = llmSpy.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { callType?: string })?.callType === 'categorization',
+      );
+      expect(calls).toHaveLength(2);
+      expect((calls[1][1] as { model?: string }).model).toBe(getConfiguredModel().model);
+      expect((calls[1][1] as { model?: string }).model).toBe('gpt-5.2');
+    } finally {
+      saveConfig({});
     }
   });
 });

@@ -10,6 +10,50 @@ import { createOperation, getOperation, markOperationStatus, type McpOperation }
 let chatHistory: InMemoryChatHistory | null = null;
 let agentRunner: AgentRunnerController | null = null;
 
+// Last model applied to the runner + history (null = nothing applied yet).
+let appliedModel: { model: string; provider: string } | null = null;
+
+/**
+ * Last chat model applied to the runner and history (null before the first
+ * apply). Test/diagnostic accessor.
+ */
+export function getAppliedChatModel(): { model: string; provider: string } | null {
+  return appliedModel;
+}
+
+/** The chat history backing the dashboard chat (null before initChatSession). */
+export function getActiveChatHistory(): InMemoryChatHistory | null {
+  return chatHistory;
+}
+
+/**
+ * Re-read the chat model from settings and, when it changed, apply it through
+ * the same live-update path the TUI's /model switch uses:
+ * agentRunner.updateModel(model, provider) + chatHistory.setModel(model).
+ *
+ * This is the single apply point for the chat model: the panel write route
+ * only persists the setting, and this refresh runs per dashboard message —
+ * so the next message (and its background summarize/relevance calls, which
+ * read chatHistory's model) uses the new model with no restart. One mechanism
+ * covers every writer of the setting: the panel, the TUI's /model switch, or
+ * a hand-edited settings.json.
+ */
+export function refreshChatModel(): void {
+  if (!agentRunner || !chatHistory) return;
+  const { model, provider } = getConfiguredModel();
+  if (
+    appliedModel &&
+    appliedModel.model === model &&
+    appliedModel.provider === provider
+  ) {
+    return;
+  }
+  agentRunner.updateModel(model, provider);
+  chatHistory.setModel(model);
+  appliedModel = { model, provider };
+  logger.info(`Dashboard chat model applied`, { model, provider });
+}
+
 /**
  * Bound scope for chat-originated confirmations — fixed rather than
  * per-browser-tab, because the agent runner itself is a single server-side
@@ -102,6 +146,12 @@ export function initChatSession(db: Database): void {
   chatHistory = new InMemoryChatHistory();
   chatHistory.setDatabase(db);
   agentRunner = new AgentRunnerController({ model, modelProvider: provider, maxIterations: 10 }, chatHistory);
+
+  // Fresh runner + history: force re-apply so the session never rides the
+  // InMemoryChatHistory DEFAULT_MODEL — the session starts on the configured
+  // chat model (and stays live via refreshChatModel on every message).
+  appliedModel = null;
+  refreshChatModel();
   logger.info(`Dashboard chat session initialized`, { model, provider });
 }
 
@@ -117,6 +167,12 @@ export async function handleChatMessage(
     logger.warn(`Dashboard chat: session not initialized`);
     return { answer: 'Chat session not initialized.', sessionId: null };
   }
+
+  // Per-message resolution: a chat-model change (panel write, TUI /model
+  // switch, hand-edited settings) applies to the very next message without a
+  // restart — the agent runner is re-configured and the background
+  // summarize/relevance consumers follow chatHistory's model.
+  refreshChatModel();
 
   if (sessionId) {
     chatHistory.setSessionId(sessionId);
