@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.6.0] — 2026-09-21
+
+### Features
+
+- feat: dashboard Settings Models panel — per-task model rows with local/server badges and tool call-type tagging (#88) (#104) (c39981c)
+
+### Fixes
+
+- fix: align dashboard UI account types with the real wire format so Accounts and Liabilities render real balances (#79) (#103) (83fa52b)
+
+### Other
+
+- Show model confidence badge in dashboard transaction list Category cell (#109) (ccb545c)
+- Add local-first WebGPU hybrid chat to the dashboard with silent server fallback (#68) (#98) (d29e69e)
+- Add dashboard POST /api/import endpoint with CLI-shared external_id dedup and imports ledger (#96) (35b0783)
+- Validate tool-call arguments against each tool's zod schema in defineTool (#66) (#90) (c840e7f)
+- Add local embedding engine, embeddings store, and batched backfill (#82) (64a4763)
+- Validate structured LLM output in callLlm with one repair re-prompt and typed rejection (#65) (#77) (72d40eb)
+- Add percentage-of-income targets to goal_manage financial goals (#46) (7b34ab3)
+- Route SPF roster through gertie's Ollama Cloud (ebe2dd6)
+- Add SPF quality/protected_files/watch config (4a3d645)
+
+
 ## [Unreleased]
 
 ### Features
