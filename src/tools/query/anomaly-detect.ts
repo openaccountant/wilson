@@ -25,7 +25,7 @@ function getDb(): Database {
 
 // ── Anomaly types ─────────────────────────────────────────────────────────────
 
-interface DuplicateAnomaly {
+export interface DuplicateAnomaly {
   type: 'duplicate';
   transactions: {
     id: number;
@@ -36,7 +36,7 @@ interface DuplicateAnomaly {
   message: string;
 }
 
-interface SpikeAnomaly {
+export interface SpikeAnomaly {
   type: 'spike';
   transaction: {
     id: number;
@@ -68,7 +68,7 @@ type Anomaly = DuplicateAnomaly | SpikeAnomaly | UnusedSubscriptionAnomaly;
 /**
  * Find potential duplicate transactions: same amount and similar description within 3 days.
  */
-function detectDuplicates(database: Database): DuplicateAnomaly[] {
+export function detectDuplicates(database: Database): DuplicateAnomaly[] {
   const rows = database
     .prepare(
       `
@@ -108,7 +108,7 @@ function detectDuplicates(database: Database): DuplicateAnomaly[] {
 /**
  * Find spending spikes: transactions where the amount is > 3x the average for that merchant.
  */
-function detectSpikes(database: Database): SpikeAnomaly[] {
+export function detectSpikes(database: Database): SpikeAnomaly[] {
   // First get average amounts per description (merchant)
   const rows = database
     .prepare(

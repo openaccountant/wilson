@@ -18,8 +18,9 @@ import {
   apiMemories, apiAddMemory, apiDeactivateMemory,
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
-  apiImport, type ImportRequestBody,
+  apiImport, apiDemoTraceStep, type ImportRequestBody,
 } from './api.js';
+import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
@@ -147,7 +148,17 @@ function canManageUsers(role: Role): boolean {
  * Start the dashboard HTTP server.
  * Supports optional auth/RBAC and multi-profile DB switching.
  */
-export async function startDashboardServer(db: Database, preferredPort?: number) {
+export interface DashboardServerOptions {
+  /**
+   * Injectable embed function for the Demo tab's statement trace chain
+   * (tests inject a deterministic fake embedder so no model download happens).
+   * Production default is the local embedTexts engine.
+   */
+  traceEmbed?: EmbedFn;
+}
+
+export async function startDashboardServer(db: Database, preferredPort?: number, options?: DashboardServerOptions) {
+  const traceEmbed = options?.traceEmbed;
   const port = preferredPort ?? DEFAULT_PORT;
 
   // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
@@ -494,6 +505,19 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
           const body = await req.json() as ImportRequestBody;
           const result = apiImport(activeDb, body);
           return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
+        }
+
+        // ── Demo: statement agent trace ─────────────────────────────
+        // One endpoint for all four chain steps; `import` is the only write
+        // and mirrors /api/import's canWrite RBAC exactly.
+
+        if (path === '/api/demo/trace/step' && req.method === 'POST') {
+          const body = await req.json() as { step?: unknown };
+          if (body?.step === 'import' && authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const result = await apiDemoTraceStep(activeDb, body, traceEmbed ? { embed: traceEmbed } : undefined);
+          return Response.json(result, { status: result.status === 'error' ? 400 : 200, headers });
         }
 
         // ── Memories ─────────────────────────────────────────────────

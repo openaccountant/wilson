@@ -15,6 +15,7 @@ import { LlmTab } from '@/tabs/LlmTab';
 import { LogsTab } from '@/tabs/LogsTab';
 import { GoalsTab } from '@/tabs/GoalsTab';
 import { SettingsTab } from '@/tabs/SettingsTab';
+import { DemoTab } from '@/tabs/DemoTab';
 
 function getHashTab(): TabId {
   const hash = window.location.hash.replace('#', '');

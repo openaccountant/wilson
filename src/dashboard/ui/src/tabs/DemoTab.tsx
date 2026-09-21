@@ -11,6 +11,7 @@ import {
   type CloudMode,
   type ParsedDecision,
 } from '@/demo/core';
+import { AgentTraceSection } from '@/demo/AgentTraceSection';
 
 /**
  * Speed Showdown (issue #92) — pick a synthetic sample transaction and watch
@@ -26,6 +27,11 @@ import {
  * - every arm label states what actually ran;
  * - simulated cloud runs carry their own marker (canned chip + simulated
  *   verdict wording) so nothing reads as a network measurement.
+ *
+ * The statement-agent-trace slice (issue #93) renders above this one in the
+ * same tab: drop a bank statement and watch Wilson's offline chain — import →
+ * embedding lookup → category prediction → reconciliation hint — run as a
+ * live four-node flow diagram with real per-step timing.
  */
 
 interface SampleRow {
@@ -380,6 +386,16 @@ export function DemoTab() {
   return (
     <div className="flex-1 overflow-y-auto min-h-0">
       <div className="max-w-5xl mx-auto p-6 space-y-6">
+        {/* ── Statement-to-dashboard agent trace (#93) ────────────────── */}
+        <div>
+          <h2 className="text-lg font-semibold text-text">Your agent. Your data. Your machine.</h2>
+          <p className="text-sm text-text-secondary mt-1">
+            Drop a bank statement and watch Wilson's offline agent chain run, step by step — every
+            node timed on this machine, nothing sent to a cloud.
+          </p>
+        </div>
+        <AgentTraceSection />
+
         {/* ── Headline ─────────────────────────────────────────────── */}
         <div>
           <h1 className="text-2xl font-bold text-text">Your agent. Your data. Your speed.</h1>
