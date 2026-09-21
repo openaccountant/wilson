@@ -59,6 +59,7 @@ import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask
 import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
+import { parseTransactionListParams } from './transactions-query.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 
@@ -140,21 +141,8 @@ export function apiAlerts(db: Database) {
 // ── Transactions ────────────────────────────────────────────────────────────
 
 export function apiTransactions(db: Database, params: URLSearchParams) {
-  const filters: TransactionFilters = {};
-  const start = params.get('start');
-  const end = params.get('end');
-  const category = params.get('category');
-  const merchant = params.get('merchant');
-  const accountId = parseAccountId(params);
-  const entityId = parseEntityId(params);
-  if (start) filters.dateStart = start;
-  if (end) filters.dateEnd = end;
-  if (category) filters.category = category;
-  if (merchant) filters.merchant = merchant;
-  if (accountId !== undefined) filters.accountId = accountId;
-  if (entityId !== undefined) filters.entityId = entityId;
+  const { filters, limit } = parseTransactionListParams(params);
   const txns = getTransactions(db, filters);
-  const limit = parseInt(params.get('limit') ?? '100', 10);
   return txns.slice(0, limit);
 }
 

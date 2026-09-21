@@ -1,4 +1,9 @@
 import type { Database } from './compat-sqlite.js';
+import { buildTransactionWhere, type TransactionFilters } from './transaction-where.js';
+
+// The filters interface moved to transaction-where.ts (shared with the offline
+// dashboard mirror); re-exported here so existing imports keep working.
+export type { TransactionFilters };
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
@@ -47,18 +52,6 @@ export interface TransactionRow {
   revision: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface TransactionFilters {
-  dateStart?: string;
-  dateEnd?: string;
-  category?: string;
-  minAmount?: number;
-  maxAmount?: number;
-  merchant?: string;
-  isRecurring?: boolean;
-  accountId?: number;
-  entityId?: number;
 }
 
 export interface SpendingSummaryRow {
@@ -138,53 +131,16 @@ export function insertTransactions(
 
 /**
  * Get transactions with optional filters.
+ *
+ * The WHERE clause comes from the shared builder in transaction-where.ts so the
+ * server and the offline mirror compose identical SQL for identical filters.
  */
 export function getTransactions(
   db: Database,
   filters: TransactionFilters = {}
 ): TransactionRow[] {
-  const conditions: string[] = [];
-  const params: Record<string, unknown> = {};
-
-  if (filters.dateStart) {
-    conditions.push('date >= @dateStart');
-    params.dateStart = filters.dateStart;
-  }
-  if (filters.dateEnd) {
-    conditions.push('date <= @dateEnd');
-    params.dateEnd = filters.dateEnd;
-  }
-  if (filters.category) {
-    conditions.push('category = @category');
-    params.category = filters.category;
-  }
-  if (filters.minAmount !== undefined) {
-    conditions.push('amount >= @minAmount');
-    params.minAmount = filters.minAmount;
-  }
-  if (filters.maxAmount !== undefined) {
-    conditions.push('amount <= @maxAmount');
-    params.maxAmount = filters.maxAmount;
-  }
-  if (filters.merchant) {
-    conditions.push('description LIKE @merchant');
-    params.merchant = `%${filters.merchant}%`;
-  }
-  if (filters.isRecurring !== undefined) {
-    conditions.push('is_recurring = @isRecurring');
-    params.isRecurring = filters.isRecurring ? 1 : 0;
-  }
-  if (filters.accountId !== undefined) {
-    conditions.push('account_id = @accountId');
-    params.accountId = filters.accountId;
-  }
-  if (filters.entityId !== undefined) {
-    conditions.push('entity_id = @entityId');
-    params.entityId = filters.entityId;
-  }
-
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const sql = `SELECT * FROM transactions ${where} ORDER BY date DESC`;
+  const { whereSql, params } = buildTransactionWhere(filters);
+  const sql = `SELECT * FROM transactions ${whereSql} ORDER BY date DESC`;
 
   return db.prepare(sql).all(params) as TransactionRow[];
 }
