@@ -40,7 +40,7 @@
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
     "monarch-money-api": "^0.0.8",
-    "plaid": "^41.3.0",
+    "plaid": "^47.0.0",
     "winston": "^3.19.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.13"
