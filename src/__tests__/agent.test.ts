@@ -132,6 +132,30 @@ describe('Agent', () => {
     expect((doneEvent as any).iterations).toBe(2);
   });
 
+  test('validation failure is fed back and the loop continues to a final answer', async () => {
+    // Iteration 1: malformed tool call (csv_import requires filePath) → schema
+    // guard rejects it before the tool runs, and the error is fed back to the
+    // model. Iteration 2: the model recovers with a text-only answer.
+    adapterResponses = [
+      makeResponse('', [{ id: 'tc1', name: 'csv_import', args: {} }]),
+      makeResponse('Import failed: you must provide a file path.'),
+    ];
+
+    const agent = await Agent.create({ maxIterations: 5 });
+    const events = await collectEvents(agent.run('import my file'));
+
+    const toolError = events.find((e) => e.type === 'tool_error')!;
+    expect(toolError).toBeTruthy();
+    expect((toolError as any).error).toContain("Invalid arguments for tool 'csv_import'");
+    expect((toolError as any).error).toContain('filePath');
+
+    // The loop continues after the validation failure and finishes normally
+    const doneEvent = events.find((e) => e.type === 'done')!;
+    expect(doneEvent).toBeTruthy();
+    expect((doneEvent as any).answer).toBe('Import failed: you must provide a file path.');
+    expect((doneEvent as any).iterations).toBe(2);
+  });
+
   test('token usage is accumulated across iterations', async () => {
     adapterResponses = [
       makeResponse('', [{ id: 'tc1', name: 'csv_import', args: { filePath: '/tmp/test.csv' } }]),

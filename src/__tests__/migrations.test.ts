@@ -3,6 +3,7 @@ import { Database } from '../db/compat-sqlite.js';
 import { runMigrations, getSchemaVersion, MIGRATIONS } from '../db/migrations.js';
 import { insertTransactions } from '../db/queries.js';
 import type { CategorizationReviewRow } from '../db/categorization-review-queries.js';
+import { vecToBlob } from '../db/embedding-queries.js';
 import { ensureTestProfile } from './helpers.js';
 
 ensureTestProfile();
@@ -133,7 +134,7 @@ describe('migration runner', () => {
     db.close();
   });
 
-  test('v23 categorization_reviews: table and backfill contents', () => {
+  test('v24 categorization_reviews: table and backfill contents', () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -180,6 +181,82 @@ describe('migration runner', () => {
     runMigrations(db);
     const queueAfter = db.prepare('SELECT * FROM categorization_reviews').all() as CategorizationReviewRow[];
     expect(queueAfter.length).toBe(1);
+
+    db.close();
+  });
+
+  // ── Migration 23: embeddings table ────────────────────────────────────────
+
+  test('migration 23 creates the embeddings table with the expected columns', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table'"
+    ).all() as { name: string }[];
+    expect(tables.map((t) => t.name)).toContain('embeddings');
+
+    const cols = db.prepare("PRAGMA table_info('embeddings')").all() as { name: string; type: string; notnull: number }[];
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toEqual(['id', 'source_type', 'source_id', 'model', 'dim', 'vec', 'created_at']);
+    expect(cols.find((c) => c.name === 'vec')?.type).toBe('BLOB');
+
+    const indexes = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+    ).all() as { name: string }[];
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain('idx_embeddings_source');
+    expect(indexNames).toContain('idx_embeddings_model');
+
+    const migrationRow = db.prepare(
+      "SELECT version, name FROM schema_migrations WHERE version = 23"
+    ).get() as { version: number; name: string };
+    expect(migrationRow.name).toBe('create_embeddings');
+
+    db.close();
+  });
+
+  test('embeddings UNIQUE(source_type, source_id, model) rejects duplicates', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+
+    const vec = new Float32Array(4).fill(0.5);
+    const insert = db.prepare(
+      'INSERT INTO embeddings (source_type, source_id, model, dim, vec) VALUES (@sourceType, @sourceId, @model, @dim, @vec)'
+    );
+
+    insert.run({ sourceType: 'transaction', sourceId: 1, model: 'test-model', dim: 4, vec: vecToBlob(vec) });
+    expect(() =>
+      insert.run({ sourceType: 'transaction', sourceId: 1, model: 'test-model', dim: 4, vec: vecToBlob(vec) })
+    ).toThrow(/UNIQUE/);
+
+    // Same source row under a different model is allowed.
+    insert.run({ sourceType: 'transaction', sourceId: 1, model: 'other-model', dim: 4, vec: vecToBlob(vec) });
+    // A different source_type for the same source_id is allowed.
+    insert.run({ sourceType: 'chat', sourceId: 1, model: 'test-model', dim: 4, vec: vecToBlob(vec) });
+
+    const count = db.prepare('SELECT COUNT(*) AS c FROM embeddings').get() as { c: number };
+    expect(count.c).toBe(3);
+
+    db.close();
+  });
+
+  test('embeddings source_type CHECK constraint rejects unknown kinds', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    runMigrations(db);
+
+    const insert = db.prepare(
+      'INSERT INTO embeddings (source_type, source_id, model, dim, vec) VALUES (@sourceType, @sourceId, @model, @dim, @vec)'
+    );
+    expect(() =>
+      insert.run({ sourceType: 'widget', sourceId: 1, model: 'test-model', dim: 4, vec: vecToBlob(new Float32Array(4)) })
+    ).toThrow(/CHECK/);
 
     db.close();
   });

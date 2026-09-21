@@ -10,6 +10,7 @@ import {
 import { setSetting, CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY, DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD } from '../utils/config.js';
 import { createTestDb } from './helpers.js';
 import * as llmModule from '../model/llm.js';
+import { LlmValidationError } from '../model/structured-output.js';
 
 describe('categorize tool', () => {
   let db: Database;
@@ -97,6 +98,9 @@ describe('categorize tool', () => {
     const after = getTransactions(db);
     expect(after[0].category).toBe('Shopping');
     expect(countPendingCategorizationReviews(db)).toBe(0);
+    // The call is tagged with its own call type so the Training per-task view
+    // groups it under 'categorization' instead of the generic 'standalone'.
+    expect(llmSpy.mock.calls.some((call: unknown[]) => (call[1] as { callType?: string })?.callType === 'categorization')).toBe(true);
   });
 
   test('mixed rules and LLM categorization', async () => {
@@ -317,5 +321,38 @@ describe('categorize tool', () => {
     expect(result.data.errors).toBeDefined();
     expect(result.data.errors.length).toBeGreaterThan(0);
     expect(result.data.errors[0]).toContain('rate limited');
+  });
+
+  test('schema-rejected structured output reports the batch in errors and writes nothing', async () => {
+    insertTransactions(db, [
+      { date: '2026-02-15', description: 'Mystery Store', amount: -50 },
+      { date: '2026-02-16', description: 'Unknown Vendor', amount: -30 },
+    ]);
+    initCategorizeTool(db);
+
+    llmSpy.mockRejectedValue(
+      new LlmValidationError(
+        'LLM structured output failed schema validation after one repair attempt: transactions.0.confidence: Invalid input: expected number, received string',
+        ['transactions.0.confidence: Invalid input: expected number, received string'],
+        { content: '{"transactions":[{"id":1,"category":"Junk","confidence":"NaN?"}]}', toolCalls: [] },
+      ),
+    );
+
+    const raw = await categorizeTool.func({});
+    const result = JSON.parse(raw as string);
+
+    // The rejected batch is reported through the existing errors channel…
+    expect(result.data.errors).toBeDefined();
+    expect(result.data.errors[0]).toContain('failed schema validation');
+    expect(result.data.categorized).toBe(0);
+
+    // …and the transactions are untouched: no category, no NaN confidence, no junk write.
+    const txns = getTransactions(db);
+    expect(txns).toHaveLength(2);
+    for (const txn of txns) {
+      expect(txn.category).toBeNull();
+      expect(txn.category_confidence).toBeNull();
+      expect(Number.isNaN(txn.category_confidence as number)).toBe(false);
+    }
   });
 });
