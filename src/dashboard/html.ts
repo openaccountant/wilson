@@ -839,7 +839,10 @@ export function getDashboardHtml(port: number): string {
     data.forEach(function(t) {
       var tr = document.createElement('tr'); tr.dataset.id = t.id;
       tr.appendChild(el('td',null,t.date)); tr.appendChild(el('td',null,t.description));
-      tr.appendChild(el('td',t.amount>=0?'amt-pos':'amt-neg',fmt(t.amount))); tr.appendChild(el('td',null,t.category||'\\u2014'));
+      var catTd = el('td',null,t.category||'\\u2014');
+      if (t.user_verified) { catTd.textContent += ' \\u2713'; }
+      else if (t.category_confidence != null) { catTd.textContent += ' (' + Math.round(t.category_confidence * 100) + '%)'; }
+      tr.appendChild(catTd);
       var acctLabel = ''; if (t.bank) { acctLabel = t.bank; if (t.account_last4) acctLabel += ' ****' + t.account_last4; } tr.appendChild(el('td',null,acctLabel||'\\u2014'));
       if (isAdmin()) {
         var act = el('td','txn-actions');

@@ -8,6 +8,10 @@ export interface Transaction {
   amount: number;
   category: string | null;
   category_detailed: string | null;
+  /** Model-assigned categorization confidence (0–1); null when the category came from the bank/import. */
+  category_confidence: number | null;
+  /** SQLite 0/1 flag: the user has personally verified the category. */
+  user_verified: number;
   account_id: number | null;
   account_name: string | null;
   entity_id: number | null;

@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
-import { createTestDb, seedTestData } from './helpers.js';
+import { createTestDb, seedTestData, daysAgo } from './helpers.js';
 import {
   apiTransactions,
   apiExportCsv,
@@ -51,6 +51,31 @@ describe('apiTransactions', () => {
     const params = new URLSearchParams({ limit: '2' });
     const txns = apiTransactions(db, params);
     expect(txns.length).toBeLessThanOrEqual(2);
+  });
+
+  test('transactions carry their category confidence', () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      { date: daysAgo(1), description: 'Model High', amount: -10, category: 'Dining', category_confidence: 0.92 },
+      { date: daysAgo(2), description: 'Model Low', amount: -20, category: 'Shopping', category_confidence: 0.42 },
+      { date: daysAgo(3), description: 'Bank Row', amount: -30, category: 'Utilities' },
+    ]);
+    const byDesc = (d: string) =>
+      apiTransactions(db, new URLSearchParams()).find((t) => t.description === d)!;
+    expect(byDesc('Model High').category_confidence).toBe(0.92);
+    expect(byDesc('Model Low').category_confidence).toBe(0.42);
+    expect(byDesc('Bank Row').category_confidence).toBeNull();
+  });
+
+  test('user_verified flag flows through the transactions API', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    db.prepare(`UPDATE transactions SET user_verified = 1 WHERE description = 'Grocery Store'`).run();
+    const rows = apiTransactions(db, new URLSearchParams());
+    const verified = rows.filter((t) => t.description === 'Grocery Store');
+    expect(verified.length).toBeGreaterThan(0);
+    for (const t of verified) expect(t.user_verified).toBe(1);
+    for (const t of rows.filter((x) => x.description !== 'Grocery Store')) expect(t.user_verified).toBe(0);
   });
 });
 
