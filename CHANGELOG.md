@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.9.0] — 2026-09-21
+
+### Features
+
+- feat: offline overview — the eight approved overview cards compute from the local mirror without a server (#76) (#115) (ef450d8)
+
+### Other
+
+- Add dashboard Review tab to confirm or correct queued categorizations (#86) (#113) (3061c95)
+- Embed on write: keep the semantic index fresh across import, sync, edit, and delete paths (#63) (#110) (be12b5b)
+- Add per-response chat provenance indicator (local · server fallback · unavailable) to both dashboard UIs (#69) (#108) (8852470)
+- Add statement-to-dashboard agent trace — drop a CSV and watch the offline chain run with per-step timing (#93) (#107) (ec75bff)
+- Add Speed Showdown demo: race local vs cloud categorization with real trace-sourced timers (#92) (#106) (1365e1e)
+
+
 ## [v0.8.0] — 2026-09-21
 
 ### Features
