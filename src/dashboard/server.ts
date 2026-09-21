@@ -3,7 +3,7 @@ import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
-  apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
+  apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
   type SetTaskModelBody,
@@ -30,8 +30,58 @@ import {
 import {
   getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
+import { handleMcpRoute } from './mcp-routes.js';
+import { handleMcpHttpRequest } from '../mcp/http-server.js';
+import { revokeGrantsForUser } from '../mcp/store.js';
 
 const DEFAULT_PORT = 3141;
+
+/**
+ * Paths whose own auth model replaces the dashboard bearer-token check:
+ * `/mcp` authenticates each call with its own grant-bound bearer token
+ * (see src/mcp/http-server.ts), not the dashboard_sessions token — an
+ * external MCP client like Hronaut has no dashboard login of its own.
+ */
+const MCP_HTTP_PATH = '/mcp';
+
+/**
+ * `/api/mcp/*` and `/mcp` carry grant tokens and mutation approvals — never
+ * safe to hand to `*`. A request with no Origin header (a non-browser HTTP
+ * client, e.g. Hronaut hitting `/mcp` directly) isn't a CORS-relevant
+ * request at all, so there's nothing to restrict; a browser request gets
+ * reflected only when it already matches this server's own origin.
+ */
+function mcpCorsHeaders(port: number, requestOrigin: string | null): Record<string, string> {
+  if (!requestOrigin) return {};
+  const ownOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+  if (ownOrigins.includes(requestOrigin)) {
+    return { 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
+  }
+  return {};
+}
+
+/** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
+async function buildWebMcpBridgeScript(): Promise<string> {
+  try {
+    const result = await Bun.build({
+      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      target: 'browser',
+      minify: false,
+    });
+    const output = result.outputs[0];
+    return output ? await output.text() : '';
+  } catch (err) {
+    console.error('[webmcp-bridge] failed to build bridge script:', err);
+    return '';
+  }
+}
+
+/** Injects the WebMCP bridge <script> tag into either the React build or the legacy HTML. */
+function injectWebMcpBridge(html: string, port: number): string {
+  const tag = `<script src="/webmcp-bridge.js" data-port="${port}" defer></script>`;
+  if (html.includes('</body>')) return html.replace('</body>', `${tag}</body>`);
+  return html + tag;
+}
 
 // ── Static hybrid-chat assets ───────────────────────────────────────────────
 
@@ -109,6 +159,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
     // React build not available — fall back to legacy getDashboardHtml()
   }
 
+  // Bundle the WebMCP bridge once at startup — deliberately independent of
+  // the React dashboard build so the bridge works whether or not `ui/dist`
+  // exists. Injected into whichever HTML the page route returns below.
+  const webMcpBridgeScript = await buildWebMcpBridgeScript();
+
   // Set up initial DB in manager and chat session
   setInitialProfile(getCurrentProfileName(), db);
   initChatSession(db);
@@ -122,11 +177,24 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
       const url = new URL(req.url);
       const path = url.pathname;
 
+      // `port` may be 0 (ephemeral, e.g. in tests) — server.port is the actual
+      // bound port once Bun.serve has returned, which is what a real request's
+      // Origin header will contain. `server` is safe to reference here even
+      // though it's declared by this same Bun.serve(...) call: fetch only
+      // ever runs after that assignment has completed.
+      const actualPort = server.port ?? port;
+
+      const isMcpPath = path === MCP_HTTP_PATH || path.startsWith('/api/mcp');
       const headers: Record<string, string> = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
       };
+      if (isMcpPath) {
+        // Never the wildcard for grant/approval/mutation traffic — see mcpCorsHeaders.
+        delete headers['Access-Control-Allow-Origin'];
+        Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
+      }
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers });
@@ -162,9 +230,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
           // Public auth routes (no token required)
           const publicPaths = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
           const isPublicAuth = publicPaths.includes(path);
-          const isHtmlPage = path === '/' || path === '/index.html';
+          const isHtmlPage = path === '/' || path === '/index.html' || path === '/webmcp-bridge.js';
+          // /mcp authenticates each call with its own grant-bound bearer token
+          // (see src/mcp/http-server.ts) — an external MCP client has no
+          // dashboard login to present here.
+          const isMcpHttp = path === MCP_HTTP_PATH;
 
-          if (!isPublicAuth && !isHtmlPage && !currentUser) {
+          if (!isPublicAuth && !isHtmlPage && !isMcpHttp && !currentUser) {
             return Response.json(
               { error: 'Unauthorized' },
               { status: 401, headers }
@@ -172,11 +244,34 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
           }
         }
 
+        // ── WebMCP bridge (Streamable-HTTP fallback + browser-facing API) ──
+
+        if (path === MCP_HTTP_PATH) {
+          return handleMcpHttpRequest(activeDb, req);
+        }
+
+        if (path.startsWith('/api/mcp/')) {
+          const mcpResponse = await handleMcpRoute(req, url, path, {
+            activeDb,
+            currentUser,
+            authEnabled,
+            port: actualPort,
+            headers,
+          });
+          if (mcpResponse) return mcpResponse;
+        }
+
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
-          const html = reactDashboardHtml ?? getDashboardHtml(port);
+          const html = injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
           return new Response(html, {
             headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
+          });
+        }
+
+        if (path === '/webmcp-bridge.js') {
+          return new Response(webMcpBridgeScript, {
+            headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' },
           });
         }
 
@@ -220,7 +315,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         if (path === '/api/auth/logout' && req.method === 'POST') {
           const authHeader = req.headers.get('Authorization');
           const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-          if (token) revokeToken(activeDb, token);
+          if (token) {
+            revokeToken(activeDb, token);
+            // A dashboard logout ends the browser's WebMCP grants too — a
+            // stolen/replayed session token shouldn't be able to keep using
+            // tool access minted under the now-dead login.
+            if (currentUser) revokeGrantsForUser(activeDb, currentUser.id);
+          }
           return Response.json({ success: true }, { headers });
         }
 
@@ -315,6 +416,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         }
         if (path === '/api/transactions') {
           return Response.json(apiTransactions(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/transactions/search') {
+          return Response.json(await apiSemanticSearch(activeDb, url.searchParams), { headers });
         }
 
         // Transaction edit/delete (RBAC: admin only)

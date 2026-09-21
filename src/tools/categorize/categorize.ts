@@ -7,6 +7,8 @@ import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
 import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.js';
+import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
+import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -47,7 +49,8 @@ export const categorizeTool = defineTool({
   name: 'categorize',
   description:
     'Categorize uncategorized transactions using AI. ' +
-    'Assigns each transaction to a spending category with a confidence score.',
+    'Assigns each transaction to a spending category with a confidence score. ' +
+    'Suggestions below the confidence threshold are NOT applied — they are held in a persistent review queue for human review.',
   schema: z.object({
     limit: z
       .number()
@@ -60,6 +63,7 @@ export const categorizeTool = defineTool({
   }),
   func: async ({ limit, entityId }) => {
     const database = getDb();
+    const threshold = getCategorizationConfidenceThreshold();
 
     // Load dynamic categories from DB (with fallback)
     let dbCategories: CategoryRow[] | undefined;
@@ -81,7 +85,7 @@ export const categorizeTool = defineTool({
     }
 
     let totalCategorized = 0;
-    let totalNeedingReview = 0;
+    let totalRoutedForReview = 0;
     let ruleMatchCount = 0;
     const categoryCounts: Record<string, number> = {};
     const errors: string[] = [];
@@ -99,6 +103,9 @@ export const categorizeTool = defineTool({
           totalCategorized++;
           ruleMatchCount++;
           categoryCounts[match.category] = (categoryCounts[match.category] ?? 0) + 1;
+          // Rule matches apply at confidence 1.0 — clear any stale pending
+          // review row so the queue only lists transactions still in question.
+          deletePendingCategorizationReview(database, txn.id);
         } else {
           needsLlm.push(txn);
         }
@@ -148,16 +155,22 @@ export const categorizeTool = defineTool({
           }
           const confidence = Math.max(0, Math.min(1, cat.confidence));
 
-          updateCategory(database, cat.id, validCategory, confidence);
-          if (entityId !== undefined) {
-            database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: cat.id });
-          }
-          totalCategorized++;
-
-          categoryCounts[validCategory] = (categoryCounts[validCategory] ?? 0) + 1;
-
-          if (confidence < 0.7) {
-            totalNeedingReview++;
+          if (confidence >= threshold) {
+            updateCategory(database, cat.id, validCategory, confidence);
+            if (entityId !== undefined) {
+              database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: cat.id });
+            }
+            totalCategorized++;
+            categoryCounts[validCategory] = (categoryCounts[validCategory] ?? 0) + 1;
+            // Now categorized — clear any stale pending review row.
+            deletePendingCategorizationReview(database, cat.id);
+          } else {
+            // Guardrail: below-threshold suggestion is NEVER applied to the
+            // transaction (category stays untouched) — route it to the
+            // persistent review queue for a human decision. The partial
+            // unique index makes re-runs idempotent (no duplicate rows).
+            addPendingCategorizationReview(database, cat.id, validCategory, confidence);
+            totalRoutedForReview++;
           }
         }
       } catch (err) {
@@ -174,12 +187,12 @@ export const categorizeTool = defineTool({
       ruleMatched: ruleMatchCount,
       llmCategorized: totalCategorized - ruleMatchCount,
       categoriesApplied: categoryCounts,
-      needingReview: totalNeedingReview,
+      routedForReview: totalRoutedForReview,
       errors: errors.length > 0 ? errors : undefined,
       message:
         `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
         (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
-        `. ${totalNeedingReview} need review (confidence < 0.7).` +
+        `. ${totalRoutedForReview} routed for human review (below threshold ${threshold}).` +
         (errors.length > 0 ? ` ${errors.length} batch errors occurred.` : ''),
     });
   },
