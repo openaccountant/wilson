@@ -5,7 +5,7 @@ import { getEntities, getUnassignedTransactions, assignEntityToTransactions } fr
 import { buildEntityClassificationPrompt, type ClassificationInput } from './entity-classify-prompt.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
-import { getConfiguredModel } from '../../utils/config.js';
+import { CALL_TYPE_ENTITY_CLASSIFICATION, getTaskModel } from '../../model/task-models.js';
 
 let db: Database | null = null;
 
@@ -25,7 +25,7 @@ const classificationOutputSchema = z.object({
     z.object({
       id: z.number(),
       entityId: z.number(),
-      confidence: z.number(),
+      confidence: z.number().min(0).max(1),
       reasoning: z.string(),
     }),
   ),
@@ -97,23 +97,21 @@ export const entityClassifyTool = defineTool({
       const prompt = buildEntityClassificationPrompt(inputs, entities);
 
       try {
-        const { model } = getConfiguredModel();
+        // Resolved per batch so a pinned override (settings.json) lands on the
+        // very next run with no restart.
+        const model = getTaskModel('entity-classification');
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial entity classifier. Respond only with valid JSON.',
           outputSchema: classificationOutputSchema,
           model,
+          callType: CALL_TYPE_ENTITY_CLASSIFICATION,
         });
 
-        let classifications: z.infer<typeof classificationOutputSchema>;
-
-        if (result.response.structured && typeof result.response.structured === 'object' && 'transactions' in result.response.structured) {
-          classifications = result.response.structured as z.infer<typeof classificationOutputSchema>;
-        } else if (result.response.content) {
-          classifications = classificationOutputSchema.parse(JSON.parse(result.response.content));
-        } else {
-          errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: Unexpected LLM response format`);
-          continue;
-        }
+        // callLlm validated the structured output against classificationOutputSchema
+        // (with one repair re-prompt) or threw — result.response.structured is guaranteed
+        // to satisfy the schema, so a rejected batch lands in the catch below and nothing
+        // is assigned for this batch.
+        const classifications = result.response.structured as z.infer<typeof classificationOutputSchema>;
 
         // 4. Process results
         const highConfIds: Map<number, number[]> = new Map(); // entityId → txnIds

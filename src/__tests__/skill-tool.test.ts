@@ -1,5 +1,12 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
+import * as skillsIndex from '../skills/index.js';
+import * as licenseModule from '../licensing/license.js';
+
+// Link the real modules BEFORE mock.module below so bun mutates them in place
+// instead of wholesale-replacing them and their re-export graph — keeping
+// ../skills/loader.js real for skills-loader.test.ts.
+void skillsIndex;
 
 // Mock the skills module before importing the skill tool
 const mockGetSkill = mock(() => Promise.resolve(null as any));
@@ -10,18 +17,23 @@ mock.module('../skills/index.js', () => ({
   discoverSkills: mockDiscoverSkills,
   buildSkillMetadataSection: mock(() => ''),
   clearSkillCache: mock(() => {}),
-  parseSkillFile: mock(() => null),
-  loadSkillFromPath: mock(() => null),
-  extractSkillMetadata: mock(() => null),
+  parseSkillFile: skillsIndex.parseSkillFile,
+  loadSkillFromPath: skillsIndex.loadSkillFromPath,
+  extractSkillMetadata: skillsIndex.extractSkillMetadata,
 }));
 
-const mockHasLicense = mock(() => false);
-mock.module('../licensing/license.js', () => ({
-  hasLicense: mockHasLicense,
-}));
+// Spy (not mock.module) on hasLicense so license.test.ts keeps the real
+// implementation after mockRestore().
+const mockHasLicense = spyOn(licenseModule, 'hasLicense').mockReturnValue(false);
 
 // Import after mocks are set up
 const { skillTool } = await import('../tools/skill.js');
+
+afterAll(() => {
+  // Undo the license spy so later-loading test files (license.test.ts)
+  // exercise the real implementation.
+  mockHasLicense.mockRestore();
+});
 
 describe('skillTool', () => {
   beforeEach(() => {

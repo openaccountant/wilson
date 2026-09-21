@@ -9,7 +9,7 @@ import {
   getMonthlySavingsData,
   getLastImportDate,
 } from '../db/queries.js';
-import { getActiveGoals } from '../db/goal-queries.js';
+import { getActiveGoals, resolveGoalTarget } from '../db/goal-queries.js';
 import { getActiveMemories } from '../db/memory-queries.js';
 import { getPlaidItems } from '../plaid/store.js';
 import { theme } from '../theme.js';
@@ -102,6 +102,20 @@ function buildGoalProgressHints(db: Database): string[] {
   try {
     const goals = getActiveGoals(db);
     for (const goal of goals) {
+      if (goal.goal_type === 'financial' && goal.target_percent != null) {
+        const period = goal.income_period ?? 'month';
+        const resolved = resolveGoalTarget(db, goal);
+        if (resolved && resolved.target > 0) {
+          const pct = Math.round((resolved.progress / resolved.target) * 100);
+          if (pct >= 80) {
+            hints.push(
+              theme.muted('Almost there: ') +
+              theme.accent(`${goal.title}`) +
+              theme.muted(` is ${pct}% of this ${period}'s target`)
+            );
+          }
+        }
+      }
       if (goal.goal_type === 'financial' && goal.target_amount && goal.target_amount > 0) {
         const pct = Math.round((goal.current_amount / goal.target_amount) * 100);
         if (pct >= 80) {

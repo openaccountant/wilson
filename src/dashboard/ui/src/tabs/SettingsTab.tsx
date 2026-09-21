@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
-import type { Memory, Entity } from '@/types';
+import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/types';
 
 const AUTH_KEY = 'wilson_auth_token';
 
@@ -552,6 +552,217 @@ function CustomPromptSection() {
   );
 }
 
+// ── Models Section ───────────────────────────────────────────────────────────
+
+function executionBadge(execution: NonNullable<ModelTaskRow['execution']>): { text: string; className: string } {
+  return execution === 'local'
+    ? { text: 'Runs on this device', className: 'bg-green/15 text-green' }
+    : { text: 'Runs on a cloud server', className: 'bg-amber-500/15 text-amber-500' };
+}
+
+/** Dropdown text for a catalog entry: uncached local models flag their first-use download. */
+function catalogOptionLabel(model: CatalogModel): string {
+  if (!model.isLocal || model.cached) return model.displayName;
+  const size = model.downloadSize?.startsWith('~') ? model.downloadSize : model.downloadSize ? `~${model.downloadSize}` : null;
+  return size
+    ? `${model.displayName} (${size} — downloads on first use)`
+    : `${model.displayName} (downloads on first use)`;
+}
+
+interface ModelRowProps {
+  row: ModelTaskRow;
+  /** Friendly name of the chat model — what "Follows chat model" points at. */
+  chatModelName: string | null;
+  catalog: CatalogModel[];
+  canOverride: boolean;
+  onSave: (task: string, model: string | null) => Promise<void>;
+}
+
+function ModelRow({ row, chatModelName, catalog, canOverride, onSave }: ModelRowProps) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // The dropdown lists the server-filtered catalog; if the row's current model
+  // isn't in it (installed-but-uncatalogued id), append it so the select shows
+  // the truth.
+  const options: CatalogModel[] = [...catalog];
+  if (row.model && !catalog.some((m) => m.id === row.model)) {
+    options.push({
+      id: row.model,
+      displayName: row.modelName ?? row.model,
+      provider: row.provider ?? '',
+      providerName: row.providerName ?? '',
+      isLocal: row.execution === 'local',
+      cached: true,
+      downloadSize: null,
+    });
+  }
+
+  // Grouped by provider, preserving catalog order (the builder emits models
+  // provider-by-provider, so adjacent grouping suffices).
+  const groups: { label: string; models: CatalogModel[] }[] = [];
+  for (const model of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.label === model.providerName) last.models.push(model);
+    else groups.push({ label: model.providerName, models: [model] });
+  }
+
+  // Select value: a pinned row shows its pin; a default row shows '' (the
+  // reset option). The chat row has no reset — its value is the model itself.
+  const selectValue = row.task === 'chat' ? (row.model ?? '') : row.assignment === 'override' ? (row.model ?? '') : '';
+
+  async function handleChange(value: string) {
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(row.task, value === '' ? null : value);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-border rounded px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm text-text shrink-0">{row.label}</span>
+          {row.inUse ? (
+            <span className="text-sm text-text-muted truncate">
+              {row.modelName}
+              {row.providerName && <span className="text-xs text-text-muted"> — via {row.providerName}</span>}
+            </span>
+          ) : (
+            <span className="text-sm text-text-muted truncate">
+              Not in use{row.note ? ` — ${row.note}` : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Assignment state: the chat row IS the global model setting (no
+              chip). Tool rows say why they run what they run. */}
+          {row.inUse && row.task !== 'chat' && (
+            <span className="text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded bg-border-muted/50 text-text-muted">
+              {row.assignment === 'default'
+                ? `Follows chat model (${chatModelName ?? '—'})`
+                : `Pinned: ${row.modelName}`}
+            </span>
+          )}
+          {row.inUse && row.execution && (
+            <span className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded ${executionBadge(row.execution).className}`}>
+              {executionBadge(row.execution).text}
+            </span>
+          )}
+        </div>
+      </div>
+      {canOverride && row.inUse && (
+        <div className="mt-2">
+          <select
+            value={selectValue}
+            onChange={(e) => handleChange(e.target.value)}
+            disabled={saving}
+            className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-text w-full max-w-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {row.task !== 'chat' && <option value="">Follows chat model</option>}
+            {groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {catalogOptionLabel(model)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {row.task === 'chat' ? (
+            <p className="text-xs text-text-muted mt-1">
+              This is the global model setting — it applies to chat everywhere: this dashboard and the CLI. Background calls (message summaries, relevance) follow it too.
+            </p>
+          ) : (
+            <p className="text-xs text-text-muted mt-1">
+              Applies everywhere this task runs — dashboard and CLI — on its next run.
+            </p>
+          )}
+          {error && (
+            <p className="text-xs text-amber-500 mt-1">
+              Could not save model override — {error}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelsSection() {
+  const { data, loading, refetch } = useApi<ModelsPanel>('/api/models');
+  const { data: authStatus } = useApi<AuthStatus>('/api/auth/status');
+  // Same gate the write route enforces: admin-only when auth is on, allowed
+  // in single-user local mode (auth disabled — user is null there).
+  const canOverride = authStatus ? (!authStatus.authEnabled || authStatus.user?.role === 'admin') : false;
+  // Machine-level capability: every row carries the same probe result.
+  const webgpu = data?.tasks.some((t) => t.webgpu) ?? false;
+  const chatModelName = data?.tasks.find((t) => t.task === 'chat')?.modelName ?? null;
+
+  async function handleSave(task: string, model: string | null) {
+    await api('/api/models', {
+      method: 'POST',
+      body: JSON.stringify({ task, model }),
+    });
+    refetch();
+  }
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Models</h2>
+        <div className="bg-surface-raised border border-border rounded-lg p-4">
+          <div className="h-[120px] animate-pulse bg-border-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Models</h2>
+      <div className="bg-surface-raised border border-border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-text-muted">
+            Which AI model handles each task — and whether it runs on this device or a cloud server.
+          </p>
+          <span
+            className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded shrink-0 ${
+              webgpu ? 'bg-green/15 text-green' : 'bg-border-muted/50 text-text-muted'
+            }`}
+            title="Whether this machine can accelerate local model inference with WebGPU"
+          >
+            WebGPU acceleration: {webgpu ? 'available' : 'not available'}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {(data?.tasks ?? []).map((row) => (
+            <ModelRow
+              key={row.task}
+              row={row}
+              chatModelName={chatModelName}
+              catalog={data?.catalog ?? []}
+              canOverride={canOverride}
+              onSave={handleSave}
+            />
+          ))}
+        </div>
+        {canOverride && (
+          <p className="text-xs text-text-muted">
+            Model pins apply on each task's next run — no restart needed.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Entity Section ───────────────────────────────────────────────────────────
 
 function EntitySection() {
@@ -737,6 +948,7 @@ function EntitySection() {
 export function SettingsTab() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <ModelsSection />
       <ProfileSection />
       <EntitySection />
       <SecuritySection />

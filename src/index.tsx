@@ -70,6 +70,7 @@ Usage:
   wilson --balance-sheet           Full balance sheet with equity
   wilson --dashboard [--port N]     Run standalone dashboard server
   wilson --sync                    Sync all linked accounts (Plaid, Monarch, Firefly III)
+  wilson --index                   Build the local semantic index for existing transactions (on-device)
   wilson --mcp                     Show MCP server connections and available tools
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
@@ -130,6 +131,40 @@ Usage:
 } else if (args.includes("--sync")) {
   const { runSync } = await import("./sync.js");
   await runSync();
+} else if (args.includes("--index")) {
+  const { runEmbeddingIndex } = await import("./embedding-backfill.js");
+  const { initDatabase } = await import("./db/database.js");
+  const { DEFAULT_EMBEDDING_MODEL, EMBEDDING_DIM } = await import("./utils/embeddings.js");
+  const db = initDatabase();
+  try {
+    const result = await runEmbeddingIndex({
+      db,
+      onModelDownload: (pct) => {
+        if (pct >= 100) {
+          process.stdout.write("\rEmbedding model ready.            \n");
+        } else {
+          process.stdout.write(`\rDownloading embedding model… ${pct}%  `);
+        }
+      },
+      onProgress: (indexed, total) => {
+        const pct = total > 0 ? Math.round((indexed / total) * 100) : 100;
+        process.stdout.write(`\rIndexing ${indexed}/${total} (${pct}%)  `);
+      },
+    });
+    if (result.total === 0) {
+      console.log(
+        result.alreadyIndexed > 0
+          ? `All ${result.alreadyIndexed} transactions already indexed — nothing to do.`
+          : "No transactions to index."
+      );
+    } else {
+      console.log(
+        `\nIndexed ${result.indexed} transactions · model ${DEFAULT_EMBEDDING_MODEL} · dim ${EMBEDDING_DIM}`
+      );
+    }
+  } finally {
+    db.close();
+  }
 } else if (runIndex !== -1) {
   const query = args.slice(runIndex + 1).join(" ");
   if (!query) {

@@ -1,9 +1,12 @@
 import type { Database } from '../db/compat-sqlite.js';
+import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
-  apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
+  apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
+  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
+  type SetTaskModelBody,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -14,6 +17,7 @@ import {
   apiMemories, apiAddMemory, apiDeactivateMemory,
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
+  apiImport, type ImportRequestBody,
 } from './api.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
@@ -26,8 +30,103 @@ import {
 import {
   getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
+import { handleMcpRoute } from './mcp-routes.js';
+import { handleMcpHttpRequest } from '../mcp/http-server.js';
+import { revokeGrantsForUser } from '../mcp/store.js';
 
 const DEFAULT_PORT = 3141;
+
+/**
+ * Paths whose own auth model replaces the dashboard bearer-token check:
+ * `/mcp` authenticates each call with its own grant-bound bearer token
+ * (see src/mcp/http-server.ts), not the dashboard_sessions token — an
+ * external MCP client like Hronaut has no dashboard login of its own.
+ */
+const MCP_HTTP_PATH = '/mcp';
+
+/**
+ * `/api/mcp/*` and `/mcp` carry grant tokens and mutation approvals — never
+ * safe to hand to `*`. A request with no Origin header (a non-browser HTTP
+ * client, e.g. Hronaut hitting `/mcp` directly) isn't a CORS-relevant
+ * request at all, so there's nothing to restrict; a browser request gets
+ * reflected only when it already matches this server's own origin.
+ */
+function mcpCorsHeaders(port: number, requestOrigin: string | null): Record<string, string> {
+  if (!requestOrigin) return {};
+  const ownOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+  if (ownOrigins.includes(requestOrigin)) {
+    return { 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
+  }
+  return {};
+}
+
+/** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
+async function buildWebMcpBridgeScript(): Promise<string> {
+  try {
+    const result = await Bun.build({
+      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      target: 'browser',
+      minify: false,
+    });
+    const output = result.outputs[0];
+    return output ? await output.text() : '';
+  } catch (err) {
+    console.error('[webmcp-bridge] failed to build bridge script:', err);
+    return '';
+  }
+}
+
+/** Injects the WebMCP bridge <script> tag into either the React build or the legacy HTML. */
+function injectWebMcpBridge(html: string, port: number): string {
+  const tag = `<script src="/webmcp-bridge.js" data-port="${port}" defer></script>`;
+  if (html.includes('</body>')) return html.replace('</body>', `${tag}</body>`);
+  return html + tag;
+}
+
+// ── Static hybrid-chat assets ───────────────────────────────────────────────
+
+/** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
+export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+
+const ASSET_MIME_TYPES: Record<string, string> = {
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
+  '.json': 'application/json',
+};
+
+/**
+ * Serve a file from the hybrid build output under /assets/.
+ *
+ * These must be public (no auth): the hybrid chunk is loaded as a module
+ * script and the onnxruntime-web binaries are fetched by ORT itself — neither
+ * can attach an Authorization header. A 404 is the normal "hybrid not built"
+ * state; the client treats a failed chunk load as capability-unavailable and
+ * silently uses the server path.
+ *
+ * Rejects path traversal: the resolved path must stay inside `dir`.
+ */
+export async function serveDashboardAsset(
+  pathname: string,
+  dir: string,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const notFound = () => new Response('Not Found', { status: 404, headers });
+
+  const rel = pathname.slice('/assets/'.length);
+  if (!rel || rel.includes('\0')) return notFound();
+
+  const root = resolvePath(dir);
+  const resolved = resolvePath(root, rel);
+  if (resolved !== root && !resolved.startsWith(root + pathSep)) return notFound();
+
+  const file = Bun.file(resolved);
+  if (!(await file.exists())) return notFound();
+
+  const ext = resolved.slice(resolved.lastIndexOf('.'));
+  const contentType = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
+  return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+}
 
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +159,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
     // React build not available — fall back to legacy getDashboardHtml()
   }
 
+  // Bundle the WebMCP bridge once at startup — deliberately independent of
+  // the React dashboard build so the bridge works whether or not `ui/dist`
+  // exists. Injected into whichever HTML the page route returns below.
+  const webMcpBridgeScript = await buildWebMcpBridgeScript();
+
   // Set up initial DB in manager and chat session
   setInitialProfile(getCurrentProfileName(), db);
   initChatSession(db);
@@ -73,11 +177,24 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
       const url = new URL(req.url);
       const path = url.pathname;
 
+      // `port` may be 0 (ephemeral, e.g. in tests) — server.port is the actual
+      // bound port once Bun.serve has returned, which is what a real request's
+      // Origin header will contain. `server` is safe to reference here even
+      // though it's declared by this same Bun.serve(...) call: fetch only
+      // ever runs after that assignment has completed.
+      const actualPort = server.port ?? port;
+
+      const isMcpPath = path === MCP_HTTP_PATH || path.startsWith('/api/mcp');
       const headers: Record<string, string> = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
       };
+      if (isMcpPath) {
+        // Never the wildcard for grant/approval/mutation traffic — see mcpCorsHeaders.
+        delete headers['Access-Control-Allow-Origin'];
+        Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
+      }
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers });
@@ -86,6 +203,14 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
       try {
         // Get active DB (may change after profile switch)
         const activeDb = getActiveDb();
+
+        // ── Static hybrid-chat assets (public) ────────────────────────
+        // Module scripts and ORT's own wasm fetches cannot send auth headers,
+        // so /assets/* is served without the auth middleware (same treatment
+        // as the HTML page). Contents are build artifacts only.
+        if (path.startsWith('/assets/')) {
+          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers);
+        }
 
         // ── Auth middleware ──────────────────────────────────────────
         let currentUser: DashboardUser | null = null;
@@ -105,9 +230,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
           // Public auth routes (no token required)
           const publicPaths = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
           const isPublicAuth = publicPaths.includes(path);
-          const isHtmlPage = path === '/' || path === '/index.html';
+          const isHtmlPage = path === '/' || path === '/index.html' || path === '/webmcp-bridge.js';
+          // /mcp authenticates each call with its own grant-bound bearer token
+          // (see src/mcp/http-server.ts) — an external MCP client has no
+          // dashboard login to present here.
+          const isMcpHttp = path === MCP_HTTP_PATH;
 
-          if (!isPublicAuth && !isHtmlPage && !currentUser) {
+          if (!isPublicAuth && !isHtmlPage && !isMcpHttp && !currentUser) {
             return Response.json(
               { error: 'Unauthorized' },
               { status: 401, headers }
@@ -115,11 +244,34 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
           }
         }
 
+        // ── WebMCP bridge (Streamable-HTTP fallback + browser-facing API) ──
+
+        if (path === MCP_HTTP_PATH) {
+          return handleMcpHttpRequest(activeDb, req);
+        }
+
+        if (path.startsWith('/api/mcp/')) {
+          const mcpResponse = await handleMcpRoute(req, url, path, {
+            activeDb,
+            currentUser,
+            authEnabled,
+            port: actualPort,
+            headers,
+          });
+          if (mcpResponse) return mcpResponse;
+        }
+
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
-          const html = reactDashboardHtml ?? getDashboardHtml(port);
+          const html = injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
           return new Response(html, {
             headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
+          });
+        }
+
+        if (path === '/webmcp-bridge.js') {
+          return new Response(webMcpBridgeScript, {
+            headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' },
           });
         }
 
@@ -163,7 +315,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         if (path === '/api/auth/logout' && req.method === 'POST') {
           const authHeader = req.headers.get('Authorization');
           const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-          if (token) revokeToken(activeDb, token);
+          if (token) {
+            revokeToken(activeDb, token);
+            // A dashboard logout ends the browser's WebMCP grants too — a
+            // stolen/replayed session token shouldn't be able to keep using
+            // tool access minted under the now-dead login.
+            if (currentUser) revokeGrantsForUser(activeDb, currentUser.id);
+          }
           return Response.json({ success: true }, { headers });
         }
 
@@ -259,6 +417,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         if (path === '/api/transactions') {
           return Response.json(apiTransactions(activeDb, url.searchParams), { headers });
         }
+        if (path === '/api/transactions/search') {
+          return Response.json(await apiSemanticSearch(activeDb, url.searchParams), { headers });
+        }
 
         // Transaction edit/delete (RBAC: admin only)
         const txnMatch = path.match(/^\/api\/transactions\/(\d+)$/);
@@ -318,6 +479,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             }
             return Response.json(apiDeleteEntity(activeDb, id), { headers });
           }
+        }
+
+        // ── Import ──────────────────────────────────────────────────
+
+        if (path === '/api/import' && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as ImportRequestBody;
+          const result = apiImport(activeDb, body);
+          return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
         }
 
         // ── Memories ─────────────────────────────────────────────────
@@ -455,6 +627,41 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
           const result = await handleChatMessage(body.query, body.sessionId);
+          return Response.json(result, { headers });
+        }
+
+        // ── Hybrid (local-first WebGPU) chat ────────────────────────
+
+        if (path === '/api/config/local-chat') {
+          return Response.json(apiLocalChatConfig(), { headers });
+        }
+
+        // ── Models panel (Settings) ─────────────────────────────────
+
+        if (path === '/api/models' && req.method === 'POST') {
+          // Same posture as every other settings write: admin-only when auth
+          // is on, allowed in single-user local mode (auth disabled).
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await req.json() as SetTaskModelBody;
+          const result = apiSetTaskModel(body);
+          if ('error' in result) {
+            return Response.json(result, { status: 400, headers });
+          }
+          return Response.json(result, { headers });
+        }
+
+        if (path === '/api/models') {
+          return Response.json(await apiModels(), { headers });
+        }
+
+        if (path === '/api/chat/local' && req.method === 'POST') {
+          const body = await req.json() as { query?: string; answer?: string; sessionId?: string };
+          const result = apiRecordLocalChatMessage(activeDb, body);
+          if ('error' in result) {
+            return Response.json(result, { status: 400, headers });
+          }
           return Response.json(result, { headers });
         }
 

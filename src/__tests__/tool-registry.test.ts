@@ -1,14 +1,16 @@
-import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, afterAll, mock, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
+import * as realOrchRegistry from '../orchestration/registry.js';
+
+// Spy (not mock.module) on getOrchestrationTools so the tool registry stays
+// light while orchestration-registry.test.ts keeps the real function after
+// mockRestore().
+const orchToolsSpy = spyOn(realOrchRegistry, 'getOrchestrationTools').mockImplementation(async () => []);
 
 // Re-mock registry.js to restore real behavior (may have been mocked by chain.test.ts)
 // We need the real module, so import and re-export the actual functions
 mock.module('../mcp/adapter.js', () => ({
   getCachedMcpTools: mock(() => []),
-}));
-
-mock.module('../orchestration/registry.js', () => ({
-  getOrchestrationTools: mock(async () => []),
 }));
 
 const {
@@ -17,6 +19,10 @@ const {
   getToolsByNames,
   buildToolDescriptions,
 } = await import('../tools/registry.js');
+
+afterAll(() => {
+  orchToolsSpy.mockRestore();
+});
 
 describe('Tool Registry', () => {
   const savedEnv: Record<string, string | undefined> = {};

@@ -2,7 +2,12 @@ import { describe, expect, test, beforeEach, afterEach, spyOn, mock } from 'bun:
 import { Database } from '../db/compat-sqlite.js';
 import { runMigrations } from '../db/migrations.js';
 import * as licenseModule from '../licensing/license.js';
+import * as realPlaidClient from '../plaid/client.js';
 import { ensureTestProfile } from './helpers.js';
+
+// Link the real client module before mocking so bun mutates it in place —
+// keeps the real PlaidError class for plaid-sync-modified-removed.test.ts.
+void realPlaidClient;
 
 // Ensure test profile is set for any module that needs it
 ensureTestProfile();
@@ -24,11 +29,9 @@ mock.module('../plaid/store.js', () => ({
 }));
 
 mock.module('../plaid/client.js', () => ({
+  ...realPlaidClient,
   getBalances: async () => [],
   hasLocalPlaidCreds: () => false,
-  PlaidError: class PlaidError extends Error {
-    constructor(message: string, public errorType: string, public errorCode: string, public statusCode: number) { super(message); }
-  },
 }));
 
 mock.module('../tools/import/plaid-sync.js', () => ({

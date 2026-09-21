@@ -6,7 +6,9 @@ import { buildCategorizationPrompt, type CategorizationInput } from './prompt.js
 import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
-import { getConfiguredModel } from '../../utils/config.js';
+import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.js';
+import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
+import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -32,7 +34,7 @@ const categorizationOutputSchema = z.object({
     z.object({
       id: z.number(),
       category: z.string(),
-      confidence: z.number(),
+      confidence: z.number().min(0).max(1),
     })
   ),
 });
@@ -47,7 +49,8 @@ export const categorizeTool = defineTool({
   name: 'categorize',
   description:
     'Categorize uncategorized transactions using AI. ' +
-    'Assigns each transaction to a spending category with a confidence score.',
+    'Assigns each transaction to a spending category with a confidence score. ' +
+    'Suggestions below the confidence threshold are NOT applied — they are held in a persistent review queue for human review.',
   schema: z.object({
     limit: z
       .number()
@@ -60,6 +63,7 @@ export const categorizeTool = defineTool({
   }),
   func: async ({ limit, entityId }) => {
     const database = getDb();
+    const threshold = getCategorizationConfidenceThreshold();
 
     // Load dynamic categories from DB (with fallback)
     let dbCategories: CategoryRow[] | undefined;
@@ -81,7 +85,7 @@ export const categorizeTool = defineTool({
     }
 
     let totalCategorized = 0;
-    let totalNeedingReview = 0;
+    let totalRoutedForReview = 0;
     let ruleMatchCount = 0;
     const categoryCounts: Record<string, number> = {};
     const errors: string[] = [];
@@ -99,6 +103,9 @@ export const categorizeTool = defineTool({
           totalCategorized++;
           ruleMatchCount++;
           categoryCounts[match.category] = (categoryCounts[match.category] ?? 0) + 1;
+          // Rule matches apply at confidence 1.0 — clear any stale pending
+          // review row so the queue only lists transactions still in question.
+          deletePendingCategorizationReview(database, txn.id);
         } else {
           needsLlm.push(txn);
         }
@@ -121,25 +128,21 @@ export const categorizeTool = defineTool({
       const prompt = buildCategorizationPrompt(inputs, dbCategories);
 
       try {
-        // 3. Call LLM with structured output
-        const { model } = getConfiguredModel();
+        // 3. Call LLM with structured output. Resolved per batch so a pinned
+        // override (settings.json) lands on the very next run with no restart.
+        const model = getTaskModel('categorization');
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial transaction categorizer. Respond only with valid JSON.',
           outputSchema: categorizationOutputSchema,
           model,
+          callType: CALL_TYPE_CATEGORIZATION,
         });
 
-        // Parse the result — with structured output, response.structured is the parsed object
-        let categorizations: z.infer<typeof categorizationOutputSchema>;
-
-        if (result.response.structured && typeof result.response.structured === 'object' && 'transactions' in result.response.structured) {
-          categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
-        } else if (result.response.content) {
-          categorizations = categorizationOutputSchema.parse(JSON.parse(result.response.content));
-        } else {
-          errors.push(`Batch ${Math.floor(i / BATCH_SIZE) + 1}: Unexpected LLM response format`);
-          continue;
-        }
+        // callLlm validated the structured output against categorizationOutputSchema
+        // (with one repair re-prompt) or threw — result.response.structured is guaranteed
+        // to satisfy the schema, so a rejected batch lands in the catch below and this
+        // batch's transactions stay uncategorized.
+        const categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
 
         // 4. Update categories in database
         for (const cat of categorizations.transactions) {
@@ -152,16 +155,22 @@ export const categorizeTool = defineTool({
           }
           const confidence = Math.max(0, Math.min(1, cat.confidence));
 
-          updateCategory(database, cat.id, validCategory, confidence);
-          if (entityId !== undefined) {
-            database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: cat.id });
-          }
-          totalCategorized++;
-
-          categoryCounts[validCategory] = (categoryCounts[validCategory] ?? 0) + 1;
-
-          if (confidence < 0.7) {
-            totalNeedingReview++;
+          if (confidence >= threshold) {
+            updateCategory(database, cat.id, validCategory, confidence);
+            if (entityId !== undefined) {
+              database.prepare('UPDATE transactions SET entity_id = @entityId WHERE id = @id').run({ entityId, id: cat.id });
+            }
+            totalCategorized++;
+            categoryCounts[validCategory] = (categoryCounts[validCategory] ?? 0) + 1;
+            // Now categorized — clear any stale pending review row.
+            deletePendingCategorizationReview(database, cat.id);
+          } else {
+            // Guardrail: below-threshold suggestion is NEVER applied to the
+            // transaction (category stays untouched) — route it to the
+            // persistent review queue for a human decision. The partial
+            // unique index makes re-runs idempotent (no duplicate rows).
+            addPendingCategorizationReview(database, cat.id, validCategory, confidence);
+            totalRoutedForReview++;
           }
         }
       } catch (err) {
@@ -178,12 +187,12 @@ export const categorizeTool = defineTool({
       ruleMatched: ruleMatchCount,
       llmCategorized: totalCategorized - ruleMatchCount,
       categoriesApplied: categoryCounts,
-      needingReview: totalNeedingReview,
+      routedForReview: totalRoutedForReview,
       errors: errors.length > 0 ? errors : undefined,
       message:
         `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
         (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
-        `. ${totalNeedingReview} need review (confidence < 0.7).` +
+        `. ${totalRoutedForReview} routed for human review (below threshold ${threshold}).` +
         (errors.length > 0 ? ` ${errors.length} batch errors occurred.` : ''),
     });
   },
