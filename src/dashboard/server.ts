@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiSavings, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels,
@@ -296,6 +296,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });
+        }
+        if (path === '/api/cashflow/monthly') {
+          return Response.json(apiCashflowMonthly(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/alerts') {
           return Response.json(apiAlerts(activeDb), { headers });

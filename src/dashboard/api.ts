@@ -5,6 +5,7 @@ import {
   getProfitLoss,
   getBudgetVsActual,
   getMonthlySavingsData,
+  getMonthlyCashflowData,
   getTransactions,
   getRecentChatHistory,
   getChatSessions,
@@ -114,6 +115,14 @@ export function apiSavings(db: Database, params: URLSearchParams) {
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
   return getMonthlySavingsData(db, undefined, months, accountId, entityId);
+}
+
+// Read-only monthly income/expense series for the client-side cash forecast.
+// Portfolio-level flows (no account/entity filters) to line up with the
+// liquid-cash starting balance the card computes from all accounts.
+export function apiCashflowMonthly(db: Database, params: URLSearchParams) {
+  const months = Math.min(120, Math.max(1, parseInt(params.get('months') ?? '24', 10) || 24));
+  return getMonthlyCashflowData(db, undefined, months);
 }
 
 export function apiAlerts(db: Database) {

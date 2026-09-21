@@ -4,6 +4,8 @@
 
 ### Features
 
+- feat: client-side Monte Carlo cash forecast card on Overview, beside Savings Rate — a new read-only `GET /api/cashflow/monthly` series classified exactly like the P&L (transfers between accounts excluded so card payments aren't double-counted, complete calendar months only so the partial current month never skews sampling), a seeded in-browser bootstrap of 500 twelve-month paths over the user's own history (mulberry32 PRNG, deterministic under test), a recharts fan chart of translucent p10–p90 bands around the median liquid-cash line starting from checking/savings/cash balances, a plain-language takeaway naming the median cash at the horizon (and roughly when the pessimistic path runs low, if it does), and an empty state until a couple of months of history exist (#80)
+
 - feat: dashboard Settings "Models" panel — a read endpoint (`GET /api/models`) and Settings section showing which model handles each AI task (chat, categorization, entity classification) with friendly model names, "runs on this device" vs "runs on a cloud server" badges derived from a new `isLocal` flag on the provider registry, the server-side WebGPU capability probe, and an embeddings row marked "Not in use — no embeddings task in this build"; categorization and entity-classification LLM calls are also tagged with their own call types so the Training per-task view groups them truthfully instead of lumping them into `standalone` (#88)
 
 - feat: local-first hybrid dashboard chat — WebGPU-capable browsers answer from a pre-fetched transaction bundle via transformers.js (Qwen3-0.6B, fastModel-driven) with silent server fallback, bundle framing/hand-off classification, and browser-originated history recording (#68)
