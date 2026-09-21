@@ -21,6 +21,7 @@ import {
   apiImport, apiDemoTraceStep, type ImportRequestBody,
   apiReviewQueue, apiConfirmReview, apiCorrectReview,
 } from './api.js';
+import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
@@ -549,6 +550,19 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           }
           const result = await apiDemoTraceStep(activeDb, body, traceEmbed ? { embed: traceEmbed } : undefined);
           return Response.json(result, { status: result.status === 'error' ? 400 : 200, headers });
+        }
+
+        // ── Demo: auto-book candidate resolution ────────────────────
+        // Which freshly imported rows match the predicted description —
+        // server truth so the confirmation card names the exact transaction.
+        // Read-only: the booking write happens only inside the WebMCP
+        // substrate's commit, after the human approves the confirmation card.
+
+        if (path === '/api/demo/autobook/candidates' && req.method === 'POST') {
+          const body = await req.json() as unknown;
+          const result = apiDemoAutoBookCandidates(activeDb, body);
+          if (!result.ok) return Response.json({ error: result.error }, { status: 400, headers });
+          return Response.json({ candidates: result.candidates }, { headers });
         }
 
         // ── Memories ─────────────────────────────────────────────────

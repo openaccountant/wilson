@@ -59,6 +59,9 @@ export default defineConfig({
       // Browser-safe statement-import helpers shared with the CLI
       // (src/tools/import/client-import.ts + parsers it pulls in).
       '@import-tools': path.resolve(__dirname, '../../tools/import'),
+      // Shared WebMCP gate constants (session key, panel-open event) so the
+      // React build and the in-page bridge can't drift apart.
+      '@webmcp-session': path.resolve(__dirname, '../../dashboard/webmcp-session'),
     },
   },
   server: {
