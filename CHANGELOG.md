@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.6.0] — 2026-09-21
+
+### Features
+
+- feat: dashboard Settings Models panel — per-task model rows with local/server badges and tool call-type tagging (#88) (#104) (c39981c)
+
+### Fixes
+
+- fix: align dashboard UI account types with the real wire format so Accounts and Liabilities render real balances (#79) (#103) (83fa52b)
+
+### Other
+
+- Show model confidence badge in dashboard transaction list Category cell (#109) (ccb545c)
+- Add local-first WebGPU hybrid chat to the dashboard with silent server fallback (#68) (#98) (d29e69e)
+- Add dashboard POST /api/import endpoint with CLI-shared external_id dedup and imports ledger (#96) (35b0783)
+- Validate tool-call arguments against each tool's zod schema in defineTool (#66) (#90) (c840e7f)
+- Add local embedding engine, embeddings store, and batched backfill (#82) (64a4763)
+- Validate structured LLM output in callLlm with one repair re-prompt and typed rejection (#65) (#77) (72d40eb)
+- Add percentage-of-income targets to goal_manage financial goals (#46) (7b34ab3)
+- Route SPF roster through gertie's Ollama Cloud (ebe2dd6)
+- Add SPF quality/protected_files/watch config (4a3d645)
+
+
 ## [Unreleased]
 
 ### Features
@@ -19,6 +42,8 @@
 - fix: validate structured LLM output at the `callLlm` boundary — a response violating its `outputSchema` gets exactly one schema-aware repair re-prompt, then the call rejects with a typed `LlmValidationError` instead of returning unvalidated data; categorization and entity-classification batches land in their errors channel with nothing written (no more NaN confidences or junk categories from malformed local-model JSON), chat-history relevance degrades to no injected history, and team dispatch falls back to the dispatcher's direct answer; both tool schemas now constrain `confidence` to [0, 1] (#65)
 
 - fix: validate every tool invocation against its own zod schema in `defineTool` — malformed model tool-call arguments are rejected with a field-naming error before the tool function runs, and the failure is fed back to the model as a tool error so it can correct its arguments (#66)
+
+- fix: correct the dashboard UI's drifted account wire-format types — `Account`, `NetWorthResponse`, and `NetWorthTrendPoint` now declare the shape the API actually sends (`account_type`/`account_subtype`/`current_balance`, the `*BySubtype` arrays, and `date`/`totalAssets`/`totalLiabilities` trend rows) so the Accounts tab groups by real type with real balances (no more "Other" catch-all or NaN), the trend chart shows date labels, and the Liabilities card's per-account breakdown renders again; the wire contract is pinned by seeded-API field-name tests (#79)
 
 
 ## [v0.5.0] — 2026-07-05

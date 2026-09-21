@@ -6,6 +6,7 @@ import { buildEntityClassificationPrompt, type ClassificationInput } from './ent
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
 import { getConfiguredModel } from '../../utils/config.js';
+import { CALL_TYPE_ENTITY_CLASSIFICATION } from '../../model/task-models.js';
 
 let db: Database | null = null;
 
@@ -102,6 +103,7 @@ export const entityClassifyTool = defineTool({
           systemPrompt: 'You are a precise financial entity classifier. Respond only with valid JSON.',
           outputSchema: classificationOutputSchema,
           model,
+          callType: CALL_TYPE_ENTITY_CLASSIFICATION,
         });
 
         // callLlm validated the structured output against classificationOutputSchema

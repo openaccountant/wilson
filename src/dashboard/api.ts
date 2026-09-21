@@ -9,6 +9,10 @@ import {
   getRecentChatHistory,
   getChatSessions,
   getChatHistoryBySession,
+  createChatSession,
+  getChatSessionById,
+  updateSessionTitle,
+  insertChatMessage,
   updateTransaction,
   deleteTransaction,
   insertTransactions,
@@ -43,6 +47,8 @@ import {
 import { checkAlerts } from '../alerts/engine.js';
 import { getActiveGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
+import { getLocalChatModelConfig } from '../model/local-chat.js';
+import { getModelTaskRows } from '../model/task-models.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
@@ -383,6 +389,64 @@ export function apiChatSessionHistory(db: Database, sessionId: string) {
   } catch {
     return [];
   }
+}
+
+// ── Hybrid (local-first WebGPU) chat ────────────────────────────────────────
+
+/**
+ * Model choice + bundle bounds for the browser-side local chat path. Derived
+ * entirely from the provider registry / model catalog (see src/model/local-chat.ts).
+ */
+export function apiLocalChatConfig() {
+  return getLocalChatModelConfig();
+}
+
+// ── Models panel (Settings) ─────────────────────────────────────────────────
+
+/**
+ * Which model handles each AI task, local vs server. Read-only and
+ * config-derived (no db). The webgpuOverride param exists so tests can pin
+ * the probe result without loading onnxruntime-node; production passes
+ * nothing and the cached server-side probe runs on first hit.
+ */
+export async function apiModels(webgpuOverride?: boolean) {
+  return { tasks: await getModelTaskRows(webgpuOverride) };
+}
+
+export interface LocalChatRecordBody {
+  query?: string;
+  answer?: string;
+  sessionId?: string;
+}
+
+/**
+ * Record a locally-answered exchange in the same chat history the server path
+ * writes, so locally-answered turns survive a reload (Wilson records
+ * everything). Reuses the existing session/history shapes — no new schema.
+ * `summary` stays null: the LLM-summary pass is a server-agent behavior.
+ *
+ * OPERATOR VETO CANDIDATE: this is the only new write path added for hybrid
+ * chat (browser-originated history append, same auth posture as POST /api/chat).
+ */
+export function apiRecordLocalChatMessage(
+  db: Database,
+  body: LocalChatRecordBody,
+): { success: true; sessionId: string } | { error: string } {
+  const query = typeof body?.query === 'string' ? body.query.trim() : '';
+  const answer = typeof body?.answer === 'string' ? body.answer.trim() : '';
+  if (!query || !answer) {
+    return { error: 'query and answer are required' };
+  }
+
+  const supplied = typeof body?.sessionId === 'string' && body.sessionId ? body.sessionId : null;
+  const existing = supplied ? getChatSessionById(db, supplied) : null;
+  const sessionId = existing ? existing.id : createChatSession(db);
+  if (!existing) {
+    updateSessionTitle(db, sessionId, query.slice(0, 100));
+  }
+  insertChatMessage(db, query, answer, null, sessionId);
+  logger.info(`Dashboard local chat recorded`, { sessionId, queryChars: query.length });
+  return { success: true, sessionId };
 }
 
 // ── Traces ──────────────────────────────────────────────────────────────────

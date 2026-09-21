@@ -87,6 +87,9 @@ describe('categorize tool', () => {
     expect(result.data.success).toBe(true);
     expect(result.data.llmCategorized).toBe(1);
     expect(llmSpy).toHaveBeenCalled();
+    // The call is tagged with its own call type so the Training per-task view
+    // groups it under 'categorization' instead of the generic 'standalone'.
+    expect(llmSpy.mock.calls.some((call: unknown[]) => (call[1] as { callType?: string })?.callType === 'categorization')).toBe(true);
   });
 
   test('mixed rules and LLM categorization', async () => {

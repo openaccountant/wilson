@@ -723,6 +723,10 @@ export function updateSessionTitle(db: Database, sessionId: string, title: strin
   db.prepare(`UPDATE chat_sessions SET title = @title WHERE id = @id`).run({ id: sessionId, title });
 }
 
+export function getChatSessionById(db: Database, id: string): ChatSessionRow | null {
+  return db.prepare(`SELECT * FROM chat_sessions WHERE id = @id`).get({ id }) as ChatSessionRow | null;
+}
+
 export function getChatSessions(db: Database, limit: number = 50): ChatSessionRow[] {
   return db.prepare(`
     SELECT * FROM chat_sessions ORDER BY started_at DESC LIMIT @limit

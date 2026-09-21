@@ -6,6 +6,40 @@ import { formatAmount, formatDate } from '@/format';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
 import type { Transaction, Entity } from '@/types';
 
+/** Confidence at or above which the categorize tool auto-assigns (src/tools/categorize). */
+const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
+
+function ConfidenceBadge({ tx }: { tx: Transaction }) {
+  if (tx.user_verified) {
+    return (
+      <span
+        title="Verified by you"
+        className="inline-block text-[10px] px-1.5 py-0.5 rounded border border-green/40 bg-green/10 text-green"
+      >
+        verified
+      </span>
+    );
+  }
+  if (tx.category_confidence == null) return null;
+  const low = tx.category_confidence < CONFIDENCE_REVIEW_THRESHOLD;
+  return (
+    <span
+      title={
+        low
+          ? 'Low model confidence \u2014 worth reviewing'
+          : 'Model confidence'
+      }
+      className={`inline-block text-[10px] px-1.5 py-0.5 rounded border font-mono ${
+        low
+          ? 'border-yellow/40 bg-yellow/10 text-yellow'
+          : 'border-border bg-border-muted/60 text-text-muted'
+      }`}
+    >
+      {Math.round(tx.category_confidence * 100)}%
+    </span>
+  );
+}
+
 function EntityCell({
   txId,
   entityId,
@@ -294,7 +328,12 @@ export function TransactionsTab() {
                       {formatAmount(tx.amount)}
                     </td>
                     <td className="px-4 py-3 text-text-secondary text-xs">
-                      {tx.category_detailed ?? tx.category ?? (
+                      {tx.category_detailed ?? tx.category ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          {tx.category_detailed ?? tx.category}
+                          <ConfidenceBadge tx={tx} />
+                        </span>
+                      ) : (
                         <span className="text-text-muted">Uncategorized</span>
                       )}
                     </td>
