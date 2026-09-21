@@ -48,6 +48,7 @@ import { checkAlerts } from '../alerts/engine.js';
 import { getActiveGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import { getLocalChatModelConfig } from '../model/local-chat.js';
+import { getModelTaskRows } from '../model/task-models.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
@@ -398,6 +399,18 @@ export function apiChatSessionHistory(db: Database, sessionId: string) {
  */
 export function apiLocalChatConfig() {
   return getLocalChatModelConfig();
+}
+
+// ── Models panel (Settings) ─────────────────────────────────────────────────
+
+/**
+ * Which model handles each AI task, local vs server. Read-only and
+ * config-derived (no db). The webgpuOverride param exists so tests can pin
+ * the probe result without loading onnxruntime-node; production passes
+ * nothing and the cached server-side probe runs on first hit.
+ */
+export async function apiModels(webgpuOverride?: boolean) {
+  return { tasks: await getModelTaskRows(webgpuOverride) };
 }
 
 export interface LocalChatRecordBody {

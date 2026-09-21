@@ -4,6 +4,8 @@
 
 ### Features
 
+- feat: dashboard Settings "Models" panel — a read endpoint (`GET /api/models`) and Settings section showing which model handles each AI task (chat, categorization, entity classification) with friendly model names, "runs on this device" vs "runs on a cloud server" badges derived from a new `isLocal` flag on the provider registry, the server-side WebGPU capability probe, and an embeddings row marked "Not in use — no embeddings task in this build"; categorization and entity-classification LLM calls are also tagged with their own call types so the Training per-task view groups them truthfully instead of lumping them into `standalone` (#88)
+
 - feat: local-first hybrid dashboard chat — WebGPU-capable browsers answer from a pre-fetched transaction bundle via transformers.js (Qwen3-0.6B, fastModel-driven) with silent server fallback, bundle framing/hand-off classification, and browser-originated history recording (#68)
 
 - docs: record dashboard offline-store comparison spike (IndexedDB-direct vs OPFS-backed sqlite-wasm, measured against the real read contract) and commit wa-sqlite@1.0.0 + AccessHandlePoolVFS as the store technology, incl. the accepted unencrypted-at-rest tradeoff — `docs/plans/2026-09-20-003-dashboard-offline-store-comparison.md` (#74)

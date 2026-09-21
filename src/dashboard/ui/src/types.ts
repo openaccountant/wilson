@@ -309,3 +309,20 @@ export interface Memory {
   is_active: number;
   created_at: string;
 }
+
+// Matches GET /api/models response (see src/model/task-models.ts)
+export type TaskExecution = 'local' | 'server';
+
+export interface ModelTaskRow {
+  task: 'chat' | 'categorization' | 'entity-classification' | 'embeddings';
+  label: string;
+  inUse: boolean;
+  model: string | null;
+  modelName: string | null;
+  provider: string | null;
+  providerName: string | null;
+  execution: TaskExecution | null;
+  webgpu: boolean;
+  assignment: 'default' | 'override';
+  note: string | null;
+}

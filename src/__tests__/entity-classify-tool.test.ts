@@ -53,6 +53,9 @@ describe('entity_classify tool', () => {
     expect(result.data.success).toBe(true);
     expect(result.data.classified).toBe(1);
     expect(getTransactions(db)[0].entity_id).toBe(business);
+    // The call is tagged with its own call type so the Training per-task view
+    // groups it under 'entity-classification' instead of the generic 'standalone'.
+    expect(llmSpy.mock.calls.some((call: unknown[]) => (call[1] as { callType?: string })?.callType === 'entity-classification')).toBe(true);
   });
 
   test('low-confidence classifications land in reviewItems, not the database', async () => {
