@@ -120,6 +120,14 @@ export interface SavingsPoint {
   savingsRate: number;
 }
 
+// Matches GET /api/cashflow/monthly response (MonthlyCashflowRow in src/db/queries.ts).
+// Complete calendar months only — the current partial month is never included.
+export interface MonthlyCashflowRow {
+  month: string;
+  income: number;
+  expenses: number;
+}
+
 // Matches GET /api/summary response (existing endpoint)
 export interface SpendingSummaryItem {
   category: string;

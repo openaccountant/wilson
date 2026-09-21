@@ -414,6 +414,48 @@ export function getMonthlySavingsData(
   });
 }
 
+export interface MonthlyCashflowRow {
+  month: string;    // 'YYYY-MM', complete calendar months only (current partial month excluded)
+  income: number;   // sum of amounts where amount > 0 OR category = 'Income'  (P&L income rule)
+  expenses: number; // sum of ABS(amount) where amount < 0 AND COALESCE(category,'') NOT IN ('Income','Transfer')  (P&L expense rule)
+}
+
+/**
+ * Monthly income/expense series classified exactly like getProfitLoss, so a
+ * cash projection never counts transfers between accounts as spending (the
+ * monthly savings series does, double-counting card payments). Window covers
+ * the `months` complete calendar months ending with the last complete month
+ * before `endMonth` (default: the current month).
+ */
+export function getMonthlyCashflowData(
+  db: Database,
+  endMonth?: string,
+  months: number = 24,
+): MonthlyCashflowRow[] {
+  const end = endMonth ?? new Date().toISOString().slice(0, 7);
+  const [endYear, endMon] = end.split('-').map(Number);
+  // Complete calendar months only: the window ends on the last day of the
+  // month before `endMonth` (default: the current month), so the still-open
+  // partial month is never sampled as a full month of spending.
+  const endDate = new Date(endYear, endMon - 1, 0).toISOString().slice(0, 10);
+
+  const startDate = (() => {
+    const d = new Date(endYear, endMon - months - 1, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  })();
+
+  return db.prepare(`
+    SELECT strftime('%Y-%m', date) AS month,
+      COALESCE(SUM(CASE WHEN amount > 0 OR category = 'Income' THEN amount ELSE 0 END), 0) AS income,
+      COALESCE(SUM(CASE WHEN amount < 0 AND COALESCE(category, '') NOT IN ('Income', 'Transfer')
+        THEN ABS(amount) ELSE 0 END), 0) AS expenses
+    FROM transactions
+    WHERE date >= @startDate AND date <= @endDate
+    GROUP BY strftime('%Y-%m', date)
+    ORDER BY month
+  `).all({ startDate, endDate }) as MonthlyCashflowRow[];
+}
+
 // ── Rule queries ─────────────────────────────────────────────────────────────
 
 export interface RuleRow {

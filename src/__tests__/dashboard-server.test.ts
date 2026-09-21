@@ -5,8 +5,8 @@ import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth } from '../dashboard/auth.js';
 import { insertTransactions } from '../db/queries.js';
 import { insertAccount, insertBalanceSnapshot } from '../db/net-worth-queries.js';
-import { apiAccounts, apiNetWorth, apiNetWorthTrend } from '../dashboard/api.js';
-import type { Account, NetWorthResponse, NetWorthTrendPoint } from '../dashboard/ui/src/types.js';
+import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly } from '../dashboard/api.js';
+import type { Account, NetWorthResponse, NetWorthTrendPoint, MonthlyCashflowRow } from '../dashboard/ui/src/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 /** Spin up a fresh server with an in-memory DB. */
@@ -932,6 +932,111 @@ describe('dashboard server', () => {
       const res = await fetch(base + '/api/export/xlsx');
       // May succeed (xlsx installed) or return 500 (xlsx not installed)
       expect([200, 500]).toContain(res.status);
+    });
+  });
+
+  // ── Cashflow monthly series (client-side cash forecast sampling source) ──
+
+  describe('cashflow monthly', () => {
+    // ⚠️ The series covers COMPLETE calendar months only (the current,
+    // still-ongoing month is never included), so rows must be seeded with
+    // explicit dates in completed months — daysAgo(N) would land in the
+    // current partial month and never appear. Same trap as seedTestData (#23).
+    // Pin to day 1 before offsetting so a run on the 29th–31st can't roll
+    // over into the wrong month.
+    function monthYm(monthsBack: number): string {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - monthsBack);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+    function monthYMD(monthsBack: number, day: number): string {
+      return `${monthYm(monthsBack)}-${String(day).padStart(2, '0')}`;
+    }
+
+    test('transfer-category expense is not counted as spending (AC pin)', () => {
+      const db = createTestDb();
+      insertTransactions(db, [
+        { date: monthYMD(1, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+        { date: monthYMD(1, 10), description: 'Groceries', amount: -400, category: 'Groceries' },
+        // Credit-card payment between accounts: NOT an expense for cash
+        // projection (the card charge was already counted when it happened).
+        { date: monthYMD(1, 20), description: 'Credit card payment', amount: -250, category: 'Transfer' },
+      ]);
+
+      const rows = apiCashflowMonthly(db, new URLSearchParams());
+      const prev = rows.find((r) => r.month === monthYm(1));
+      expect(prev).toBeDefined();
+      expect(prev!.income).toBe(3000);
+      expect(prev!.expenses).toBe(400); // the -250 Transfer contributed nothing
+
+      // Complete-months-only rule: the current partial month never appears.
+      expect(rows.find((r) => r.month === monthYm(0))).toBeUndefined();
+    });
+
+    test('income-side P&L parity: a positive Transfer row counts as income (deliberate pin)', () => {
+      // This mirrors getProfitLoss's income rule (amount > 0 OR category =
+      // 'Income') exactly, by design. With two-sided transfer data the two
+      // legs can net out imperfectly for cash purposes — accepted for this
+      // slice; changing it is a conscious later decision, not a bug fix.
+      const db = createTestDb();
+      insertTransactions(db, [
+        { date: monthYMD(1, 5), description: 'Transfer in from broker', amount: 250, category: 'Transfer' },
+        { date: monthYMD(1, 6), description: 'Dinner', amount: -80, category: 'Dining' },
+      ]);
+
+      const rows = apiCashflowMonthly(db, new URLSearchParams());
+      const prev = rows.find((r) => r.month === monthYm(1));
+      expect(prev).toBeDefined();
+      expect(prev!.income).toBe(250);
+      expect(prev!.expenses).toBe(80);
+    });
+
+    test('wire shape matches the UI MonthlyCashflowRow type', () => {
+      const db = createTestDb();
+      insertTransactions(db, [
+        { date: monthYMD(1, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+      ]);
+
+      const rows = apiCashflowMonthly(db, new URLSearchParams());
+      expect(rows.length).toBeGreaterThan(0);
+      expect(Object.keys(rows[0]).sort()).toEqual(['expenses', 'income', 'month']);
+      // Compile-time belt: the API return type must be assignable to the UI
+      // wire type (mirrors the #79 field-name pins above).
+      const typed: MonthlyCashflowRow[] = apiCashflowMonthly(db, new URLSearchParams());
+      expect(typed[0].month).toBe(rows[0].month);
+    });
+
+    test('months window: ?months=1 returns at most the last complete month', () => {
+      const db = createTestDb();
+      insertTransactions(db, [
+        { date: monthYMD(1, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+        { date: monthYMD(2, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+      ]);
+
+      const rows = apiCashflowMonthly(db, new URLSearchParams('months=1'));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].month).toBe(monthYm(1));
+    });
+
+    test('GET /api/cashflow/monthly returns a JSON array honoring ?months', async () => {
+      const { db, base } = await start();
+      insertTransactions(db, [
+        { date: monthYMD(1, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+        { date: monthYMD(2, 3), description: 'Paycheck', amount: 3000, category: 'Income' },
+      ]);
+
+      const res = await fetch(base + '/api/cashflow/monthly');
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThanOrEqual(2);
+
+      const res1 = await fetch(base + '/api/cashflow/monthly?months=1');
+      expect(res1.status).toBe(200);
+      const data1 = await res1.json();
+      expect(data1).toHaveLength(1);
+      expect(data1[0].month).toBe(monthYm(1));
     });
   });
 });
