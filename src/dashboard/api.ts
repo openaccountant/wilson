@@ -54,7 +54,9 @@ import {
 } from '../db/embedding-queries.js';
 import { DEFAULT_EMBEDDING_MODEL, embedTexts } from '../utils/embeddings.js';
 import { getLocalChatModelConfig } from '../model/local-chat.js';
-import { getModelTaskRows } from '../model/task-models.js';
+import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask } from '../model/task-models.js';
+import { resolveProvider } from '../providers.js';
+import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
@@ -500,13 +502,64 @@ export function apiLocalChatConfig() {
 // ── Models panel (Settings) ─────────────────────────────────────────────────
 
 /**
- * Which model handles each AI task, local vs server. Read-only and
- * config-derived (no db). The webgpuOverride param exists so tests can pin
- * the probe result without loading onnxruntime-node; production passes
- * nothing and the cached server-side probe runs on first hit.
+ * Which model handles each AI task (with any admin pins applied live), plus
+ * the model catalog an admin pins from. Read-only and config-derived (no db).
+ * The webgpuOverride param exists so tests can pin the probe result without
+ * loading onnxruntime-node; production passes nothing and the cached
+ * server-side probe runs on first hit.
  */
 export async function apiModels(webgpuOverride?: boolean) {
-  return { tasks: await getModelTaskRows(webgpuOverride) };
+  return getModelPanel(webgpuOverride);
+}
+
+// ── Task model overrides (POST /api/models) ─────────────────────────────────
+
+export interface SetTaskModelBody {
+  task?: string;
+  /** Model id to pin; null (or undefined for tool tasks) resets to follow the chat model. */
+  model?: string | null;
+}
+
+export type SetTaskModelResult =
+  | { success: true; task: string; model: string | null }
+  | { error: string };
+
+/**
+ * Persist a per-task model assignment. The chat task IS the global model
+ * setting (same keys the TUI's /model switch writes: provider + modelId); the
+ * tool tasks get their own override keys (see task-models.ts). This is the
+ * route's whole job — applying the chat change live happens in chat.ts's
+ * per-message refreshChatModel(), not here.
+ */
+export function apiSetTaskModel(body: SetTaskModelBody): SetTaskModelResult {
+  const task = typeof body?.task === 'string' ? body.task : '';
+
+  if (task === 'chat') {
+    if (body.model === null || body.model === undefined) {
+      return { error: "The chat task's model is the global model setting — pick a model to set it (there is no reset)" };
+    }
+    if (!validateTaskModel(body.model)) {
+      return { error: `Unknown model: ${String(body.model)}` };
+    }
+    const provider = resolveProvider(body.model).id;
+    if (!setSetting('provider', provider) || !setSetting('modelId', body.model)) {
+      return { error: 'Failed to save settings' };
+    }
+    return { success: true, task, model: body.model };
+  }
+
+  if (task === 'categorization' || task === 'entity-classification') {
+    const pinned: string | null = body.model ?? null;
+    if (pinned !== null && !validateTaskModel(pinned)) {
+      return { error: `Unknown model: ${String(pinned)}` };
+    }
+    if (!setTaskOverride(task as OverridableTask, pinned)) {
+      return { error: 'Failed to save settings' };
+    }
+    return { success: true, task, model: pinned };
+  }
+
+  return { error: `Unknown task: ${task || '(missing)'}` };
 }
 
 export interface LocalChatRecordBody {

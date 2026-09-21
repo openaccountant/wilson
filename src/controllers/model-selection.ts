@@ -1,6 +1,3 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { getSetting, setSetting } from '../utils/config.js';
 import {
   checkApiKeyExistsForProvider,
@@ -10,19 +7,12 @@ import {
 import {
   getDefaultModelForProvider,
   getModelsForProvider,
+  isTransformersModelCached,
   type Model,
   type ModelTag,
 } from '../utils/model.js';
 import { getOllamaModels } from '../utils/ollama.js';
 import { checkWebGpuAvailable } from '../model/providers/transformers.js';
-
-/** Returns true if the model has already been downloaded to the local cache. */
-function isTransformersModelCached(modelId: string): boolean {
-  // modelId format: "HuggingFaceTB/SmolLM3-3B-ONNX"
-  // transformers.js cache: ~/.openaccountant/models/models--{org}--{name}/
-  const cacheName = `models--${modelId.replace('/', '--')}`;
-  return existsSync(join(homedir(), '.openaccountant', 'models', cacheName));
-}
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '../model/llm.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 
