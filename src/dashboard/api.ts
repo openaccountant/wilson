@@ -98,6 +98,7 @@ import {
   type BrowserTraceBody,
 } from '../demo/showdown.js';
 import { getSampleBySlug } from '../demo/samples.js';
+import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -707,6 +708,29 @@ export async function apiDemoShowdownLocal(body: ShowdownSlugBody) {
 /** POST /api/demo/showdown/browser-trace — record the browser arm's measured time. */
 export function apiDemoShowdownBrowserTrace(body: BrowserTraceBody) {
   return recordBrowserLocalTrace(body);
+}
+
+// ── Demo: Privacy Validator (issue #95) ─────────────────────────────────────
+
+/**
+ * POST /api/demo/privacy/start — arm a run: snapshot the trace watermark.
+ * The db comes from the route (same per-request posture as apiTraces); the
+ * exhibit deliberately takes none — it is fixture-only by construction.
+ */
+export function apiDemoPrivacyStart(db: Database) {
+  return startPrivacyRun(db);
+}
+
+/** GET /api/demo/privacy/ledger?run=… — rows recorded since the run armed. Throws → 400. */
+export function apiDemoPrivacyLedger(db: Database, params: URLSearchParams) {
+  return getPrivacyLedger(db, params.get('run'));
+}
+
+/** GET /api/demo/privacy/exhibit[?slug=…] — the would-be cloud payload, fixtures only. Throws → 400. */
+export function apiDemoPrivacyExhibit(params: URLSearchParams) {
+  const slug = params.get('slug') ?? undefined;
+  // tolerate `?slug=` (empty) as "no slug"
+  return getPrivacyExhibit(slug === '' ? undefined : slug);
 }
 
 // ── Traces ──────────────────────────────────────────────────────────────────

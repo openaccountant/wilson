@@ -33,6 +33,17 @@ import { getSampleBySlug, SAMPLE_TRANSACTIONS, type SampleTransaction } from './
  */
 export const SHOWDOWN_SYSTEM_PROMPT = CATEGORIZER_SYSTEM_PROMPT;
 
+// ── Trace-store provider markers ────────────────────────────────────────────
+
+/**
+ * The provider strings the two non-network arms write into the trace store.
+ * Exported (byte-identical to the literals the arms have always recorded) so
+ * the privacy ledger (#95) classifies them from this one source instead of
+ * re-spelling the markers.
+ */
+export const SIMULATED_PROVIDER = 'simulated';
+export const BROWSER_LOCAL_PROVIDER = 'transformers-browser';
+
 // ── Labels (exact strings; mirrored in src/dashboard/ui/src/demo/core.ts) ───
 
 export const LOCAL_BROWSER_LABEL = 'in your browser, on your GPU';
@@ -319,7 +330,7 @@ export function recordSimulatedCloudTrace(input: {
     id: `${Date.now()}-showdown-${Math.random().toString(36).slice(2, 9)}`,
     timestamp: new Date().toISOString(),
     model: `simulated:${input.apiModel}`,
-    provider: 'simulated',
+    provider: SIMULATED_PROVIDER,
     promptLength: input.userPrompt.length,
     responseLength: input.cannedResponse.length,
     inputTokens: 0,
@@ -363,7 +374,7 @@ export function recordBrowserLocalTrace(body: BrowserTraceBody): { traceId: stri
     id: `${Date.now()}-showdown-${Math.random().toString(36).slice(2, 9)}`,
     timestamp: new Date().toISOString(),
     model,
-    provider: 'transformers-browser',
+    provider: BROWSER_LOCAL_PROVIDER,
     promptLength: 0,
     responseLength: 0,
     inputTokens: 0,

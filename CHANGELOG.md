@@ -44,6 +44,8 @@
 
 - feat: auto-book through the visible confirmation gate — the Demo tab's agent trace gains an explicit "Auto-book this" action on a predicted transaction; tapping it requires opting the tab's agent session in via the Agent access panel (zero tools exposed by default, revocable any time), then a confirmation card names the exact change (which transaction, from/to category, server-computed delta) and the booking write — the same updateTransaction path as the transactions editor — lands only on explicit approval; denying leaves the data untouched and says so (#94)
 
+- feat: privacy validator — the Demo tab's stretch panel renders a live provider ledger proving every model/agent request during a demo run stayed on localhost: it arms a server-side watermark over the trace store, classifies each row through the provider registry's isLocal (with #92's `simulated` / `transformers-browser` markers in their own honest buckets — a simulated timer can never read as a cloud call, and an unrecognized provider is never silently counted as local), and says so plainly when a real cloud call does occur; side-by-side, the exhibit shows the exact request a cloud-based agent would have sent for the same decision step — the production categorization prompt built only from the in-repo synthetic sample fixtures, never attendee-imported data (#95)
+
 ### Other
 
 - Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)
