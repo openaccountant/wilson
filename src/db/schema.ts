@@ -391,6 +391,158 @@ CREATE INDEX IF NOT EXISTS idx_accounts_entity_id ON accounts(entity_id);
 CREATE INDEX IF NOT EXISTS idx_budgets_entity_id ON budgets(entity_id);
 `;
 
+// ── Goal Percentage-of-Income Columns (migration v22) ───────────────────────
+// NOTE: these columns live only in this migration, not in the GOALS_TABLE /
+// GOAL_SNAPSHOTS_TABLE CREATE statements above — fresh installs run all
+// migrations in order, and re-adding them in the CREATE would make this
+// ALTER fail with "duplicate column" (see ENTITY_ID_COLUMNS precedent).
+
+export const GOAL_TARGET_PERCENT_COLUMNS = `
+ALTER TABLE goals ADD COLUMN target_percent REAL;
+ALTER TABLE goals ADD COLUMN income_period TEXT;
+ALTER TABLE goal_snapshots ADD COLUMN resolved_target REAL;
+`;
+
+// ── Categorization Review Queue (migration v24) ─────────────────────────────
+// Below-threshold AI categorization suggestions are never applied to
+// transactions.category — they are held here as pending rows until a human
+// reviews them. The partial unique index makes duplicate pending rows for the
+// same transaction impossible at the storage level (INSERT OR IGNORE relies
+// on it). The backfill flags historically auto-applied low-confidence model
+// categorizations into the queue WITHOUT touching their applied category —
+// reports stay undistorted until a human acts. The 0.7 literal is the
+// default threshold; migrations cannot read the per-profile settings file.
+// Rows with NULL category_confidence are bank/import-provided categories, not
+// model output, and deliberately stay out of the queue.
+
+export const CATEGORIZATION_REVIEWS_TABLE = `
+CREATE TABLE IF NOT EXISTS categorization_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  transaction_id INTEGER NOT NULL,
+  suggested_category TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_categorization_reviews_txn ON categorization_reviews(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_categorization_reviews_status ON categorization_reviews(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categorization_reviews_pending_txn
+  ON categorization_reviews(transaction_id) WHERE status = 'pending';
+INSERT INTO categorization_reviews (transaction_id, suggested_category, confidence, status)
+SELECT id, category, category_confidence, 'pending'
+FROM transactions
+WHERE category IS NOT NULL
+  AND category_confidence IS NOT NULL
+  AND category_confidence < 0.7
+  AND COALESCE(user_verified, 0) = 0;
+`;
+
+// ── Embeddings Table (migration v23) ────────────────────────────────────────
+// Track B of the local-memory design: locally-computed semantic vectors for
+// chat turns, transactions, and memories. `vec` holds a serialized
+// L2-normalized Float32Array; `dim` is recorded per row so a future model
+// switch is diagnosable. The UNIQUE triple makes upserts idempotent per
+// (source_type, source_id, model) and lets a re-index with a new model
+// coexist with the old one.
+// No FK to source tables — embeddings are deleted via the explicit
+// deleteEmbeddings hook, and the table stays generic over source types.
+
+export const EMBEDDINGS_TABLE = `
+CREATE TABLE IF NOT EXISTS embeddings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_type TEXT NOT NULL CHECK(source_type IN ('chat','transaction','memory')),
+  source_id INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vec BLOB NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(source_type, source_id, model)
+);
+`;
+
+export const EMBEDDINGS_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
+`;
+
+// ── Transaction Revision Column (migration v25) ─────────────────────────────
+// Optimistic-concurrency guard for the WebMCP mutation prepare/commit protocol
+// (see src/mcp/store.ts). Every successful write to a transaction row bumps
+// this counter; commit() requires the caller's prepare-time revision to still
+// match, so a stale confirmation card can never silently overwrite a row the
+// user (or another agent) already changed. Same ALTER-only convention as
+// GOAL_TARGET_PERCENT_COLUMNS above — never add this to TRANSACTIONS_TABLE.
+
+export const TRANSACTION_REVISION_COLUMN = `
+ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+`;
+
+// ── WebMCP Bridge Tables (migration v26) ────────────────────────────────────
+// Persisted grant + prepare/commit-operation store for the WebMCP bridge
+// (src/mcp/store.ts). Mirrors the dashboard_sessions/cleanExpiredSessions
+// pattern in src/dashboard/auth.ts: rows are the durable source of truth for
+// scope checks, and a cheap periodic sweep clears expired ones.
+
+export const MCP_GRANTS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_grants (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  schema_digest TEXT NOT NULL,
+  user_id INTEGER,
+  role TEXT NOT NULL,
+  profile TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  session_generation TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_batch ON mcp_grants(batch_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_session ON mcp_grants(session_generation);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_expires ON mcp_grants(expires_at);
+`;
+
+export const MCP_OPERATIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_operations (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  grant_id TEXT,
+  tool_name TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  before_json TEXT,
+  after_json TEXT,
+  transaction_id INTEGER,
+  revision_at_prepare INTEGER,
+  profile TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  session_generation TEXT NOT NULL,
+  user_id INTEGER,
+  role TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  outcome_json TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_status ON mcp_operations(status);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_session ON mcp_operations(session_generation);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_expires ON mcp_operations(expires_at);
+`;
+
+export const MCP_APPROVAL_TOKENS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_approval_tokens (
+  token TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  FOREIGN KEY (operation_id) REFERENCES mcp_operations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_approval_tokens_operation ON mcp_approval_tokens(operation_id);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

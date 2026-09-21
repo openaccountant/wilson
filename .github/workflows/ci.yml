@@ -8,13 +8,20 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Both OSes: the WebGPU model path resolves execution providers from
+    # platform-specific onnxruntime-node prebuilds, so Linux-only coverage
+    # would miss half of it.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.2.23"
+          bun-version: "1.4.2"
 
       - run: bun install --frozen-lockfile
 
@@ -43,7 +50,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.2.23"
+          bun-version: "1.4.2"
 
       - name: Install SQLCipher
         run: |
