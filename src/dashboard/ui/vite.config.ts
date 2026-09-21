@@ -9,6 +9,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Browser-safe statement-import helpers shared with the CLI
+      // (src/tools/import/client-import.ts + parsers it pulls in).
+      '@import-tools': path.resolve(__dirname, '../../tools/import'),
     },
   },
   server: {
