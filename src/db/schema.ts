@@ -466,6 +466,83 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_source ON embeddings(source_type, sour
 CREATE INDEX IF NOT EXISTS idx_embeddings_model ON embeddings(model);
 `;
 
+// ── Transaction Revision Column (migration v25) ─────────────────────────────
+// Optimistic-concurrency guard for the WebMCP mutation prepare/commit protocol
+// (see src/mcp/store.ts). Every successful write to a transaction row bumps
+// this counter; commit() requires the caller's prepare-time revision to still
+// match, so a stale confirmation card can never silently overwrite a row the
+// user (or another agent) already changed. Same ALTER-only convention as
+// GOAL_TARGET_PERCENT_COLUMNS above — never add this to TRANSACTIONS_TABLE.
+
+export const TRANSACTION_REVISION_COLUMN = `
+ALTER TABLE transactions ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+`;
+
+// ── WebMCP Bridge Tables (migration v26) ────────────────────────────────────
+// Persisted grant + prepare/commit-operation store for the WebMCP bridge
+// (src/mcp/store.ts). Mirrors the dashboard_sessions/cleanExpiredSessions
+// pattern in src/dashboard/auth.ts: rows are the durable source of truth for
+// scope checks, and a cheap periodic sweep clears expired ones.
+
+export const MCP_GRANTS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_grants (
+  id TEXT PRIMARY KEY,
+  batch_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  schema_digest TEXT NOT NULL,
+  user_id INTEGER,
+  role TEXT NOT NULL,
+  profile TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  session_generation TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_batch ON mcp_grants(batch_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_session ON mcp_grants(session_generation);
+CREATE INDEX IF NOT EXISTS idx_mcp_grants_expires ON mcp_grants(expires_at);
+`;
+
+export const MCP_OPERATIONS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_operations (
+  id TEXT PRIMARY KEY,
+  source TEXT NOT NULL,
+  grant_id TEXT,
+  tool_name TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  before_json TEXT,
+  after_json TEXT,
+  transaction_id INTEGER,
+  revision_at_prepare INTEGER,
+  profile TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  session_generation TEXT NOT NULL,
+  user_id INTEGER,
+  role TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  outcome_json TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_status ON mcp_operations(status);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_session ON mcp_operations(session_generation);
+CREATE INDEX IF NOT EXISTS idx_mcp_operations_expires ON mcp_operations(expires_at);
+`;
+
+export const MCP_APPROVAL_TOKENS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_approval_tokens (
+  token TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  FOREIGN KEY (operation_id) REFERENCES mcp_operations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_approval_tokens_operation ON mcp_approval_tokens(operation_id);
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

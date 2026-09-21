@@ -139,9 +139,12 @@ describe('migration runner', () => {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
 
-    // Build a v22 database, then seed historical categorization data so the
-    // v23 backfill runs against it.
-    runMigrationsUpTo(db, MIGRATIONS.length - 1);
+    // Build a pre-v24 database (through v23/embeddings), then seed historical
+    // categorization data so the v24 backfill runs against it. Hardcoded to
+    // 23 rather than `MIGRATIONS.length - 1` — later migrations (v25/v26,
+    // added by the WebMCP bridge) must not shift which migration this test
+    // is exercising.
+    runMigrationsUpTo(db, 23);
 
     insertTransactions(db, [
       // Model-applied, below the 0.7 backfill threshold → must be queued
@@ -159,7 +162,7 @@ describe('migration runner', () => {
     db.prepare('UPDATE transactions SET user_verified = 1 WHERE id = @id')
       .run({ id: byDescription['USER VERIFIED'] });
 
-    // Apply the pending v23 migration (and anything after it)
+    // Apply the pending v24 migration (and anything after it)
     runMigrations(db);
 
     expect(getSchemaVersion(db)).toBe(MIGRATIONS.length);
