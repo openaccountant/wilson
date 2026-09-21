@@ -20,6 +20,8 @@
 
 - fix: validate every tool invocation against its own zod schema in `defineTool` — malformed model tool-call arguments are rejected with a field-naming error before the tool function runs, and the failure is fed back to the model as a tool error so it can correct its arguments (#66)
 
+- fix: correct the dashboard UI's drifted account wire-format types — `Account`, `NetWorthResponse`, and `NetWorthTrendPoint` now declare the shape the API actually sends (`account_type`/`account_subtype`/`current_balance`, the `*BySubtype` arrays, and `date`/`totalAssets`/`totalLiabilities` trend rows) so the Accounts tab groups by real type with real balances (no more "Other" catch-all or NaN), the trend chart shows date labels, and the Liabilities card's per-account breakdown renders again; the wire contract is pinned by seeded-API field-name tests (#79)
+
 
 ## [v0.5.0] — 2026-07-05
 
