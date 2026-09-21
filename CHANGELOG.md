@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Other
+
+- Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)
+
+
 ## [v0.7.0] — 2026-09-21
 
 ### Features
