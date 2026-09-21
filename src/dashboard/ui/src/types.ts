@@ -345,3 +345,20 @@ export interface ModelTaskRow {
   assignment: 'default' | 'override';
   note: string | null;
 }
+
+// One catalog entry an admin can pin to a task (POST /api/models)
+export interface CatalogModel {
+  id: string;
+  displayName: string;
+  provider: string;
+  providerName: string;
+  isLocal: boolean;
+  cached: boolean;
+  downloadSize: string | null;
+}
+
+// Matches GET /api/models response (see src/model/task-models.ts)
+export interface ModelsPanel {
+  tasks: ModelTaskRow[];
+  catalog: CatalogModel[];
+}

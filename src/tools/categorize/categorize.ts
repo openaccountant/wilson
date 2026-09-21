@@ -6,9 +6,9 @@ import { buildCategorizationPrompt, type CategorizationInput } from './prompt.js
 import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
-import { getConfiguredModel, getCategorizationConfidenceThreshold } from '../../utils/config.js';
+import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.js';
+import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
 import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
-import { CALL_TYPE_CATEGORIZATION } from '../../model/task-models.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -128,8 +128,9 @@ export const categorizeTool = defineTool({
       const prompt = buildCategorizationPrompt(inputs, dbCategories);
 
       try {
-        // 3. Call LLM with structured output
-        const { model } = getConfiguredModel();
+        // 3. Call LLM with structured output. Resolved per batch so a pinned
+        // override (settings.json) lands on the very next run with no restart.
+        const model = getTaskModel('categorization');
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial transaction categorizer. Respond only with valid JSON.',
           outputSchema: categorizationOutputSchema,

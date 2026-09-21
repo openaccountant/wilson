@@ -5,8 +5,7 @@ import { getEntities, getUnassignedTransactions, assignEntityToTransactions } fr
 import { buildEntityClassificationPrompt, type ClassificationInput } from './entity-classify-prompt.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
-import { getConfiguredModel } from '../../utils/config.js';
-import { CALL_TYPE_ENTITY_CLASSIFICATION } from '../../model/task-models.js';
+import { CALL_TYPE_ENTITY_CLASSIFICATION, getTaskModel } from '../../model/task-models.js';
 
 let db: Database | null = null;
 
@@ -98,7 +97,9 @@ export const entityClassifyTool = defineTool({
       const prompt = buildEntityClassificationPrompt(inputs, entities);
 
       try {
-        const { model } = getConfiguredModel();
+        // Resolved per batch so a pinned override (settings.json) lands on the
+        // very next run with no restart.
+        const model = getTaskModel('entity-classification');
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial entity classifier. Respond only with valid JSON.',
           outputSchema: classificationOutputSchema,

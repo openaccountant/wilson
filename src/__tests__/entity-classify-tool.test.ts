@@ -3,9 +3,11 @@ import type { Database } from '../db/compat-sqlite.js';
 import { initEntityClassifyTool, entityClassifyTool } from '../tools/entity/entity-classify.js';
 import { insertTransactions, getTransactions } from '../db/queries.js';
 import { createEntity } from '../db/entity-queries.js';
-import { createTestDb } from './helpers.js';
+import { createTestDb, ensureTestProfile } from './helpers.js';
 import * as llmModule from '../model/llm.js';
 import { LlmValidationError } from '../model/structured-output.js';
+import { setTaskOverride } from '../model/task-models.js';
+import { setSetting, saveConfig, getConfiguredModel } from '../utils/config.js';
 
 describe('entity_classify tool', () => {
   let db: Database;
@@ -111,5 +113,65 @@ describe('entity_classify tool', () => {
     const txns = getTransactions(db);
     expect(txns).toHaveLength(1);
     expect(txns[0].entity_id).toBeNull();
+  });
+
+  test('LLM model resolves the per-task pin at call time; reset restores the chat model', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'gpt-5.2');
+    setSetting('provider', 'openai');
+    try {
+      const business = createEntity(db, { name: 'Consulting LLC' }); // second entity besides seeded 'Personal'
+      insertTransactions(db, [
+        { date: '2026-02-15', description: 'Office supplies', amount: -40 },
+      ]);
+      initEntityClassifyTool(db);
+      const txn = getTransactions(db)[0];
+      llmSpy.mockResolvedValue({
+        response: {
+          content: '',
+          structured: {
+            transactions: [{ id: txn.id, entityId: business, confidence: 0.95, reasoning: 'office supplies' }],
+          },
+        },
+        metadata: {},
+      });
+
+      // Pin a different model to the task, run it: the very next call uses the pin.
+      setTaskOverride('entity-classification', 'ollama:qwen3:0.6b');
+      await entityClassifyTool.func({});
+      let calls = llmSpy.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { callType?: string })?.callType === 'entity-classification',
+      );
+      expect(calls).toHaveLength(1);
+      expect((calls[0][1] as { model?: string }).model).toBe('ollama:qwen3:0.6b');
+
+      // Reset: the next run follows the chat model again (fresh unassigned txn
+      // so the LLM path actually runs).
+      setTaskOverride('entity-classification', null);
+      insertTransactions(db, [
+        { date: '2026-02-16', description: 'Second office expense', amount: -25 },
+      ]);
+      initEntityClassifyTool(db);
+      const txns2 = getTransactions(db).filter((t) => t.entity_id === null);
+      llmSpy.mockResolvedValue({
+        response: {
+          content: '',
+          structured: {
+            transactions: [{ id: txns2[0].id, entityId: business, confidence: 0.95, reasoning: 'office supplies' }],
+          },
+        },
+        metadata: {},
+      });
+      await entityClassifyTool.func({});
+      calls = llmSpy.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { callType?: string })?.callType === 'entity-classification',
+      );
+      expect(calls).toHaveLength(2);
+      expect((calls[1][1] as { model?: string }).model).toBe(getConfiguredModel().model);
+      expect((calls[1][1] as { model?: string }).model).toBe('gpt-5.2');
+    } finally {
+      saveConfig({});
+    }
   });
 });
