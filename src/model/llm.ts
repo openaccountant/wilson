@@ -52,12 +52,18 @@ export interface CallLlmOptions {
   runId?: string;
   sequenceNum?: number;
   callType?: string;
+  /** Generation cap. Honored by the Transformers adapter; other adapters ignore it in this slice. */
+  maxTokens?: number;
 }
 
 export interface LlmResult {
   response: LlmResponse;
   usage?: LlmResponse['usage'];
   interactionId?: number | null;
+  /** Id of the trace row recorded for this call (see trace-store.ts). */
+  traceId: string;
+  /** The real measured wall-clock duration of this call, in ms. */
+  durationMs: number;
 }
 
 /**
@@ -148,7 +154,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
     const totalTokens = finalResponse.usage?.totalTokens ?? 0;
     const toolCallCount = finalResponse.toolCalls?.length ?? 0;
 
-    traceStore.record({
+    const trace = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       timestamp: new Date().toISOString(),
       model: apiModel,
@@ -159,8 +165,10 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       outputTokens,
       totalTokens,
       durationMs,
-      status: 'ok',
-    });
+      status: 'ok' as const,
+    };
+
+    traceStore.record(trace);
 
     const interactionId = interactionStore.recordInteraction({
       runId: runId ?? 'standalone',
@@ -189,7 +197,15 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
       toolCalls: toolCallCount,
     });
 
-    return { response: finalResponse, usage: finalResponse.usage, interactionId };
+    // Trace id + measured duration ride back to callers so every on-screen
+    // timer can be sourced from a recorded trace row (see demo/showdown.ts).
+    return {
+      response: finalResponse,
+      usage: finalResponse.usage,
+      interactionId,
+      traceId: trace.id,
+      durationMs: trace.durationMs,
+    };
   } catch (error) {
     const durationMs = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);

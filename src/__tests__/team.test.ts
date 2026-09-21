@@ -63,9 +63,11 @@ describe('runTeam', () => {
           toolCalls: [],
           structured: { assignments: [{ memberId: 'analyst', subtask: 'Summarize spending' }] },
         },
+        traceId: 'team-test-dispatch',
+        durationMs: 1,
       },
-      { response: { content: 'Member findings: spent $42.', toolCalls: [] } },
-      { response: { content: 'Final synthesized answer.', toolCalls: [] } },
+      { response: { content: 'Member findings: spent $42.', toolCalls: [] }, traceId: 'team-test-member', durationMs: 1 },
+      { response: { content: 'Final synthesized answer.', toolCalls: [] }, traceId: 'team-test-synth', durationMs: 1 },
     ];
     let call = 0;
     llmSpy.mockImplementation(async () => {

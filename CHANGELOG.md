@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Features
+
+- feat: Speed Showdown demo — pick an in-repo synthetic sample transaction (incl. the Harborview $318 Health row) in a new `#demo` dashboard tab and race side-by-side real, trace-store-sourced timers for the identical categorization decision: local via the hybrid routing (browser WebGPU with separately measured load time, else the server-side transformers path, always labeled with its actual source) against a live OpenRouter round-trip when key + network probe pass, otherwise a clearly-labeled simulated round-trip whose traces carry provider `simulated` markers so they are never misattributed; the exact prompt exhibit ("what leaves your machine") contains synthetic sample rows only, the verdict line names the ms/× delta, and the caption honestly contrasts jev-ultrafast (~178 ms median request, not privacy-preserving) (#92)
+
 ### Other
 
 - Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)
