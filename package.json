@@ -32,7 +32,7 @@
     "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@opentelemetry/winston-transport": "^0.32.0",
-    "ai": "^6.0.116",
+    "ai": "^7.0.107",
     "chalk": "^6.0.0",
     "csv-parse": "^6.2.1",
     "dotenv": "^18.0.0",
