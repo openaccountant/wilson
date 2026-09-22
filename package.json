@@ -22,7 +22,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/google": "^3.0.43",
-    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/openai": "^4.0.71",
     "@huggingface/transformers": "4.3.0",
     "@mariozechner/pi-tui": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
