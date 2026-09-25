@@ -20,9 +20,9 @@
     "test:coverage": "bun test --coverage"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
-    "@ai-sdk/google": "^3.0.43",
-    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/anthropic": "^4.0.58",
+    "@ai-sdk/google": "^4.0.76",
+    "@ai-sdk/openai": "^4.0.71",
     "@huggingface/transformers": "4.3.0",
     "@mariozechner/pi-tui": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
@@ -32,7 +32,7 @@
     "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@opentelemetry/winston-transport": "^0.32.0",
-    "ai": "^6.0.116",
+    "ai": "^7.0.107",
     "chalk": "^6.0.0",
     "csv-parse": "^7.0.2",
     "dotenv": "^18.0.0",
