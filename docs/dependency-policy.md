@@ -15,7 +15,15 @@ decision and what "validated" means for the bumps that don't get grouped.
   `actions` group. Merge once the workflow run on the PR itself succeeds.
 
 No human validation step is required for these beyond green CI — that's
-the point of grouping them.
+the point of grouping them. As of 2026-09-25 this is also enforced by
+automation, not just policy: `.github/workflows/dependabot-lockfile-fix.yml`
+regenerates `bun.lock` when Dependabot bumps `package.json` without it (the
+most common reason these PRs went red), and
+`.github/workflows/auto-approve-trusted.yml` approves and enables auto-merge
+once CI is green — see [`CONTRIBUTING.md`](../CONTRIBUTING.md#merge-pipeline-dependabot--the-spf-factory)
+for how both work. Major bumps below still need the manual validation
+steps and a deliberate `gh pr merge --admin` — neither workflow touches
+those.
 
 ## Needs validation — major version bumps
 
@@ -47,17 +55,12 @@ the minor/patch groups), one per dependency. Before merging one:
   semver.
 - Anything where CI is red and the cause isn't understood yet.
 
-## Current major-bump backlog (as of 2026-09-19)
+## Major-bump backlog
+
+Clear as of 2026-09-25 — the 2026-09-19 backlog (#4, #5, #7, #9, #10, #12,
+#13) and everything grouped/minor since (#32, #118–#122) all merged. Track
+new major bumps here as Dependabot opens them; this table should stay short
+if the fast-track path above is doing its job.
 
 | PR | Bump | Status |
 |----|------|--------|
-| #10 | `typescript` 5.9.3 → 6.0.2 | needs validation |
-| #9 | `csv-parse` 5.6.0 → 6.2.1 | needs validation |
-| #13 | `actions/dependency-review-action` 4 → 5 | needs validation |
-| #12 | `actions/github-script` 7 → 9 | needs validation |
-| #7 | `actions/checkout` 4 → 6 | needs validation |
-| #5 | `peter-evans/repository-dispatch` 3 → 4 | needs validation |
-| #4 | `actions/setup-node` 4 → 6 | needs validation |
-
-PR #32 (grouped minor/patch bump) is already safe under this policy once
-its CI passes.
