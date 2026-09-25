@@ -95,7 +95,7 @@ jobs:
             echo "trusted=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         if: steps.pr.outputs.number != '' && steps.trust.outputs.trusted == 'true'
         id: bot-token
         with:

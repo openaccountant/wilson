@@ -39,7 +39,7 @@ jobs:
       # The default GITHUB_TOKEN cannot bypass the main-branch ruleset, so the
       # release commit/tag are pushed with a token minted for the release-bot
       # GitHub App, which is on the ruleset's bypass list.
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: release-bot
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
