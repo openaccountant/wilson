@@ -174,13 +174,24 @@ re-triggers CI with a working lockfile.
 
 ### `.github/workflows/auto-approve-trusted.yml`
 
-Runs after CI finishes on a PR. If CI passed and the PR is from
-`dependabot[bot]` or from the maintainer on a `spf-watch/*` branch, it mints
-a token for the `release-bot` GitHub App (already on the ruleset's bypass
-list for release commits) and has that identity — distinct from the PR
-author — submit the approving review, then enables `gh pr merge --auto` so
-the PR joins the merge queue the moment it's mergeable. No one has to click
-merge for these two sources anymore; they flow on green CI alone.
+Runs after CI finishes on a PR. If CI passed, it mints a token for the
+`release-bot` GitHub App (already on the ruleset's bypass list for release
+commits) and has that identity — distinct from the PR author — submit the
+approving review, then enables `gh pr merge --auto` so the PR joins the
+merge queue the moment it's mergeable, for:
+
+- any PR from the maintainer on a `spf-watch/*` branch, or
+- a `dependabot[bot]` PR that's grouped (title contains `group`, e.g. the
+  `minor-and-patch` group) or a standalone same-major-version bump (title
+  matches `bump X from A to B` with the same leading version number) — i.e.
+  exactly what [`docs/dependency-policy.md`](docs/dependency-policy.md)
+  already calls safe to fast-track.
+
+A standalone **major**-version Dependabot bump is deliberately left alone —
+it still needs the manual validation steps in that doc and a human running
+`gh pr merge --admin` once satisfied. If the title doesn't match either
+recognized pattern, this workflow fails closed (treats it as untrusted)
+rather than guessing.
 
 If this stops approving PRs, the most likely cause is the `release-bot` App
 missing the `pull-requests: write` permission — grant it in the App's
