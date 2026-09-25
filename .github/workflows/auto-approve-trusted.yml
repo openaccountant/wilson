@@ -9,9 +9,13 @@ name: Auto-approve Trusted PRs
 # This workflow stands in as a second, distinct reviewer identity (the
 # release-bot GitHub App, already on the ruleset's bypass list for release
 # commits) and approves ONLY once CI is green, and ONLY for sources we
-# already trust: dependabot[bot], or the repo owner's own spf-watch/*
-# branches. Anything else — including any external contributor's PR — is
-# never touched here and still needs a human to merge it deliberately.
+# already trust: the repo owner's own spf-watch/* branches, or dependabot[bot]
+# PRs that docs/dependency-policy.md classifies as fast-track (grouped, or a
+# same-major-version bump). A dependabot PR that bumps a major version still
+# needs the manual validation steps in that doc and a deliberate
+# `gh pr merge --admin` — this workflow leaves those alone on purpose.
+# Anything else — including any external contributor's PR — is never
+# touched here either.
 
 on:
   workflow_run:
@@ -44,15 +48,50 @@ jobs:
             core.setOutput('number', String(pr.number));
             core.setOutput('author', pr.user.login);
             core.setOutput('branch', pr.head.ref);
+            core.setOutput('title', pr.title);
 
       - name: Decide trust
         id: trust
         run: |
           author="${{ steps.pr.outputs.author }}"
           branch="${{ steps.pr.outputs.branch }}"
-          if [ "$author" = "dependabot[bot]" ] || { [ "$author" = "iamfiscus" ] && [[ "$branch" == spf-watch/* ]]; }; then
+          title="${{ steps.pr.outputs.title }}"
+
+          if [ "$author" = "iamfiscus" ] && [[ "$branch" == spf-watch/* ]]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$author" != "dependabot[bot]" ]; then
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Grouped PRs (dependabot.yml's minor-and-patch / actions groups)
+          # are minor/patch by construction — dependabot.yml restricts each
+          # group's update-types. Their titles don't have a "from X to Y",
+          # e.g. "bump the minor-and-patch group across 1 directory with 6
+          # updates" — matching "group" is enough to identify them.
+          if [[ "$title" == *" group "* ]]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Standalone bump: "bump X from A to B" — trust it only if the
+          # leading version component (major, or the only number GitHub
+          # Actions use) is unchanged. A change there is a major bump and
+          # needs the manual validation steps in docs/dependency-policy.md.
+          # Matched separately (not "from A to B" as one pattern) because A
+          # and B can be full semver ("3.0.125"), not just a bare integer.
+          from=""
+          to=""
+          if [[ "$title" =~ from\ ([0-9]+) ]]; then from="${BASH_REMATCH[1]}"; fi
+          if [[ "$title" =~ to\ ([0-9]+) ]]; then to="${BASH_REMATCH[1]}"; fi
+          if [ -n "$from" ] && [ -n "$to" ] && [ "$from" = "$to" ]; then
             echo "trusted=true" >> "$GITHUB_OUTPUT"
           else
+            # Either a real major bump, or the title didn't match the
+            # expected pattern at all — fail closed either way.
             echo "trusted=false" >> "$GITHUB_OUTPUT"
           fi
 
