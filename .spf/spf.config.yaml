@@ -8,6 +8,12 @@
 defaults:
   coding_agent: flue
   model: ollama/glm-5.3-flash:cloud
+  # spf@0.19.1+ only (opt-in, flue-backend-only). Without this, a silently
+  # dead Ollama Cloud connection hangs the dispatch for Flue's own default
+  # (1 hour) before anything notices — this is exactly what stalled
+  # openaccountant/course#2 three times before the fix landed upstream
+  # (seesharpguy/super-portable-software-factory#93). 900000ms = 15 min.
+  request_timeout_ms: 900000
 
 agents:
   - name: planner
