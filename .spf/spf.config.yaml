@@ -39,7 +39,14 @@ watch:
   label_prefix: spf
   chain: plan-build-test-quality    # gates on the `all` suite (typecheck + test) — single
                                     # package, so unlike app/ there's no per-package cost tradeoff
-  concurrency: 2
+  # Was 2. Two issues in flight at once meant two branches cut from the same
+  # main snapshot, each drifting further as the other's PR (and everything
+  # else merging in the meantime) landed first — real content conflicts by
+  # the time either got reviewed, not just line-shift noise. 1 keeps each
+  # branch's base close to current main. Revisit once auto-approve-trusted.yml
+  # + the merge queue are reliably clearing PRs same-day; concurrency is only
+  # risky when PRs sit.
+  concurrency: 1
   poll_ms: 60000
   fanout:
     n: 1

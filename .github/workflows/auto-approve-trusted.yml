@@ -1,0 +1,81 @@
+name: Auto-approve Trusted PRs
+
+# main's ruleset requires 1 approving review before a PR can enter the merge
+# queue. On a solo-maintainer repo the PR author can never satisfy that for
+# their own PRs (GitHub blocks self-approval), so automated PRs — Dependabot
+# bumps, and the SPF factory's spf-watch/* branches — would sit forever with
+# nothing able to approve them. That's the actual bottleneck this fixes.
+#
+# This workflow stands in as a second, distinct reviewer identity (the
+# release-bot GitHub App, already on the ruleset's bypass list for release
+# commits) and approves ONLY once CI is green, and ONLY for sources we
+# already trust: dependabot[bot], or the repo owner's own spf-watch/*
+# branches. Anything else — including any external contributor's PR — is
+# never touched here and still needs a human to merge it deliberately.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  approve-and-merge:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve the PR this run belongs to
+        id: pr
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const runPRs = context.payload.workflow_run.pull_requests;
+            if (!runPRs || runPRs.length === 0) {
+              core.setOutput('number', '');
+              return;
+            }
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: runPRs[0].number,
+            });
+            core.setOutput('number', String(pr.number));
+            core.setOutput('author', pr.user.login);
+            core.setOutput('branch', pr.head.ref);
+
+      - name: Decide trust
+        id: trust
+        run: |
+          author="${{ steps.pr.outputs.author }}"
+          branch="${{ steps.pr.outputs.branch }}"
+          if [ "$author" = "dependabot[bot]" ] || { [ "$author" = "iamfiscus" ] && [[ "$branch" == spf-watch/* ]]; }; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/create-github-app-token@v2
+        if: steps.pr.outputs.number != '' && steps.trust.outputs.trusted == 'true'
+        id: bot-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Approve as the bot identity
+        if: steps.pr.outputs.number != '' && steps.trust.outputs.trusted == 'true'
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          gh pr review ${{ steps.pr.outputs.number }} \
+            --approve \
+            --body "Auto-approved: CI green, trusted automated source (\`${{ steps.pr.outputs.author }}\`)." \
+            --repo ${{ github.repository }}
+
+      - name: Enable auto-merge (joins the merge queue once mergeable)
+        if: steps.pr.outputs.number != '' && steps.trust.outputs.trusted == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr merge ${{ steps.pr.outputs.number }} --auto --squash --repo ${{ github.repository }}

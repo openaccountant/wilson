@@ -1,0 +1,49 @@
+name: Dependabot Lockfile Fix
+
+# Dependabot's npm_and_yarn ecosystem support bumps package.json but doesn't
+# reliably regenerate bun.lock (this repo uses Bun, not npm/yarn), so every
+# npm dependency PR fails CI's `bun install --frozen-lockfile` step. This
+# workflow regenerates the lockfile and pushes the fix straight to the PR
+# branch, which re-triggers CI with a working lockfile.
+#
+# Must be pull_request_target, not pull_request: GitHub forces a read-only
+# GITHUB_TOKEN with no secrets on pull_request runs triggered by Dependabot,
+# regardless of the permissions declared here. pull_request_target runs in
+# the base repo's context and is the documented workaround. Scoped tightly
+# (dependabot actor only, contents:write only) to keep that safe.
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  fix-lockfile:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Regenerate bun.lock against the bumped package.json
+        run: bun install
+
+      - name: Commit and push if the lockfile actually changed
+        run: |
+          if git diff --quiet -- bun.lock; then
+            echo "bun.lock already in sync — nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bun.lock
+          git commit -m "chore: regenerate bun.lock for dependabot bump"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
