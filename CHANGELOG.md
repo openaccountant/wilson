@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.9.1] — 2026-09-25
+
+### Fixes
+
+- fix: don't auto-approve major-version dependabot bumps (#133) (2062d91)
+
+### Other
+
+- Add Privacy Validator: live provider ledger + fixture-only would-be-cloud payload exhibit (#95) (#117) (21d2f34)
+- Add auto-book through the visible confirmation gate (#94) (#116) (6195886)
+
+
 ## [v0.9.0] — 2026-09-21
 
 ### Features
