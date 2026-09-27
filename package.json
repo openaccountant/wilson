@@ -1,6 +1,6 @@
 {
   "name": "@openaccountant/wilson",
-  "version": "0.6.0",
+  "version": "0.9.1",
   "description": "Open Accountant - Privacy-first AI bookkeeper CLI",
   "repository": {
     "type": "git",
@@ -20,27 +20,27 @@
     "test:coverage": "bun test --coverage"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
-    "@ai-sdk/google": "^3.0.43",
-    "@ai-sdk/openai": "^3.0.41",
-    "@huggingface/transformers": "4.0.1",
-    "@mariozechner/pi-tui": "^0.52.9",
+    "@ai-sdk/anthropic": "^4.0.58",
+    "@ai-sdk/google": "^4.0.76",
+    "@ai-sdk/openai": "^4.0.71",
+    "@huggingface/transformers": "4.3.0",
+    "@mariozechner/pi-tui": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.212.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.5.1",
-    "@opentelemetry/sdk-logs": "^0.212.0",
+    "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "@opentelemetry/winston-transport": "^0.22.0",
-    "ai": "^6.0.116",
-    "chalk": "^5.4.1",
-    "csv-parse": "^5.6.0",
-    "dotenv": "^17.2.3",
+    "@opentelemetry/winston-transport": "^0.32.0",
+    "ai": "^7.0.107",
+    "chalk": "^6.0.0",
+    "csv-parse": "^7.0.2",
+    "dotenv": "^18.0.0",
     "exa-js": "^2.2.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
-    "monarch-money-api": "^0.0.6",
-    "plaid": "^41.3.0",
+    "monarch-money-api": "^0.0.8",
+    "plaid": "^47.0.0",
     "winston": "^3.19.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.13"
@@ -48,7 +48,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   },
   "trustedDependencies": [
     "onnxruntime-node"

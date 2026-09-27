@@ -8,6 +8,8 @@ import { getPlaidItems, updatePlaidCursor, updatePlaidItemError, isReauthRequire
 import { syncTransactions, getBalances, PlaidError, getItemInstitutionId } from '../../plaid/client.js';
 import type { SyncedTransaction } from '../../plaid/client.js';
 import type { PlaidItem } from '../../plaid/store.js';
+import { deleteEmbeddings } from '../../db/embedding-queries.js';
+import { embedTransactionIds } from '../../utils/embed-on-write.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
 import { hasLocalPlaidCreds } from '../../plaid/client.js';
@@ -109,6 +111,8 @@ export async function syncPlaidItem(
   const newTxns: TransactionInsert[] = [];
   // Track which Plaid account ID each new transaction belongs to
   const txnPlaidAccountIds: string[] = [];
+  // Exact row ids of this sync's inserts (for the embed-on-write sweep)
+  const addedIds: number[] = [];
   let skipped = 0;
 
   for (const txn of added) {
@@ -149,7 +153,7 @@ export async function syncPlaidItem(
 
     const insertAll = database.transaction(() => {
       for (const txn of newTxns) {
-        stmt.run({
+        const result = stmt.run({
           date: txn.date,
           description: txn.description,
           amount: txn.amount,
@@ -165,6 +169,7 @@ export async function syncPlaidItem(
           pending: txn.pending ?? 0,
           authorized_date: txn.authorized_date ?? null,
         });
+        addedIds.push((result as { lastInsertRowid: number }).lastInsertRowid);
       }
     });
     insertAll();
@@ -172,7 +177,13 @@ export async function syncPlaidItem(
 
   // ── Handle modified transactions ──────────────────────────────────────────
   let modifiedCount = 0;
+  // Row ids whose embed text changed this sync (pending→posted description/
+  // merchant updates) — refreshed by the same post-sync embed sweep as inserts.
+  const changedIds: number[] = [];
   if (modified.length > 0) {
+    const existingStmt = database.prepare(
+      'SELECT id, description, merchant_name FROM transactions WHERE plaid_transaction_id = @tid'
+    );
     const updateStmt = database.prepare(`
       UPDATE transactions SET
         date = @date, amount = @amount, description = @description, pending = @pending,
@@ -194,6 +205,13 @@ export async function syncPlaidItem(
         const category = txn.category.length > 0 ? txn.category[txn.category.length - 1] : null;
         const categoryDetailed = pfcDetailed ?? pfcPrimary ?? null;
 
+        // Text before the update — only a description/merchant_name change
+        // affects the vector; pure amount/pending/category churn must not
+        // trigger a re-embed.
+        const existing = existingStmt.get({ tid: txn.transactionId }) as
+          | { id: number; description: string; merchant_name: string | null }
+          | undefined;
+
         const result = updateStmt.run({
           date: txn.date,
           amount: -txn.amount,
@@ -209,9 +227,16 @@ export async function syncPlaidItem(
 
         if ((result as { changes: number }).changes > 0) {
           modifiedCount++;
+          if (
+            existing &&
+            (existing.description !== txn.name ||
+              (existing.merchant_name ?? null) !== (txn.merchantName ?? null))
+          ) {
+            changedIds.push(existing.id);
+          }
         } else {
           // Edge case: modified transaction doesn't exist locally — insert it
-          insertStmt.run({
+          const insertResult = insertStmt.run({
             date: txn.date,
             description: txn.name,
             amount: -txn.amount,
@@ -227,6 +252,7 @@ export async function syncPlaidItem(
             pending: txn.pending ? 1 : 0,
             authorized_date: txn.authorizedDate ?? null,
           });
+          changedIds.push((insertResult as { lastInsertRowid: number }).lastInsertRowid);
           modifiedCount++;
         }
       }
@@ -237,16 +263,28 @@ export async function syncPlaidItem(
   // ── Handle removed transactions ───────────────────────────────────────────
   let removedCount = 0;
   if (removed.length > 0) {
+    // Ids captured before the delete so their vectors can be dropped too.
+    const removedIds: number[] = [];
+    const idStmt = database.prepare(
+      'SELECT id FROM transactions WHERE plaid_transaction_id = @tid'
+    );
     const deleteStmt = database.prepare(
       'DELETE FROM transactions WHERE plaid_transaction_id = @tid'
     );
     const deleteAll = database.transaction(() => {
       for (const tid of removed) {
+        // All rows carrying this plaid_transaction_id (defensive — the id is
+        // meant to be unique, but never orphan a vector if it isn't).
+        const rows = idStmt.all({ tid }) as Array<{ id: number }>;
+        for (const row of rows) removedIds.push(row.id);
         const result = deleteStmt.run({ tid });
         removedCount += (result as { changes: number }).changes;
       }
     });
     deleteAll();
+    for (const id of removedIds) {
+      deleteEmbeddings(database, 'transaction', id);
+    }
   }
 
   // Upsert accounts from Plaid balance data so accounts exist before linking
@@ -303,6 +341,14 @@ export async function syncPlaidItem(
       });
       linkAll();
     }
+  }
+
+  // ── Embed-on-write: index/refresh this sync's new + text-changed rows ─────
+  // One batched sweep covers added inserts and pending→posted refreshes. Never
+  // fails the sync — a broken model leaves the rows for the next --index run.
+  const embedIds = [...addedIds, ...changedIds];
+  if (embedIds.length > 0) {
+    await embedTransactionIds(database, embedIds);
   }
 
   updatePlaidCursor(item.itemId, nextCursor);

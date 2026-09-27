@@ -1,5 +1,6 @@
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { PnlResponse } from '@/types';
 
 function fmt(n: number): string {
@@ -8,7 +9,7 @@ function fmt(n: number): string {
 
 export function PnlCard() {
   const params = useFilterParams();
-  const { data, loading } = useApi<PnlResponse>(`/api/pnl?${params}`, [params]);
+  const { data, loading, offline } = useApi<PnlResponse>(`/api/pnl?${params}`, [params]);
 
   if (loading) {
     return (
@@ -16,6 +17,11 @@ export function PnlCard() {
         <div className="h-[80px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than rendering zeros.
+    return <OfflineUnavailable title="Profit & Loss" />;
   }
 
   const income = data?.totalIncome ?? 0;

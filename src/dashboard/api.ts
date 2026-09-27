@@ -1,9 +1,21 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { createHash } from 'crypto';
 import {
+  importStep,
+  embeddingStep,
+  predictStep,
+  reconcileStep,
+  type TraceDeps,
+  type TraceStepId,
+  type TraceStepResult,
+  type TraceTransaction,
+} from '../demo/statement-trace.js';
+import {
   getSpendingSummary,
   getProfitLoss,
   getBudgetVsActual,
+  getBudgets,
+  getCategories,
   getMonthlySavingsData,
   getMonthlyCashflowData,
   getTransactions,
@@ -20,10 +32,16 @@ import {
   checkImported,
   checkExternalId,
   recordImport,
+  resolveCategory,
   type TransactionFilters,
   type TransactionUpdate,
   type TransactionInsert,
 } from '../db/queries.js';
+import {
+  getPendingReviewQueue,
+  resolveCategorizationReview,
+  type PendingReviewRow,
+} from '../db/categorization-review-queries.js';
 import {
   getAccounts,
   getNetWorthSummary,
@@ -59,34 +77,33 @@ import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask
 import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
+import { parseTransactionListParams } from './transactions-query.js';
+import { embedTransactionIds } from '../utils/embed-on-write.js';
+import { CATEGORIES } from '../tools/categorize/categories.js';
+import {
+  parseAccountId,
+  parseEntityId,
+  parseDateRange,
+  parseSavingsMonths,
+  parseBudgetCountdownMonth,
+  parseDailySpendingRange,
+} from './overview-params.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
+import {
+  getShowdownSamples,
+  runShowdownCloudArm,
+  runShowdownLocalServerArm,
+  recordBrowserLocalTrace,
+  type BrowserTraceBody,
+} from '../demo/showdown.js';
+import { getSampleBySlug } from '../demo/samples.js';
+import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function parseAccountId(params: URLSearchParams): number | undefined {
-  const val = params.get('accountId');
-  return val ? parseInt(val, 10) : undefined;
-}
-
-function parseEntityId(params: URLSearchParams): number | undefined {
-  const val = params.get('entityId');
-  return val ? parseInt(val, 10) : undefined;
-}
-
-function parseDateRange(params: URLSearchParams) {
-  const directStart = params.get('startDate');
-  const directEnd = params.get('endDate');
-  if (directStart && directEnd) {
-    const month = directStart.slice(0, 7);
-    return { month, startDate: directStart, endDate: directEnd };
-  }
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
-  const [year, mon] = month.split('-').map(Number);
-  const startDate = `${month}-01`;
-  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
-  return { month, startDate, endDate };
-}
+// The overview param parsers moved to overview-params.ts (shared with the
+// offline dashboard mirror); imported above so both sides parse identically.
 
 function escapeCsv(v: string): string {
   if (v.includes(',') || v.includes('"') || v.includes('\n')) {
@@ -119,7 +136,7 @@ export function apiBudgets(db: Database, params: URLSearchParams) {
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
-  const months = parseInt(params.get('months') ?? '6', 10);
+  const months = parseSavingsMonths(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
   return getMonthlySavingsData(db, undefined, months, accountId, entityId);
@@ -137,30 +154,73 @@ export function apiAlerts(db: Database) {
   return checkAlerts(db);
 }
 
+/**
+ * Raw budget limit rows. Unlike /api/budgets (the vs-actual aggregation), this
+ * returns the budgets table as-is. Read-only; exists to feed the dashboard
+ * mirror's sync pull (the offline mirror needs budgets for the streak's daily
+ * budget and the budget cards).
+ */
+export function apiBudgetLimits(db: Database) {
+  return getBudgets(db);
+}
+
+/**
+ * Raw category rows (flat list). Read-only; exists to feed the dashboard
+ * mirror's sync pull (budget-vs-actual rolls spending up the category
+ * hierarchy, which the mirror recomputes locally).
+ */
+export function apiCategories(db: Database) {
+  return getCategories(db);
+}
+
 // ── Transactions ────────────────────────────────────────────────────────────
 
 export function apiTransactions(db: Database, params: URLSearchParams) {
-  const filters: TransactionFilters = {};
-  const start = params.get('start');
-  const end = params.get('end');
-  const category = params.get('category');
-  const merchant = params.get('merchant');
-  const accountId = parseAccountId(params);
-  const entityId = parseEntityId(params);
-  if (start) filters.dateStart = start;
-  if (end) filters.dateEnd = end;
-  if (category) filters.category = category;
-  if (merchant) filters.merchant = merchant;
-  if (accountId !== undefined) filters.accountId = accountId;
-  if (entityId !== undefined) filters.entityId = entityId;
+  const { filters, limit } = parseTransactionListParams(params);
   const txns = getTransactions(db, filters);
-  const limit = parseInt(params.get('limit') ?? '100', 10);
   return txns.slice(0, limit);
 }
 
-export function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
+export async function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
   const success = updateTransaction(db, id, updates);
+  // Description is part of the embed text — refresh the stored vector.
+  // Never fails the edit (degrade, never error).
+  if (success && updates.description !== undefined) {
+    await embedTransactionIds(db, [id]);
+  }
   return { success, id };
+}
+
+// ── Categorization review queue ─────────────────────────────────────────────
+
+/** GET /api/reviews — pending categorization reviews joined with their transactions (read-only; any authenticated user). */
+export function apiReviewQueue(db: Database, params: URLSearchParams): PendingReviewRow[] {
+  const limit = parseInt(params.get('limit') ?? '200', 10);
+  return getPendingReviewQueue(db, Number.isFinite(limit) && limit >= 1 ? limit : 200);
+}
+
+export type ReviewActionResult =
+  | { success: true; transactionId: number; category: string }
+  | { success: false; error: string; status: number };
+
+/** POST /api/reviews/:id/confirm — apply the suggested category (admin-only route). */
+export function apiConfirmReview(db: Database, reviewId: number): ReviewActionResult {
+  const result = resolveCategorizationReview(db, reviewId, { action: 'confirm' });
+  if (!result.ok) return { success: false, error: result.error, status: 404 };
+  return { success: true, transactionId: result.transactionId, category: result.category };
+}
+
+/** POST /api/reviews/:id/correct — apply a user-chosen category (admin-only route). */
+export function apiCorrectReview(db: Database, reviewId: number, body: { category?: unknown }): ReviewActionResult {
+  const raw = typeof body?.category === 'string' ? body.category.trim() : '';
+  if (!raw) return { success: false, error: 'category is required', status: 400 };
+  // Same two-source "existing category list" the categorize tool validates
+  // against: the DB categories table first, then the static CATEGORIES list.
+  const category = resolveCategory(db, raw) ?? (CATEGORIES.includes(raw) ? raw : null);
+  if (!category) return { success: false, error: `unknown category "${raw}"`, status: 400 };
+  const result = resolveCategorizationReview(db, reviewId, { action: 'correct', category });
+  if (!result.ok) return { success: false, error: result.error, status: 404 };
+  return { success: true, transactionId: result.transactionId, category: result.category };
 }
 
 // ── Semantic search ─────────────────────────────────────────────────────────
@@ -607,6 +667,72 @@ export function apiRecordLocalChatMessage(
   return { success: true, sessionId };
 }
 
+// ── Demo: Speed Showdown (issue #92) ────────────────────────────────────────
+
+/** GET /api/demo/showdown/samples — fixtures + prompts + model config. */
+export function apiDemoShowdownSamples() {
+  return getShowdownSamples();
+}
+
+export interface ShowdownSlugBody {
+  slug?: unknown;
+}
+
+function requireDemoSlug(body: ShowdownSlugBody): string {
+  const slug = typeof body?.slug === 'string' ? body.slug.trim() : '';
+  if (!slug) {
+    throw new Error('slug is required');
+  }
+  // Throws on unknown slug → the route answers 400. This is the structural
+  // synthetic-only guard: only in-repo fixture slugs reach the arms.
+  getSampleBySlug(slug);
+  return slug;
+}
+
+/**
+ * POST /api/demo/showdown/cloud — cloud arm for one sample.
+ * Bad input (missing/unknown slug) throws → 400; arm-internal failures
+ * resolve to { ok:false, error } at HTTP 200 so the UI degrades inline.
+ */
+export async function apiDemoShowdownCloud(body: ShowdownSlugBody) {
+  const slug = requireDemoSlug(body);
+  return runShowdownCloudArm(slug);
+}
+
+/** POST /api/demo/showdown/local — server-side local arm. Same posture. */
+export async function apiDemoShowdownLocal(body: ShowdownSlugBody) {
+  const slug = requireDemoSlug(body);
+  return runShowdownLocalServerArm(slug);
+}
+
+/** POST /api/demo/showdown/browser-trace — record the browser arm's measured time. */
+export function apiDemoShowdownBrowserTrace(body: BrowserTraceBody) {
+  return recordBrowserLocalTrace(body);
+}
+
+// ── Demo: Privacy Validator (issue #95) ─────────────────────────────────────
+
+/**
+ * POST /api/demo/privacy/start — arm a run: snapshot the trace watermark.
+ * The db comes from the route (same per-request posture as apiTraces); the
+ * exhibit deliberately takes none — it is fixture-only by construction.
+ */
+export function apiDemoPrivacyStart(db: Database) {
+  return startPrivacyRun(db);
+}
+
+/** GET /api/demo/privacy/ledger?run=… — rows recorded since the run armed. Throws → 400. */
+export function apiDemoPrivacyLedger(db: Database, params: URLSearchParams) {
+  return getPrivacyLedger(db, params.get('run'));
+}
+
+/** GET /api/demo/privacy/exhibit[?slug=…] — the would-be cloud payload, fixtures only. Throws → 400. */
+export function apiDemoPrivacyExhibit(params: URLSearchParams) {
+  const slug = params.get('slug') ?? undefined;
+  // tolerate `?slug=` (empty) as "no slug"
+  return getPrivacyExhibit(slug === '' ? undefined : slug);
+}
+
 // ── Traces ──────────────────────────────────────────────────────────────────
 
 export function apiTraces(db: Database, params: URLSearchParams) {
@@ -768,12 +894,11 @@ export function apiAnnotateInteraction(db: Database, id: number, annotation: {
 // ── Daily / Gamification ─────────────────────────────────────────────────────
 
 export function apiDailySpending(db: Database, params: URLSearchParams) {
-  const startDate = params.get('startDate');
-  const endDate = params.get('endDate');
-  if (!startDate || !endDate) {
-    return { error: 'startDate and endDate required' };
+  const range = parseDailySpendingRange(params);
+  if ('error' in range) {
+    return range;
   }
-  return getDailySpending(db, startDate, endDate);
+  return getDailySpending(db, range.startDate, range.endDate);
 }
 
 export function apiStreak(db: Database) {
@@ -785,7 +910,7 @@ export function apiWeeklySummary(db: Database) {
 }
 
 export function apiBudgetCountdown(db: Database, params: URLSearchParams) {
-  const month = params.get('month') ?? new Date().toISOString().slice(0, 7);
+  const month = parseBudgetCountdownMonth(params);
   return getBudgetCountdown(db, month);
 }
 
@@ -933,7 +1058,7 @@ function failedImport(error: string): ImportResult {
  * and optional account auto-link. The server trusts the parsed rows — it never
  * re-parses raw file content.
  */
-export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
+export async function apiImport(db: Database, body: ImportRequestBody): Promise<ImportResult> {
   // 1. Validate the payload
   if (!body.filename || typeof body.filename !== 'string' || body.filename.trim() === '') {
     return failedImport('filename is required');
@@ -1022,7 +1147,10 @@ export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
     authorized_date: t.authorized_date,
     account_last4: t.account_last4,
   }));
-  const count = insertTransactions(db, txns);
+  const { count, ids } = insertTransactions(db, txns);
+
+  // Embed-on-write: index the new rows immediately (never fails the import).
+  await embedTransactionIds(db, ids);
 
   // Date range (mirrors CLI step 9: lexicographic sort works for YYYY-MM-DD)
   const dates = newRows.map((t) => t.date).sort();
@@ -1066,4 +1194,96 @@ export function apiImport(db: Database, body: ImportRequestBody): ImportResult {
     dateRange: { start: dateRangeStart, end: dateRangeEnd },
     message,
   };
+}
+
+// ── Demo trace (statement-to-dashboard agent chain) ─────────────────────────
+
+const MAX_TRACE_ROWS = 2000;
+
+function traceError(step: TraceStepId, error: string): TraceStepResult {
+  return {
+    step,
+    status: 'error',
+    durationMs: 0,
+    detail: { bank: '', format: '', rowCount: 0, imported: 0, skippedRows: 0, importedIds: [], message: '' },
+    error,
+  };
+}
+
+/**
+ * One step of the Demo tab's statement agent chain. A thin validating
+ * dispatcher over the chain's step functions (src/demo/statement-trace.ts):
+ * `import` commits through apiImport (the only write), `embed`/`predict`/
+ * `reconcile` are reads/inference. Validation failures come back as
+ * status:'error' results (the route maps them to 400).
+ */
+export async function apiDemoTraceStep(db: Database, body: unknown, deps?: Partial<TraceDeps>): Promise<TraceStepResult> {
+  const step = (body as { step?: unknown } | null)?.step;
+
+  if (step !== 'import' && step !== 'embed' && step !== 'predict' && step !== 'reconcile') {
+    return { step: 'import', status: 'error', durationMs: 0, detail: { bank: '', format: '', rowCount: 0, imported: 0, skippedRows: 0, importedIds: [], message: '' }, error: `unknown step: ${String(step)}` };
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    return traceError(step, 'request body must be an object');
+  }
+  const b = body as Record<string, unknown>;
+  const traceDeps: TraceDeps = { db, ...(deps ?? {}) };
+
+  if (step === 'import') {
+    if (typeof b.filename !== 'string' || b.filename.trim() === '') {
+      return traceError('import', 'filename is required');
+    }
+    if (typeof b.fileHash !== 'string' || b.fileHash.trim() === '') {
+      return traceError('import', 'fileHash is required');
+    }
+    if (!Array.isArray(b.transactions) || b.transactions.length === 0) {
+      return traceError('import', 'transactions must be a non-empty array');
+    }
+    return importStep(
+      {
+        filename: b.filename,
+        bank: typeof b.bank === 'string' ? b.bank : undefined,
+        format: typeof b.format === 'string' ? b.format : undefined,
+        fileHash: b.fileHash,
+        transactions: b.transactions as TraceTransaction[],
+      },
+      traceDeps,
+    );
+  }
+
+  if (step === 'embed') {
+    if (!Array.isArray(b.transactions) || b.transactions.length === 0) {
+      return traceError('embed', 'transactions must be a non-empty array');
+    }
+    if (b.transactions.length > MAX_TRACE_ROWS) {
+      return traceError('embed', `transactions must not exceed ${MAX_TRACE_ROWS} rows`);
+    }
+    const rows = b.transactions as unknown[];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] as { description?: unknown } | null;
+      if (typeof r !== 'object' || r === null || typeof r.description !== 'string' || r.description.trim() === '') {
+        return traceError('embed', `transactions[${i}].description must be a non-empty string`);
+      }
+    }
+    return embeddingStep(rows as { description: string }[], traceDeps);
+  }
+
+  if (step === 'predict') {
+    if (typeof b.description !== 'string' || b.description.trim() === '') {
+      return traceError('predict', 'description must be a non-empty string');
+    }
+    return predictStep(b.description, traceDeps);
+  }
+
+  // step === 'reconcile'
+  if (!Array.isArray(b.importedIds) || b.importedIds.length === 0) {
+    return traceError('reconcile', 'importedIds must be a non-empty array of transaction ids');
+  }
+  for (const id of b.importedIds) {
+    if (typeof id !== 'number' || !Number.isInteger(id)) {
+      return traceError('reconcile', 'importedIds must be a non-empty array of transaction ids');
+    }
+  }
+  return reconcileStep(b.importedIds as number[], traceDeps);
 }

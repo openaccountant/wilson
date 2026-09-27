@@ -18,9 +18,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -39,13 +39,13 @@ jobs:
       # The default GITHUB_TOKEN cannot bypass the main-branch ruleset, so the
       # release commit/tag are pushed with a token minted for the release-bot
       # GitHub App, which is on the ruleset's bypass list.
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: release-bot
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.release-bot.outputs.token }}
@@ -198,7 +198,7 @@ jobs:
             --title "$TAG" \
             --notes-file /tmp/release-notes.md
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.bump.outputs.bump != 'none'
         with:
           node-version: 22

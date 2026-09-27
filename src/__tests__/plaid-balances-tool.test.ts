@@ -1,6 +1,7 @@
 import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import * as license from '../licensing/license.js';
 import * as realPlaidClient from '../plaid/client.js';
+import * as realPlaidStore from '../plaid/store.js';
 import { createTestDb } from './helpers.js';
 import type { Database } from '../db/compat-sqlite.js';
 
@@ -8,7 +9,10 @@ import type { Database } from '../db/compat-sqlite.js';
 // keeps the real PlaidError class for plaid-sync-modified-removed.test.ts.
 void realPlaidClient;
 
-// Mock Plaid store and client
+// Mock Plaid store and client. The store factory spreads the real module so
+// every export plaid-sync.js imports (updatePlaidCursor included) exists —
+// a missing one breaks the named-import link for any later first-time
+// instantiation of the real plaid-sync module.
 let mockPlaidItems: Array<{ itemId: string; accessToken: string; institutionName: string; accounts: unknown[]; cursor: string | null; linkedAt: string }> = [];
 let mockBalances: Array<{
   accountId: string; name: string; mask: string; type: string; subtype: string;
@@ -16,6 +20,7 @@ let mockBalances: Array<{
 }> = [];
 
 mock.module('../plaid/store.js', () => ({
+  ...realPlaidStore,
   getPlaidItems: () => mockPlaidItems,
   savePlaidItem: () => {},
   removePlaidItem: () => {},

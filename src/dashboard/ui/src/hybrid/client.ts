@@ -26,6 +26,7 @@ import {
   type HybridCapability,
   type HybridResult,
 } from './core.js';
+import { parseCategorizationDecision, type ParsedDecision } from '../demo/core.js';
 
 export type { HybridResult } from './core.js';
 
@@ -62,6 +63,24 @@ interface ProgressEvent {
   status?: string;
   progress?: number;
   file?: string;
+}
+
+/**
+ * Extract the assistant turn from a transformers.js pipeline result — the
+ * same logic the server-side TransformersAdapter applies, shared by tryLocal
+ * and categorizeSample.
+ */
+function extractAssistantText(result: unknown): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const generated = (result as any)?.[0]?.generated_text;
+  if (Array.isArray(generated)) {
+    const last = generated[generated.length - 1];
+    return typeof last === 'object' && last !== null && 'content' in last
+      ? String((last as { content: unknown }).content)
+      : String(last ?? '');
+  }
+  if (typeof generated === 'string') return generated;
+  return '';
 }
 
 export function createHybridChat(opts: HybridOpts) {
@@ -270,17 +289,7 @@ export function createHybridChat(opts: HybridOpts) {
       const result = await pipe(messages, { max_new_tokens: 256, do_sample: false });
 
       // Extract the assistant turn the same way the server-side adapter does.
-      const generated = result?.[0]?.generated_text;
-      let rawOutput = '';
-      if (Array.isArray(generated)) {
-        const last = generated[generated.length - 1];
-        rawOutput =
-          typeof last === 'object' && last !== null && 'content' in last
-            ? String((last as { content: unknown }).content)
-            : String(last ?? '');
-      } else if (typeof generated === 'string') {
-        rawOutput = generated;
-      }
+      const rawOutput = extractAssistantText(result);
 
       const classified = classifyLocalOutput(rawOutput);
       if (classified.kind === 'handoff') {
@@ -315,11 +324,102 @@ export function createHybridChat(opts: HybridOpts) {
     }
   }
 
+  // ── Speed Showdown: browser categorization arm (issue #92) ──────────────
+  // Single-row categorization in the browser, riding the same probe/verdict/
+  // loadModel machinery as tryLocal. Never throws; a failure resolves
+  // {ok:false, reason} and the DemoTab falls back to the server local path.
+
+  async function categorizeSample(opts: {
+    systemPrompt: string;
+    userPrompt: string;
+    onProgress?: ProgressCb;
+  }): Promise<CategorizeSampleResult> {
+    const failed = (reason: NonNullable<CategorizeSampleResult['reason']>): CategorizeSampleResult => ({
+      ok: false,
+      model: '',
+      raw: '',
+      decision: null,
+      decisionMs: 0,
+      loadMs: 0,
+      loadFresh: false,
+      reason,
+    });
+    try {
+      if (!shouldAttemptLocal(verdict)) return failed('unavailable');
+      if (verdict === 'unknown') await probe();
+      if (!shouldAttemptLocal(verdict)) return failed('unavailable');
+
+      const cfg = await fetchConfig();
+      if (!cfg) return failed('unavailable');
+
+      // Track whether this call initiated the model load, so the UI can say
+      // "model already loaded (12 ms)" honestly.
+      const wasLoaded = pipelinePromise !== null;
+
+      opts.onProgress?.('Loading local model…');
+      const loadStart = performance.now();
+      const pipe = await loadModel(opts.onProgress);
+      if (!pipe) return failed('failed');
+      const loadMs = performance.now() - loadStart;
+
+      opts.onProgress?.('Thinking locally…');
+      const genStart = performance.now();
+      const result = await pipe(
+        [
+          { role: 'system', content: opts.systemPrompt },
+          { role: 'user', content: opts.userPrompt },
+        ],
+        // 128 tokens keeps the 0.6B model's JSON answer tight — a rambling
+        // generation would falsify the timing story this demo is about.
+        { max_new_tokens: 128, do_sample: false },
+      );
+      const decisionMs = performance.now() - genStart;
+
+      const raw = extractAssistantText(result);
+      const parsed = parseCategorizationDecision(raw);
+      return {
+        ok: true,
+        model: cfg.repo,
+        raw,
+        decision: parsed.ok ? parsed.decision : null,
+        decisionMs,
+        loadMs,
+        loadFresh: !wasLoaded,
+      };
+    } catch {
+      return failed('error');
+    }
+  }
+
   return {
     probe,
     loadModel,
     tryLocal,
+    categorizeSample,
   };
 }
 
 export type HybridChat = ReturnType<typeof createHybridChat>;
+
+export interface CategorizeSampleResult {
+  ok: boolean;
+  /** Hub repo that actually ran (e.g. 'onnx-community/Qwen3-0.6B-ONNX'). */
+  model: string;
+  raw: string;
+  /** Parsed decision, or null when the output was unparseable (raw shown honestly). */
+  decision: ParsedDecision | null;
+  /** performance.now() measured around the generation call. */
+  decisionMs: number;
+  /** Measured around loadModel(); ≈0 when the model was already warm. */
+  loadMs: number;
+  /** True iff this call initiated the model load. */
+  loadFresh: boolean;
+  /** When ok=false: why the browser path was not usable. */
+  reason?: 'unavailable' | 'failed' | 'error';
+}
+
+export interface CategorizeSampleOpts {
+  systemPrompt: string;
+  userPrompt: string;
+  onProgress?: (label: string) => void;
+}

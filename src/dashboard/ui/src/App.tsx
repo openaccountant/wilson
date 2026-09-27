@@ -4,11 +4,14 @@ import { TabBar, type TabId } from '@/components/TabBar';
 import { AppContext, type AppState } from '@/state';
 import { useDateRange } from '@/hooks/useDateRange';
 import { useApi } from '@/hooks/useApi';
+import { useMirrorSync } from '@/hooks/useMirrorSync';
 import type { Account, SpendingSummaryItem, Entity } from '@/types';
 import { OverviewTab } from '@/tabs/OverviewTab';
 import { TransactionsTab } from '@/tabs/TransactionsTab';
+import { ReviewTab } from '@/tabs/ReviewTab';
 import { AccountsTab } from '@/tabs/AccountsTab';
 import { ChatTab } from '@/tabs/ChatTab';
+import { DemoTab } from '@/tabs/DemoTab';
 import { LlmTab } from '@/tabs/LlmTab';
 import { LogsTab } from '@/tabs/LogsTab';
 import { GoalsTab } from '@/tabs/GoalsTab';
@@ -16,22 +19,25 @@ import { SettingsTab } from '@/tabs/SettingsTab';
 
 function getHashTab(): TabId {
   const hash = window.location.hash.replace('#', '');
-  const valid: TabId[] = ['overview', 'transactions', 'accounts', 'goals', 'chat', 'llm', 'logs', 'settings'];
+  const valid: TabId[] = ['overview', 'transactions', 'review', 'accounts', 'goals', 'chat', 'demo', 'llm', 'logs', 'settings'];
   return valid.includes(hash as TabId) ? (hash as TabId) : 'overview';
 }
 
 const TAB_COMPONENTS: Record<TabId, React.FC> = {
   overview: OverviewTab,
   transactions: TransactionsTab,
+  review: ReviewTab,
   accounts: AccountsTab,
   goals: GoalsTab,
   chat: ChatTab,
+  demo: DemoTab,
   llm: LlmTab,
   logs: LogsTab,
   settings: SettingsTab,
 };
 
 export function App() {
+  useMirrorSync();
   const [activeTab, setActiveTab] = useState<TabId>(getHashTab);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [category, setCategory] = useState<string | null>(null);

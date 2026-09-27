@@ -55,4 +55,6 @@ export interface ProviderCallOptions {
   tools?: ToolDef[];
   outputSchema?: z.ZodType;
   signal?: AbortSignal;
+  /** Generation cap. Honored by the Transformers adapter; other adapters ignore it in this slice. */
+  maxTokens?: number;
 }

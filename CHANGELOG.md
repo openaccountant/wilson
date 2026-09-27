@@ -1,5 +1,85 @@
 # Changelog
 
+## [v0.9.1] — 2026-09-25
+
+### Fixes
+
+- fix: don't auto-approve major-version dependabot bumps (#133) (2062d91)
+
+### Other
+
+- Add Privacy Validator: live provider ledger + fixture-only would-be-cloud payload exhibit (#95) (#117) (21d2f34)
+- Add auto-book through the visible confirmation gate (#94) (#116) (6195886)
+
+
+## [v0.9.0] — 2026-09-21
+
+### Features
+
+- feat: offline overview — the eight approved overview cards compute from the local mirror without a server (#76) (#115) (ef450d8)
+
+### Other
+
+- Add dashboard Review tab to confirm or correct queued categorizations (#86) (#113) (3061c95)
+- Embed on write: keep the semantic index fresh across import, sync, edit, and delete paths (#63) (#110) (be12b5b)
+- Add per-response chat provenance indicator (local · server fallback · unavailable) to both dashboard UIs (#69) (#108) (8852470)
+- Add statement-to-dashboard agent trace — drop a CSV and watch the offline chain run with per-step timing (#93) (#107) (ec75bff)
+- Add Speed Showdown demo: race local vs cloud categorization with real trace-sourced timers (#92) (#106) (1365e1e)
+
+
+## [v0.8.0] — 2026-09-21
+
+### Features
+
+- feat: offline dashboard transactions — sync-fed local mirror serves the transactions tab without a server (#105) (4ff32f3)
+
+### Other
+
+- Add what-if controls to the Cash Forecast card: 6/12/24-month horizon and ±50% income/expense assumption sliders (#81) (#114) (c834456)
+
+
+## [Unreleased]
+
+### Features
+
+- feat: Speed Showdown demo — pick an in-repo synthetic sample transaction (incl. the Harborview $318 Health row) in a new `#demo` dashboard tab and race side-by-side real, trace-store-sourced timers for the identical categorization decision: local via the hybrid routing (browser WebGPU with separately measured load time, else the server-side transformers path, always labeled with its actual source) against a live OpenRouter round-trip when key + network probe pass, otherwise a clearly-labeled simulated round-trip whose traces carry provider `simulated` markers so they are never misattributed; the exact prompt exhibit ("what leaves your machine") contains synthetic sample rows only, the verdict line names the ms/× delta, and the caption honestly contrasts jev-ultrafast (~178 ms median request, not privacy-preserving) (#92)
+
+- feat: statement-to-dashboard agent trace — the Demo tab gains a drop-a-statement flow that runs Wilson's offline chain as a live four-node diagram (import → local embedding lookup → category prediction → reconciliation hint), each node lit by its real server-measured duration; import reuses the /api/import substrate with file-hash dedup (re-drop skips cleanly), embeddings run the local MiniLM engine against a known-merchant/category reference, predictions are strictly display-only (nothing written), and reconciliation surfaces duplicate/spike hints over the freshly imported rows — vendored ground-truth fixture at demos/fixtures/august-2026-chase.csv (#93)
+
+- feat: per-response provenance indicator in both dashboard chat UIs — each live answer is badged `answered locally · on-device`, `server fallback`, or a neutral `server agent` when the hybrid layer is absent; derived at send time from the exchange's actual path (never from message text), not persisted, so history-loaded messages show no badge (#69)
+
+- feat: embed-on-write — every import (CSV/OFX/QIF, Monarch, Firefly, dashboard /api/import), sync (Plaid insert/update/remove, Coinbase), description edit (agent tool + dashboard PATCH), and delete keeps the semantic index fresh immediately, so search reflects changes without ever running `wilson --index`; embedding failures degrade to a logged warning and leave rows for the next backfill instead of failing the import or edit, and `--index` now also sweeps orphaned vectors whose transaction is gone (#63)
+
+- feat: dashboard Review tab for the categorization queue — lists every pending review with the transaction's date, amount, description, the suggested category and its confidence (plus the currently applied category for backfilled historical rows); Confirm applies the suggested category and Correct applies a user-picked one from the existing category list, and either action atomically applies the category, marks the transaction user-verified, and resolves the queue entry (`GET /api/reviews` readable by any authenticated user, `POST /api/reviews/:id/confirm|correct` admin-only; `PATCH /api/transactions/:id` can now also carry `user_verified`) (#86)
+
+- feat: offline overview — the eight approved overview cards (heatmap, streak, weekly summary, budget countdown, savings, donut, P&L, budget bars) compute from the sync-fed local mirror without a server; the mirror now also carries budgets + categories, and out-of-scope cards (alerts, net worth, cash forecast) show an explicit unavailable-offline state (#76)
+
+- feat: auto-book through the visible confirmation gate — the Demo tab's agent trace gains an explicit "Auto-book this" action on a predicted transaction; tapping it requires opting the tab's agent session in via the Agent access panel (zero tools exposed by default, revocable any time), then a confirmation card names the exact change (which transaction, from/to category, server-computed delta) and the booking write — the same updateTransaction path as the transactions editor — lands only on explicit approval; denying leaves the data untouched and says so (#94)
+
+- feat: privacy validator — the Demo tab's stretch panel renders a live provider ledger proving every model/agent request during a demo run stayed on localhost: it arms a server-side watermark over the trace store, classifies each row through the provider registry's isLocal (with #92's `simulated` / `transformers-browser` markers in their own honest buckets — a simulated timer can never read as a cloud call, and an unrecognized provider is never silently counted as local), and says so plainly when a real cloud call does occur; side-by-side, the exhibit shows the exact request a cloud-based agent would have sent for the same decision step — the production categorization prompt built only from the in-repo synthetic sample fixtures, never attendee-imported data (#95)
+
+### Other
+
+- Add what-if controls to the Cash Forecast card: 6/12/24-month horizon selector and ±50% income/expense assumption sliders that re-run the seeded in-browser simulation in place (#81)
+
+
+## [v0.7.0] — 2026-09-21
+
+### Features
+
+- feat(plaid): dedup Items by institution_id; fix cross-file test mock pollution (#59) (013cc8b)
+
+### Other
+
+- Add client-side Monte Carlo cash forecast fan chart to Overview (#80) (#111) (15b6c0e)
+- Render markdown in dashboard chat replies via react-markdown + remark-gfm (#47) (747e36c)
+- Add admin per-task model overrides applied live via POST /api/models and the controllable Settings Models panel (#89) (#112) (a3d1a4d)
+- WebMCP bridge: browser-native + Streamable-HTTP tool access with prepare/commit confirmation (#99) (cc74c17)
+- Gate below-threshold categorization suggestions into a persistent review queue instead of auto-applying (#100) (6e2e7ca)
+- Add Transactions-tab statement importer: client-side parse preview with confirm-to-commit (#72) (#102) (5fd38ff)
+- Add dashboard Transactions semantic search endpoint and zero-match UI fallback (#62) (#101) (13c14a8)
+
+
 ## [v0.6.0] — 2026-09-21
 
 ### Features
@@ -38,6 +118,8 @@
 - feat: semantic search in the dashboard Transactions view — a new `GET /api/transactions/search` embeds the query with the local on-device engine, prefilters candidates with the same SQL filters the transactions endpoint accepts (date range, account, category, entity), ranks by dot product, and returns full transaction rows with similarity scores plus indexed/total coverage counts; the Transactions tab keeps today's instant substring matching whenever it produces results and only falls back to semantic matches on a zero-match query (score chips, `semantic` marker, and a one-line hint naming `wilson --index` when vectors lag the transaction count); query and transaction text are embedded in-process — nothing but the one-time model download ever leaves the machine (#62)
 
 - feat: dashboard Settings "Models" panel — a read endpoint (`GET /api/models`) and Settings section showing which model handles each AI task (chat, categorization, entity classification) with friendly model names, "runs on this device" vs "runs on a cloud server" badges derived from a new `isLocal` flag on the provider registry, the server-side WebGPU capability probe, and an embeddings row marked "Not in use — no embeddings task in this build"; categorization and entity-classification LLM calls are also tagged with their own call types so the Training per-task view groups them truthfully instead of lumping them into `standalone` (#88)
+
+- feat: offline dashboard transactions — a sync-fed, per-profile local mirror (wa-sqlite@1.0.0 + AccessHandlePoolVFS in an inline worker, wasm base64-inlined into the single-file build, no COOP/COEP or static-asset routes) seeds/refreshes on full pulls keyed by external_id, reconciles server-side deletions, and re-seeds on schema-version change; the fetch seam goes network-first with mirror fallback so browsing/search/filtering work offline with server-identical results (parity pinned by tests), and offline entity assignment shows an explicit requires-connection state instead of failing silently (#75)
 
 - feat: local-first hybrid dashboard chat — WebGPU-capable browsers answer from a pre-fetched transaction bundle via transformers.js (Qwen3-0.6B, fastModel-driven) with silent server fallback, bundle framing/hand-off classification, and browser-originated history recording (#68)
 

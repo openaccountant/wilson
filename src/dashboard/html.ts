@@ -88,6 +88,8 @@ export function getDashboardHtml(port: number): string {
   .chat-msg.msg-user .bubble { background:#1a3a2a; border:1px solid #22c55e44; border-radius:12px 12px 4px 12px; padding:8px 12px; text-align:right; }
   .chat-msg.msg-assistant .bubble { background:#21262d; border:1px solid #30363d; border-radius:12px 12px 12px 4px; padding:8px 12px; }
   .chat-msg .sender { font-size:11px; color:#8b949e; margin-bottom:2px; }
+  .chat-msg .prov { font-size:11px; color:#8b949e; margin-top:4px; letter-spacing:.02em; }
+  .chat-msg .prov-local { color:#22c55e; }
   .chat-msg .text { font-size:14px; line-height:1.6; }
   .chat-msg .text p { margin:0 0 8px 0; }
   .chat-msg .text p:last-child { margin-bottom:0; }
@@ -1144,6 +1146,20 @@ export function getDashboardHtml(port: number): string {
     bubble.appendChild(textDiv); div.appendChild(bubble);
     chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight; return div;
   }
+  // Provenance badge — mirrors deriveChatProvenance in
+  // src/dashboard/ui/src/hybrid/core.ts (matrix pinned by
+  // src/__tests__/local-chat-provenance.test.ts). Inline copy because this
+  // page cannot import ES modules and the hybrid chunk 404s in exactly the
+  // state ('unavailable') this badge must render.
+  var PROV_LABELS = { 'local-with-context':'answered locally · on-device', 'server-fallback':'server fallback', 'unavailable':'server agent' };
+  function deriveProv(localAnswered, hybridPresent) {
+    if (localAnswered) return 'local-with-context';
+    return hybridPresent ? 'server-fallback' : 'unavailable';
+  }
+  function stampProv(msgDiv, prov) {
+    var b = el('div','prov'+(prov==='local-with-context'?' prov-local':''),PROV_LABELS[prov]||'');
+    var bubble = msgDiv.querySelector('.bubble'); if (bubble) bubble.appendChild(b);
+  }
   function renderSessionMessages(messages) {
     chatMessages.replaceChildren();
     if (!messages||!messages.length) { chatMessages.appendChild(el('p','empty','No messages in this session.')); return; }
@@ -1181,9 +1197,10 @@ export function getDashboardHtml(port: number): string {
     // falls through to the server agent silently — hybrid failures must never
     // render an error bubble. The catch below stays reserved for genuine
     // server-path failures.
-    var localAnswer = null;
+    var localAnswer = null, hybridPresent = false;
     hybridInit();
     if (window.WilsonHybridChat) {
+      hybridPresent = true;
       try {
         var r = await window.WilsonHybridChat.tryLocal(q, function(label){ pendingText.textContent = label; }, activeSessionId);
         if (r && r.ok) {
@@ -1192,9 +1209,13 @@ export function getDashboardHtml(port: number): string {
         }
       } catch(e) { /* silent: any local failure falls through to the server path */ }
     }
+    // Which path produced this answer: local answered → on-device; local layer
+    // in play but server answered → fallback; hybrid chunk absent → neutral.
+    var prov = deriveProv(localAnswer != null, hybridPresent);
     if (localAnswer != null) {
       // Safe: renderMd escapes all HTML entities before applying markdown transforms
       pendingText.innerHTML = renderMd(localAnswer);
+      stampProv(pending, prov);
       loadSessions();
     } else {
       try {
@@ -1204,8 +1225,9 @@ export function getDashboardHtml(port: number): string {
         if (data.sessionId) { activeSessionId = data.sessionId; isLiveSession = true; }
         // Safe: renderMd escapes all HTML entities before applying markdown transforms
         pendingText.innerHTML = renderMd(answer);
+        stampProv(pending, prov);
         loadSessions();
-      } catch(e) { pendingText.textContent = 'Error: '+e.message; }
+      } catch(e) { pendingText.textContent = 'Error: '+e.message; stampProv(pending, prov); }
     }
     chatSend.disabled = false; chatMessages.scrollTop = chatMessages.scrollHeight;
   }

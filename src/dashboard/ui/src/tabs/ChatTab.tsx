@@ -5,11 +5,18 @@ import { useApi } from '@/hooks/useApi';
 import { useHybridChat } from '@/hooks/useHybridChat';
 import { api } from '@/api';
 import type { ChatHistoryRow, ChatResponse, ChatSessionRow } from '@/types';
-import type { HybridResult } from '@/hybrid/core';
+import { deriveChatProvenance, PROVENANCE_BADGES } from '@/hybrid/core';
+import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 
 interface DisplayMessage {
   role: 'user' | 'assistant';
   content: string;
+  /**
+   * Which path produced this live response. Never persisted — history rows
+   * loaded from /api/chat/sessions/:id carry no provenance and render no
+   * indicator (no chat-history schema change).
+   */
+  provenance?: ChatProvenance;
 }
 
 // Markdown element map for assistant replies, tuned to the Forensic Noir theme.
@@ -176,13 +183,26 @@ export function ChatTab() {
     }
     setProgressLabel(null);
 
+    // Provenance of THIS exchange, decided at send time from the actual path
+    // (never from message text): local answered → on-device; local layer was
+    // in play but the server answered → fallback; hybrid layer absent →
+    // neutral. getStatus() (not the stale `status` state) is authoritative
+    // here because handleSend's closure may outdate the state snapshot.
+    const provenance = deriveChatProvenance({
+      localAnswered: local !== null,
+      hybridLayerPresent: hybrid.getStatus() !== 'unavailable',
+    });
+
     try {
       if (local) {
         if (local.sessionId) {
           setSessionId(local.sessionId);
           setActiveSessionId(local.sessionId);
         }
-        setMessages((prev) => [...prev, { role: 'assistant', content: local.answer }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: local.answer, provenance },
+        ]);
         refetchSessions();
       } else {
         const body: { query: string; sessionId?: string } = { query };
@@ -195,14 +215,17 @@ export function ChatTab() {
 
         setSessionId(res.sessionId);
         if (res.sessionId) setActiveSessionId(res.sessionId);
-        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: res.answer, provenance },
+        ]);
         refetchSessions();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: `Error: ${errMsg}` },
+        { role: 'assistant', content: `Error: ${errMsg}`, provenance },
       ]);
     } finally {
       setSending(false);
@@ -278,6 +301,15 @@ export function ChatTab() {
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                     {msg.content}
                   </ReactMarkdown>
+                  {msg.provenance && (
+                    <div
+                      className={`mt-1.5 text-xs tracking-wide ${
+                        msg.provenance === 'local-with-context' ? 'text-green' : 'text-text-muted'
+                      }`}
+                    >
+                      {PROVENANCE_BADGES[msg.provenance]}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

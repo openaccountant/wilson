@@ -1,4 +1,5 @@
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { AlertItem } from '@/types';
 
 const SEVERITY_STYLES: Record<string, { bg: string; border: string }> = {
@@ -8,7 +9,10 @@ const SEVERITY_STYLES: Record<string, { bg: string; border: string }> = {
 };
 
 export function AlertList() {
-  const { data, loading } = useApi<AlertItem[]>('/api/alerts');
+  // The alerts engine runs server-side — explicitly outside the approved
+  // offline scope, so offline it degrades to an explicit unavailable state
+  // rather than the misleading "No alerts. All clear."
+  const { data, loading, offline } = useApi<AlertItem[]>('/api/alerts');
 
   if (loading) {
     return (
@@ -16,6 +20,10 @@ export function AlertList() {
         <div className="h-[80px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    return <OfflineUnavailable title="Alerts" />;
   }
 
   if (!data || data.length === 0) {

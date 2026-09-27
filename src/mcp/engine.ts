@@ -205,6 +205,7 @@ export function prepareOperation(
     args,
     before: delta.before,
     after: delta.after,
+    summary: delta.summary,
     transactionId: delta.transactionId,
     revisionAtPrepare: delta.revision,
     profile: scope.profile,

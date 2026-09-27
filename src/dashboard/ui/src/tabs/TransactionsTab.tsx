@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
+import { useMirrorStatus } from '@/hooks/useMirrorSync';
 import { useAppState } from '@/state';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
+import { classifyWriteError, type WriteFailureKind } from '@/store/offline-writes';
 import type { Transaction, Entity } from '@/types';
 
 /** Confidence at or above which the categorize tool auto-assigns (src/tools/categorize). */
@@ -53,18 +55,23 @@ function EntityCell({
   onUpdate: (txId: number, entityId: number | null) => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<WriteFailureKind | null>(null);
 
   async function handleChange(value: string) {
     const newEntityId = value === '' ? null : Number(value);
     setSaving(true);
+    setSaveError(null);
     try {
       await api(`/api/transactions/${txId}`, {
         method: 'PATCH',
         body: JSON.stringify({ entity_id: newEntityId }),
       });
       onUpdate(txId, newEntityId);
-    } catch {
-      // silent
+    } catch (err) {
+      // Offline (or otherwise failed) assignments surface an explicit state
+      // instead of failing silently; the controlled select self-reverts because
+      // onUpdate only fires on success.
+      setSaveError(classifyWriteError(err));
     } finally {
       setSaving(false);
     }
@@ -78,19 +85,29 @@ function EntityCell({
   }
 
   return (
-    <select
-      value={entityId ?? ''}
-      onChange={(e) => handleChange(e.target.value)}
-      disabled={saving}
-      className="bg-transparent border border-transparent hover:border-border rounded px-1 py-0.5 text-xs text-text-secondary cursor-pointer focus:outline-none focus:border-green disabled:opacity-50 w-full max-w-[120px]"
-    >
-      <option value="">--</option>
-      {entities.map((e) => (
-        <option key={e.id} value={e.id}>
-          {e.name}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-col gap-0.5">
+      <select
+        value={entityId ?? ''}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={saving}
+        className="bg-transparent border border-transparent hover:border-border rounded px-1 py-0.5 text-xs text-text-secondary cursor-pointer focus:outline-none focus:border-green disabled:opacity-50 w-full max-w-[120px]"
+      >
+        <option value="">--</option>
+        {entities.map((e) => (
+          <option key={e.id} value={e.id}>
+            {e.name}
+          </option>
+        ))}
+      </select>
+      {saveError === 'requires-connection' && (
+        <span className="text-[10px] leading-tight text-amber-500">
+          Requires connection — assignment not saved
+        </span>
+      )}
+      {saveError === 'failed' && (
+        <span className="text-[10px] leading-tight text-red">Save failed</span>
+      )}
+    </div>
   );
 }
 
@@ -194,6 +211,7 @@ export function TransactionsTab() {
   const [seedFile, setSeedFile] = useState<File | null>(null);
   const [banner, setBanner] = useState('');
   const [zoneDragOver, setZoneDragOver] = useState(false);
+  const mirror = useMirrorStatus();
   const { dateRange, setDateRange, accountId, category: globalCategory, entityId } = useAppState();
 
   const apiPath = useMemo(() => {
@@ -317,6 +335,14 @@ export function TransactionsTab() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-text">Transactions</h2>
+            {mirror.available && mirror.seeded && !mirror.online && (
+              <span
+                data-testid="offline-pill"
+                className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-500 uppercase tracking-wide"
+              >
+                Offline — showing synced data
+              </span>
+            )}
             {data && (
               <span className="text-xs text-text-muted font-mono">
                 {semanticActive

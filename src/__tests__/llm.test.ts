@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, mock } from 'bun:test';
 import { z } from 'zod';
 import { ensureTestProfile } from './helpers.js';
+import { traceStore } from '../utils/trace-store.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
 import { LlmValidationError } from '../model/structured-output.js';
 
@@ -45,6 +46,17 @@ describe('callLlm', () => {
     expect(result.usage).toEqual({ inputTokens: 100, outputTokens: 50, totalTokens: 150 });
     // interactionId is null when no DB is set on the singleton interactionStore
     expect(result).toHaveProperty('interactionId');
+  });
+
+  test('success returns traceId and durationMs matching the trace it recorded', async () => {
+    mockAdapterFn = async () => makeLlmResponse({ content: 'Hello!' });
+
+    const result = await callLlm('trace contract prompt');
+    const [recorded] = traceStore.getRecentTraces(1);
+    expect(recorded).toBeDefined();
+    expect(result.traceId).toBe(recorded.id);
+    expect(result.durationMs).toBe(recorded.durationMs);
+    expect(recorded.status).toBe('ok');
   });
 
   test('success with tool calls', async () => {

@@ -14,6 +14,9 @@
  * has nothing to do with it.
  */
 
+import { confirmationCardModel } from '../mcp/confirmation-card.js';
+import { WILSON_MCP_SESSION_KEY, WILSON_OPEN_AGENT_PANEL_EVENT } from './webmcp-session.js';
+
 export {}; // makes this a module so `declare global` below is valid
 
 interface ToolAnnotations {
@@ -39,6 +42,7 @@ interface McpOperation {
   id: string;
   source: string;
   tool_name: string;
+  summary: string | null;
   before_json: string | null;
   after_json: string | null;
   status: string;
@@ -46,7 +50,8 @@ interface McpOperation {
 }
 
 const AUTH_KEY = 'wilson_auth_token';
-const SESSION_KEY = 'wilson_mcp_session_generation';
+const SESSION_KEY = WILSON_MCP_SESSION_KEY;
+const OPEN_PANEL_EVENT = WILSON_OPEN_AGENT_PANEL_EVENT;
 const POLL_INTERVAL_MS = 1500;
 const PREPARE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -87,43 +92,36 @@ function getSessionGeneration(): string {
 // One rendering surface for every mutation confirmation, whatever proposed
 // it (a WebMCP tool call, the HTTP-MCP fallback, or the dashboard chat's
 // 'categorize' tool). Always renders the structured before/after delta the
-// server computed in `prepare` — never the agent's own prose.
+// server computed in `prepare` — never the agent's own prose. The content
+// itself (title, source label, summary line, delta rows) comes from the pure
+// model in src/mcp/confirmation-card.ts; this file only assembles DOM.
 
 const shownOperations = new Set<string>();
 
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
-}
-
-function renderDelta(container: HTMLElement, before: unknown, after: unknown): void {
-  if (before === null && after === null) {
+function renderDelta(container: HTMLElement, model: ReturnType<typeof confirmationCardModel>): void {
+  if (model.deltaRows === null) {
     container.textContent = 'No structured delta available for this action.';
     return;
   }
-  const beforeObj = (before ?? {}) as Record<string, unknown>;
-  const afterObj = (after ?? {}) as Record<string, unknown>;
-  const keys = new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]);
-  if (keys.size === 0) {
+  if (model.deltaRows.rows.length === 0) {
     container.textContent = 'No fields changed.';
     return;
   }
   const table = document.createElement('table');
   table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
-  for (const key of keys) {
-    const row = table.insertRow();
-    row.innerHTML = '';
+  for (const row of model.deltaRows.rows) {
+    const tr = table.insertRow();
+    tr.innerHTML = '';
     const th = document.createElement('td');
-    th.textContent = key;
+    th.textContent = row.field;
     th.style.cssText = 'padding:4px 8px 4px 0;color:#888;white-space:nowrap;';
     const from = document.createElement('td');
-    from.textContent = formatValue(beforeObj[key]);
+    from.textContent = row.from;
     from.style.cssText = 'padding:4px 8px;color:#c0392b;text-decoration:line-through;';
     const to = document.createElement('td');
-    to.textContent = formatValue(afterObj[key]);
+    to.textContent = row.to;
     to.style.cssText = 'padding:4px 0;color:#27ae60;font-weight:600;';
-    row.append(th, from, to);
+    tr.append(th, from, to);
   }
   container.appendChild(table);
 }
@@ -132,6 +130,8 @@ function showConfirmationCard(op: McpOperation, onResolved: () => void): void {
   if (shownOperations.has(op.id)) return;
   shownOperations.add(op.id);
 
+  const model = confirmationCardModel(op);
+
   const overlay = document.createElement('div');
   overlay.style.cssText =
     'position:fixed;bottom:16px;right:16px;z-index:2147483647;width:340px;' +
@@ -139,16 +139,25 @@ function showConfirmationCard(op: McpOperation, onResolved: () => void): void {
     'box-shadow:0 8px 24px rgba(0,0,0,.4);font-family:system-ui,sans-serif;';
 
   const title = document.createElement('div');
-  title.textContent = `Confirm: ${op.tool_name}`;
+  title.textContent = `Confirm: ${model.title}`;
   title.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;';
 
   const sourceLine = document.createElement('div');
-  sourceLine.textContent = `Requested by: ${op.source === 'chat' ? 'dashboard chat' : op.source === 'http-mcp' ? 'external MCP client' : 'this page (WebMCP)'}`;
-  sourceLine.style.cssText = 'font-size:11px;color:#999;margin-bottom:10px;';
+  sourceLine.textContent = `Requested by: ${model.sourceLabel}`;
+  sourceLine.style.cssText = 'font-size:11px;color:#999;margin-bottom:6px;';
+
+  // The server-computed summary names the exact change (which transaction,
+  // from/to) — the semantic context a financial mutation needs. Never
+  // agent/UI-provided prose: it is prepareMutation's own output.
+  const summaryLine = document.createElement('div');
+  summaryLine.textContent = model.summary ?? '';
+  summaryLine.style.cssText = model.summary
+    ? 'font-size:13px;font-weight:600;color:#f2f2f2;margin-bottom:10px;line-height:1.35;'
+    : 'display:none;';
 
   const deltaBox = document.createElement('div');
   deltaBox.style.cssText = 'margin-bottom:12px;';
-  renderDelta(deltaBox, op.before_json ? JSON.parse(op.before_json) : null, op.after_json ? JSON.parse(op.after_json) : null);
+  renderDelta(deltaBox, model);
 
   const buttons = document.createElement('div');
   buttons.style.cssText = 'display:flex;gap:8px;';
@@ -174,7 +183,7 @@ function showConfirmationCard(op: McpOperation, onResolved: () => void): void {
   rejectBtn.onclick = () => void finish('reject');
 
   buttons.append(approveBtn, rejectBtn);
-  overlay.append(title, sourceLine, deltaBox, buttons);
+  overlay.append(title, sourceLine, summaryLine, deltaBox, buttons);
   document.body.appendChild(overlay);
 }
 
@@ -415,6 +424,14 @@ function buildPanel(): void {
     panel.hidden = !panel.hidden;
     if (!panel.hidden) void render();
   };
+
+  // The Demo tab's auto-book opt-in dispatches this event so the attendee can
+  // grant the agent session without hunting for the 🤖 button. Opening here
+  // goes through the exact same panel — no second grant surface.
+  window.addEventListener(OPEN_PANEL_EVENT, () => {
+    panel.hidden = false;
+    void render();
+  });
 
   document.body.append(button, panel);
 }

@@ -3,6 +3,7 @@ import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { insertTransactions, recordImport, type TransactionInsert } from '../../db/queries.js';
 import { getAccounts, linkTransactionsToAccount } from '../../db/net-worth-queries.js';
+import { embedTransactionIds } from '../../utils/embed-on-write.js';
 import { formatToolResult } from '../types.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
@@ -166,8 +167,9 @@ export const monarchImportTool = defineTool({
       });
     }
 
-    // 5. Bulk insert
-    const count = insertTransactions(database, txns);
+    // 5. Bulk insert + embed-on-write (never fails the import)
+    const { count, ids } = insertTransactions(database, txns);
+    await embedTransactionIds(database, ids);
 
     // 5b. Auto-link transactions to accounts by account_name
     let autoLinked = 0;

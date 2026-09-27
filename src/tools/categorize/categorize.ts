@@ -28,6 +28,14 @@ function getDb(): Database {
   return db;
 }
 
+/**
+ * The production categorizer's system prompt. Exported so the demo Speed
+ * Showdown sends the exact same string (single source of truth — the exhibit
+ * must match what Wilson's own categorizer sends).
+ */
+export const CATEGORIZER_SYSTEM_PROMPT =
+  'You are a precise financial transaction categorizer. Respond only with valid JSON.';
+
 /** Zod schema for LLM structured output */
 const categorizationOutputSchema = z.object({
   transactions: z.array(
@@ -132,7 +140,7 @@ export const categorizeTool = defineTool({
         // override (settings.json) lands on the very next run with no restart.
         const model = getTaskModel('categorization');
         const result = await callLlm(prompt, {
-          systemPrompt: 'You are a precise financial transaction categorizer. Respond only with valid JSON.',
+          systemPrompt: CATEGORIZER_SYSTEM_PROMPT,
           outputSchema: categorizationOutputSchema,
           model,
           callType: CALL_TYPE_CATEGORIZATION,

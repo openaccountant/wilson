@@ -2,11 +2,12 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiBudgetLimits, apiCategories, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
   type SetTaskModelBody,
+  apiDemoShowdownSamples, apiDemoShowdownCloud, apiDemoShowdownLocal, apiDemoShowdownBrowserTrace,
   apiUpdateTransaction, apiDeleteTransaction,
   apiTraces, apiTraceStats,
   apiAccounts, apiNetWorth, apiNetWorthTrend, apiAccountTransactions, apiSpendingByInstitution,
@@ -17,8 +18,12 @@ import {
   apiMemories, apiAddMemory, apiDeactivateMemory,
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
-  apiImport, type ImportRequestBody,
+  apiImport, apiDemoTraceStep, type ImportRequestBody,
+  apiReviewQueue, apiConfirmReview, apiCorrectReview,
+  apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
 } from './api.js';
+import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
+import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
@@ -146,7 +151,17 @@ function canManageUsers(role: Role): boolean {
  * Start the dashboard HTTP server.
  * Supports optional auth/RBAC and multi-profile DB switching.
  */
-export async function startDashboardServer(db: Database, preferredPort?: number) {
+export interface DashboardServerOptions {
+  /**
+   * Injectable embed function for the Demo tab's statement trace chain
+   * (tests inject a deterministic fake embedder so no model download happens).
+   * Production default is the local embedTexts engine.
+   */
+  traceEmbed?: EmbedFn;
+}
+
+export async function startDashboardServer(db: Database, preferredPort?: number, options?: DashboardServerOptions) {
+  const traceEmbed = options?.traceEmbed;
   const port = preferredPort ?? DEFAULT_PORT;
 
   // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
@@ -396,6 +411,16 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
         if (path === '/api/budgets') {
           return Response.json(apiBudgets(activeDb, url.searchParams), { headers });
         }
+        if (path === '/api/budgets/limits') {
+          // Raw budget rows (sync feed for the offline mirror) — distinct from
+          // /api/budgets, the vs-actual aggregation. Exact-match check, so the
+          // two routes never collide.
+          return Response.json(apiBudgetLimits(activeDb), { headers });
+        }
+        if (path === '/api/categories') {
+          // Raw category rows (sync feed for the offline mirror).
+          return Response.json(apiCategories(activeDb), { headers });
+        }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });
         }
@@ -433,7 +458,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
             const body = await req.json() as Record<string, unknown>;
-            return Response.json(apiUpdateTransaction(activeDb, id, body), { headers });
+            return Response.json(await apiUpdateTransaction(activeDb, id, body), { headers });
           }
           if (req.method === 'DELETE') {
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
@@ -441,6 +466,26 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             }
             return Response.json(apiDeleteTransaction(activeDb, id), { headers });
           }
+        }
+
+        // ── Categorization review queue ─────────────────────────────
+        // Reads are open to any authenticated user (viewers see the queue
+        // read-only); mutations follow the standard admin-only canWrite guard.
+
+        if (path === '/api/reviews') {
+          return Response.json(apiReviewQueue(activeDb, url.searchParams), { headers });
+        }
+
+        const reviewMatch = path.match(/^\/api\/reviews\/(\d+)\/(confirm|correct)$/);
+        if (reviewMatch && req.method === 'POST') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const id = parseInt(reviewMatch[1], 10);
+          const result = reviewMatch[2] === 'confirm'
+            ? apiConfirmReview(activeDb, id)
+            : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
 
         // ── Goals ──────────────────────────────────────────────────
@@ -491,8 +536,34 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const body = await req.json() as ImportRequestBody;
-          const result = apiImport(activeDb, body);
+          const result = await apiImport(activeDb, body);
           return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
+        }
+
+        // ── Demo: statement agent trace ─────────────────────────────
+        // One endpoint for all four chain steps; `import` is the only write
+        // and mirrors /api/import's canWrite RBAC exactly.
+
+        if (path === '/api/demo/trace/step' && req.method === 'POST') {
+          const body = await req.json() as { step?: unknown };
+          if (body?.step === 'import' && authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const result = await apiDemoTraceStep(activeDb, body, traceEmbed ? { embed: traceEmbed } : undefined);
+          return Response.json(result, { status: result.status === 'error' ? 400 : 200, headers });
+        }
+
+        // ── Demo: auto-book candidate resolution ────────────────────
+        // Which freshly imported rows match the predicted description —
+        // server truth so the confirmation card names the exact transaction.
+        // Read-only: the booking write happens only inside the WebMCP
+        // substrate's commit, after the human approves the confirmation card.
+
+        if (path === '/api/demo/autobook/candidates' && req.method === 'POST') {
+          const body = await req.json() as unknown;
+          const result = apiDemoAutoBookCandidates(activeDb, body);
+          if (!result.ok) return Response.json({ error: result.error }, { status: 400, headers });
+          return Response.json({ candidates: result.candidates }, { headers });
         }
 
         // ── Memories ─────────────────────────────────────────────────
@@ -666,6 +737,86 @@ export async function startDashboardServer(db: Database, preferredPort?: number)
             return Response.json(result, { status: 400, headers });
           }
           return Response.json(result, { headers });
+        }
+
+        // ── Demo: Speed Showdown (issue #92) ────────────────────────
+
+        if (path === '/api/demo/showdown/samples') {
+          return Response.json(apiDemoShowdownSamples(), { headers });
+        }
+
+        if (path === '/api/demo/showdown/cloud' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = await apiDemoShowdownCloud(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            // Bad input only (missing/unknown slug). Arm failures resolve
+            // above as { ok:false, error } with HTTP 200 so the demo degrades
+            // inline instead of showing a broken panel.
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/showdown/local' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = await apiDemoShowdownLocal(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/showdown/browser-trace' && req.method === 'POST') {
+          const body = await req.json() as Record<string, unknown>;
+          try {
+            const result = apiDemoShowdownBrowserTrace(body);
+            return Response.json(result, { headers });
+          } catch (err) {
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        // ── Demo: Privacy Validator (issue #95) ─────────────────────
+
+        if (path === '/api/demo/privacy/start' && req.method === 'POST') {
+          return Response.json(apiDemoPrivacyStart(activeDb), { headers });
+        }
+
+        if (path === '/api/demo/privacy/ledger') {
+          try {
+            return Response.json(apiDemoPrivacyLedger(activeDb, url.searchParams), { headers });
+          } catch (err) {
+            // Unknown/null run id (e.g. the server restarted and wiped run
+            // state) — the panel re-arms. Writes no DB rows, so no canWrite
+            // gate, exactly like the browser-trace recorder above.
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
+        }
+
+        if (path === '/api/demo/privacy/exhibit') {
+          try {
+            return Response.json(apiDemoPrivacyExhibit(url.searchParams), { headers });
+          } catch (err) {
+            // Unknown slug → 400 (fixture slugs only, same guard as the arms).
+            return Response.json(
+              { error: err instanceof Error ? err.message : String(err) },
+              { status: 400, headers },
+            );
+          }
         }
 
         // ── Interactions (Training Data) ─────────────────────────────

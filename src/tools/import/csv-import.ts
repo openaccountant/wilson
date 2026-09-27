@@ -22,6 +22,7 @@ import {
   type TransactionInsert,
 } from '../../db/queries.js';
 import { linkTransactionsToAccount } from '../../db/net-worth-queries.js';
+import { embedTransactionIds } from '../../utils/embed-on-write.js';
 import { formatToolResult } from '../types.js';
 
 const IMPORTABLE_EXTENSIONS = new Set(['.csv', '.ofx', '.qif']);
@@ -209,8 +210,10 @@ async function importSingleFile(
   // 7. Convert to insert format with all new fields
   const txns: TransactionInsert[] = newParsed.map((t) => toInsert(t, filePath));
 
-  // 8. Bulk insert
-  const count = insertTransactions(database, txns);
+  // 8. Bulk insert + embed-on-write: index the new rows immediately so they are
+  // semantically searchable without a backfill run. Never fails the import.
+  const { count, ids } = insertTransactions(database, txns);
+  await embedTransactionIds(database, ids);
 
   // 9. Compute date range
   const dates = newParsed.map((t) => t.date).sort();

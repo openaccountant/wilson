@@ -4,6 +4,7 @@ import { startDashboardServer, stopDashboardServer } from '../dashboard/server.j
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth } from '../dashboard/auth.js';
 import { insertTransactions } from '../db/queries.js';
+import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount, insertBalanceSnapshot } from '../db/net-worth-queries.js';
 import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly } from '../dashboard/api.js';
 import type { Account, NetWorthResponse, NetWorthTrendPoint, MonthlyCashflowRow } from '../dashboard/ui/src/types.js';
@@ -267,6 +268,96 @@ describe('dashboard server', () => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       expect(res.status).toBe(200);
+    });
+
+    // ── Review queue RBAC: viewers list read-only, admins resolve ────────
+
+    /** Seed one uncategorized transaction with one pending review; return ids. */
+    function seedPendingReview(db: Database): { txnId: number; reviewId: number } {
+      insertTransactions(db, [{ date: '2026-01-01', description: 'Review Me', amount: -10 }]);
+      const txn = db.prepare("SELECT id FROM transactions WHERE description = 'Review Me'").get() as { id: number };
+      addPendingCategorizationReview(db, txn.id, 'Transport', 0.55);
+      const review = db.prepare('SELECT id FROM categorization_reviews').get() as { id: number };
+      return { txnId: txn.id, reviewId: review.id };
+    }
+
+    test('viewer can list reviews but cannot confirm', async () => {
+      const { db, base, viewerToken } = await setupRbac();
+      const { reviewId } = seedPendingReview(db);
+
+      const unauthed = await fetch(base + '/api/reviews');
+      expect(unauthed.status).toBe(401);
+
+      const list = await fetch(base + '/api/reviews', {
+        headers: { Authorization: `Bearer ${viewerToken}` },
+      });
+      expect(list.status).toBe(200);
+      const queue = (await list.json()) as unknown[];
+      expect(queue).toHaveLength(1);
+
+      const res = await fetch(base + `/api/reviews/${reviewId}/confirm`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${viewerToken}` },
+      });
+      expect(res.status).toBe(403);
+
+      // Nothing changed: the review is still pending and the queue still lists it
+      const review = db.prepare('SELECT status FROM categorization_reviews WHERE id = @id')
+        .get({ id: reviewId }) as { status: string };
+      expect(review.status).toBe('pending');
+      const stillListed = await fetch(base + '/api/reviews', {
+        headers: { Authorization: `Bearer ${viewerToken}` },
+      });
+      expect(((await stillListed.json()) as unknown[]).length).toBe(1);
+    });
+
+    test('viewer cannot correct a review', async () => {
+      const { db, base, viewerToken } = await setupRbac();
+      const { txnId, reviewId } = seedPendingReview(db);
+
+      const res = await fetch(base + `/api/reviews/${reviewId}/correct`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${viewerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ category: 'Health' }),
+      });
+      expect(res.status).toBe(403);
+
+      const txn = db.prepare('SELECT category, user_verified FROM transactions WHERE id = @id')
+        .get({ id: txnId }) as { category: string | null; user_verified: number };
+      expect(txn.category).toBeNull();
+      expect(txn.user_verified).toBe(0);
+    });
+
+    test('admin can confirm a review', async () => {
+      const { db, base, adminToken, viewerToken } = await setupRbac();
+      const { txnId, reviewId } = seedPendingReview(db);
+
+      const res = await fetch(base + `/api/reviews/${reviewId}/confirm`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { success: boolean; category: string };
+      expect(data.success).toBe(true);
+      expect(data.category).toBe('Transport');
+
+      const txn = db.prepare('SELECT category, category_confidence, user_verified FROM transactions WHERE id = @id')
+        .get({ id: txnId }) as { category: string; category_confidence: number; user_verified: number };
+      expect(txn.category).toBe('Transport');
+      expect(txn.category_confidence).toBe(0.55);
+      expect(txn.user_verified).toBe(1);
+
+      const review = db.prepare('SELECT status FROM categorization_reviews WHERE id = @id')
+        .get({ id: reviewId }) as { status: string };
+      expect(review.status).toBe('resolved');
+
+      const after = await fetch(base + '/api/reviews', {
+        headers: { Authorization: `Bearer ${viewerToken}` },
+      });
+      expect(((await after.json()) as unknown[]).length).toBe(0);
     });
 
     test('viewer cannot manage users', async () => {

@@ -7,6 +7,7 @@ import { getCoinbaseConnections, updateLastSyncedAt } from '../../coinbase/store
 import type { CoinbaseConnection } from '../../coinbase/store.js';
 import { getAccounts, getTransactions, hasLocalCoinbaseCreds } from '../../coinbase/client.js';
 import { getCoinbaseTransactionSign } from '../../coinbase/account-mapping.js';
+import { embedTransactionIds } from '../../utils/embed-on-write.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
 
@@ -57,6 +58,8 @@ export async function syncCoinbaseConnection(
   let totalAdded = 0;
   let totalSkipped = 0;
   let totalLinked = 0;
+  // Exact row ids of this sync's inserts across all accounts (for embed-on-write)
+  const insertedIds: number[] = [];
 
   for (const acct of accounts) {
     const txns = await getTransactions(conn, acct.id, useProxy);
@@ -126,7 +129,7 @@ export async function syncCoinbaseConnection(
 
       const insertAll = database.transaction(() => {
         for (const txn of newTxns) {
-          stmt.run({
+          const result = stmt.run({
             date: txn.date,
             description: txn.description,
             amount: txn.amount,
@@ -135,6 +138,7 @@ export async function syncCoinbaseConnection(
             bank: txn.bank,
             external_id: txn.external_id,
           });
+          insertedIds.push((result as { lastInsertRowid: number }).lastInsertRowid);
         }
       });
       insertAll();
@@ -155,6 +159,11 @@ export async function syncCoinbaseConnection(
         linkAll();
       }
     }
+  }
+
+  // ── Embed-on-write: index this sync's new rows (never fails the sync) ─────
+  if (insertedIds.length > 0) {
+    await embedTransactionIds(database, insertedIds);
   }
 
   updateLastSyncedAt(conn.keyName);

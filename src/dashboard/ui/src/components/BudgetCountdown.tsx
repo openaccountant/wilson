@@ -1,5 +1,6 @@
 import { useApi } from '@/hooks/useApi';
 import { useAppState } from '@/state';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { BudgetCountdownItem } from '@/types';
 
 function barColor(percent: number): string {
@@ -11,7 +12,7 @@ function barColor(percent: number): string {
 export function BudgetCountdown() {
   const { dateRange } = useAppState();
   const month = dateRange.startDate.slice(0, 7);
-  const { data, loading } = useApi<BudgetCountdownItem[]>(`/api/budget-countdown?month=${month}`, [month]);
+  const { data, loading, offline } = useApi<BudgetCountdownItem[]>(`/api/budget-countdown?month=${month}`, [month]);
 
   if (loading) {
     return (
@@ -19,6 +20,11 @@ export function BudgetCountdown() {
         <div className="h-[120px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    // Mirror unavailable or never seeded — say so rather than "No budgets configured."
+    return <OfflineUnavailable title="Budget Countdown" />;
   }
 
   if (!data || data.length === 0) {

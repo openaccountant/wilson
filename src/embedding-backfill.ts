@@ -18,6 +18,7 @@
 import type { Database } from './db/compat-sqlite.js';
 import {
   countMissingTransactionTargets,
+  deleteOrphanedTransactionEmbeddings,
   getMissingTransactionTargets,
   upsertEmbeddings,
 } from './db/embedding-queries.js';
@@ -49,6 +50,8 @@ export interface EmbeddingIndexResult {
   total: number;
   /** Transactions that already had an embedding for this model. */
   alreadyIndexed: number;
+  /** Stale vectors whose transaction row no longer exists — removed by this run. */
+  orphaned: number;
 }
 
 /**
@@ -65,11 +68,16 @@ export async function runEmbeddingIndex(
   const embed =
     opts.embed ?? ((texts: string[]) => embedTexts(texts, model));
 
+  // ── Orphan sweep (structural safety net) ────────────────────────────────
+  // Runs on every invocation — including no-op runs — so vectors whose
+  // transaction row is gone are reclaimed even when nothing is missing.
+  const orphaned = deleteOrphanedTransactionEmbeddings(db);
+
   // ── No-op check ─────────────────────────────────────────────────────────
   const total = countMissingTransactionTargets(db, model);
   if (total === 0) {
     const allTransactions = countTransactions(db);
-    return { indexed: 0, total: 0, alreadyIndexed: allTransactions };
+    return { indexed: 0, total: 0, alreadyIndexed: allTransactions, orphaned };
   }
 
   // ── Model availability first (download progress before any batch work) ──
@@ -108,7 +116,7 @@ export async function runEmbeddingIndex(
   }
 
   const allTransactions = countTransactions(db);
-  return { indexed: done, total, alreadyIndexed: allTransactions - total };
+  return { indexed: done, total, alreadyIndexed: allTransactions - total, orphaned };
 }
 
 function countTransactions(db: Database): number {

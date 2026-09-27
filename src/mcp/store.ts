@@ -49,6 +49,8 @@ export interface McpOperation {
   args_json: string;
   before_json: string | null;
   after_json: string | null;
+  /** Server-computed human summary from prepareMutation — what the confirmation card names the change by. */
+  summary: string | null;
   transaction_id: number | null;
   revision_at_prepare: number | null;
   profile: string;
@@ -223,6 +225,7 @@ export function createOperation(
     args: unknown;
     before: unknown;
     after: unknown;
+    summary?: string | null;
     transactionId: number | null;
     revisionAtPrepare: number | null;
     profile: string;
@@ -237,11 +240,11 @@ export function createOperation(
   const expiresAt = isoIn(params.ttlMs ?? OPERATION_TTL_MS);
   db.prepare(`
     INSERT INTO mcp_operations (
-      id, source, grant_id, tool_name, args_json, before_json, after_json,
+      id, source, grant_id, tool_name, args_json, before_json, after_json, summary,
       transaction_id, revision_at_prepare, profile, origin, session_generation,
       user_id, role, status, expires_at
     ) VALUES (
-      @id, @source, @grantId, @toolName, @argsJson, @beforeJson, @afterJson,
+      @id, @source, @grantId, @toolName, @argsJson, @beforeJson, @afterJson, @summary,
       @transactionId, @revisionAtPrepare, @profile, @origin, @sessionGeneration,
       @userId, @role, 'pending', @expiresAt
     )
@@ -253,6 +256,7 @@ export function createOperation(
     argsJson: JSON.stringify(params.args),
     beforeJson: params.before === undefined ? null : JSON.stringify(params.before),
     afterJson: params.after === undefined ? null : JSON.stringify(params.after),
+    summary: params.summary ?? null,
     transactionId: params.transactionId,
     revisionAtPrepare: params.revisionAtPrepare,
     profile: params.profile,

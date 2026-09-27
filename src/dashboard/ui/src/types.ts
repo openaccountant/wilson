@@ -135,6 +135,20 @@ export interface SpendingSummaryItem {
   count: number;
 }
 
+// Matches GET /api/reviews (PendingReviewRow in src/db/categorization-review-queries.ts)
+export interface ReviewQueueItem {
+  review_id: number;
+  transaction_id: number;
+  suggested_category: string;
+  confidence: number;
+  suggested_at: string;
+  date: string;
+  description: string;
+  merchant_name: string | null;
+  amount: number;
+  current_category: string | null;
+}
+
 // Matches GET /api/pnl response (existing endpoint)
 export interface PnlResponse {
   totalIncome: number;

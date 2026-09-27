@@ -52,7 +52,7 @@ describe('embedding backfill resumability', () => {
       batchSize: 2,
       onProgress: (indexed, total) => progress2.push([indexed, total]),
     });
-    expect(result2).toEqual({ indexed: 6, total: 6, alreadyIndexed: 4 });
+    expect(result2).toEqual({ indexed: 6, total: 6, alreadyIndexed: 4, orphaned: 0 });
     expect(progress2).toEqual([[2, 6], [4, 6], [6, 6]]);
 
     const afterRun2 = db.prepare('SELECT COUNT(*) AS c FROM embeddings WHERE source_type = @sourceType').get({ sourceType: 'transaction' }) as { c: number };
@@ -66,7 +66,7 @@ describe('embedding backfill resumability', () => {
     // ── Run 3: fully indexed → instant no-op with zero embed calls ───────────
     const run3 = createFakeEmbedder();
     const result3 = await runEmbeddingIndex({ db, embed: run3.embed, batchSize: 2 });
-    expect(result3).toEqual({ indexed: 0, total: 0, alreadyIndexed: 10 });
+    expect(result3).toEqual({ indexed: 0, total: 0, alreadyIndexed: 10, orphaned: 0 });
     expect(run3.calls).toHaveLength(0);
     expect(run3.batchCount).toBe(0);
 
@@ -103,8 +103,44 @@ describe('embedding backfill resumability', () => {
 
     const again = createFakeEmbedder();
     const result = await runEmbeddingIndex({ db, embed: again.embed, batchSize: 2 });
-    expect(result).toEqual({ indexed: 0, total: 0, alreadyIndexed: 3 });
+    expect(result).toEqual({ indexed: 0, total: 0, alreadyIndexed: 3, orphaned: 0 });
     expect(again.calls).toHaveLength(0);
+    db.close();
+  });
+
+  test('orphan sweep: embeddings whose transaction row is gone are reclaimed on every run', async () => {
+    const db = createTestDb();
+    const txns = seedTransactions(db, 3);
+
+    // Fully index all three rows.
+    const first = createFakeEmbedder();
+    await runEmbeddingIndex({ db, embed: first.embed, batchSize: 2 });
+    const indexedBefore = db.prepare('SELECT COUNT(*) AS c FROM embeddings WHERE source_type = @sourceType').get({ sourceType: 'transaction' }) as { c: number };
+    expect(indexedBefore.c).toBe(3);
+
+    // Raw-delete an indexed transaction — bypassing the delete hook — to
+    // simulate a future delete path that misses its vector cleanup.
+    db.prepare('DELETE FROM transactions WHERE id = @id').run({ id: txns[0].id });
+
+    // A run with nothing missing must still sweep the ghost vector.
+    const noop = createFakeEmbedder();
+    const result = await runEmbeddingIndex({ db, embed: noop.embed, batchSize: 2 });
+    expect(result).toEqual({ indexed: 0, total: 0, alreadyIndexed: 2, orphaned: 1 });
+    expect(noop.calls).toHaveLength(0);
+
+    const after = db.prepare('SELECT COUNT(*) AS c FROM embeddings WHERE source_type = @sourceType').get({ sourceType: 'transaction' }) as { c: number };
+    expect(after.c).toBe(2);
+
+    // A run with missing rows reports the sweep alongside the backfill:
+    // raw-delete another indexed transaction (ghost vector) while the last
+    // remaining row loses its vector (needs indexing).
+    db.prepare('DELETE FROM transactions WHERE id = @id').run({ id: txns[1].id });
+    db.prepare("DELETE FROM embeddings WHERE source_type = 'transaction' AND source_id = @id").run({ id: txns[2].id });
+    const run = createFakeEmbedder();
+    const result2 = await runEmbeddingIndex({ db, embed: run.embed, batchSize: 2 });
+    expect(result2.orphaned).toBe(1);
+    expect(result2.indexed).toBe(1);
+    expect(run.calls).toEqual([transactionEmbedText({ merchant_name: txns[2].merchant_name, description: txns[2].description })]);
     db.close();
   });
 

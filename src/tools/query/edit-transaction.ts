@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { updateTransaction, getTransactionById } from '../../db/queries.js';
+import { embedTransactionIds } from '../../utils/embed-on-write.js';
 import { formatToolResult } from '../types.js';
 
 let db: Database | null = null;
@@ -47,6 +48,13 @@ export const editTransactionTool = defineTool({
     }
 
     const success = updateTransaction(database, id, filtered);
+
+    // Description is part of the embed text — refresh the stored vector so
+    // semantic search reflects the edit. Never fails the edit.
+    if (success && description !== undefined) {
+      await embedTransactionIds(database, [id]);
+    }
+
     const updated = getTransactionById(database, id);
 
     return formatToolResult({

@@ -41,6 +41,11 @@ export const FORECAST_HORIZON_MONTHS = 12;
 export const MIN_HISTORY_MONTHS = 2;
 export const DEFAULT_SEED = 1337;
 
+/** What-if slider bounds (percent of observed monthly values) and step. */
+export const WHATIF_MIN_PCT = 50; // −50%
+export const WHATIF_MAX_PCT = 150; // +50%
+export const WHATIF_STEP = 5;
+
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Mulberry32 — tiny seeded PRNG, deterministic under test. */
@@ -64,6 +69,11 @@ export function percentile(sortedAsc: number[], p: number): number {
   return sortedAsc[idx];
 }
 
+/** Non-finite or negative what-if scales fall back to no adjustment (no-throw posture). */
+function sanitizeScale(v: number | undefined, fallback = 1): number {
+  return v === undefined || !Number.isFinite(v) || v < 0 ? fallback : v;
+}
+
 export function runCashflowForecast(opts: {
   history: CashflowMonth[];
   startBalance: number;
@@ -75,10 +85,16 @@ export function runCashflowForecast(opts: {
   paths?: number;
   /** Default DEFAULT_SEED. */
   seed?: number;
+  /** Multiplier applied to every drawn income month. Default 1 (no adjustment). */
+  incomeScale?: number;
+  /** Multiplier applied to every drawn expense month. Default 1 (no adjustment). */
+  expenseScale?: number;
 }): CashflowForecast | null {
   const horizonMonths = opts.horizonMonths ?? FORECAST_HORIZON_MONTHS;
   const paths = opts.paths ?? FORECAST_PATHS;
   const seed = opts.seed ?? DEFAULT_SEED;
+  const incomeScale = sanitizeScale(opts.incomeScale);
+  const expenseScale = sanitizeScale(opts.expenseScale);
 
   // Drop non-finite rows defensively; too little history → no forecast.
   const history = opts.history.filter(
@@ -95,13 +111,24 @@ export function runCashflowForecast(opts: {
 
   // Income and expense are drawn independently each month (bootstrap with
   // replacement) — good months pairing with good months is exactly the noise
-  // the fan is meant to express.
+  // the fan is meant to express. The loop is step-major with a per-path
+  // balance carried across steps, so month k always consumes the same slice
+  // of the single RNG stream regardless of horizonMonths: a 24-month run's
+  // first 12 steps replay a 12-month run's steps exactly under the same seed
+  // (horizon prefix-stability), and two runs that differ only in the what-if
+  // scales consume identical randomness.
+  const balances = Array.from({ length: paths }, () => opts.startBalance);
   const stepSamples: number[][] = Array.from({ length: horizonMonths }, () => []);
-  for (let path = 0; path < paths; path++) {
-    let balance = opts.startBalance;
-    for (let step = 1; step <= horizonMonths; step++) {
-      balance += pick(incomes) - pick(expenses);
-      stepSamples[step - 1].push(balance);
+  for (let step = 1; step <= horizonMonths; step++) {
+    for (let path = 0; path < paths; path++) {
+      // Scale AFTER the draw: multiplying the picked value keeps the RNG draw
+      // sequence and draw count identical regardless of the assumptions, so
+      // under one seed the same assumptions always replay the same projection
+      // and band shifts reflect the assumptions, not re-sampling luck. The
+      // anchor (startBalance) is deliberately not scaled: the what-if adjusts
+      // future flows, not the cash you hold today.
+      balances[path] += pick(incomes) * incomeScale - pick(expenses) * expenseScale;
+      stepSamples[step - 1].push(balances[path]);
     }
   }
 

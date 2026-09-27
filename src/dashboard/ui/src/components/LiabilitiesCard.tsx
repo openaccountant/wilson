@@ -1,4 +1,5 @@
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { NetWorthResponse } from '@/types';
 
 function fmt(n: number): string {
@@ -6,7 +7,10 @@ function fmt(n: number): string {
 }
 
 export function LiabilitiesCard() {
-  const { data, loading } = useApi<NetWorthResponse>('/api/net-worth');
+  // Net worth aggregates the accounts table, which the mirror does not carry —
+  // outside the approved offline scope, so offline it degrades to an explicit
+  // unavailable state rather than zeros.
+  const { data, loading, offline } = useApi<NetWorthResponse>('/api/net-worth');
 
   if (loading) {
     return (
@@ -14,6 +18,10 @@ export function LiabilitiesCard() {
         <div className="h-[80px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (offline && !data) {
+    return <OfflineUnavailable title="Net Worth" />;
   }
 
   if (!data) {

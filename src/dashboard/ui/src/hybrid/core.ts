@@ -255,3 +255,38 @@ export type HybridCapability = 'unknown' | 'ready' | 'unavailable' | 'failed';
 export function shouldAttemptLocal(state: HybridCapability): boolean {
   return state === 'unknown' || state === 'ready';
 }
+
+// ── Response provenance ─────────────────────────────────────────────────────
+
+/**
+ * Which path actually produced a live chat response. Carried on the live
+ * message only — never persisted (no chat-history schema change), so
+ * history-loaded messages render with no indicator.
+ */
+export type ChatProvenance = 'local-with-context' | 'server-fallback' | 'unavailable';
+
+export const PROVENANCE_BADGES: Record<ChatProvenance, string> = {
+  'local-with-context': 'answered locally · on-device',
+  'server-fallback': 'server fallback',
+  'unavailable': 'server agent',
+};
+
+/**
+ * Single source of truth for the per-response indicator, pinned by
+ * src/__tests__/local-chat-provenance.test.ts. `hybridLayerPresent` = the
+ * prebuilt hybrid chunk was loadable at send time (window global defined /
+ * hook status !== 'unavailable'). WebGPU-unavailable counts as present —
+ * the local layer was in play and the server covered for it, which is a
+ * fallback. Only when the hybrid layer itself is absent (chunk 404 /
+ * window global undefined) was local inference skipped entirely, and the
+ * neutral state applies. Deliberately NOT keyed off HybridResult.reason:
+ * no-reason {ok:false} results are ambiguous by design, and layer presence
+ * is what separates fallback from neutral.
+ */
+export function deriveChatProvenance(outcome: {
+  localAnswered: boolean;
+  hybridLayerPresent: boolean;
+}): ChatProvenance {
+  if (outcome.localAnswered) return 'local-with-context';
+  return outcome.hybridLayerPresent ? 'server-fallback' : 'unavailable';
+}

@@ -1,9 +1,10 @@
 import { useApi } from '@/hooks/useApi';
+import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import type { WeeklySummaryData, StreakData } from '@/types';
 
 export function WeeklySummary() {
-  const { data: weekData, loading: loadingWeek } = useApi<WeeklySummaryData>('/api/weekly-summary');
-  const { data: streakData, loading: loadingStreak } = useApi<StreakData>('/api/streak');
+  const { data: weekData, loading: loadingWeek, offline: offlineWeek } = useApi<WeeklySummaryData>('/api/weekly-summary');
+  const { data: streakData, loading: loadingStreak, offline: offlineStreak } = useApi<StreakData>('/api/streak');
 
   if (loadingWeek || loadingStreak) {
     return (
@@ -11,6 +12,11 @@ export function WeeklySummary() {
         <div className="h-[60px] animate-pulse bg-border-muted rounded" />
       </div>
     );
+  }
+
+  if (!weekData && (offlineWeek || offlineStreak)) {
+    // Mirror unavailable or never seeded — say so rather than implying empty data.
+    return <OfflineUnavailable title="This Week" />;
   }
 
   if (!weekData) {

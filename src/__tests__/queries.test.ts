@@ -134,11 +134,12 @@ describe('queries', () => {
   describe('insertTransactions', () => {
     test('returns correct insert count', () => {
       const freshDb = createTestDb();
-      const count = insertTransactions(freshDb, [
+      const { count, ids } = insertTransactions(freshDb, [
         { date: '2026-04-01', description: 'Test', amount: -10.00 },
         { date: '2026-04-02', description: 'Test 2', amount: -20.00 },
       ]);
       expect(count).toBe(2);
+      expect(ids).toHaveLength(2);
     });
 
     test('data roundtrips correctly', () => {

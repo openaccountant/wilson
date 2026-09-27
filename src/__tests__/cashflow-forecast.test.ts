@@ -4,6 +4,9 @@ import {
   percentile,
   runCashflowForecast,
   MIN_HISTORY_MONTHS,
+  WHATIF_MIN_PCT,
+  WHATIF_MAX_PCT,
+  WHATIF_STEP,
 } from '../dashboard/ui/src/lib/cashflowForecast.js';
 import type { CashflowMonth } from '../dashboard/ui/src/lib/cashflowForecast.js';
 
@@ -213,5 +216,214 @@ describe('runCashflowForecast', () => {
         expect(Number.isFinite(v)).toBe(true);
       }
     }
+  });
+
+  describe('what-if assumptions', () => {
+    test('lowering assumed expenses raises the median under the same seed', () => {
+      const baseline = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        seed: 42,
+      })!;
+      const cheaper = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        seed: 42,
+        expenseScale: 0.5,
+      })!;
+      // Same seed → identical randomness; the only difference is the
+      // assumption, so the cheaper-expense projection can never dip below the
+      // baseline and must be strictly higher by the end.
+      for (let i = 0; i < baseline.points.length; i++) {
+        expect(cheaper.points[i].p50).toBeGreaterThanOrEqual(baseline.points[i].p50);
+      }
+      expect(cheaper.points[12].p50).toBeGreaterThan(baseline.points[12].p50);
+    });
+
+    test('expense scale reaches the simulation end-to-end (degenerate history)', () => {
+      const history: CashflowMonth[] = Array.from({ length: 5 }, (_, i) => ({
+        month: `2026-0${i + 3}`,
+        income: 3000,
+        expenses: 2000,
+      }));
+      const result = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 99,
+        expenseScale: 0.5,
+      })!;
+      // Expenses halve: net per month = 3000 - 2000*0.5 = 2000 (was 1000).
+      for (let step = 0; step <= 12; step++) {
+        const expected = 1000 + step * 2000;
+        for (const p of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
+          expect(result.points[step][p]).toBe(expected);
+        }
+      }
+    });
+
+    test('raising assumed income raises the median (income scale, and both scales together)', () => {
+      const history: CashflowMonth[] = Array.from({ length: 5 }, (_, i) => ({
+        month: `2026-0${i + 3}`,
+        income: 3000,
+        expenses: 2000,
+      }));
+      const richer = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 99,
+        incomeScale: 1.5,
+      })!;
+      // Income ×1.5: net per month = 3000*1.5 - 2000 = 2500 (was 1000).
+      for (let step = 0; step <= 12; step++) {
+        const expected = 1000 + step * 2500;
+        for (const p of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
+          expect(richer.points[step][p]).toBe(expected);
+        }
+      }
+      const both = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 99,
+        incomeScale: 1.5,
+        expenseScale: 0.5,
+      })!;
+      // Both: net per month = 4500 - 1000 = 3500.
+      for (let step = 0; step <= 12; step++) {
+        const expected = 1000 + step * 3500;
+        for (const p of ['p10', 'p25', 'p50', 'p75', 'p90'] as const) {
+          expect(both.points[step][p]).toBe(expected);
+        }
+      }
+    });
+
+    test('a longer horizon yields a longer series', () => {
+      const long = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        horizonMonths: 24,
+        seed: 42,
+      })!;
+      expect(long.points).toHaveLength(25);
+      expect(long.points[24].step).toBe(24);
+    });
+
+    test('horizon prefix-stability: extending the horizon never reshuffles earlier months', () => {
+      const twelve = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        horizonMonths: 12,
+        seed: 42,
+      })!;
+      const twentyFour = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        horizonMonths: 24,
+        seed: 42,
+      })!;
+      // Same seed + same assumptions → the per-path RNG draw order is
+      // unchanged, so the 24-month run's first 13 points must equal the
+      // 12-month run's exactly: extending the horizon adds months, it never
+      // re-samples them.
+      expect(twentyFour.points.slice(0, 13)).toEqual(twelve.points);
+    });
+
+    test('same seed + same assumptions is fully deterministic; differing assumptions are not re-sampled noise', () => {
+      const a = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        seed: 1234,
+        incomeScale: 1.2,
+        expenseScale: 0.8,
+      });
+      const b = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        seed: 1234,
+        incomeScale: 1.2,
+        expenseScale: 0.8,
+      });
+      expect(a).toEqual(b);
+
+      const c = runCashflowForecast({
+        history: variedHistory,
+        startBalance: 5000,
+        startMonth: '2026-09',
+        seed: 1234,
+        incomeScale: 1.5,
+        expenseScale: 0.8,
+      })!;
+      const medianA = a!.points.map((p) => p.p50);
+      const medianC = c.points.map((p) => p.p50);
+      expect(medianA).not.toEqual(medianC);
+    });
+
+    test('non-finite or negative scales fall back to no adjustment', () => {
+      const history: CashflowMonth[] = Array.from({ length: 5 }, (_, i) => ({
+        month: `2026-0${i + 3}`,
+        income: 3000,
+        expenses: 2000,
+      }));
+      const plain = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 7,
+      })!;
+      const nanIncome = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 7,
+        incomeScale: Number.NaN,
+      })!;
+      const negExpense = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 7,
+        expenseScale: -1,
+      })!;
+      expect(nanIncome).toEqual(plain);
+      expect(negExpense).toEqual(plain);
+    });
+
+    test('what-if constants match the slider bounds', () => {
+      expect(WHATIF_MIN_PCT).toBe(50);
+      expect(WHATIF_MAX_PCT).toBe(150);
+      expect(WHATIF_STEP).toBe(5);
+    });
+
+    test('the anchor (step 0) is never scaled', () => {
+      const history: CashflowMonth[] = Array.from({ length: 5 }, (_, i) => ({
+        month: `2026-0${i + 3}`,
+        income: 3000,
+        expenses: 2000,
+      }));
+      const result = runCashflowForecast({
+        history,
+        startBalance: 1000,
+        startMonth: '2026-09',
+        seed: 7,
+        incomeScale: 1.5,
+        expenseScale: 0.5,
+      })!;
+      const anchor = result.points[0];
+      expect(anchor.step).toBe(0);
+      expect(anchor.p10).toBe(1000);
+      expect(anchor.p25).toBe(1000);
+      expect(anchor.p50).toBe(1000);
+      expect(anchor.p75).toBe(1000);
+      expect(anchor.p90).toBe(1000);
+    });
   });
 });
