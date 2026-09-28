@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { callLlm } from '../model/llm.js';
+import { LlmValidationError } from '../model/structured-output.js';
 import { getToolsByNames } from '../tools/registry.js';
-import type { ToolDef } from '../model/types.js';
+import type { ToolDef, LlmResponse } from '../model/types.js';
 import type { TeamDef, TeamRunOptions } from './types.js';
 
 const DEFAULT_MAX_MEMBER_ITERATIONS = 5;
@@ -105,13 +106,24 @@ ${memberDescriptions}
 
 Assign a specific subtask to each relevant member. Not all members need to be used.`;
 
-  const { response: dispatchResponse } = await callLlm(dispatchPrompt, {
-    model: dispatcherModel,
-    systemPrompt: team.dispatcher.systemPrompt ?? 'You coordinate financial analysis specialists. Assign clear, specific subtasks.',
-    outputSchema: dispatchSchema,
-  });
+  // A rejected dispatch (structured output failed validation even after the repair
+  // re-prompt) degrades to the dispatcher answering directly from its raw content —
+  // no assignments, no member runs.
+  let dispatchResponse: LlmResponse;
+  try {
+    ({ response: dispatchResponse } = await callLlm(dispatchPrompt, {
+      model: dispatcherModel,
+      systemPrompt: team.dispatcher.systemPrompt ?? 'You coordinate financial analysis specialists. Assign clear, specific subtasks.',
+      outputSchema: dispatchSchema,
+    }));
+  } catch (err) {
+    if (err instanceof LlmValidationError) {
+      return err.lastResponse.content.trim() || 'No subtasks were assigned.';
+    }
+    throw err; // network/provider errors keep propagating (already retried upstream)
+  }
 
-  const assignments = (dispatchResponse.structured as z.infer<typeof dispatchSchema>)?.assignments ?? [];
+  const assignments = (dispatchResponse.structured as z.infer<typeof dispatchSchema>).assignments ?? [];
 
   if (assignments.length === 0) {
     // No assignments — dispatcher answers directly

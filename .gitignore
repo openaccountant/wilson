@@ -5,3 +5,7 @@ dist/
 *.db
 firebase-debug.log
 data/api/debug/
+*.tsbuildinfo
+
+# Prebuilt hybrid chat chunk + ort binaries (npm run build:hybrid output)
+src/dashboard/ui/dist-hybrid/

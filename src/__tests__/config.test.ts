@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import * as os from 'os';
-import { loadConfig, saveConfig, getSetting, setSetting, getConfiguredModel } from '../utils/config.js';
+import { loadConfig, saveConfig, getSetting, setSetting, getConfiguredModel, getCategorizationConfidenceThreshold, DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD, CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY } from '../utils/config.js';
 import { setActiveProfilePaths, resetActiveProfile, type ProfilePaths } from '../profile/index.js';
 
 describe('utils/config', () => {
@@ -104,5 +104,21 @@ describe('utils/config', () => {
     const config = loadConfig();
     expect(config.provider).toBe('google');
     expect(config.model).toBeUndefined();
+  });
+
+  test('getCategorizationConfidenceThreshold defaults to 0.7', () => {
+    saveConfig({});
+    expect(DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD).toBe(0.7);
+    expect(CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY).toBe('categorizationConfidenceThreshold');
+    expect(getCategorizationConfidenceThreshold()).toBe(0.7);
+  });
+
+  test('categorizationConfidenceThreshold is overridable per profile', () => {
+    saveConfig({});
+    setSetting(CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY, 0.85);
+    expect(getCategorizationConfidenceThreshold()).toBe(0.85);
+    // Restore the default — sibling suites in this process share settings.json
+    setSetting(CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY, DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD);
+    expect(getCategorizationConfidenceThreshold()).toBe(0.7);
   });
 });

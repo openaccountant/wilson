@@ -110,6 +110,9 @@ Categorize transactions using AI-powered classification.
 ## Usage Notes
 
 - Call ONCE with the full batch — it handles multiple transactions internally
+- Suggestions below the confidence threshold (default 0.7; setting "categorizationConfidenceThreshold")
+  are NOT applied to transactions — they are routed to the persistent review queue
+  (categorization_reviews table) and reported as "routed for human review"
 - Uses local LLM (Ollama) for privacy-first categorization
 - Categories include: Groceries, Dining, Transport, Housing, Utilities, Entertainment, Shopping, Health, Travel, Income, Transfer, and more
 - This is a bulk operation that requires user approval before execution

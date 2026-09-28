@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
+import { useHybridChat } from '@/hooks/useHybridChat';
 import { api } from '@/api';
 import type { ChatHistoryRow, ChatResponse, ChatSessionRow } from '@/types';
+import type { HybridResult } from '@/hybrid/core';
 
 interface DisplayMessage {
   role: 'user' | 'assistant';
@@ -24,6 +26,8 @@ export function ChatTab() {
   const [sending, setSending] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const hybrid = useHybridChat();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,19 +81,43 @@ export function ChatTab() {
     setInput('');
     setSending(true);
 
+    // ── Local-first: try the on-device WebGPU path ────────────────────────
+    // Every hybrid failure resolves {ok:false} (no WebGPU, model load or
+    // generation failure, tool-call attempt, question outside the bundle) and
+    // falls through to the server agent silently. The belt-and-braces catch
+    // guarantees hybrid problems can never reach the Error: bubble below,
+    // which is reserved for genuine server-path failures.
+    let local: { answer: string; sessionId: string | null } | null = null;
     try {
-      const body: { query: string; sessionId?: string } = { query };
-      if (sessionId) body.sessionId = sessionId;
+      const r: HybridResult = await hybrid.tryLocal(query, setProgressLabel, sessionId);
+      if (r.ok) local = { answer: r.answer, sessionId: r.sessionId };
+    } catch {
+      local = null;
+    }
+    setProgressLabel(null);
 
-      const res = await api<ChatResponse>('/api/chat', {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
+    try {
+      if (local) {
+        if (local.sessionId) {
+          setSessionId(local.sessionId);
+          setActiveSessionId(local.sessionId);
+        }
+        setMessages((prev) => [...prev, { role: 'assistant', content: local.answer }]);
+        refetchSessions();
+      } else {
+        const body: { query: string; sessionId?: string } = { query };
+        if (sessionId) body.sessionId = sessionId;
 
-      setSessionId(res.sessionId);
-      if (res.sessionId) setActiveSessionId(res.sessionId);
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.answer }]);
-      refetchSessions();
+        const res = await api<ChatResponse>('/api/chat', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+
+        setSessionId(res.sessionId);
+        if (res.sessionId) setActiveSessionId(res.sessionId);
+        setMessages((prev) => [...prev, { role: 'assistant', content: res.answer }]);
+        refetchSessions();
+      }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setMessages((prev) => [
@@ -175,11 +203,16 @@ export function ChatTab() {
           {sending && (
             <div className="flex justify-start">
               <div className="bg-surface border border-border rounded-lg px-4 py-2.5 text-sm text-text-muted">
-                <span className="inline-flex gap-1">
-                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
-                </span>
+                {progressLabel ? (
+                  /* First-run model download / warmup progress (Track D). */
+                  <span>{progressLabel}</span>
+                ) : (
+                  <span className="inline-flex gap-1">
+                    <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                  </span>
+                )}
               </div>
             </div>
           )}

@@ -227,8 +227,9 @@ Select which previous messages are relevant to understanding or answering the cu
         callType: 'relevance',
       });
 
-      const structured = response.structured as { message_ids: number[] } | undefined;
-      const selectedIds = structured?.message_ids || [];
+      // callLlm validated this against SelectedMessagesSchema (or threw, handled below)
+      const structured = response.structured as { message_ids: number[] };
+      const selectedIds = structured.message_ids ?? [];
 
       const selectedMessages = selectedIds
         .filter((idx) => idx >= 0 && idx < this.messages.length)

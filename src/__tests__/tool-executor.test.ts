@@ -1,8 +1,10 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
+import { z } from 'zod';
 import { AgentToolExecutor } from '../agent/tool-executor.js';
 import { createRunContext } from '../agent/run-context.js';
 import type { LlmResponse, ToolDef } from '../model/types.js';
 import type { ApprovalDecision } from '../agent/types.js';
+import { defineTool } from '../tools/define-tool.js';
 import { ensureTestProfile, mockTool, collectEvents } from './helpers.js';
 
 describe('AgentToolExecutor', () => {
@@ -173,5 +175,65 @@ describe('AgentToolExecutor', () => {
     expect(callOrder).toEqual(['a', 'b']);
     const endEvents = events.filter((e) => e.type === 'tool_end');
     expect(endEvents).toHaveLength(2);
+  });
+
+  test('malformed args are rejected before the tool function runs', async () => {
+    let funcCalls = 0;
+    const tool = defineTool({
+      name: 'edit_transaction',
+      description: 'Edit',
+      schema: z.object({ id: z.number(), amount: z.number().optional() }),
+      func: async () => {
+        funcCalls++;
+        return 'edited';
+      },
+    });
+    const toolMap = new Map<string, ToolDef>([['edit_transaction', tool]]);
+    const executor = new AgentToolExecutor(toolMap);
+    const ctx = createRunContext('test query');
+
+    const response = makeLlmResponse([
+      { id: 'tc1', name: 'edit_transaction', args: { id: 'abc', amount: 'not-a-number' } },
+    ]);
+
+    const events = await collectEvents(executor.executeAll(response, ctx));
+    expect(funcCalls).toBe(0); // tool function never invoked
+
+    const errEvent = events.find((e) => e.type === 'tool_error')!;
+    expect(errEvent).toBeTruthy();
+    expect((errEvent as any).error).toContain('Invalid arguments for tool');
+    expect((errEvent as any).error).toContain('id'); // offending fields named
+    expect((errEvent as any).error).toContain('amount');
+    expect(events.some((e) => e.type === 'tool_end')).toBe(false);
+
+    // Error is fed back to the model on the next iteration (re-prompt)
+    expect(ctx.scratchpad.getToolResults()).toContain('Invalid arguments');
+  });
+
+  test('valid args execute normally through the schema guard', async () => {
+    let funcCalls = 0;
+    const tool = defineTool({
+      name: 'edit_transaction',
+      description: 'Edit',
+      schema: z.object({ id: z.number(), amount: z.number().optional() }),
+      func: async () => {
+        funcCalls++;
+        return 'edited';
+      },
+    });
+    const toolMap = new Map<string, ToolDef>([['edit_transaction', tool]]);
+    const executor = new AgentToolExecutor(toolMap);
+    const ctx = createRunContext('test query');
+
+    const response = makeLlmResponse([
+      { id: 'tc1', name: 'edit_transaction', args: { id: 42, amount: -12.5 } },
+    ]);
+
+    const events = await collectEvents(executor.executeAll(response, ctx));
+    expect(funcCalls).toBe(1);
+    const endEvent = events.find((e) => e.type === 'tool_end')!;
+    expect(endEvent).toBeTruthy();
+    expect((endEvent as any).result).toBe('edited');
+    expect(events.some((e) => e.type === 'tool_error')).toBe(false);
   });
 });

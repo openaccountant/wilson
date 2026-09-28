@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
-import type { Memory, Entity } from '@/types';
+import type { Memory, Entity, ModelTaskRow } from '@/types';
 
 const AUTH_KEY = 'wilson_auth_token';
 
@@ -552,6 +552,95 @@ function CustomPromptSection() {
   );
 }
 
+// ── Models Section ───────────────────────────────────────────────────────────
+
+function executionBadge(execution: NonNullable<ModelTaskRow['execution']>): { text: string; className: string } {
+  return execution === 'local'
+    ? { text: 'Runs on this device', className: 'bg-green/15 text-green' }
+    : { text: 'Runs on a cloud server', className: 'bg-amber-500/15 text-amber-500' };
+}
+
+function ModelRow({ row }: { row: ModelTaskRow }) {
+  return (
+    <div className="flex items-center justify-between bg-surface border border-border rounded px-3 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-sm text-text shrink-0">{row.label}</span>
+        {row.inUse ? (
+          <>
+            <span className="text-sm text-text-muted truncate">
+              {row.modelName}
+              {row.providerName && <span className="text-xs text-text-muted"> — via {row.providerName}</span>}
+            </span>
+          </>
+        ) : (
+          <span className="text-sm text-text-muted truncate">
+            Not in use{row.note ? ` — ${row.note}` : ''}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Assignment state: 'default' = follows the chat model; 'override' is the
+            dead path until the override slice lands — both branches render so a
+            future override lights this chip up without redesign. No interactive
+            control here in this slice. */}
+        {row.inUse && row.task !== 'chat' && (
+          <span className="text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded bg-border-muted/50 text-text-muted">
+            {row.assignment === 'default' ? 'Default — follows the chat model' : 'Override'}
+          </span>
+        )}
+        {row.inUse && row.execution && (
+          <span className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded ${executionBadge(row.execution).className}`}>
+            {executionBadge(row.execution).text}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModelsSection() {
+  const { data, loading } = useApi<{ tasks: ModelTaskRow[] }>('/api/models');
+  // Machine-level capability: every row carries the same probe result.
+  const webgpu = data?.tasks.some((t) => t.webgpu) ?? false;
+
+  if (loading) {
+    return (
+      <div>
+        <h2 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Models</h2>
+        <div className="bg-surface-raised border border-border rounded-lg p-4">
+          <div className="h-[120px] animate-pulse bg-border-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Models</h2>
+      <div className="bg-surface-raised border border-border rounded-lg p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-text-muted">
+            Which AI model handles each task — and whether it runs on this device or a cloud server.
+          </p>
+          <span
+            className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded shrink-0 ${
+              webgpu ? 'bg-green/15 text-green' : 'bg-border-muted/50 text-text-muted'
+            }`}
+            title="Whether this machine can accelerate local model inference with WebGPU"
+          >
+            WebGPU acceleration: {webgpu ? 'available' : 'not available'}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          {(data?.tasks ?? []).map((row) => (
+            <ModelRow key={row.task} row={row} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Entity Section ───────────────────────────────────────────────────────────
 
 function EntitySection() {
@@ -737,6 +826,7 @@ function EntitySection() {
 export function SettingsTab() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <ModelsSection />
       <ProfileSection />
       <EntitySection />
       <SecuritySection />

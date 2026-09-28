@@ -25,7 +25,11 @@ export function LiabilitiesCard() {
     );
   }
 
-  const liabilities = data.accounts.filter((a) => a.balance < 0);
+  // Liability rows carry a positive current_balance on the wire, so detect by
+  // account_type first; a negative current_balance catches overdrawn assets too.
+  const liabilities = data.accounts.filter(
+    (a) => a.account_type === 'liability' || a.current_balance < 0,
+  );
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4">
@@ -52,9 +56,9 @@ export function LiabilitiesCard() {
       {liabilities.length > 0 && (
         <div className="space-y-1 border-t border-border pt-2">
           {liabilities.map((acct) => (
-            <div key={acct.name} className="flex justify-between text-xs">
+            <div key={acct.id} className="flex justify-between text-xs">
               <span className="text-text-muted">{acct.name}</span>
-              <span className="font-mono text-red">{fmt(acct.balance)}</span>
+              <span className="font-mono text-red">{fmt(acct.current_balance)}</span>
             </div>
           ))}
         </div>

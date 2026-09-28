@@ -94,6 +94,22 @@ export function getConfiguredModel(): { model: string; provider: string } {
   return { model, provider };
 }
 
+/**
+ * Confidence threshold for AI categorization. Suggestions scoring below this
+ * are never applied to transactions — they are routed to the review queue
+ * (categorization_reviews). Defaults to 0.7; overridable per profile via the
+ * "categorizationConfidenceThreshold" setting in settings.json.
+ */
+export const DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD = 0.7;
+export const CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY = 'categorizationConfidenceThreshold';
+
+export function getCategorizationConfidenceThreshold(): number {
+  return getSetting(
+    CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY,
+    DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD
+  );
+}
+
 export function setSetting(key: string, value: unknown): boolean {
   const config = loadConfig();
   config[key] = value;

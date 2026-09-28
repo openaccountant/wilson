@@ -1,5 +1,7 @@
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock } from 'bun:test';
+import { z } from 'zod';
 import { ensureTestProfile } from './helpers.js';
+import { defineTool } from '../tools/define-tool.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
 import type { ChainDef } from '../orchestration/types.js';
 
@@ -7,8 +9,11 @@ import type { ChainDef } from '../orchestration/types.js';
 
 let adapterCallCount = 0;
 let adapterResponses: LlmResponse[] = [];
+/** userPrompt of every adapter call, in order (for asserting feedback prompts). */
+let receivedPrompts: string[] = [];
 
-const mockAdapterCall = mock(async (): Promise<LlmResponse> => {
+const mockAdapterCall = mock(async (options?: { userPrompt?: string }): Promise<LlmResponse> => {
+  if (options?.userPrompt !== undefined) receivedPrompts.push(options.userPrompt);
   const response = adapterResponses[Math.min(adapterCallCount, adapterResponses.length - 1)];
   adapterCallCount++;
   return response;
@@ -45,6 +50,13 @@ mock.module('../tools/registry.js', () => ({
 
 const { runChain } = await import('../orchestration/chain.js');
 
+afterAll(() => {
+  // bun shares module mocks across test files: leaving mockToolsByNames
+  // populated would make later files (e.g. tool-registry.test.ts) receive
+  // this file's leftover fake tools instead of the real registry.
+  mockToolsByNames = [];
+});
+
 function makeResponse(content: string, toolCalls: LlmResponse['toolCalls'] = []): LlmResponse {
   return { content, toolCalls, usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75 } };
 }
@@ -55,8 +67,10 @@ describe('runChain', () => {
     adapterResponses = [];
     adapterCallCount = 0;
     mockToolsByNames = [];
+    receivedPrompts = [];
     mockAdapterCall.mockReset();
-    mockAdapterCall.mockImplementation(async () => {
+    mockAdapterCall.mockImplementation(async (options?: { userPrompt?: string }) => {
+      if (options?.userPrompt !== undefined) receivedPrompts.push(options.userPrompt);
       const response = adapterResponses[Math.min(adapterCallCount, adapterResponses.length - 1)];
       adapterCallCount++;
       return response;
@@ -175,5 +189,36 @@ describe('runChain', () => {
     const result = await runChain(chain, 'Do my taxes');
     expect(result).toBe('Tax analysis done.');
     expect(mockAdapterCall).toHaveBeenCalled();
+  });
+
+  test('malformed tool args are rejected by the schema guard and fed back to the step model', async () => {
+    let funcCalls = 0;
+    // Real defineTool guard applies (define-tool.js is NOT mocked here)
+    mockToolsByNames = [defineTool({
+      name: 'edit_transaction',
+      description: 'Edit a transaction',
+      schema: z.object({ id: z.number() }),
+      func: async () => { funcCalls++; return 'edited'; },
+    })];
+
+    const chain: ChainDef = {
+      name: 'guarded-chain',
+      description: 'Chain with guarded tool',
+      steps: [{ id: 'edit', tools: ['edit_transaction'] }],
+    };
+
+    adapterResponses = [
+      makeResponse('', [{ id: 'tc1', name: 'edit_transaction', args: { id: 'abc' } }]),
+      makeResponse('Could not edit: invalid arguments.'),
+    ];
+
+    const result = await runChain(chain, 'Edit transaction abc');
+    expect(funcCalls).toBe(0); // record never touched by garbage args
+    expect(result).toBe('Could not edit: invalid arguments.');
+
+    // The second iteration prompt carries the validation error back to the model
+    expect(receivedPrompts.length).toBe(2);
+    expect(receivedPrompts[1]).toContain("Invalid arguments for tool 'edit_transaction'");
+    expect(receivedPrompts[1]).toContain('id'); // offending field named
   });
 });

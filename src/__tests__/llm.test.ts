@@ -1,6 +1,8 @@
 import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { z } from 'zod';
 import { ensureTestProfile } from './helpers.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
+import { LlmValidationError } from '../model/structured-output.js';
 
 // --- Mocks for callLlm's dependencies ---
 
@@ -105,6 +107,145 @@ describe('callLlm', () => {
 
     await callLlm('test', { model: 'ollama:llama3' });
     expect(receivedModel).toBe('llama3');
+  });
+});
+
+describe('callLlm structured-output validation', () => {
+  const testSchema = z.object({
+    items: z.array(z.object({ id: z.number(), confidence: z.number().min(0).max(1) })),
+  });
+
+  // Mirrors the tightened categorization schema: confidence must be a number in [0, 1].
+  const categorizationSchema = z.object({
+    transactions: z.array(
+      z.object({ id: z.number(), category: z.string(), confidence: z.number().min(0).max(1) }),
+    ),
+  });
+
+  beforeEach(() => {
+    ensureTestProfile();
+    mockAdapterFn = async () => makeLlmResponse();
+  });
+
+  test('valid structured output passes through unchanged with a single adapter call', async () => {
+    let adapterCalls = 0;
+    const valid = { items: [{ id: 1, confidence: 0.9 }] };
+    mockAdapterFn = async () => {
+      adapterCalls++;
+      return makeLlmResponse({ content: JSON.stringify(valid), structured: valid });
+    };
+
+    const result = await callLlm('test prompt', { outputSchema: testSchema });
+    expect(adapterCalls).toBe(1);
+    expect(result.response.structured).toEqual(valid);
+    expect(result.response.content).toBe(JSON.stringify(valid));
+  });
+
+  test('structured missing but content parses to schema-valid JSON is validated and populated', async () => {
+    let adapterCalls = 0;
+    mockAdapterFn = async () => {
+      adapterCalls++;
+      return makeLlmResponse({ content: '{"items":[{"id":2,"confidence":0.5}]}' });
+    };
+
+    const result = await callLlm('test prompt', { outputSchema: testSchema });
+    expect(adapterCalls).toBe(1); // no repair needed
+    expect(result.response.structured).toEqual({ items: [{ id: 2, confidence: 0.5 }] });
+  });
+
+  test('malformed structured output triggers one schema-aware repair prompt that succeeds', async () => {
+    const calls: any[] = [];
+    mockAdapterFn = async (opts: any) => {
+      calls.push(opts);
+      if (calls.length === 1) {
+        return makeLlmResponse({ content: 'not json', structured: { items: 'nope' } });
+      }
+      return makeLlmResponse({
+        content: '{"items":[{"id":3,"confidence":1}]}',
+        structured: { items: [{ id: 3, confidence: 1 }] },
+      });
+    };
+
+    const result = await callLlm('categorize my transactions', { outputSchema: testSchema });
+
+    expect(calls.length).toBe(2); // original + exactly one repair
+    // The repair re-prompt contains the original task, the validation issue, and the JSON schema.
+    expect(calls[1].userPrompt).toContain('categorize my transactions');
+    expect(calls[1].userPrompt).toContain('Validation issues');
+    expect(calls[1].userPrompt).toContain('items'); // issue path
+    expect(calls[1].userPrompt).toContain('"type": "object"'); // schema text
+    expect(calls[1].userPrompt).toContain('"minimum": 0');
+    expect(calls[1].userPrompt).toContain('ONLY a single JSON object');
+    // Repair succeeded and the validated value is returned.
+    expect(result.response.structured).toEqual({ items: [{ id: 3, confidence: 1 }] });
+  });
+
+  test('malformed structured output on both attempts rejects with LlmValidationError', async () => {
+    let adapterCalls = 0;
+    mockAdapterFn = async () => {
+      adapterCalls++;
+      return makeLlmResponse({ content: 'garbage', structured: { wrong: 'shape' } });
+    };
+
+    try {
+      await callLlm('test prompt', { outputSchema: testSchema });
+      expect.unreachable('callLlm should have rejected');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LlmValidationError);
+      expect((err as LlmValidationError).name).toBe('LlmValidationError');
+      expect((err as LlmValidationError).issues.length).toBeGreaterThan(0);
+      expect((err as LlmValidationError).lastResponse.content).toBe('garbage');
+      expect(String(err)).toContain('failed schema validation after one repair attempt');
+    }
+    expect(adapterCalls).toBe(2); // original + exactly one repair, never a third
+  });
+
+  test('string confidence against the tightened tool schema triggers repair then rejection', async () => {
+    let adapterCalls = 0;
+    const badConfidence = { transactions: [{ id: 1, category: 'Shopping', confidence: '0.9' }] };
+    mockAdapterFn = async () => {
+      adapterCalls++;
+      return makeLlmResponse({ content: JSON.stringify(badConfidence), structured: badConfidence });
+    };
+
+    await expect(
+      callLlm('test prompt', { outputSchema: categorizationSchema }),
+    ).rejects.toThrow('failed schema validation after one repair attempt');
+    expect(adapterCalls).toBe(2);
+  });
+
+  test('out-of-range confidence (1.5) violates the tightened tool schema and is rejected', async () => {
+    let adapterCalls = 0;
+    const badConfidence = { transactions: [{ id: 1, category: 'Shopping', confidence: 1.5 }] };
+    mockAdapterFn = async () => {
+      adapterCalls++;
+      return makeLlmResponse({ content: JSON.stringify(badConfidence), structured: badConfidence });
+    };
+
+    try {
+      await callLlm('test prompt', { outputSchema: categorizationSchema });
+      expect.unreachable('callLlm should have rejected');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LlmValidationError);
+      expect((err as LlmValidationError).issues.join('; ')).toContain('confidence');
+    }
+    expect(adapterCalls).toBe(2);
+  });
+
+  test('repair attempt that returns schema-valid content JSON is accepted', async () => {
+    const calls: any[] = [];
+    mockAdapterFn = async (opts: any) => {
+      calls.push(opts);
+      if (calls.length === 1) {
+        // structured present but garbage; repair responds with plain content JSON
+        return makeLlmResponse({ content: 'broken', structured: { nope: true } });
+      }
+      return makeLlmResponse({ content: '{"items":[{"id":9,"confidence":0.25}]}' });
+    };
+
+    const result = await callLlm('test prompt', { outputSchema: testSchema });
+    expect(calls.length).toBe(2);
+    expect(result.response.structured).toEqual({ items: [{ id: 9, confidence: 0.25 }] });
   });
 });
 

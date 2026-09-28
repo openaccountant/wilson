@@ -87,16 +87,23 @@ describe('goal_manage percentage-of-income targets', () => {
         args: { action: 'add', title: 'Zero percent', goalType: 'financial', targetPercent: 0 },
         error: 'targetPercent must be greater than 0',
       },
-      {
-        args: { action: 'add', title: 'Over 100 percent', goalType: 'financial', targetPercent: 150 },
-        error: 'targetPercent must be 100 or less',
-      },
     ];
     for (const { args, error } of cases) {
       const raw = await goalManageTool.func(args);
       const result = JSON.parse(raw as string);
       expect(result.data.error).toBe(error);
     }
+    // targetPercent > 100 violates the tool's own schema (max 100), so the
+    // defineTool guard rejects it before func runs instead of returning the
+    // internal JSON error the cases above exercise.
+    const over100 = await goalManageTool.func({
+      action: 'add',
+      title: 'Over 100 percent',
+      goalType: 'financial',
+      targetPercent: 150,
+    }).then(() => null, (e: Error) => e);
+    expect((over100 as Error).message).toContain('Invalid arguments for tool');
+    expect((over100 as Error).message).toContain('targetPercent');
     const count = (db.prepare('SELECT COUNT(*) AS c FROM goals').get() as { c: number }).c;
     expect(count).toBe(0);
   });

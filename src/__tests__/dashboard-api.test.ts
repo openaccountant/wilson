@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
-import { createTestDb, seedTestData } from './helpers.js';
+import { createTestDb, seedTestData, daysAgo } from './helpers.js';
 import {
   apiTransactions,
   apiExportCsv,
@@ -32,6 +32,8 @@ import {
 import { createChatSession, insertChatMessage, insertTransactions } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { traceStore } from '../utils/trace-store.js';
+import { apiModels } from '../dashboard/api.js';
+import { setSetting, saveConfig, getConfiguredModel } from '../utils/config.js';
 
 describe('apiTransactions', () => {
   test('returns transactions with filters', () => {
@@ -51,6 +53,31 @@ describe('apiTransactions', () => {
     const params = new URLSearchParams({ limit: '2' });
     const txns = apiTransactions(db, params);
     expect(txns.length).toBeLessThanOrEqual(2);
+  });
+
+  test('transactions carry their category confidence', () => {
+    const db = createTestDb();
+    insertTransactions(db, [
+      { date: daysAgo(1), description: 'Model High', amount: -10, category: 'Dining', category_confidence: 0.92 },
+      { date: daysAgo(2), description: 'Model Low', amount: -20, category: 'Shopping', category_confidence: 0.42 },
+      { date: daysAgo(3), description: 'Bank Row', amount: -30, category: 'Utilities' },
+    ]);
+    const byDesc = (d: string) =>
+      apiTransactions(db, new URLSearchParams()).find((t) => t.description === d)!;
+    expect(byDesc('Model High').category_confidence).toBe(0.92);
+    expect(byDesc('Model Low').category_confidence).toBe(0.42);
+    expect(byDesc('Bank Row').category_confidence).toBeNull();
+  });
+
+  test('user_verified flag flows through the transactions API', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    db.prepare(`UPDATE transactions SET user_verified = 1 WHERE description = 'Grocery Store'`).run();
+    const rows = apiTransactions(db, new URLSearchParams());
+    const verified = rows.filter((t) => t.description === 'Grocery Store');
+    expect(verified.length).toBeGreaterThan(0);
+    for (const t of verified) expect(t.user_verified).toBe(1);
+    for (const t of rows.filter((x) => x.description !== 'Grocery Store')) expect(t.user_verified).toBe(0);
   });
 });
 
@@ -521,12 +548,22 @@ describe('apiInteractions', () => {
       INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
       VALUES ('r2', 1, 'classify', 'claude-3', 'anthropic', 'Q2', 'ok')
     `).run();
+    db.prepare(`
+      INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+      VALUES ('r3', 1, 'categorization', 'ollama:qwen3:8b', 'ollama', 'Q3', 'ok')
+    `).run();
 
     const agentOnly = apiInteractions(db, new URLSearchParams({ callType: 'agent' }));
     expect(agentOnly).toHaveLength(1);
 
     const claudeOnly = apiInteractions(db, new URLSearchParams({ model: 'claude-3' }));
     expect(claudeOnly).toHaveLength(1);
+
+    // The tool-tagged call types are first-class filter values in the
+    // Training per-task view — 'categorization' rows are not 'standalone'.
+    const catOnly = apiInteractions(db, new URLSearchParams({ callType: 'categorization' }));
+    expect(catOnly).toHaveLength(1);
+    expect((catOnly[0] as { run_id: string }).run_id).toBe('r3');
   });
 });
 
@@ -630,5 +667,57 @@ describe('apiExportXlsx', () => {
     const buf = apiExportXlsx(db, new URLSearchParams());
     expect(buf).toBeDefined();
     expect(buf.length).toBeGreaterThan(0);
+  });
+});
+
+describe('apiModels', () => {
+  test('override pins webgpu and skips the probe; four task rows returned', async () => {
+    const { tasks } = await apiModels(false);
+    expect(tasks).toHaveLength(4);
+    for (const row of tasks) {
+      expect(row.webgpu).toBe(false);
+    }
+  });
+
+  test('in-use rows carry model fields; the not-in-use row carries none of them', async () => {
+    const { tasks } = await apiModels(true);
+    const inUse = tasks.filter((t) => t.inUse);
+    const notInUse = tasks.filter((t) => !t.inUse);
+    expect(inUse).toHaveLength(3);
+    expect(notInUse).toHaveLength(1);
+    for (const row of inUse) {
+      expect(row.model).toBeTruthy();
+      expect(row.modelName).toBeTruthy();
+      expect(row.provider).toBeTruthy();
+      expect(row.execution === 'local' || row.execution === 'server').toBe(true);
+      expect(row.assignment).toBe('default');
+    }
+    for (const row of notInUse) {
+      expect(row.model).toBeNull();
+      expect(row.modelName).toBeNull();
+      expect(row.provider).toBeNull();
+      expect(row.providerName).toBeNull();
+      expect(row.execution).toBeNull();
+      expect(row.note).toBeTruthy();
+    }
+  });
+
+  test('rows reflect the configured model: local ollama vs server openai', async () => {
+    setSetting('modelId', 'ollama:qwen3:8b');
+    try {
+      const local = await apiModels(false);
+      expect(local.tasks[0].task).toBe('chat');
+      expect(local.tasks[0].model).toBe('ollama:qwen3:8b');
+      expect(local.tasks[0].execution).toBe('local');
+
+      setSetting('modelId', 'gpt-5.2');
+      const server = await apiModels(false);
+      expect(server.tasks[0].model).toBe('gpt-5.2');
+      expect(server.tasks[0].execution).toBe('server');
+    } finally {
+      // Reset so later tests in this file see config defaults.
+      saveConfig({});
+    }
+    expect(getConfiguredModel().model).not.toBe('gpt-5.2');
   });
 });

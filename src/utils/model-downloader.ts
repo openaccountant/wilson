@@ -2,6 +2,10 @@
  * Ollama model download via REST API, and Transformers.js model pre-download.
  */
 
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { DEFAULT_EMBEDDING_MODEL } from './embeddings.js';
+
 export interface RecommendedModel {
   name: string;
   size: string;
@@ -29,6 +33,50 @@ export const RECOMMENDED_OLLAMA_MODELS: RecommendedModel[] = [
 ];
 
 /**
+ * Shared transformers.js environment setup so the on-device model cache dir
+ * (~/.openaccountant/models/) is configured in exactly one place. Used by both
+ * pre-download helpers (text-generation and feature-extraction) and by the
+ * embedding engine in src/utils/embeddings.ts.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function configureTransformersEnv(env: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  env.cacheDir = join(homedir(), '.openaccountant', 'models');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (env.backends?.onnx?.wasm) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    env.backends.onnx.wasm.proxy = false;
+  }
+}
+
+/**
+ * Build the transformers.js progress callback that folds per-file progress
+ * events into a single 0–100 percentage. Shared by both pre-download helpers.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeProgressCallback(onProgress?: (pct: number) => void): (progress: any) => void {
+  let filesDone = 0;
+  let totalFiles = 0;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return function progressCallback(progress: any) {
+    if (!onProgress) return;
+    if (progress.status === 'initiate') {
+      totalFiles++;
+    } else if (progress.status === 'done') {
+      filesDone++;
+      const pct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
+      onProgress(pct);
+    } else if (progress.status === 'progress' && progress.total) {
+      // Per-file progress for large files
+      const filePct = Math.round((progress.loaded / progress.total) * 100);
+      const basePct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
+      onProgress(Math.min(basePct + Math.round(filePct / totalFiles), 99));
+    }
+  };
+}
+
+/**
  * Pre-download a Transformers.js model to the local cache.
  * Triggers the same download that happens on first inference, but with progress reporting.
  * After this completes, the model loads from ~/.openaccountant/models/ in <2s.
@@ -40,45 +88,45 @@ export async function pullTransformersModel(
   modelId: string,
   onProgress?: (pct: number) => void,
 ): Promise<void> {
-  const { join } = await import('node:path');
-  const { homedir } = await import('node:os');
   const { env, pipeline } = await import('@huggingface/transformers');
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (env as any).cacheDir = join(homedir(), '.openaccountant', 'models');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((env as any).backends?.onnx?.wasm) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (env as any).backends.onnx.wasm.proxy = false;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let lastFile = '';
-  let filesDone = 0;
-  let totalFiles = 0;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function progressCallback(progress: any) {
-    if (!onProgress) return;
-    if (progress.status === 'initiate') {
-      totalFiles++;
-    } else if (progress.status === 'done') {
-      filesDone++;
-      lastFile = progress.file ?? lastFile;
-      const pct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
-      onProgress(pct);
-    } else if (progress.status === 'progress' && progress.total) {
-      // Per-file progress for large files
-      const filePct = Math.round((progress.loaded / progress.total) * 100);
-      const basePct = totalFiles > 0 ? Math.round((filesDone / totalFiles) * 100) : 0;
-      onProgress(Math.min(basePct + Math.round(filePct / totalFiles), 99));
-    }
-  }
+  configureTransformersEnv(env);
 
   await pipeline('text-generation', modelId, {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    progress_callback: progressCallback as any,
+    progress_callback: makeProgressCallback(onProgress) as any,
     device: 'cpu',
+  });
+
+  onProgress?.(100);
+}
+
+/**
+ * Pre-download the local embedding model (feature-extraction twin of
+ * `pullTransformersModel`). Same cache dir, same progress reporting, but
+ * builds the pipeline with the exact options the embedding engine uses
+ * (feature-extraction on CPU/WASM) so the cached artifacts match what
+ * inference will load.
+ *
+ * When the model is already cached this resolves without downloading (and is
+ * cheap), which is how the --index command reports "model ready" on re-runs.
+ *
+ * @param modelId - HuggingFace model ID; defaults to the local embedding model
+ * @param onProgress - callback receiving progress 0–100
+ */
+export async function pullEmbeddingModel(
+  modelId: string = DEFAULT_EMBEDDING_MODEL,
+  onProgress?: (pct: number) => void,
+): Promise<void> {
+  const { env, pipeline } = await import('@huggingface/transformers');
+  configureTransformersEnv(env);
+
+  await pipeline('feature-extraction', modelId, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    progress_callback: makeProgressCallback(onProgress) as any,
+    device: 'cpu',
+    // fp32 — see getEmbeddingPipeline(): this model repo ships no q8
+    // (model_quantized) file, and q8 is also the implicit wasm default.
+    dtype: 'fp32',
   });
 
   onProgress?.(100);
