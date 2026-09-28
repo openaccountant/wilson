@@ -155,7 +155,13 @@ function showConfirmationCard(op: McpOperation, onResolved: () => void): void {
 
   const finish = async (action: 'approve' | 'reject') => {
     overlay.remove();
-    shownOperations.delete(op.id);
+    // Deliberately never remove op.id from shownOperations: it's a permanent
+    // "already handled locally" marker, not a "currently displayed" one.
+    // Operation ids are never reused, so keeping it forever is correct and
+    // closes a real race — if the approve/reject POST below is still
+    // in-flight (or retried) when the confirmation poller's next tick reads
+    // this operation as still 'pending', deleting the id here would let the
+    // poller resurrect a zombie card for a decision the user already made.
     try {
       await api(`/api/mcp/operations/${op.id}/${action}`, { method: 'POST' });
     } finally {
