@@ -15,7 +15,7 @@
  */
 
 import { confirmationCardModel } from '../mcp/confirmation-card.js';
-import { WILSON_MCP_SESSION_KEY, WILSON_OPEN_AGENT_PANEL_EVENT } from './webmcp-session.js';
+import { WILSON_MCP_SESSION_KEY, WILSON_OPEN_AGENT_PANEL_EVENT, WILSON_GRANTS_CHANGED_EVENT } from './webmcp-session.js';
 
 export {}; // makes this a module so `declare global` below is valid
 
@@ -52,6 +52,7 @@ interface McpOperation {
 const AUTH_KEY = 'wilson_auth_token';
 const SESSION_KEY = WILSON_MCP_SESSION_KEY;
 const OPEN_PANEL_EVENT = WILSON_OPEN_AGENT_PANEL_EVENT;
+const GRANTS_CHANGED_EVENT = WILSON_GRANTS_CHANGED_EVENT;
 const POLL_INTERVAL_MS = 1500;
 const PREPARE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -404,6 +405,7 @@ function buildPanel(): void {
         await api(`/api/mcp/grants/${g.id}`, { method: 'DELETE' }).catch(() => {});
       }
       await syncRegisteredTools();
+      window.dispatchEvent(new CustomEvent(GRANTS_CHANGED_EVENT, { detail: { from: 'bridge' } }));
       await render();
     };
 
@@ -413,6 +415,7 @@ function buildPanel(): void {
     revokeAllBtn.onclick = async () => {
       await api('/api/mcp/grants/revoke-session', { method: 'POST', body: JSON.stringify({ sessionGeneration }) }).catch(() => {});
       await syncRegisteredTools();
+      window.dispatchEvent(new CustomEvent(GRANTS_CHANGED_EVENT, { detail: { from: 'bridge' } }));
       await render();
     };
 
@@ -425,12 +428,19 @@ function buildPanel(): void {
     if (!panel.hidden) void render();
   };
 
-  // The Demo tab's auto-book opt-in dispatches this event so the attendee can
-  // grant the agent session without hunting for the 🤖 button. Opening here
-  // goes through the exact same panel — no second grant surface.
+  // Settings → Agent access dispatches this so a user can jump from there to
+  // this panel without hunting for the 🤖 button.
   window.addEventListener(OPEN_PANEL_EVENT, () => {
     panel.hidden = false;
     void render();
+  });
+
+  // Settings → Agent access changed this tab's grants: register/unregister
+  // now rather than on the next 10s tick, and refresh the panel if it's open.
+  window.addEventListener(GRANTS_CHANGED_EVENT, (e) => {
+    if ((e as CustomEvent<{ from?: string }>).detail?.from === 'bridge') return;
+    void syncRegisteredTools();
+    if (!panel.hidden) void render();
   });
 
   document.body.append(button, panel);

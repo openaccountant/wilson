@@ -150,7 +150,8 @@ function TxRow({
           <span className="truncate max-w-[300px]">
             {tx.merchant_name ?? tx.description}
           </span>
-          {tx.pending && (
+          {/* SQLite hands back 0/1, not a boolean — `0 && …` would render a literal "0". */}
+          {!!tx.pending && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-border text-text-muted uppercase tracking-wider">
               pending
             </span>

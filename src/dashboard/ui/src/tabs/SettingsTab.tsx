@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/types';
+import { WILSON_MCP_SESSION_KEY, WILSON_GRANTS_CHANGED_EVENT } from '@webmcp-session';
 
 const AUTH_KEY = 'wilson_auth_token';
 
@@ -763,6 +764,282 @@ function ModelsSection() {
   );
 }
 
+// ── Agent Access Section ─────────────────────────────────────────────────────
+//
+// The permanent home for WebMCP grant management (spec S2, issue #50). Same
+// semantics as the bridge's 🤖 panel (src/dashboard/webmcp-bridge.ts), which
+// it shares a session key and endpoints with: zero tools exposed by default,
+// explicit per-tab opt-in, revocable any time, and every grant bound
+// server-side to {user/role, profile, origin, session generation}.
+//
+// Requests are same-origin relative fetches, exactly like the bridge's: the
+// server never reflects a foreign Origin for /api/mcp/* (see mcpCorsHeaders
+// in server.ts), so the dev-mode api() base URL (:3141 from :5173) can't be
+// used here.
+
+interface McpCatalogTool {
+  name: string;
+  description: string;
+  classification: 'read' | 'mutating';
+}
+
+interface McpGrant {
+  id: string;
+  tool_name: string;
+  expires_at: string;
+}
+
+function agentSessionGeneration(): string {
+  let id = sessionStorage.getItem(WILSON_MCP_SESSION_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem(WILSON_MCP_SESSION_KEY, id);
+  }
+  return id;
+}
+
+async function mcpApi<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem(AUTH_KEY);
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+function AgentAccessSection() {
+  const { data: authStatus } = useApi<AuthStatus>('/api/auth/status');
+  // Same gate grantLocalAccess enforces: viewers may grant read tools only.
+  const canGrantMutating = authStatus ? (!authStatus.authEnabled || authStatus.user?.role === 'admin') : false;
+  const sessionGeneration = useMemo(agentSessionGeneration, []);
+
+  const [catalog, setCatalog] = useState<McpCatalogTool[]>([]);
+  const [grants, setGrants] = useState<McpGrant[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [copied, setCopied] = useState('');
+
+  async function load() {
+    try {
+      const [catalogRes, grantsRes] = await Promise.all([
+        mcpApi<{ tools: McpCatalogTool[] }>('/api/mcp/catalog'),
+        mcpApi<{ grants: McpGrant[] }>(`/api/mcp/grants?sessionGeneration=${encodeURIComponent(sessionGeneration)}`),
+      ]);
+      setCatalog(catalogRes.tools);
+      setGrants(grantsRes.grants);
+      setSelected(new Set(grantsRes.grants.map((g) => g.tool_name)));
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tool catalog');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    const onChanged = (e: Event) => {
+      if ((e as CustomEvent<{ from?: string }>).detail?.from !== 'settings') void load();
+    };
+    window.addEventListener(WILSON_GRANTS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(WILSON_GRANTS_CHANGED_EVENT, onChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionGeneration]);
+
+  const grantedNames = new Set(grants.map((g) => g.tool_name));
+  const dirty = catalog.some((t) => selected.has(t.name) !== grantedNames.has(t.name));
+
+  function toggle(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
+
+  function announce() {
+    window.dispatchEvent(new CustomEvent(WILSON_GRANTS_CHANGED_EVENT, { detail: { from: 'settings' } }));
+  }
+
+  async function handleApply() {
+    setSaving(true);
+    setError('');
+    try {
+      const toGrant = [...selected].filter((name) => !grantedNames.has(name));
+      const toRevoke = grants.filter((g) => !selected.has(g.tool_name));
+      if (toGrant.length > 0) {
+        await mcpApi('/api/mcp/grants', { method: 'POST', body: JSON.stringify({ sessionGeneration, tools: toGrant }) });
+      }
+      for (const g of toRevoke) {
+        await mcpApi(`/api/mcp/grants/${g.id}`, { method: 'DELETE' });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update grants');
+    } finally {
+      announce();
+      await load();
+      setSaving(false);
+    }
+  }
+
+  async function handleRevokeAll() {
+    setSaving(true);
+    setError('');
+    try {
+      await mcpApi('/api/mcp/grants/revoke-session', { method: 'POST', body: JSON.stringify({ sessionGeneration }) });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke grants');
+    } finally {
+      announce();
+      await load();
+      setSaving(false);
+    }
+  }
+
+  async function copy(label: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      setTimeout(() => setCopied(''), 1500);
+    } catch {
+      // Clipboard blocked (insecure context / permissions) — the value is still visible to select.
+    }
+  }
+
+  const endpoint = `${window.location.origin}/mcp`;
+  const expiresAt = grants.length > 0 ? grants.map((g) => g.expires_at).sort()[0] : null;
+
+  return (
+    <div>
+      <h2 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Agent access</h2>
+      <div className="bg-surface-raised border border-border rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-text-muted">
+            Which Wilson tools an AI agent may use in this browser tab. Nothing is exposed until you grant it; changes to
+            your data always wait for your approval.
+          </p>
+          <span
+            className={`text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded shrink-0 ${
+              grants.length > 0 ? 'bg-green/15 text-green' : 'bg-border-muted/50 text-text-muted'
+            }`}
+          >
+            {grants.length > 0 ? `${grants.length} tool${grants.length === 1 ? '' : 's'} granted` : 'No tools exposed'}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="h-[120px] animate-pulse bg-border-muted rounded" />
+        ) : (
+          <div className="space-y-1">
+            {catalog.map((tool) => {
+              const locked = tool.classification === 'mutating' && !canGrantMutating;
+              return (
+                <label
+                  key={tool.name}
+                  className={`flex items-start gap-3 px-2 py-1.5 rounded ${locked ? 'opacity-50' : 'hover:bg-border-muted/30 cursor-pointer'}`}
+                  title={locked ? 'Viewer accounts can grant read-only tools only' : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={selected.has(tool.name)}
+                    disabled={locked || saving}
+                    onChange={() => toggle(tool.name)}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm text-text font-mono">
+                      {tool.name}
+                      {tool.classification === 'mutating' && (
+                        <span className="ml-2 text-[10px] uppercase tracking-wide font-sans font-medium px-1.5 py-0.5 rounded bg-yellow/15 text-yellow">
+                          needs approval
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-text-muted">{tool.description}</div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {error && <div className="text-xs text-red">{error}</div>}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleApply}
+            disabled={!dirty || saving}
+            className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer border-none bg-blue/20 text-blue hover:bg-blue/30 disabled:opacity-40 disabled:cursor-default"
+          >
+            {saving ? 'Saving…' : 'Apply'}
+          </button>
+          <button
+            onClick={handleRevokeAll}
+            disabled={grants.length === 0 || saving}
+            className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer border-none bg-red/20 text-red hover:bg-red/30 disabled:opacity-40 disabled:cursor-default"
+          >
+            Revoke all
+          </button>
+          {expiresAt && (
+            <span className="text-xs text-text-muted ml-auto">
+              Expires {new Date(expiresAt.replace(' ', 'T') + (expiresAt.endsWith('Z') ? '' : 'Z')).toLocaleString()}
+            </span>
+          )}
+        </div>
+
+        {grants.length > 0 && (
+          <div className="border-t border-border pt-4 space-y-2">
+            <div className="text-sm text-text font-medium">Connect an external MCP client</div>
+            <p className="text-xs text-text-muted">
+              Any MCP client can use exactly the tools granted above over Streamable HTTP. Treat the token like a
+              password — "Revoke all" cuts the client off immediately.
+            </p>
+            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1.5 text-xs">
+              <span className="text-text-muted">Endpoint</span>
+              <code className="font-mono text-text truncate">{endpoint}</code>
+              <button
+                onClick={() => void copy('endpoint', endpoint)}
+                className="text-xs text-text-muted hover:text-text bg-transparent border border-border rounded px-2 py-0.5 cursor-pointer"
+              >
+                {copied === 'endpoint' ? 'Copied' : 'Copy'}
+              </button>
+              <span className="text-text-muted">Bearer token</span>
+              <code className="font-mono text-text truncate" data-testid="agent-access-token">
+                {showToken ? sessionGeneration : '•'.repeat(24)}
+              </code>
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setShowToken((v) => !v)}
+                  className="text-xs text-text-muted hover:text-text bg-transparent border border-border rounded px-2 py-0.5 cursor-pointer"
+                >
+                  {showToken ? 'Hide' : 'Show'}
+                </button>
+                <button
+                  onClick={() => void copy('token', sessionGeneration)}
+                  className="text-xs text-text-muted hover:text-text bg-transparent border border-border rounded px-2 py-0.5 cursor-pointer"
+                >
+                  {copied === 'token' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Entity Section ───────────────────────────────────────────────────────────
 
 function EntitySection() {
@@ -949,6 +1226,7 @@ export function SettingsTab() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       <ModelsSection />
+      <AgentAccessSection />
       <ProfileSection />
       <EntitySection />
       <SecuritySection />
