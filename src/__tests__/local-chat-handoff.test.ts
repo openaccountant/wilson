@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  buildLocalUserMessage,
   classifyLocalOutput,
+  stripThinking,
   NEED_MORE_SENTINEL,
   NEED_MORE_PHRASES,
+  NO_THINK_SWITCH,
 } from '../dashboard/ui/src/hybrid/core.js';
 
 /**
@@ -99,5 +102,37 @@ describe('classifyLocalOutput', () => {
       // writing prose that mentions the format.
       expect(classifyLocalOutput('The tool_call format is used for tools.').kind).toBe('answer');
     });
+  });
+
+  describe('reasoning-model <think> blocks', () => {
+    const think = (body: string) => `${LT}think>${body}${LT}/think>`;
+
+    test('a closed think block is stripped from the answer', () => {
+      const v = classifyLocalOutput(`${think('\nThe user wants the top category…\n')}\n\nDining — $390.75.`);
+      expect(v).toEqual({ kind: 'answer', text: 'Dining — $390.75.' });
+    });
+
+    test('the empty block Qwen3 emits under /no_think is stripped', () => {
+      expect(classifyLocalOutput(`${think('\n\n')}\n\nYou spent $54.21.`)).toEqual({ kind: 'answer', text: 'You spent $54.21.' });
+    });
+
+    test('an unterminated think block (token cap hit mid-reasoning) is no answer, not a half-thought', () => {
+      const v = classifyLocalOutput(`${LT}think>\nOkay, let's see. The user is asking what they spent the most on`);
+      expect(v).toEqual({ kind: 'handoff', reason: 'no-answer' });
+    });
+
+    test('a sentinel inside the reasoning does not count — only the visible answer is classified', () => {
+      expect(classifyLocalOutput(`${think(`maybe ${NEED_MORE_SENTINEL}?`)} Groceries: $295.85.`).kind).toBe('answer');
+    });
+
+    test('stripThinking leaves think-free text untouched', () => {
+      expect(stripThinking('Your top category was Dining.')).toBe('Your top category was Dining.');
+    });
+  });
+});
+
+describe('buildLocalUserMessage', () => {
+  test('ends the user turn with the Qwen3 no-think soft switch', () => {
+    expect(buildLocalUserMessage('ctx', 'Top category?').endsWith(`Question: Top category? ${NO_THINK_SWITCH}`)).toBe(true);
   });
 });

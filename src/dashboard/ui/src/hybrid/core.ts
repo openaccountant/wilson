@@ -172,9 +172,28 @@ export function buildLocalSystemPrompt(today: string): string {
   return LOCAL_SYSTEM_PROMPT_TEMPLATE.replace('{date}', today);
 }
 
+/**
+ * Qwen3's documented soft switch: suppresses the <think> reasoning preamble,
+ * which would otherwise eat most of the small local token budget. Models
+ * without the switch just see an inert trailing token.
+ */
+export const NO_THINK_SWITCH = '/no_think';
+
 /** User turn: the framed bundle followed by the question under the marker. */
 export function buildLocalUserMessage(bundleText: string, question: string): string {
-  return `${bundleText}\nQuestion: ${question}`;
+  return `${bundleText}\nQuestion: ${question} ${NO_THINK_SWITCH}`;
+}
+
+/**
+ * Remove reasoning-model <think>…</think> blocks (Qwen3 emits an empty one
+ * even under /no_think). An unterminated <think> — the token cap ran out
+ * mid-reasoning — drops everything after it: that is no answer at all, and
+ * must never be shown as one.
+ */
+export function stripThinking(text: string): string {
+  const closed = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  const open = closed.indexOf('<think>');
+  return open === -1 ? closed : closed.slice(0, open);
 }
 
 // ── Hand-off detection ──────────────────────────────────────────────────────
@@ -223,7 +242,8 @@ const TOOL_CALL_QWEN = new RegExp('\x3ctool_call>[\\s\\S]*?\x3ctool_response>');
  * the server agent. Order matters and is pinned by tests: tool-call shapes
  * first, then the sentinel, then the fuzzy phrases, then empty output.
  */
-export function classifyLocalOutput(text: string): LocalVerdict {
+export function classifyLocalOutput(raw: string): LocalVerdict {
+  const text = stripThinking(raw);
   if (TOOL_CALL_REPO.test(text) || TOOL_CALL_QWEN.test(text)) {
     return { kind: 'handoff', reason: 'tool-call' };
   }
