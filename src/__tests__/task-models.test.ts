@@ -29,9 +29,9 @@ describe('provider registry isLocal classification', () => {
     }
   });
 
-  test('local providers are exactly ollama and transformers', () => {
+  test('local providers are exactly ollama, openai-compatible, and transformers', () => {
     const local = PROVIDER_DEFS.filter((p) => p.isLocal).map((p) => p.id).sort();
-    expect(local).toEqual(['ollama', 'transformers']);
+    expect(local).toEqual(['ollama', 'openai-compatible', 'transformers']);
   });
 
   test('cloud providers are classified as server', () => {

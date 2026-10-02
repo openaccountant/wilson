@@ -33,6 +33,12 @@ export const PROVIDERS: ProviderDef[] = [
     isLocal: true,
   },
   {
+    id: 'openai-compatible',
+    displayName: 'OpenAI-compatible server',
+    modelPrefix: 'openai-compatible:',
+    isLocal: true,
+  },
+  {
     id: 'transformers',
     displayName: 'Transformers.js (local)',
     modelPrefix: 'transformers:',

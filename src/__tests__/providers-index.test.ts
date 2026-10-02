@@ -11,7 +11,7 @@ describe('getAdapter', () => {
     for (const key of [
       'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY',
       'XAI_API_KEY', 'DEEPSEEK_API_KEY', 'OPENROUTER_API_KEY',
-      'MOONSHOT_API_KEY', 'LITELLM_API_KEY',
+      'MOONSHOT_API_KEY', 'LITELLM_API_KEY', 'OPENAI_COMPATIBLE_API_KEY',
     ]) {
       savedEnv[key] = process.env[key];
     }
@@ -67,6 +67,14 @@ describe('getAdapter', () => {
   test('ollama does not require API key', async () => {
     const { getAdapter } = await import('../model/providers/index.js');
     const adapter = getAdapter('ollama');
+    expect(adapter).toBeTruthy();
+    expect(typeof adapter.call).toBe('function');
+  });
+
+  test('openai-compatible does not require API key', async () => {
+    delete process.env.OPENAI_COMPATIBLE_API_KEY;
+    const { getAdapter } = await import('../model/providers/index.js');
+    const adapter = getAdapter('openai-compatible');
     expect(adapter).toBeTruthy();
     expect(typeof adapter.call).toBe('function');
   });

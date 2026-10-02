@@ -4,6 +4,10 @@ import { TransformersAdapter } from './transformers.js';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { google } from '@ai-sdk/google';
+import {
+  getOpenAiCompatibleApiKey,
+  getOpenAiCompatibleBaseUrl,
+} from '../../utils/openai-compatible.js';
 
 /**
  * Adapter registry — lazily initialized per provider.
@@ -54,12 +58,25 @@ export function getAdapter(providerId: string): ProviderAdapter {
       );
       break;
     case 'ollama':
-      // Ollama exposes an OpenAI-compatible endpoint at /v1
+      // Ollama exposes an OpenAI-compatible endpoint at /v1, but only
+      // /chat/completions — not the /responses API the callable default targets.
       adapter = new VercelAiAdapter((m) =>
         createOpenAI({
           apiKey: 'ollama',
           baseURL: `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/v1`,
-        })(m),
+        }).chat(m),
+      );
+      break;
+    case 'openai-compatible':
+      // Any self-hosted OpenAI REST server (llama.cpp, LM Studio, vLLM, ...).
+      // .chat() pins /chat/completions — the callable default targets /responses,
+      // which these servers do not implement. The base URL is resolved per call so
+      // /model changes take effect without restarting.
+      adapter = new VercelAiAdapter((m) =>
+        createOpenAI({
+          apiKey: getOpenAiCompatibleApiKey(),
+          baseURL: getOpenAiCompatibleBaseUrl(),
+        }).chat(m),
       );
       break;
     case 'transformers':

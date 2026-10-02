@@ -46,6 +46,11 @@ class EmptyModelSelector extends Container {
         new Text(theme.muted('Make sure Ollama is running and you have models downloaded.'), 0, 0),
       );
     }
+    if (providerId === 'openai-compatible') {
+      this.addChild(
+        new Text(theme.muted('Make sure your server is running and serving GET /v1/models.'), 0, 0),
+      );
+    }
     this.addChild(new Text(theme.muted('esc to go back'), 0, 0));
   }
 

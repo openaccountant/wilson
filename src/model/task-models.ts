@@ -85,7 +85,7 @@ export interface ModelTaskRow {
   provider: string | null;
   /** Provider display name; null when !inUse. */
   providerName: string | null;
-  /** Derived from ProviderDef.isLocal (local = Ollama/Transformers); null when !inUse. */
+  /** Derived from ProviderDef.isLocal (local = Ollama/Transformers/OpenAI-compatible); null when !inUse. */
   execution: TaskExecution | null;
   /** Machine capability from the cached server-side probe — same value on every row. */
   webgpu: boolean;
