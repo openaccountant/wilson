@@ -11,7 +11,6 @@ import { TransactionsTab } from '@/tabs/TransactionsTab';
 import { ReviewTab } from '@/tabs/ReviewTab';
 import { AccountsTab } from '@/tabs/AccountsTab';
 import { ChatTab } from '@/tabs/ChatTab';
-import { DemoTab } from '@/tabs/DemoTab';
 import { LlmTab } from '@/tabs/LlmTab';
 import { LogsTab } from '@/tabs/LogsTab';
 import { GoalsTab } from '@/tabs/GoalsTab';
@@ -19,7 +18,7 @@ import { SettingsTab } from '@/tabs/SettingsTab';
 
 function getHashTab(): TabId {
   const hash = window.location.hash.replace('#', '');
-  const valid: TabId[] = ['overview', 'transactions', 'review', 'accounts', 'goals', 'chat', 'demo', 'llm', 'logs', 'settings'];
+  const valid: TabId[] = ['overview', 'transactions', 'review', 'accounts', 'goals', 'chat', 'llm', 'logs', 'settings'];
   return valid.includes(hash as TabId) ? (hash as TabId) : 'overview';
 }
 
@@ -30,7 +29,6 @@ const TAB_COMPONENTS: Record<TabId, React.FC> = {
   accounts: AccountsTab,
   goals: GoalsTab,
   chat: ChatTab,
-  demo: DemoTab,
   llm: LlmTab,
   logs: LogsTab,
   settings: SettingsTab,
