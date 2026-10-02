@@ -1,12 +1,5 @@
 # Changelog
 
-## [Unreleased]
-
-### Features
-
-- feat: Forecast tab — Monte Carlo net-worth fan chart (p10–p90) with live savings-rate, real-return, horizon and one-off-shock sliders, simulated in a Web Worker (5,000 paths while dragging, 20,000 on release) with a first-class assumptions & limitations panel (#42)
-
-
 ## [v0.9.1] — 2026-09-25
 
 ### Fixes
