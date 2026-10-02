@@ -10,22 +10,19 @@
 // it must typecheck cleanly under both the root tsconfig and the UI tsconfig,
 // exactly like src/dashboard/ui/src/hybrid/core.ts.
 
+import { mulberry32, percentile, sanitizeScale, stepLabel, DEFAULT_SEED } from './forecastCore.js';
+import type { ForecastPoint } from './forecastCore.js';
+
+// Re-exported so this module's public surface is byte-identical to what it
+// shipped with: src/__tests__/cashflow-forecast.test.ts and
+// components/CashflowForecast.tsx both import these names from HERE.
+export { mulberry32, percentile, DEFAULT_SEED } from './forecastCore.js';
+export type { ForecastPoint } from './forecastCore.js';
+
 export interface CashflowMonth {
   month: string;
   income: number;
   expenses: number;
-}
-
-export interface ForecastPoint {
-  /** 0 = anchor (now, unsimulated); 1..horizonMonths are projected steps. */
-  step: number;
-  /** 'Now' for step 0, else 'MMM YYYY' (e.g. 'Oct 2026'). */
-  label: string;
-  p10: number;
-  p25: number;
-  p50: number;
-  p75: number;
-  p90: number;
 }
 
 export interface CashflowForecast {
@@ -39,40 +36,11 @@ export const FORECAST_PATHS = 500;
 export const FORECAST_HORIZON_MONTHS = 12;
 /** 'A couple of months' — below this the card shows the empty state. */
 export const MIN_HISTORY_MONTHS = 2;
-export const DEFAULT_SEED = 1337;
 
 /** What-if slider bounds (percent of observed monthly values) and step. */
 export const WHATIF_MIN_PCT = 50; // −50%
 export const WHATIF_MAX_PCT = 150; // +50%
 export const WHATIF_STEP = 5;
-
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** Mulberry32 — tiny seeded PRNG, deterministic under test. */
-export function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Nearest-rank percentile of an ascending-sorted array. */
-export function percentile(sortedAsc: number[], p: number): number {
-  const idx = Math.min(
-    sortedAsc.length - 1,
-    Math.max(0, Math.ceil((p / 100) * sortedAsc.length) - 1),
-  );
-  return sortedAsc[idx];
-}
-
-/** Non-finite or negative what-if scales fall back to no adjustment (no-throw posture). */
-function sanitizeScale(v: number | undefined, fallback = 1): number {
-  return v === undefined || !Number.isFinite(v) || v < 0 ? fallback : v;
-}
 
 export function runCashflowForecast(opts: {
   history: CashflowMonth[];
@@ -132,11 +100,10 @@ export function runCashflowForecast(opts: {
     }
   }
 
-  const [startYear, startMon] = opts.startMonth.split('-').map(Number);
   const points: ForecastPoint[] = [
     {
       step: 0,
-      label: 'Now',
+      label: stepLabel(opts.startMonth, 0),
       p10: opts.startBalance,
       p25: opts.startBalance,
       p50: opts.startBalance,
@@ -146,10 +113,9 @@ export function runCashflowForecast(opts: {
   ];
   for (let step = 1; step <= horizonMonths; step++) {
     const sorted = stepSamples[step - 1].sort((a, b) => a - b);
-    const d = new Date(startYear, startMon - 1 + step, 1);
     points.push({
       step,
-      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+      label: stepLabel(opts.startMonth, step),
       p10: percentile(sorted, 10),
       p25: percentile(sorted, 25),
       p50: percentile(sorted, 50),
