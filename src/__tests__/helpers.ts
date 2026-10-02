@@ -63,6 +63,17 @@ export function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Like `daysAgo(n)`, but clamped to the first of the current month so the date
+ * never crosses into the previous month early in a month. Use for fixtures that
+ * current-month logic (alerts, trailing-1-month windows) must see. See #23.
+ */
+export function daysAgoThisMonth(n: number): string {
+  const date = daysAgo(n);
+  const monthStart = `${currentMonth()}-01`;
+  return date < monthStart ? monthStart : date;
+}
+
 /** Current month as YYYY-MM. */
 export function currentMonth(): string {
   return new Date().toISOString().slice(0, 7);
@@ -90,10 +101,10 @@ export function previousMonth(): string {
 
 export function seedTestData(db: Database): void {
   insertTransactions(db, [
-    { date: daysAgo(10), description: 'Grocery Store', amount: -85.50, category: 'Groceries' },
-    { date: daysAgo(8), description: 'Electric Company', amount: -120.00, category: 'Utilities' },
-    { date: daysAgo(6), description: 'Restaurant', amount: -45.00, category: 'Dining' },
-    { date: daysAgo(4), description: 'Unknown Purchase', amount: -30.00 },
+    { date: daysAgoThisMonth(10), description: 'Grocery Store', amount: -85.50, category: 'Groceries' },
+    { date: daysAgoThisMonth(8), description: 'Electric Company', amount: -120.00, category: 'Utilities' },
+    { date: daysAgoThisMonth(6), description: 'Restaurant', amount: -45.00, category: 'Dining' },
+    { date: daysAgoThisMonth(4), description: 'Unknown Purchase', amount: -30.00 },
     // Deliberately placed in the *previous* calendar month (not `daysAgo(N)`)
     // so this transaction never lands in the current month regardless of
     // which day of the month the suite runs on — it exists specifically to
@@ -101,7 +112,7 @@ export function seedTestData(db: Database): void {
     // data to find. See #23: two `daysAgo()` offsets both close to "today"
     // are not guaranteed to stay on opposite sides of a month boundary.
     { date: `${previousMonth()}-20`, description: 'Grocery Store', amount: -92.00, category: 'Groceries' },
-    { date: daysAgo(2), description: 'Gas Station', amount: -55.00, category: 'Transportation' },
+    { date: daysAgoThisMonth(2), description: 'Gas Station', amount: -55.00, category: 'Transportation' },
     { date: daysAgo(30), description: 'Paycheck', amount: 3500.00, category: 'Income' },
   ]);
   setBudget(db, 'Groceries', 200);

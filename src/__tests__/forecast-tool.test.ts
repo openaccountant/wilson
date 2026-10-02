@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createTestDb, daysAgo } from './helpers.js';
+import { createTestDb, daysAgoThisMonth } from './helpers.js';
 import { insertTransactions } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { computeForecast } from '../tools/query/forecast.js';
@@ -9,8 +9,8 @@ describe('forecast tool', () => {
     const db = createTestDb();
     insertAccount(db, { name: 'Checking', account_type: 'asset', account_subtype: 'checking', current_balance: 1000 });
     insertTransactions(db, [
-      { date: daysAgo(20), description: 'Paycheck', amount: 2000, category: 'Income' },
-      { date: daysAgo(20), description: 'Rent', amount: -2000, category: 'Home' },
+      { date: daysAgoThisMonth(20), description: 'Paycheck', amount: 2000, category: 'Income' },
+      { date: daysAgoThisMonth(20), description: 'Rent', amount: -2000, category: 'Home' },
     ]);
 
     const result = computeForecast(db, { trailingMonths: 1, horizonMonths: 3 });
@@ -24,8 +24,8 @@ describe('forecast tool', () => {
     const db = createTestDb();
     insertAccount(db, { name: 'Savings', account_type: 'asset', account_subtype: 'savings', current_balance: 5000 });
     insertTransactions(db, [
-      { date: daysAgo(10), description: 'Paycheck', amount: 3000, category: 'Income' },
-      { date: daysAgo(10), description: 'Groceries', amount: -500, category: 'Groceries' },
+      { date: daysAgoThisMonth(10), description: 'Paycheck', amount: 3000, category: 'Income' },
+      { date: daysAgoThisMonth(10), description: 'Groceries', amount: -500, category: 'Groceries' },
     ]);
 
     const result = computeForecast(db, { trailingMonths: 1, horizonMonths: 2 });
@@ -37,8 +37,8 @@ describe('forecast tool', () => {
     const db = createTestDb();
     insertAccount(db, { name: 'Checking', account_type: 'asset', account_subtype: 'checking', current_balance: 0 });
     insertTransactions(db, [
-      { date: daysAgo(5), description: 'Paycheck', amount: 3000, category: 'Income' },
-      { date: daysAgo(5), description: 'Dining out', amount: -800, category: 'Dining' },
+      { date: daysAgoThisMonth(5), description: 'Paycheck', amount: 3000, category: 'Income' },
+      { date: daysAgoThisMonth(5), description: 'Dining out', amount: -800, category: 'Dining' },
     ]);
 
     const baseline = computeForecast(db, { trailingMonths: 1, horizonMonths: 1 });
@@ -55,8 +55,8 @@ describe('forecast tool', () => {
     const db = createTestDb();
     insertAccount(db, { name: 'Checking', account_type: 'asset', account_subtype: 'checking', current_balance: 0 });
     insertTransactions(db, [
-      { date: daysAgo(5), description: 'Paycheck', amount: 3000, category: 'Income' },
-      { date: daysAgo(5), description: 'Netflix Subscription', amount: -15, category: 'Subscriptions', is_recurring: 1 },
+      { date: daysAgoThisMonth(5), description: 'Paycheck', amount: 3000, category: 'Income' },
+      { date: daysAgoThisMonth(5), description: 'Netflix Subscription', amount: -15, category: 'Subscriptions', is_recurring: 1 },
     ]);
 
     const result = computeForecast(db, {
