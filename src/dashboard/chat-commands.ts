@@ -6,11 +6,15 @@
  * WebMCP and plain HTTP callers all share one implementation. Strings that
  * also exist in the terminal CLI are kept in parity with src/cli.ts.
  *
- * Returns `{ query }` to run through the agent, or `{ direct }` to answer
- * without calling any model (help, usage errors, unknown commands).
+ * Returns `{ query }` to run through the agent, `{ direct }` to answer
+ * without calling any model (help, usage errors, unknown commands), or
+ * `{ action }` for a command that runs one tool directly, as the CLI does.
  */
 
-export type SlashExpansion = { query: string } | { direct: string };
+export type SlashExpansion =
+  | { query: string }
+  | { direct: string }
+  | { action: 'categorize'; limit?: number };
 
 /** Mirrors src/cli.ts (`/sync` routes the agent to the plaid_sync tool). */
 export const SYNC_QUERY = 'Sync my bank transactions using the plaid_sync tool';
@@ -61,8 +65,10 @@ export function expandSlashCommand(text: string): SlashExpansion {
     }
 
     case 'categorize': {
+      // Runs the categorize tool directly, like src/cli.ts — never the agent
+      // loop, whose full tool-schema prompt overwhelms local models.
       const n = /^\d+$/.test(rest) ? parseInt(rest, 10) : null;
-      return { query: `Categorize my uncategorized transactions${n && n > 0 ? ` (limit ${n})` : ''}` };
+      return n && n > 0 ? { action: 'categorize', limit: n } : { action: 'categorize' };
     }
 
     case 'sync':

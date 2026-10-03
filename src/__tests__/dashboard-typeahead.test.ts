@@ -453,7 +453,8 @@ describe('chat command registry', () => {
     for (const c of [...CHAT_COMMANDS, ...skills].filter((c) => c.kind === 'agent')) {
       const text = sample[c.name] ?? `/${c.name}`;
       const out = expandSlashCommand(text);
-      expect('query' in out).toBe(true);
+      // Runs server-side: through the agent (query) or a tool directly (action).
+      expect('query' in out || 'action' in out).toBe(true);
     }
   });
 

@@ -7,6 +7,8 @@ import { initAgentTools } from '../agent/init-tools.js';
 import { logger } from '../utils/logger.js';
 import { createOperation, getOperation, markOperationStatus, type McpOperation } from '../mcp/store.js';
 import { expandSlashCommand } from './chat-commands.js';
+import { categorizeTool } from '../tools/categorize/categorize.js';
+import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
 
 let chatHistory: InMemoryChatHistory | null = null;
 let agentRunner: AgentRunnerController | null = null;
@@ -64,6 +66,22 @@ export function refreshChatModel(): void {
  */
 const CHAT_ORIGIN = 'dashboard-chat';
 const CHAT_SESSION_GENERATION = 'dashboard-chat';
+
+/**
+ * Longest a dashboard chat message may run before /api/chat answers with an
+ * error. Neither the server route nor the browser has any other timeout, so
+ * without this a stuck run (a local model grinding on a prompt it cannot
+ * finish, an approval nobody answers) left the request pending forever.
+ * Generous: local models legitimately take minutes, and it includes the time
+ * spent waiting on an approval card.
+ */
+const DEFAULT_CHAT_DEADLINE_MS = 10 * 60_000;
+let chatDeadlineMs = DEFAULT_CHAT_DEADLINE_MS;
+
+/** Override the chat deadline (tests); null restores the default. */
+export function setChatDeadlineMs(ms: number | null): void {
+  chatDeadlineMs = ms ?? DEFAULT_CHAT_DEADLINE_MS;
+}
 
 let pendingChatRequest: { tool: string; args: Record<string, unknown> } | null = null;
 let pendingChatOperationId: string | null = null;
@@ -173,6 +191,9 @@ export async function handleChatMessage(
   if ('direct' in expansion) {
     return { answer: expansion.direct, sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
   }
+  if ('action' in expansion) {
+    return { answer: await runCategorizeCommand(expansion.limit), sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
+  }
   query = contextBlock ? `${contextBlock}${expansion.query}` : expansion.query;
 
   if (!agentRunner || !chatHistory) {
@@ -194,10 +215,28 @@ export async function handleChatMessage(
   logger.info(`Dashboard chat query`, { query: query.slice(0, 200), sessionId: sessionId ?? chatHistory.getSessionId() });
   const startTime = Date.now();
 
+  const runner = agentRunner;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await agentRunner.runQuery(query);
+    const timedOut = new Promise<'timeout'>((resolve) => {
+      deadline = setTimeout(() => resolve('timeout'), chatDeadlineMs);
+    });
+    const result = await Promise.race([runner.runQuery(query), timedOut]);
     const durationMs = Date.now() - startTime;
-    const answer = result?.answer ?? 'No response generated.';
+    if (result === 'timeout') {
+      // Stops the agent loop and denies any pending approval. An in-flight
+      // local inference call cannot be interrupted, but the request settles.
+      runner.cancelExecution();
+      const minutes = Math.round(chatDeadlineMs / 60_000);
+      logger.error(`Dashboard chat deadline exceeded`, { durationMs });
+      return {
+        answer: `Error: The request did not finish within ${minutes >= 1 ? `${minutes} minutes` : `${chatDeadlineMs} ms`} and was cancelled. ` +
+          'A local model may be too slow for this request — try a shorter question or a cloud model.',
+        sessionId: chatHistory.getSessionId() ?? null,
+      };
+    }
+    // runQuery reports its own failures through `error` and resolves undefined.
+    const answer = result?.answer ?? (runner.error ? `Error: ${runner.error}` : 'No response generated.');
     logger.info(`Dashboard chat response`, { durationMs, answerChars: answer.length });
     return { answer, sessionId: chatHistory.getSessionId() ?? null };
   } catch (err) {
@@ -205,5 +244,28 @@ export async function handleChatMessage(
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard chat error`, { durationMs, error: errorMsg });
     return { answer: `Error: ${errorMsg}`, sessionId: chatHistory.getSessionId() ?? null };
+  } finally {
+    clearTimeout(deadline);
+  }
+}
+
+/**
+ * "/categorize [n]": the categorize tool, called directly — the same path as
+ * the terminal's /categorize (src/cli.ts). Typing the command is the consent,
+ * so there is no approval round-trip, and the categorizer's own small batch
+ * prompt is used instead of the agent's full tool-schema prompt. Failures
+ * always come back as an answer.
+ */
+async function runCategorizeCommand(limit?: number): Promise<string> {
+  const startTime = Date.now();
+  try {
+    const resultJson = await categorizeTool.func(limit !== undefined ? { limit } : {});
+    const answer = formatCategorizeSummary(parseCategorizeResult(resultJson), { errorDetail: true });
+    logger.info(`Dashboard /categorize`, { durationMs: Date.now() - startTime, limit });
+    return answer;
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    logger.error(`Dashboard /categorize error`, { durationMs: Date.now() - startTime, error: errorMsg });
+    return `**Categorization failed:** ${errorMsg}`;
   }
 }

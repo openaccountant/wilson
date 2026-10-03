@@ -46,6 +46,7 @@ import { editorTheme, theme } from './theme.js';
 import { initDatabase } from './db/database.js';
 import { initImportTool, csvImportTool } from './tools/import/csv-import.js';
 import { initCategorizeTool, categorizeTool } from './tools/categorize/categorize.js';
+import { formatCategorizeSummary, parseCategorizeResult } from './tools/categorize/summary.js';
 import { initTransactionSearchTool } from './tools/query/transaction-search.js';
 import { initEditTransactionTool } from './tools/query/edit-transaction.js';
 import { initDeleteTransactionTool } from './tools/query/delete-transaction.js';
@@ -555,34 +556,7 @@ export async function runCli() {
         const resultJson = await categorizeTool.func({
           limit: limit && !isNaN(limit) ? limit : undefined,
         });
-        const result = JSON.parse(resultJson);
-        const data = result.data ?? result;
-
-        if (data.categorized === 0 && !data.error) {
-          chatLog.finalizeAnswer(data.message ?? 'All transactions are already categorized.');
-        } else if (data.error) {
-          chatLog.finalizeAnswer(`**Categorization failed:** ${data.error}`);
-        } else {
-          let msg = `Categorized **${data.categorized}** of ${data.totalUncategorized} transactions`;
-          if (data.ruleMatched > 0) {
-            msg += ` (${data.ruleMatched} by rules, ${data.llmCategorized} by AI)`;
-          }
-          if (data.routedForReview > 0) {
-            msg += `\n${data.routedForReview} routed for human review (held in review queue).`;
-          }
-          if (data.categoriesApplied && Object.keys(data.categoriesApplied).length > 0) {
-            msg += '\n\n**Categories:**\n';
-            const sorted = Object.entries(data.categoriesApplied as Record<string, number>)
-              .sort(([, a], [, b]) => b - a);
-            for (const [cat, count] of sorted) {
-              msg += `  ${cat}: ${count}\n`;
-            }
-          }
-          if (data.errors && data.errors.length > 0) {
-            msg += `\n${data.errors.length} batch errors occurred.`;
-          }
-          chatLog.finalizeAnswer(msg);
-        }
+        chatLog.finalizeAnswer(formatCategorizeSummary(parseCategorizeResult(resultJson)));
       } catch (err) {
         chatLog.finalizeAnswer(`**Categorization failed:** ${err instanceof Error ? err.message : String(err)}`);
       }

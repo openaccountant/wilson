@@ -19,13 +19,11 @@ describe('expandSlashCommand', () => {
     expect(expandSlashCommand('/sync')).toEqual({ query: SYNC_QUERY });
   });
 
-  test('/categorize with and without a limit', () => {
-    expect(expandSlashCommand('/categorize')).toEqual({ query: 'Categorize my uncategorized transactions' });
-    expect(expandSlashCommand('/categorize 50')).toEqual({
-      query: 'Categorize my uncategorized transactions (limit 50)',
-    });
-    expect(expandSlashCommand('/categorize lots')).toEqual({ query: 'Categorize my uncategorized transactions' });
-    expect(expandSlashCommand('/categorize 0')).toEqual({ query: 'Categorize my uncategorized transactions' });
+  test('/categorize runs the categorize tool directly (parity with src/cli.ts), with and without a limit', () => {
+    expect(expandSlashCommand('/categorize')).toEqual({ action: 'categorize' });
+    expect(expandSlashCommand('/categorize 50')).toEqual({ action: 'categorize', limit: 50 });
+    expect(expandSlashCommand('/categorize lots')).toEqual({ action: 'categorize' });
+    expect(expandSlashCommand('/categorize 0')).toEqual({ action: 'categorize' });
   });
 
   test('/budget set <category> <amount>', () => {
