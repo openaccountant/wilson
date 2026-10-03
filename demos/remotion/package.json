@@ -7,9 +7,9 @@
     "studio": "remotion studio"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.290",
-    "@remotion/media-utils": "4.0.290",
-    "remotion": "4.0.290",
+    "@remotion/cli": "4.0.532",
+    "@remotion/media-utils": "4.0.532",
+    "remotion": "4.0.532",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   }
