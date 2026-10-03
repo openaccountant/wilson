@@ -91,6 +91,42 @@ describe('tool-call parsing for local models', () => {
     expect(call?.name).toBe('categorize');
   });
 
+  test('a bare call followed by an invented answer is still the call (granite, 6 of 24 lost)', () => {
+    const raw =
+      '{"name": "spending_summary", "arguments": "{\\"period\\": \\"July\\"}"}\n\n**Groceries spending in July:** $842.50 (22% of total) {braces}';
+    const call = parseToolCall(raw, ['spending_summary', ...names]);
+    expect(call?.name).toBe('spending_summary');
+    expect(call?.args).toEqual({ period: 'July' });
+  });
+
+  test('braces and escaped quotes inside string values do not end the object early', () => {
+    const raw = '{"name": "categorize", "arguments": {"note": "a } \\" { b"}} trailing';
+    expect(parseToolCall(raw, names)?.args).toEqual({ note: 'a } " { b' });
+  });
+
+  test('a truncated call stays text', () => {
+    expect(parseToolCall('{"name": "categorize", "arguments": {"limit": ', names)).toBeNull();
+  });
+
+  test('a skill name called as a tool becomes a skill call (granite, observed)', () => {
+    const skills = ['month-end-close'];
+    const withSkill = [...names, 'skill'];
+    const bare = parseToolCall('{"name": "month-end-close", "arguments": {}} Sure, closing...', withSkill, skills);
+    expect(bare?.name).toBe('skill');
+    expect(bare?.args).toEqual({ skill: 'month-end-close' });
+
+    const withArgs = parseToolCall('{"name": "month-end-close", "arguments": {"month": "2026-09"}}', withSkill, skills);
+    expect(withArgs?.args).toEqual({ skill: 'month-end-close', args: '{"month":"2026-09"}' });
+
+    const tagged = parseToolCall('<tool_call>{"name": "month-end-close", "arguments": {}}</tool_call>', withSkill, skills);
+    expect(tagged?.name).toBe('skill');
+  });
+
+  test('a real tool wins over a same-named skill; unknown names stay rejected', () => {
+    expect(parseToolCall('{"name": "categorize", "arguments": {}}', names, ['categorize'])?.name).toBe('categorize');
+    expect(parseToolCall('{"name": "nope", "arguments": {}}', names, ['month-end-close'])).toBeNull();
+  });
+
   test('plain answers and JSON naming an unknown tool stay text', () => {
     expect(parseToolCall('You spent $42 on dining.', names)).toBeNull();
     expect(parseToolCall('{"name": "rm_rf", "arguments": {}}', names)).toBeNull();

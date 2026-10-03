@@ -58,14 +58,19 @@ export async function loadSoulDocument(): Promise<string | null> {
  * Build the skills section for the system prompt.
  * Only includes skill metadata if skills are available.
  */
-function buildSkillsSection(): string {
+function buildSkillsSection(local = false): string {
   const skills = discoverSkills();
 
   if (skills.length === 0) {
     return '';
   }
 
-  const skillList = buildSkillMetadataSection();
+  // Local models get names only: the 50+ descriptions were ~2.5k of a ~7.7k
+  // prompt that WebGPU models can barely prefill. The skill tool returns the
+  // full instructions once the model picks a name.
+  const skillList = local
+    ? `Call the skill tool with one of these exact names:\n${skills.map((s) => s.name).join(', ')}`
+    : buildSkillMetadataSection();
 
   return `## Available Skills
 
@@ -136,7 +141,13 @@ export async function buildSystemPrompt(model: string, soulContent?: string | nu
   // Local Transformers.js models get every tool's schema injected by their
   // adapter (prompt-based tool calling); listing the rich descriptions here as
   // well doubled the prompt (~17k tokens) past what WebGPU models can prefill.
-  const toolSection = resolveProvider(model).id === 'transformers'
+  const local = resolveProvider(model).id === 'transformers';
+  // The numeric example row leaked into granite's answers ("$842.50 (22%)" for
+  // every question), so local models get placeholders instead.
+  const exampleRow = local
+    ? '| Groceries  | $X      | Y%      |'
+    : '| Groceries  | $842.50 | 22%     |';
+  const toolSection = local
     ? ''
     : `## Available Tools
 
@@ -163,7 +174,7 @@ ${toolSection}## Tool Usage Policy
 - Users can manage multiple profiles with /profile (list) and /profile switch <name>. Each profile has its own database.
 - Only respond directly for: conceptual definitions, general financial advice, or conversational queries
 
-${buildSkillsSection()}
+${buildSkillsSection(local)}
 
 ## Behavior
 
@@ -200,7 +211,7 @@ STRICT FORMAT - each row must:
 
 | Category   | Amount  | % Total |
 |------------|---------|---------|
-| Groceries  | $842.50 | 22%     |
+${exampleRow}
 
 Keep tables compact:
 - Max 2-3 columns; prefer multiple small tables over one wide table
