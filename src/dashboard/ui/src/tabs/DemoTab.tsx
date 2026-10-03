@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
+import { money } from '@/format';
 import { useHybridChat } from '@/hooks/useHybridChat';
 import {
   parseCategorizationDecision,
@@ -147,9 +148,6 @@ function fmtMs(ms: number | null): string {
   return `${Math.round(ms)} ms`;
 }
 
-function money(n: number): string {
-  return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
-}
 
 function LoadLine({ loadMs, loadFresh }: { loadMs: number | null; loadFresh: boolean | null }) {
   if (loadMs === null) return null;

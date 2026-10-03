@@ -13,6 +13,7 @@
  */
 
 import { CURRENT_MESSAGE_MARKER } from '../../../../utils/history-context.js';
+import { money } from '../format';
 
 export { CURRENT_MESSAGE_MARKER };
 
@@ -60,10 +61,6 @@ export function isoDaysAgo(days: number, from: Date = new Date()): string {
   const d = new Date(from);
   d.setDate(d.getDate() - days);
   return d.toISOString().slice(0, 10);
-}
-
-function money(n: number): string {
-  return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
 }
 
 /**

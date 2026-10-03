@@ -1,84 +1,81 @@
+import { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { ChartCard } from '@/charts/ChartCard';
+import { ChartTooltip } from '@/charts/ChartTooltip';
+import { useCategoryColor } from '@/charts/usePalette';
+import { chartTokens } from '@/charts/tokens';
+import { buildDonutData } from '@/lib/donutData';
+import { money, pct } from '@/format';
 import type { SpendingSummaryItem } from '@/types';
-
-const COLORS = [
-  '#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
-  '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
-  '#84cc16', '#e879f9',
-];
 
 export function DonutChart() {
   const params = useFilterParams();
   const { data, loading, offline } = useApi<SpendingSummaryItem[]>(`/api/summary?${params}`, [params]);
+  const colorFor = useCategoryColor();
 
-  if (loading) {
-    return (
-      <div className="bg-surface-raised border border-border rounded-lg p-4">
-        <div className="h-[220px] animate-pulse bg-border-muted rounded" />
-      </div>
-    );
-  }
+  const { slices, total } = useMemo(() => buildDonutData(data ?? []), [data]);
 
   if (offline && !data) {
     // Mirror unavailable or never seeded — say so rather than "No spending data."
     return <OfflineUnavailable title="Spending by Category" />;
   }
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="bg-surface-raised border border-border rounded-lg p-4">
-        <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-2">Spending by Category</h3>
-        <p className="text-sm text-text-muted">No spending data.</p>
-      </div>
-    );
-  }
-
-  const chartData = data
-    .filter((d) => d.total < 0)
-    .map((d) => ({ name: d.category || 'Uncategorized', value: Math.abs(d.total) }))
-    .sort((a, b) => b.value - a.value);
+  const top = slices[0];
+  const takeaway =
+    top && total > 0
+      ? `${top.name} leads at ${pct((top.value / total) * 100)} of ${money(total)} spent.`
+      : undefined;
 
   return (
-    <div className="bg-surface-raised border border-border rounded-lg p-4">
-      <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Spending by Category</h3>
+    <ChartCard
+      title="Spending by Category"
+      takeaway={takeaway}
+      loading={loading}
+      hasData={slices.length > 0}
+      height={240}
+      empty={<p className="text-sm text-text-muted">No spending data.</p>}
+      table={{
+        columns: [
+          { label: 'Category' },
+          { label: 'Spent', numeric: true },
+          { label: 'Share', numeric: true },
+          { label: 'Txns', numeric: true },
+        ],
+        rows: slices.map((s) => [s.name, money(s.value), pct((s.value / total) * 100, 1), s.count]),
+      }}
+    >
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
           <Pie
-            data={chartData}
+            data={slices}
             cx="50%"
             cy="50%"
             innerRadius={50}
             outerRadius={80}
             paddingAngle={2}
+            stroke={chartTokens().surfaceRaised}
+            strokeWidth={2}
             dataKey="value"
+            nameKey="name"
           >
-            {chartData.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            {slices.map((s) => (
+              <Cell key={s.name} fill={colorFor(s.name)} />
             ))}
           </Pie>
-          <Tooltip
-            contentStyle={{
-              background: '#1a1d27',
-              border: '1px solid #2a2d37',
-              borderRadius: 6,
-              fontSize: 12,
-              color: '#e4e4e7',
-            }}
-            formatter={(value: number) => [`$${value.toLocaleString('en-US', { minimumFractionDigits: 2 })}`, '']}
-          />
+          <Tooltip content={<ChartTooltip total={total} countKey="count" colorFor={colorFor} labelFormat={() => null} />} />
         </PieChart>
       </ResponsiveContainer>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-        {chartData.slice(0, 6).map((d, i) => (
-          <div key={d.name} className="flex items-center gap-1.5 text-xs text-text-muted">
-            <span className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 mt-2 list-none p-0 m-0">
+        {slices.slice(0, 6).map((d) => (
+          <li key={d.name} className="flex items-center gap-1.5 text-xs text-text-muted">
+            <span aria-hidden="true" className="w-2 h-2 rounded-full" style={{ background: colorFor(d.name) }} />
             {d.name}
-          </div>
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </ChartCard>
   );
 }

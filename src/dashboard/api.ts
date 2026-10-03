@@ -13,9 +13,11 @@ import {
 import {
   getSpendingSummary,
   getProfitLoss,
-  getBudgetVsActual,
+  getBudgetVsActualRange,
   getBudgets,
+  getCoverage,
   getCategories,
+  getCategoryOptions,
   getMonthlySavingsData,
   getMonthlyCashflowData,
   getTransactions,
@@ -63,7 +65,7 @@ import {
   getWeeklySummary,
   getBudgetCountdown,
 } from '../db/daily-queries.js';
-import { checkAlerts } from '../alerts/engine.js';
+import { checkAlerts, groupedAlertMoney } from '../alerts/engine.js';
 import { getAllGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import {
@@ -87,7 +89,11 @@ import {
   parseSavingsMonths,
   parseBudgetCountdownMonth,
   parseDailySpendingRange,
+  parseDashboardOptions,
+  parseNetWorthMonths,
 } from './overview-params.js';
+import { DASHBOARD_RULES } from '../db/spend-rules.js';
+import { buildTransactionConditions } from '../db/transaction-where.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 import {
@@ -114,45 +120,71 @@ function escapeCsv(v: string): string {
 }
 
 // ── Overview APIs ───────────────────────────────────────────────────────────
+//
+// Dashboard endpoints opt into the dashboard spend/income rules
+// (src/db/spend-rules.ts) via parseDashboardOptions / DASHBOARD_RULES. The
+// CLI, reports, goals and context hints call the same server functions
+// WITHOUT options and keep their historical output.
 
+/** Spending by category (SPEND rule; honors accountId, entityId, category). */
 export function apiSummary(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getSpendingSummary(db, startDate, endDate, accountId, entityId);
+  return getSpendingSummary(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
+/**
+ * P&L (INCOME / SPEND rules; honors accountId, entityId, category). Under a
+ * category filter the P&L is expense-only for that category (income only
+ * when the filter is 'Income' itself) — see composePnlSql.
+ */
 export function apiPnl(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getProfitLoss(db, startDate, endDate, accountId, entityId);
+  return getProfitLoss(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
+/**
+ * Budgets vs actual over the requested range: the limit is monthly_limit ×
+ * the day-prorated months in [startDate, endDate] (rows carry `limit` + `months`;
+ * a whole month counts 1, a partial month days/daysInMonth).
+ * With only `month` (or nothing), the range is that one month.
+ */
 export function apiBudgets(db: Database, params: URLSearchParams) {
-  const { month } = parseDateRange(params);
+  const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getBudgetVsActual(db, month, accountId, entityId);
+  return getBudgetVsActualRange(db, startDate, endDate, accountId, entityId, DASHBOARD_RULES);
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
   const months = parseSavingsMonths(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getMonthlySavingsData(db, undefined, months, accountId, entityId);
+  return getMonthlySavingsData(db, undefined, months, accountId, entityId, { ...DASHBOARD_RULES });
 }
 
-// Read-only monthly income/expense series for the client-side cash forecast.
-// Portfolio-level flows (no account/entity filters) to line up with the
-// liquid-cash starting balance the card computes from all accounts.
+/** GET /api/coverage — { start, end, months[] } of ANY imported transactions (unfiltered). */
+export function apiCoverage(db: Database) {
+  return getCoverage(db);
+}
+
+// Read-only monthly income/expense series for the client-side cash forecast
+// and the Forecast tab. Portfolio-level flows (no account/entity filters) to
+// line up with the liquid-cash starting balance the card computes from all
+// accounts. Classified with the dashboard spend/income rules so it agrees with
+// the P&L and savings cards (negative-stored Income counts as income; card
+// payments and transfers are never expenses).
 export function apiCashflowMonthly(db: Database, params: URLSearchParams) {
   const months = Math.min(120, Math.max(1, parseInt(params.get('months') ?? '24', 10) || 24));
-  return getMonthlyCashflowData(db, undefined, months);
+  return getMonthlyCashflowData(db, undefined, months, DASHBOARD_RULES);
 }
 
+/** Dashboard alerts: same engine as the CLI, money text with thousands separators. */
 export function apiAlerts(db: Database) {
-  return checkAlerts(db);
+  return checkAlerts(db, { formatMoney: groupedAlertMoney });
 }
 
 /**
@@ -172,6 +204,16 @@ export function apiBudgetLimits(db: Database) {
  */
 export function apiCategories(db: Database) {
   return getCategories(db);
+}
+
+/**
+ * GET /api/category-options — every category label present in transactions
+ * (incl. Transfer / Credit Card / Payment / Income and one 'Uncategorized'),
+ * for the header category filter. Unlike /api/summary it is not limited to
+ * spending categories, so non-spend categories stay filterable. Mirrored.
+ */
+export function apiCategoryOptions(db: Database) {
+  return getCategoryOptions(db);
 }
 
 // ── Chat composer typeahead sources ─────────────────────────────────────────
@@ -219,9 +261,8 @@ export function apiMerchants(db: Database, q: string | null, limitRaw: string | 
 // ── Transactions ────────────────────────────────────────────────────────────
 
 export function apiTransactions(db: Database, params: URLSearchParams) {
-  const { filters, limit } = parseTransactionListParams(params);
-  const txns = getTransactions(db, filters);
-  return txns.slice(0, limit);
+  const { filters, limit, offset } = parseTransactionListParams(params);
+  return getTransactions(db, filters, { rules: DASHBOARD_RULES, page: { limit, offset } });
 }
 
 export async function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
@@ -330,7 +371,10 @@ export async function apiSemanticSearch(
   const embedFn = embed ?? embedTexts;
   const [queryVec] = await embedFn([q]);
 
-  const hits = searchTransactionsSemantic(db, queryVec, filters, limit, model);
+  // Dashboard category/entity semantics, same as /api/transactions: an
+  // 'Uncategorized' filter matches blank/NULL rows and the default entity owns
+  // NULL-entity rows (CLI callers pass no rules and keep exact matching).
+  const hits = searchTransactionsSemantic(db, queryVec, filters, limit, model, DASHBOARD_RULES);
 
   // Enrich the narrow DB-layer projection into full transaction rows, one
   // query, in ranked order. The compat-sqlite wrapper only accepts named
@@ -375,7 +419,9 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
   if (entityId !== undefined) filters.entityId = entityId;
-  const txns = getTransactions(db, filters);
+  // Same Uncategorized/default-entity matching as /api/transactions, so an
+  // export contains exactly the rows the Transactions tab shows.
+  const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
   const header = 'Date,Description,Amount,Category';
   const rows = txns.map((t) =>
@@ -398,7 +444,9 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
   if (entityId !== undefined) filters.entityId = entityId;
-  const txns = getTransactions(db, filters);
+  // Same Uncategorized/default-entity matching as /api/transactions, so an
+  // export contains exactly the rows the Transactions tab shows.
+  const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
   const data = txns.map((t) => ({
     Date: t.date,
@@ -419,7 +467,8 @@ export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  const pnl = getProfitLoss(db, startDate, endDate, accountId, entityId);
+  // Same rules as the P&L card so the export matches what the dashboard shows.
+  const pnl = getProfitLoss(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 
   const lines = ['Type,Category,Amount,Count'];
   for (const r of pnl.incomeByCategory) {
@@ -454,20 +503,25 @@ export function apiExportNetWorthCsv(db: Database): string {
 
 // ── Spending by Institution ──────────────────────────────────────────────────
 
+/**
+ * Spending grouped by institution, under the dashboard rules: SPEND rule (no
+ * card payments / transfers / negative income), 'Uncategorized' matches blank
+ * rows, and ?entityId scopes rows (the default entity owns NULL-entity rows).
+ * Honors accountId, category, entityId. Dashboard-only endpoint.
+ */
 export function apiSpendingByInstitution(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
-  const accountId = parseAccountId(params);
-  const category = params.get('category');
-  const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
-  const sqlParams: Record<string, unknown> = { startDate, endDate };
-  if (accountId !== undefined) {
-    conditions.push('account_id = @accountId');
-    sqlParams.accountId = accountId;
-  }
-  if (category) {
-    conditions.push('category = @category');
-    sqlParams.category = category;
-  }
+  const { conditions, params: sqlParams } = buildTransactionConditions(
+    {
+      dateStart: startDate,
+      dateEnd: endDate,
+      accountId: parseAccountId(params),
+      entityId: parseEntityId(params),
+      category: params.get('category') || undefined,
+      spendOnly: true,
+    },
+    DASHBOARD_RULES
+  );
   const rows = db.prepare(`
     SELECT
       COALESCE(bank, 'Unknown') AS institution,
@@ -521,8 +575,7 @@ export function apiNetWorth(db: Database) {
 }
 
 export function apiNetWorthTrend(db: Database, params: URLSearchParams) {
-  const months = parseInt(params.get('months') ?? '12', 10);
-  return getNetWorthTrend(db, months);
+  return getNetWorthTrend(db, parseNetWorthMonths(params));
 }
 
 export function apiAccountTransactions(db: Database, accountId: number, params: URLSearchParams) {
@@ -941,15 +994,19 @@ export function apiDailySpending(db: Database, params: URLSearchParams) {
   if ('error' in range) {
     return range;
   }
-  return getDailySpending(db, range.startDate, range.endDate);
+  const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
+  return getDailySpending(db, range.startDate, range.endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
-export function apiStreak(db: Database) {
-  return getStreak(db);
+/** Streak (dashboard rules; optional ?entityId scopes the days — the daily budget stays all-budgets). */
+export function apiStreak(db: Database, params: URLSearchParams = new URLSearchParams()) {
+  return getStreak(db, undefined, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
 }
 
-export function apiWeeklySummary(db: Database) {
-  return getWeeklySummary(db);
+/** This week vs last week (dashboard rules; optional ?entityId). */
+export function apiWeeklySummary(db: Database, params: URLSearchParams = new URLSearchParams()) {
+  return getWeeklySummary(db, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
 }
 
 export function apiBudgetCountdown(db: Database, params: URLSearchParams) {

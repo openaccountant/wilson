@@ -15,21 +15,14 @@ import {
   SHOCK_DEFAULT_YEAR,
   savingsDeltaToDollars,
 } from '@/lib/netWorthForecast';
+import { moneyWhole } from '@/format';
 
 export const DEFAULT_SAVINGS_DELTA_PP = 0;
 export const DEFAULT_SHOCK_AMOUNT = 0;
 
+/** '+$1,234' / '-$1,234' / '$0' — explicit sign for a delta. */
 function fmtUsdSigned(n: number): string {
-  const rounded = Math.round(n);
-  const sign = rounded < 0 ? '−' : rounded > 0 ? '+' : '';
-  return `${sign}$${Math.abs(rounded).toLocaleString('en-US')}`;
-}
-
-function fmtUsdPlain(n: number): string {
-  const rounded = Math.round(n);
-  return rounded < 0
-    ? `-$${Math.abs(rounded).toLocaleString('en-US')}`
-    : `$${rounded.toLocaleString('en-US')}`;
+  return `${Math.round(n) > 0 ? '+' : ''}${moneyWhole(n)}`;
 }
 
 interface ForecastControlsProps {
@@ -169,7 +162,7 @@ export function ForecastControls({
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-muted">One-off shock</span>
             <span className={shockAmount !== DEFAULT_SHOCK_AMOUNT ? 'text-green' : 'text-text-muted'}>
-              {shockAmount === 0 ? '$0' : `${fmtUsdPlain(shockAmount)} in year ${shockYear}`}
+              {shockAmount === 0 ? '$0' : `${moneyWhole(shockAmount)} in year ${shockYear}`}
             </span>
           </div>
           <input

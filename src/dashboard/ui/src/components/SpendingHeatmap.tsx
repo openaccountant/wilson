@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
+import { useAppState } from '@/state';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
-import type { DailySpendingRow, StreakData } from '@/types';
+import { ChartCard } from '@/charts/ChartCard';
+import { chartTokens } from '@/charts/tokens';
+import { buildHeatmapGrid, heatmapSummary, heatmapYearRange, isFilteredHeatmap } from '@/lib/heatmapGrid';
+import { dailySpendingPath } from '@/lib/overviewQueries';
+import { formatDate, money } from '@/format';
+import type { CoverageResponse, DailySpendingRow, StreakData } from '@/types';
 
 interface SpendingHeatmapProps {
   onDayClick?: (date: string) => void;
@@ -13,6 +19,17 @@ const TOTAL = CELL_SIZE + CELL_GAP;
 const LABEL_WIDTH = 28;
 const HEADER_HEIGHT = 18;
 const DAY_LABELS = ['', 'M', '', 'W', '', 'F', ''];
+const HATCH_ID = 'heatmap-uncovered-hatch';
+
+/** Filtered view: one green ramp by share of the busiest day (no budget semantics). */
+function getRelativeColor(amount: number, maxAmount: number): string {
+  if (amount === 0) return '#1e2130';
+  const ratio = maxAmount > 0 ? amount / maxAmount : 0;
+  if (ratio <= 0.25) return '#064e1a';
+  if (ratio <= 0.5) return '#166534';
+  if (ratio <= 0.75) return '#15803d';
+  return '#22c55e';
+}
 
 function getColor(amount: number, dailyBudget: number): string {
   if (amount === 0) return '#1e2130';
@@ -25,111 +42,95 @@ function getColor(amount: number, dailyBudget: number): string {
   return '#ef4444';
 }
 
-function getYearRange(): { startDate: string; endDate: string } {
-  const end = new Date();
-  const start = new Date();
-  start.setFullYear(end.getFullYear() - 1);
-  start.setDate(start.getDate() + 1);
-  // Align to Sunday
-  const dayOffset = start.getDay();
-  start.setDate(start.getDate() - dayOffset);
-  const fmt = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return { startDate: fmt(start), endDate: fmt(end) };
-}
-
 export function SpendingHeatmap({ onDayClick }: SpendingHeatmapProps) {
-  const { startDate, endDate } = useMemo(getYearRange, []);
-  const { data: dailyData, loading: loadingDaily, offline: offlineDaily } = useApi<DailySpendingRow[]>(
-    `/api/daily-spending?startDate=${startDate}&endDate=${endDate}`,
-  );
+  const { startDate, endDate } = useMemo(() => heatmapYearRange(), []);
+  // Header filters (URL-backed) scope the cells; the window stays the last year.
+  const { accountId, entityId, category } = useAppState();
+  const dailyPath = dailySpendingPath(startDate, endDate, { accountId, entityId, category });
+  const { data: dailyData, loading: loadingDaily, offline: offlineDaily } = useApi<DailySpendingRow[]>(dailyPath);
   const { data: streakData, loading: loadingStreak, offline: offlineStreak } = useApi<StreakData>('/api/streak');
+  // Coverage is optional: if the endpoint is missing or fails, every day is
+  // treated as covered (the pre-coverage behavior).
+  const { data: coverage, loading: loadingCoverage } = useApi<CoverageResponse>('/api/coverage');
 
-  const { weeks, months, underBudgetDays, totalDays } = useMemo(() => {
-    const spendingMap = new Map<string, number>();
-    if (dailyData) {
-      for (const row of dailyData) {
-        spendingMap.set(row.date, row.spending);
-      }
-    }
-    const budget = streakData?.dailyBudget ?? 50;
-
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    const allWeeks: { date: string; amount: number; dayOfWeek: number; future: boolean }[][] = [];
-    let currentWeek: typeof allWeeks[0] = [];
-    let under = 0;
-    let total = 0;
-
-    const monthLabels: { label: string; weekIndex: number }[] = [];
-    let lastMonth = -1;
-
-    const cursor = new Date(start);
-    while (cursor <= end) {
-      const dateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
-      const dayOfWeek = cursor.getDay();
-      const amount = spendingMap.get(dateStr) ?? 0;
-      const future = cursor > new Date();
-
-      if (dayOfWeek === 0 && currentWeek.length > 0) {
-        allWeeks.push(currentWeek);
-        currentWeek = [];
-      }
-
-      if (cursor.getMonth() !== lastMonth) {
-        lastMonth = cursor.getMonth();
-        monthLabels.push({
-          label: cursor.toLocaleDateString('en-US', { month: 'short' }),
-          weekIndex: allWeeks.length,
-        });
-      }
-
-      currentWeek.push({ date: dateStr, amount, dayOfWeek, future });
-
-      if (!future) {
-        total++;
-        if (amount <= budget) under++;
-      }
-
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    if (currentWeek.length > 0) allWeeks.push(currentWeek);
-
-    return { weeks: allWeeks, months: monthLabels, underBudgetDays: under, totalDays: total };
-  }, [dailyData, streakData, startDate, endDate]);
-
-  if (loadingDaily || loadingStreak) {
-    return (
-      <div className="bg-surface-raised border border-border rounded-lg p-4">
-        <div className="h-[140px] animate-pulse bg-border-muted rounded" />
-      </div>
-    );
-  }
+  const budget = streakData?.dailyBudget ?? 50;
+  const grid = useMemo(() => {
+    const spending = new Map<string, number>();
+    for (const row of dailyData ?? []) spending.set(row.date, row.spending);
+    return buildHeatmapGrid({ startDate, endDate, spending, dailyBudget: budget, coverage });
+  }, [dailyData, budget, coverage, startDate, endDate]);
 
   if ((offlineDaily && !dailyData) || (offlineStreak && !streakData)) {
     // Mirror unavailable or never seeded — say so rather than an all-zero grid.
     return <OfflineUnavailable title="Spending Heatmap" />;
   }
 
+  const { weeks, months, maxAmount } = grid;
+  const filtered = isFilteredHeatmap({ accountId, entityId, category });
+  const summary = heatmapSummary(grid, money(budget), filtered);
+  const cellColor = (amount: number) => (filtered ? getRelativeColor(amount, maxAmount) : getColor(amount, budget));
   const svgWidth = LABEL_WIDTH + weeks.length * TOTAL;
   const svgHeight = HEADER_HEIGHT + 7 * TOTAL;
-  const budget = streakData?.dailyBudget ?? 50;
+  const t = chartTokens();
+  const hasUncovered = weeks.some((w) => w.some((d) => !d.covered && !d.future));
+
+  const tableRows = weeks
+    .flat()
+    .filter((d) => d.covered && !d.future && d.amount > 0)
+    .reverse()
+    .map((d) =>
+      filtered ? [formatDate(d.date), money(d.amount)] : [formatDate(d.date), money(d.amount), d.amount <= budget ? 'Under' : 'Over'],
+    );
 
   return (
-    <div className="bg-surface-raised border border-border rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs text-text-secondary uppercase tracking-wide">Spending Heatmap</h3>
-        <span className="text-xs text-text-muted">
-          Under budget{' '}
-          <span className="text-green font-semibold">{underBudgetDays}</span> of last {Math.min(totalDays, 365)} days
-        </span>
-      </div>
+    <ChartCard
+      title="Spending Heatmap"
+      loading={loadingDaily || loadingStreak || loadingCoverage}
+      hasData={dailyData !== null}
+      height={140}
+      takeaway={summary.takeaway}
+      headerRight={
+        summary.tally ? (
+          <span className="text-xs text-text-muted tabular-nums">
+            Under budget <span className="text-green font-semibold">{summary.tally.under}</span> of{' '}
+            {summary.tally.total} days
+          </span>
+        ) : undefined
+      }
+      table={{
+        columns: filtered
+          ? [{ label: 'Date' }, { label: 'Spent', numeric: true }]
+          : [{ label: 'Date' }, { label: 'Spent', numeric: true }, { label: 'Budget', numeric: true }],
+        rows: tableRows,
+      }}
+      footer={
+        hasUncovered ? (
+          <p className="flex items-center gap-1.5 text-[10px] text-text-muted mt-2 mb-0">
+            <span
+              aria-hidden="true"
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{
+                background: `repeating-linear-gradient(45deg, ${t.chartNeutral} 0 1.5px, ${t.chartUncovered} 1.5px 4px)`,
+              }}
+            />
+            No imported statements — not counted
+          </p>
+        ) : null
+      }
+    >
       <div className="overflow-x-auto">
         <svg width={svgWidth} height={svgHeight} className="block">
-          {/* Month labels */}
-          {months.map((m, i) => (
+          <defs>
+            <pattern id={HATCH_ID} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width={4} height={4} fill={t.chartUncovered} />
+              <line x1={0} y1={0} x2={0} y2={4} stroke={t.chartNeutral} strokeWidth={1.5} />
+            </pattern>
+          </defs>
+
+          {/* Month labels (spaced so they never overlap) */}
+          {months.map((m) => (
             <text
-              key={i}
+              key={`${m.label}-${m.weekIndex}`}
               x={LABEL_WIDTH + m.weekIndex * TOTAL}
               y={12}
               className="fill-text-muted text-[10px]"
@@ -162,18 +163,24 @@ export function SpendingHeatmap({ onDayClick }: SpendingHeatmapProps) {
                 width={CELL_SIZE}
                 height={CELL_SIZE}
                 rx={2}
-                fill={day.future ? '#13161d' : getColor(day.amount, budget)}
+                fill={
+                  day.future ? '#13161d' : !day.covered ? `url(#${HATCH_ID})` : cellColor(day.amount)
+                }
                 className="cursor-pointer"
                 onClick={() => onDayClick?.(day.date)}
               >
                 <title>
-                  {day.date}: ${day.amount.toFixed(2)}
+                  {day.future
+                    ? day.date
+                    : day.covered
+                      ? `${day.date}: ${money(day.amount)}`
+                      : `${day.date}: no imported data`}
                 </title>
               </rect>
             )),
           )}
         </svg>
       </div>
-    </div>
+    </ChartCard>
   );
 }

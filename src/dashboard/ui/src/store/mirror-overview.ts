@@ -13,16 +13,20 @@
 // them. The overview parity test deep-equals every driver against the real
 // server handlers.
 //
-// Pure module — imports only overview-sql.js (shared constants + math); no
-// browser glue, no bun:sqlite.
+// Pure module — imports only overview-sql.js (shared constants + math) and the
+// zero-import spend-rules.js; no browser glue, no bun:sqlite.
 
 import {
-  DAILY_SPENDING_SQL,
+  composeDailySpendingSql,
+  COVERAGE_RANGE_SQL,
+  COVERAGE_MONTHS_SQL,
+  toCoverage,
+  CATEGORY_OPTIONS_SQL,
+  toCategoryOptions,
+  budgetActualRangeRow,
   STREAK_BUDGET_TOTAL_SQL,
-  STREAK_DAILY_SQL,
-  WEEK_TOTAL_SQL,
-  WEEK_BY_CATEGORY_SQL,
-  WEEK_TOP_MERCHANT_SQL,
+  composeStreakDailySql,
+  composeWeekSql,
   BUDGET_COUNTDOWN_BUDGETS_SQL,
   BUDGET_COUNTDOWN_SPENT_SQL,
   BUDGETS_ALL_SQL,
@@ -46,6 +50,8 @@ import {
   type BudgetCountdownRow,
   type BudgetLimitRow,
   type BudgetVsActualRow,
+  type CoverageResult,
+  type OverviewOptions,
   type DailySpendingRow,
   type MonthlyIncomeExpense,
   type OverviewQueryable,
@@ -54,16 +60,37 @@ import {
   type StreakResult,
   type WeekCategorySpending,
   type WeekData,
+  type WeekSql,
+  type EntityScopedOptions,
+  entityScopeParams,
   type WeeklySummaryResult,
 } from '../../../../db/overview-sql.js';
+import { monthsInRange, type DashboardRules } from '../../../../db/spend-rules.js';
 
 /** Mirror counterpart of getDailySpending (src/db/daily-queries.ts). */
 export async function mirrorGetDailySpending(
   db: OverviewQueryable,
   startDate: string,
-  endDate: string
+  endDate: string,
+  accountId?: number,
+  entityId?: number,
+  opts?: OverviewOptions
 ): Promise<DailySpendingRow[]> {
-  return (await db.prepare(DAILY_SPENDING_SQL).all({ startDate, endDate })) as unknown as DailySpendingRow[];
+  const { sql, params } = composeDailySpendingSql(startDate, endDate, accountId, entityId, opts);
+  return (await db.prepare(sql).all(params)) as unknown as DailySpendingRow[];
+}
+
+/** Mirror counterpart of getCoverage (src/db/queries.ts). */
+export async function mirrorGetCoverage(db: OverviewQueryable): Promise<CoverageResult> {
+  const range = (await db.prepare(COVERAGE_RANGE_SQL).get()) as { first_date?: unknown; last_date?: unknown } | undefined;
+  const months = (await db.prepare(COVERAGE_MONTHS_SQL).all()) as { month?: unknown }[];
+  return toCoverage(range, months);
+}
+
+/** Mirror counterpart of getCategoryOptions (src/db/queries.ts). */
+export async function mirrorGetCategoryOptions(db: OverviewQueryable): Promise<string[]> {
+  const rows = (await db.prepare(CATEGORY_OPTIONS_SQL).all()) as { category?: unknown }[];
+  return toCategoryOptions(rows);
 }
 
 /**
@@ -73,28 +100,32 @@ export async function mirrorGetDailySpending(
  */
 export async function mirrorGetStreak(
   db: OverviewQueryable,
-  now: Date = new Date()
+  now: Date = new Date(),
+  opts?: EntityScopedOptions
 ): Promise<StreakResult> {
   const row = (await db.prepare(STREAK_BUDGET_TOTAL_SQL).get()) as unknown as { total: number };
   const budget = computeStreakDailyBudget(row.total, now);
 
-  const rows = (await db.prepare(STREAK_DAILY_SQL).all()) as unknown as { date: string; spending: number }[];
+  const rows = (await db.prepare(composeStreakDailySql(opts)).all(entityScopeParams(opts))) as unknown as {
+    date: string;
+    spending: number;
+  }[];
   return computeStreak(rows, budget, now);
 }
 
 /** Mirror counterpart of getWeeklySummary's getWeekData glue. */
 async function mirrorGetWeekData(
   db: OverviewQueryable,
-  startDate: string,
-  endDate: string
+  sql: WeekSql,
+  params: Record<string, unknown>
 ): Promise<WeekData> {
-  const totalRow = (await db.prepare(WEEK_TOTAL_SQL).get({ startDate, endDate })) as unknown as { total: number };
+  const totalRow = (await db.prepare(sql.total).get(params)) as unknown as { total: number };
   const byCategory = (await db
-    .prepare(WEEK_BY_CATEGORY_SQL)
-    .all({ startDate, endDate })) as unknown as WeekCategorySpending[];
+    .prepare(sql.byCategory)
+    .all(params)) as unknown as WeekCategorySpending[];
   const topMerchantRow = (await db
-    .prepare(WEEK_TOP_MERCHANT_SQL)
-    .get({ startDate, endDate })) as unknown as { merchant: string } | undefined;
+    .prepare(sql.topMerchant)
+    .get(params)) as unknown as { merchant: string } | undefined;
 
   return {
     total: totalRow.total,
@@ -106,12 +137,15 @@ async function mirrorGetWeekData(
 /** Mirror counterpart of getWeeklySummary (Monday-based weeks). */
 export async function mirrorGetWeeklySummary(
   db: OverviewQueryable,
-  now: Date = new Date()
+  now: Date = new Date(),
+  opts?: EntityScopedOptions
 ): Promise<WeeklySummaryResult> {
   const windows = weekWindows(now);
+  const sql = composeWeekSql(opts);
+  const scope = entityScopeParams(opts);
 
-  const thisWeek = await mirrorGetWeekData(db, windows.thisStart, windows.thisEnd);
-  const lastWeek = await mirrorGetWeekData(db, windows.lastStart, windows.lastEnd);
+  const thisWeek = await mirrorGetWeekData(db, sql, { ...scope, startDate: windows.thisStart, endDate: windows.thisEnd });
+  const lastWeek = await mirrorGetWeekData(db, sql, { ...scope, startDate: windows.lastStart, endDate: windows.lastEnd });
 
   const changeAmount = thisWeek.total - lastWeek.total;
   const changePercent = lastWeek.total > 0 ? Math.round((changeAmount / lastWeek.total) * 100) : 0;
@@ -167,9 +201,10 @@ export async function mirrorGetSpendingSummary(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): Promise<SpendingSummaryRow[]> {
-  const { sql, params } = composeSpendingSummarySql(startDate, endDate, accountId, entityId);
+  const { sql, params } = composeSpendingSummarySql(startDate, endDate, accountId, entityId, opts);
   return (await db.prepare(sql).all(params)) as unknown as SpendingSummaryRow[];
 }
 
@@ -179,9 +214,10 @@ export async function mirrorGetProfitLoss(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): Promise<ProfitLossRow> {
-  const { incomeSql, expensesSql, params } = composePnlSql(startDate, endDate, accountId, entityId);
+  const { incomeSql, expensesSql, params } = composePnlSql(startDate, endDate, accountId, entityId, opts);
 
   const incomeByCategory = (await db.prepare(incomeSql).all(params)) as unknown as SpendingSummaryRow[];
   const expensesByCategory = (await db.prepare(expensesSql).all(params)) as unknown as SpendingSummaryRow[];
@@ -195,10 +231,11 @@ export async function mirrorGetMonthlySavingsData(
   endMonth?: string,
   months: number = 6,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): Promise<MonthlyIncomeExpense[]> {
   const { startDate, endDate } = savingsWindow(endMonth, months);
-  const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId);
+  const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId, opts);
 
   const rows = (await db.prepare(sql).all(params)) as unknown as { month: string; income: number; expenses: number }[];
   return toMonthlyIncomeExpense(rows);
@@ -246,5 +283,46 @@ export async function mirrorGetBudgetVsActual(
     results.push(budgetActualRow(budget, row.actual));
   }
 
+  return results;
+}
+
+/**
+ * Mirror counterpart of getBudgetVsActualRange (dashboard range mode): actual
+ * over [startDate, endDate] vs monthly_limit × day-prorated months in the range.
+ */
+export async function mirrorGetBudgetVsActualRange(
+  db: OverviewQueryable,
+  startDate: string,
+  endDate: string,
+  accountId?: number,
+  entityId?: number,
+  rules?: DashboardRules
+): Promise<BudgetVsActualRow[]> {
+  const budgets = (await db.prepare(BUDGETS_ALL_SQL).all()) as unknown as BudgetLimitRow[];
+  if (budgets.length === 0) return [];
+
+  const hasCategories = await (async () => {
+    try {
+      await db.prepare(HAS_CATEGORIES_PROBE_SQL).get();
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  const months = monthsInRange(startDate, endDate);
+  const { acctFilter, entityFilter } = composeBudgetActualClauses(accountId, entityId, rules);
+  const sql = hasCategories
+    ? composeBudgetRollupSql(acctFilter, entityFilter)
+    : composeBudgetFallbackSql(acctFilter, entityFilter);
+
+  const results: BudgetVsActualRow[] = [];
+  for (const budget of budgets) {
+    const params: Record<string, unknown> = { category: budget.category, startDate, endDate };
+    if (accountId !== undefined) params.accountId = accountId;
+    if (entityId !== undefined) params.entityId = entityId;
+    const row = (await db.prepare(sql).get(params)) as unknown as { actual: number };
+    results.push(budgetActualRangeRow(budget, row.actual, months));
+  }
   return results;
 }

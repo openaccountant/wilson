@@ -8,6 +8,7 @@ import {
   type ForecastQuality,
 } from '../dashboard/ui/src/lib/netWorthForecastProtocol.js';
 import { DRAG_PATHS, RELEASE_PATHS } from '../dashboard/ui/src/lib/netWorthForecast.js';
+import { TAB_IDS as URL_TAB_IDS } from '../dashboard/ui/src/lib/urlState.js';
 
 // Pure, dependency-free supersession/policy tests (no worker, no DOM, no
 // timing) plus source-level architecture pins, following the readFileSync
@@ -418,16 +419,6 @@ describe('tab registration lockstep', () => {
     return ids;
   }
 
-  function extractValidIds(appSource: string): string[] {
-    const block = appSource.match(/const valid: TabId\[\] = \[([\s\S]*?)\];/);
-    if (!block) throw new Error("App.tsx: could not locate the `valid` array");
-    const ids: string[] = [];
-    const idRe = /'([a-z0-9-]+)'/g;
-    let m: RegExpExecArray | null;
-    while ((m = idRe.exec(block[1])) !== null) ids.push(m[1]);
-    return ids;
-  }
-
   function extractTabComponentKeys(appSource: string): string[] {
     const block = appSource.match(/const TAB_COMPONENTS: Record<TabId, React\.FC> = \{([\s\S]*?)\};/);
     if (!block) throw new Error('App.tsx: could not locate the TAB_COMPONENTS map');
@@ -438,12 +429,13 @@ describe('tab registration lockstep', () => {
     return ids;
   }
 
-  test('TABS, `valid`, and TAB_COMPONENTS agree on membership and order, and include forecast', () => {
+  test('TABS, the URL-state TAB_IDS, and TAB_COMPONENTS agree on membership and order, and include forecast', () => {
     const tabBarSource = read(uiSrc, 'components', 'TabBar.tsx');
     const appSource = read(uiSrc, 'App.tsx');
 
     const tabIds = extractTabIds(tabBarSource);
-    const validIds = extractValidIds(appSource);
+    // The hash parser's tab whitelist (formerly App.tsx's `valid` array).
+    const validIds: string[] = [...URL_TAB_IDS];
     const componentKeys = extractTabComponentKeys(appSource);
 
     expect(validIds).toEqual(tabIds);

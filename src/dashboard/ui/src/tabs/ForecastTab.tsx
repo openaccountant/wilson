@@ -18,6 +18,7 @@ import {
 } from '@/lib/netWorthForecast';
 import { DEFAULT_SEED } from '@/lib/forecastCore';
 import type { NetWorthResponse, MonthlyCashflowRow } from '@/types';
+import { moneyWhole } from '@/format';
 
 // Sliders with no dedicated "default" export in lib/netWorthForecast (only
 // bounds) default to the neutral no-op value.
@@ -54,13 +55,6 @@ function partialHistoryMedians(history: MonthlyCashflowRow[] | null): {
     medianIncome: median(usable.map((r) => r.income)),
     medianContribution: median(usable.map((r) => r.income - r.expenses)),
   };
-}
-
-function fmtUsd(n: number): string {
-  const rounded = Math.round(n);
-  return rounded < 0
-    ? `-$${Math.abs(rounded).toLocaleString('en-US')}`
-    : `$${rounded.toLocaleString('en-US')}`;
 }
 
 export function ForecastTab() {
@@ -246,8 +240,8 @@ export function ForecastTab() {
         )}
         {last && (
           <p className="text-sm text-text mt-2">
-            Median net worth in {last.label}: <strong>{fmtUsd(last.p50)}</strong> · 10th–90th
-            percentile {fmtUsd(last.p10)} – {fmtUsd(last.p90)} ·{' '}
+            Median net worth in {last.label}: <strong>{moneyWhole(last.p50)}</strong> · 10th–90th
+            percentile {moneyWhole(last.p10)} – {moneyWhole(last.p90)} ·{' '}
             {(forecast?.pathCount ?? 0).toLocaleString()} simulated paths
             {refining ? ' · refining…' : ''}
           </p>

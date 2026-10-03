@@ -4,6 +4,7 @@ import { api } from '@/api';
 import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/types';
 import { parseDbTimestamp } from '@/format';
 import { WILSON_MCP_SESSION_KEY, WILSON_GRANTS_CHANGED_EVENT } from '@webmcp-session';
+import { reloadForProfileSwitch } from '@/hooks/useUrlState';
 
 const AUTH_KEY = 'wilson_auth_token';
 
@@ -39,8 +40,8 @@ function ProfileSection() {
         body: JSON.stringify({ name }),
       });
       refetch();
-      // Reload to refresh all data
-      setTimeout(() => window.location.reload(), 300);
+      // Reload to refresh all data (dropping the old profile's filter ids)
+      setTimeout(reloadForProfileSwitch, 300);
     } catch {
       // silent
     } finally {

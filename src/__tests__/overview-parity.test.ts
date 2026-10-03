@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { createTestDb, daysAgo, currentMonth, previousMonth } from './helpers.js';
+import { createTestDb, daysAgo, currentMonth, previousMonth, currentMonthEnd } from './helpers.js';
 import { Database } from '../db/compat-sqlite.js';
 import {
   apiSummary,
@@ -14,6 +14,7 @@ import {
   apiStreak,
   apiWeeklySummary,
   apiBudgetCountdown,
+  apiCoverage,
 } from '../dashboard/api.js';
 import { insertTransactions, setBudget, addCategory, getCategoryByName, getBudgets } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
@@ -106,6 +107,20 @@ insertTransactions(serverDb, [
   { date: `${currentMonth()}-03`, description: 'Espresso Bar', amount: -8.5, category: 'Espresso' },
 ]);
 
+// Dashboard-rule edge rows (spend-rules.ts): a card payment and a transfer
+// leg (never spending on the dashboard), a negative-stored paycheck (income
+// by category), blank and literal-'Uncategorized' categories (one bucket with
+// the NULL row above), and a refund inside a spending category.
+insertTransactions(serverDb, [
+  { date: daysAgo(2), description: 'CARD PAYMENT', amount: -250, category: 'Credit Card' },
+  { date: daysAgo(3), description: 'To savings', amount: -125, category: 'Internal Account Transfer' },
+  { date: daysAgo(3), description: 'Paycheck (stored negative)', amount: -1500, category: 'Income' },
+  { date: daysAgo(4), description: 'Blank category', amount: -4.5, category: '' },
+  { date: daysAgo(5), description: 'Literal uncategorized', amount: -3.25, category: 'Uncategorized' },
+  { date: daysAgo(40), description: 'Grocery refund', amount: 12.5, category: 'Groceries' },
+  { date: `${currentMonth()}-01`, description: 'Grocery store', amount: -18.75, category: 'Groceries' },
+]);
+
 // Account + entity links, like the server pipelines make them.
 const accountId = insertAccount(serverDb, {
   name: 'Everyday Checking',
@@ -119,6 +134,10 @@ serverDb.prepare(`UPDATE transactions SET account_id = @id WHERE category = 'Gro
 serverDb.prepare(
   `UPDATE transactions SET entity_id = @id WHERE category IN ('Dining', 'Espresso', 'Coffee')`
 ).run({ id: bizEntityId });
+// The default entity owns its explicit rows AND every NULL-entity row on the
+// dashboard (spend-rules defaultEntityIncludesNull).
+const defaultEntityId = (serverDb.prepare('SELECT id FROM entities WHERE is_default = 1').get() as { id: number }).id;
+serverDb.prepare(`UPDATE transactions SET entity_id = @id WHERE category = 'Transport'`).run({ id: defaultEntityId });
 
 // ── Mirror: seeded from the server's own raw pulls (the sync-engine path) ───
 
@@ -162,6 +181,12 @@ describe('offline overview aggregation parity with the server', () => {
     `startDate=${daysAgo(30)}&endDate=${daysAgo(0)}`,
     `startDate=${daysAgo(1)}&endDate=${daysAgo(0)}`,
     '', // missing params → the 200-shaped { error } object on both sides
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&accountId=${accountId}`,
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&entityId=${bizEntityId}`,
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&entityId=${defaultEntityId}`,
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&category=Groceries`,
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&category=Uncategorized`,
+    `startDate=${daysAgo(90)}&endDate=${daysAgo(0)}&category=Credit%20Card`, // non-spend → empty
   ])('/api/daily-spending?%s', async (query) => {
     const fromServer = apiDailySpending(serverDb, new URLSearchParams(query));
     const fromMirror = await serveApiPath(mirrorBinding, `/api/daily-spending?${query}`);
@@ -187,6 +212,11 @@ describe('offline overview aggregation parity with the server', () => {
     `month=${currentMonth()}&entityId=${bizEntityId}`,
     `month=${currentMonth()}&accountId=${accountId}&entityId=${bizEntityId}`,
     'month=1999-01', // empty window
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Groceries`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Uncategorized`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Income`, // non-spend → empty
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&entityId=${defaultEntityId}`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&entityId=${defaultEntityId}&category=Uncategorized`,
   ])('/api/summary?%s', async (query) => {
     const fromServer = apiSummary(serverDb, new URLSearchParams(query));
     const fromMirror = await serveApiPath(mirrorBinding, `/api/summary?${query}`);
@@ -202,6 +232,10 @@ describe('offline overview aggregation parity with the server', () => {
     `month=${currentMonth()}&entityId=${bizEntityId}`,
     `month=${currentMonth()}&accountId=${accountId}&entityId=${bizEntityId}`,
     'month=1999-01',
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Groceries`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Income`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&category=Uncategorized`,
+    `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}&entityId=${defaultEntityId}`,
   ])('/api/pnl?%s', async (query) => {
     const fromServer = apiPnl(serverDb, new URLSearchParams(query));
     const fromMirror = await serveApiPath(mirrorBinding, `/api/pnl?${query}`);
@@ -228,10 +262,50 @@ describe('offline overview aggregation parity with the server', () => {
     `month=${currentMonth()}&entityId=${bizEntityId}`,
     `month=${currentMonth()}&accountId=${accountId}&entityId=${bizEntityId}`,
     'month=1999-01',
+    `startDate=${previousMonth()}-01&endDate=${currentMonthEnd()}`, // two-month range
+    `startDate=${daysAgo(95)}&endDate=${daysAgo(0)}`, // ~quarter range
+    `startDate=${daysAgo(95)}&endDate=${daysAgo(0)}&entityId=${defaultEntityId}`,
+    `startDate=${daysAgo(95)}&endDate=${daysAgo(0)}&entityId=${bizEntityId}`,
   ])('/api/budgets?%s', async (query) => {
     const fromServer = apiBudgets(serverDb, new URLSearchParams(query));
     const fromMirror = await serveApiPath(mirrorBinding, `/api/budgets?${query}`);
     expect(fromMirror).toEqual(fromServer);
+  });
+
+  test('/api/coverage', async () => {
+    const fromServer = apiCoverage(serverDb);
+    const fromMirror = await serveApiPath(mirrorBinding, '/api/coverage');
+    expect(fromMirror).toEqual(fromServer);
+    expect(fromServer.months.length).toBeGreaterThanOrEqual(6);
+    expect(fromServer.months).toEqual([...fromServer.months].sort());
+    expect(fromServer.start).toBe(daysAgo(185));
+  });
+
+  test('budget range rows scale the limit by the months in the range', async () => {
+    const query = `startDate=${previousMonth()}-01&endDate=${currentMonthEnd()}`;
+    const rows = (await serveApiPath(mirrorBinding, `/api/budgets?${query}`)) as Array<{
+      category: string;
+      monthly_limit: number;
+      limit: number;
+      months: number;
+    }>;
+    const groceries = rows.find((r) => r.category === 'Groceries')!;
+    expect(groceries.months).toBe(2);
+    expect(groceries.limit).toBe(groceries.monthly_limit * 2);
+  });
+
+  test('dashboard spend rules hold on both sides (no card payments, merged Uncategorized)', async () => {
+    const query = `startDate=${daysAgo(60)}&endDate=${daysAgo(0)}`;
+    const summary = (await serveApiPath(mirrorBinding, `/api/summary?${query}`)) as Array<{ category: string; count: number }>;
+    const cats = summary.map((r) => r.category);
+    expect(cats).not.toContain('Credit Card');
+    expect(cats).not.toContain('Internal Account Transfer');
+    expect(cats).not.toContain('Transfer');
+    expect(cats).not.toContain('');
+    expect(cats.filter((c) => c === 'Uncategorized').length).toBe(1);
+    const pnl = (await serveApiPath(mirrorBinding, `/api/pnl?${query}`)) as { incomeByCategory: Array<{ category: string; total: number }> };
+    // 3500 + 2800 + 1500 (negative-stored) + 12.5 refund — every income total is positive.
+    expect(pnl.incomeByCategory.every((r) => r.total > 0)).toBe(true);
   });
 
   test('the Dining budget rolls child-category spending up into actual (recursive rollup)', async () => {

@@ -231,7 +231,7 @@ describe('budgets and categories ride the same sync path', () => {
 
     // The budget card aggregation works offline from the synced tables.
     const vsActual = (await serveApiPath(db, '/api/budgets?month=2026-03')) as Array<Record<string, unknown>>;
-    expect(vsActual).toEqual([{ category: 'Groceries', monthly_limit: 200, actual: 50, remaining: 150, percent_used: 25, over: false }]);
+    expect(vsActual).toEqual([{ category: 'Groceries', monthly_limit: 200, limit: 200, months: 1, actual: 50, remaining: 150, percent_used: 25, over: false }]);
   });
 
   test('a failing budgets/categories pull leaves the mirror on its last good set', async () => {

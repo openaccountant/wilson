@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api';
+import { money as money2, moneyWhole } from '@/format';
 import type {
   Account,
   BudgetLimitRow,
@@ -179,7 +180,7 @@ export const MENTION_EMPTY_LIMITS: Record<string, number> = {
 };
 
 function money(n: number): string {
-  return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
+  return Number.isInteger(n) ? moneyWhole(n) : money2(n);
 }
 
 export function buildMentionCandidates(s: MentionSources, merchants: MerchantListItem[]): MentionCandidate[] {

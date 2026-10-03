@@ -1,5 +1,6 @@
 import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts';
 import type { NetWorthForecast } from '@/lib/netWorthForecast';
+import { moneyCompact, moneyWhole } from '@/format';
 
 interface ChartDatum {
   label: string;
@@ -10,21 +11,6 @@ interface ChartDatum {
   band50: number;
   band75: number;
   band90: number;
-}
-
-function fmtUsdShort(n: number): string {
-  const abs = Math.abs(n);
-  const sign = n < 0 ? '-' : '';
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}m`;
-  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(0)}k`;
-  return `${sign}$${Math.round(abs)}`;
-}
-
-function fmtUsd(n: number): string {
-  const rounded = Math.round(n);
-  return rounded < 0
-    ? `-$${Math.abs(rounded).toLocaleString('en-US')}`
-    : `$${rounded.toLocaleString('en-US')}`;
 }
 
 function FanTooltip({
@@ -50,9 +36,9 @@ function FanTooltip({
       }}
     >
       <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
-      <div>Median {fmtUsd(d.p50)}</div>
+      <div>Median {moneyWhole(d.p50)}</div>
       <div style={{ color: '#a1a1aa' }}>
-        10th–90th percentile {fmtUsd(d.p10)}–{fmtUsd(d.p90)}
+        10th–90th percentile {moneyWhole(d.p10)}–{moneyWhole(d.p90)}
       </div>
     </div>
   );
@@ -91,7 +77,7 @@ export function ForecastFanChart({ forecast }: { forecast: NetWorthForecast }) {
             tick={{ fontSize: 10, fill: '#a1a1aa' }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v: number) => fmtUsdShort(v)}
+            tickFormatter={(v: number) => moneyCompact(v)}
           />
           <Tooltip content={<FanTooltip />} />
           {showZeroLine && <ReferenceLine y={0} stroke="#2a2d37" />}

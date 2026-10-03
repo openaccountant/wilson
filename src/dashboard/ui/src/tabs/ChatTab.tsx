@@ -16,12 +16,13 @@ import {
 } from '@/hooks/useMentionSources';
 import { api, getBaseUrl } from '@/api';
 import type { BudgetVsActualRow, ChatHistoryRow, ChatRequest, ChatResponse, ChatSessionRow } from '@/types';
-import { parseDbTimestamp } from '@/format';
+import { moneyWhole, parseDbTimestamp } from '@/format';
 import { deriveChatProvenance, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
 import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 import { Typeahead, type TypeaheadItem } from '@/components/Typeahead';
 import { ComposerBackdrop, MentionIcon } from '@/components/ComposerBackdrop';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
+import { navigateToTab, reloadForProfileSwitch } from '@/hooks/useUrlState';
 import {
   applySelection,
   contextBlockLabels,
@@ -98,15 +99,11 @@ function storage(): Storage | undefined {
   }
 }
 
-function money(n: number): string {
-  return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-}
-
 function budgetTable(rows: BudgetVsActualRow[]): string {
   if (rows.length === 0) return 'No budgets set yet. Try `/budget set Dining 200`.';
   const lines = rows.map(
     (r) =>
-      `| ${r.category} | ${money(r.monthly_limit)} | ${money(r.actual)} | ${money(r.remaining)} | ${Math.round(r.percent_used)}%${r.over ? ' ⚠' : ''} |`,
+      `| ${r.category} | ${moneyWhole(r.monthly_limit)} | ${moneyWhole(r.actual)} | ${moneyWhole(r.remaining)} | ${Math.round(r.percent_used)}%${r.over ? ' ⚠' : ''} |`,
   );
   return ['**Budgets vs. actual — this month**', '', '| Category | Limit | Spent | Left | Used |', '|---|--:|--:|--:|--:|', ...lines].join('\n');
 }
@@ -538,7 +535,8 @@ export function ChatTab() {
         setImportOpen(true);
         return;
       case 'navigate':
-        window.location.hash = cmd.run.hash;
+        // Push a tab switch that keeps the header's date range and filters.
+        navigateToTab(cmd.run.hash);
         return;
       case 'budget':
         try {
@@ -566,7 +564,7 @@ export function ChatTab() {
           await api('/api/profiles/switch', { method: 'POST', body: JSON.stringify({ name: rest }) });
           invalidateMentionSources();
           pushLocal(raw, `Switched to profile \`${rest}\` — reloading…`);
-          setTimeout(() => window.location.reload(), 300);
+          setTimeout(reloadForProfileSwitch, 300);
         } catch (err) {
           pushLocal(raw, `Error: ${err instanceof Error ? err.message : 'profile command failed'}`);
         }

@@ -250,6 +250,8 @@ describe('applySync — budgets', () => {
     expect(rows.find((r) => r.category === 'Groceries')).toEqual({
       category: 'Groceries',
       monthly_limit: 200,
+      limit: 200,
+      months: 1,
       actual: 0,
       remaining: 200,
       percent_used: 0,

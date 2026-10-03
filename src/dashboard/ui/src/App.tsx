@@ -1,10 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { TabBar, type TabId } from '@/components/TabBar';
 import { AppContext, type AppState } from '@/state';
 import { useDateRange } from '@/hooks/useDateRange';
+import { dropUnknownProfileIds, navigateToTab, useUrlState } from '@/hooks/useUrlState';
+import { categoryFilterOptions } from '@/lib/categoryOptions';
+import type { UrlTab } from '@/lib/urlState';
 import { useApi } from '@/hooks/useApi';
 import { useMirrorSync } from '@/hooks/useMirrorSync';
+import { primeCategoryPalette } from '@/charts/palette';
 import type { Account, SpendingSummaryItem, Entity } from '@/types';
 import { OverviewTab } from '@/tabs/OverviewTab';
 import { TransactionsTab } from '@/tabs/TransactionsTab';
@@ -17,11 +21,11 @@ import { GoalsTab } from '@/tabs/GoalsTab';
 import { ForecastTab } from '@/tabs/ForecastTab';
 import { SettingsTab } from '@/tabs/SettingsTab';
 
-function getHashTab(): TabId {
-  const hash = window.location.hash.replace('#', '');
-  const valid: TabId[] = ['overview', 'transactions', 'review', 'accounts', 'goals', 'forecast', 'chat', 'llm', 'logs', 'settings'];
-  return valid.includes(hash as TabId) ? (hash as TabId) : 'overview';
-}
+// lib/urlState.ts keeps its own tab list (it must stay import-free for bun
+// tests); fail the build if it drifts from the TabBar.
+type SameTabs = [TabId] extends [UrlTab] ? ([UrlTab] extends [TabId] ? true : false) : false;
+const TABS_IN_SYNC: SameTabs = true;
+void TABS_IN_SYNC;
 
 const TAB_COMPONENTS: Record<TabId, React.FC> = {
   overview: OverviewTab,
@@ -38,38 +42,57 @@ const TAB_COMPONENTS: Record<TabId, React.FC> = {
 
 export function App() {
   useMirrorSync();
-  const [activeTab, setActiveTab] = useState<TabId>(getHashTab);
-  const [accountId, setAccountId] = useState<number | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
-  const [entityId, setEntityId] = useState<number | null>(null);
+  // Tab + header filters live in the URL hash (lib/urlState.ts) so reloads,
+  // bookmarks and Back/Forward restore the view. Filter tweaks replace the
+  // current history entry; tab switches push one.
+  const { state: url, navigate } = useUrlState();
+  const activeTab: TabId = url.tab;
+  const accountId = url.account;
+  const category = url.cat;
+  const entityId = url.entity;
+  const setAccountId = useCallback(
+    (id: number | null) => navigate((s) => ({ ...s, account: id }), { mode: 'replace' }),
+    [navigate],
+  );
+  const setCategory = useCallback(
+    (cat: string | null) => navigate((s) => ({ ...s, cat: cat || null }), { mode: 'replace' }),
+    [navigate],
+  );
+  const setEntityId = useCallback(
+    (id: number | null) => navigate((s) => ({ ...s, entity: id }), { mode: 'replace' }),
+    [navigate],
+  );
   const { dateRange, setDateRange, goToPrevMonth, goToNextMonth, selectPreset, preset, monthLabel } = useDateRange();
 
   const { data: accountsData } = useApi<Account[]>('/api/accounts');
   const { data: entitiesData } = useApi<Entity[]>('/api/entities');
-  // Fetch summary with date range so categories update when range changes
-  const summaryParams = `startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
-  const { data: summaryData } = useApi<SpendingSummaryItem[]>(`/api/summary?${summaryParams}`, [summaryParams]);
-  // Also fetch a wide range to populate all known categories for the dropdown
+  // Header category options: every category label in transactions (incl.
+  // Transfer / Credit Card / Payment / Income and 'Uncategorized'). Not
+  // /api/summary — that applies the dashboard SPEND rule and would drop the
+  // non-spend categories as filter options.
+  const { data: categoryOptions } = useApi<string[]>('/api/category-options');
+  // All-time spending summary: ranks categories for stable chart colors.
   const { data: allSummaryData } = useApi<SpendingSummaryItem[]>('/api/summary?startDate=2000-01-01&endDate=2099-12-31');
+  // Stable chart colors: ranked by all-time spend, memoized for the session.
+  useEffect(() => void primeCategoryPalette(allSummaryData), [allSummaryData]);
 
   const accounts = useMemo(() => accountsData ?? [], [accountsData]);
   const entities = useMemo(() => entitiesData ?? [], [entitiesData]);
-  const categories = useMemo(() => {
-    // Merge categories from current range + all-time to populate dropdown fully
-    const combined = [...(summaryData ?? []), ...(allSummaryData ?? [])];
-    return [...new Set(combined.map((s) => s.category).filter(Boolean))].sort();
-  }, [summaryData, allSummaryData]);
+  // A deep-linked category stays selected even before the options load.
+  const categories = useMemo(() => categoryFilterOptions(categoryOptions, category), [categoryOptions, category]);
 
-  const handleTabChange = useCallback((tab: TabId) => {
-    window.location.hash = tab;
-    setActiveTab(tab);
-  }, []);
-
+  // Account/entity ids are profile-scoped. Any history entry (Back after a
+  // profile switch, an old bookmark) can carry another profile's ids, so once
+  // this profile's lists have loaded, drop unknown ids in place (replace).
+  // A list that failed to load (null) is never used to prune.
   useEffect(() => {
-    const onHashChange = () => setActiveTab(getHashTab());
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+    dropUnknownProfileIds({
+      accounts: accountsData ? accountsData.map((a) => a.id) : null,
+      entities: entitiesData ? entitiesData.map((e) => e.id) : null,
+    });
+  }, [accountsData, entitiesData, accountId, entityId]);
+
+  const handleTabChange = useCallback((tab: TabId) => navigateToTab(tab), []);
 
   const state: AppState = {
     dateRange,

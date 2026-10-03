@@ -1159,11 +1159,11 @@ describe('dashboard server', () => {
       expect(rows.find((r) => r.month === monthYm(0))).toBeUndefined();
     });
 
-    test('income-side P&L parity: a positive Transfer row counts as income (deliberate pin)', () => {
-      // This mirrors getProfitLoss's income rule (amount > 0 OR category =
-      // 'Income') exactly, by design. With two-sided transfer data the two
-      // legs can net out imperfectly for cash purposes — accepted for this
-      // slice; changing it is a conscious later decision, not a bug fix.
+    test('dashboard P&L parity: a positive Transfer row is NOT income (dashboard spend rules)', () => {
+      // The series follows the dashboard P&L classification (spend-rules.ts
+      // DASHBOARD_RULES): a transfer leg is neither income nor spending, in
+      // either direction. (Before the dashboard rules this pinned the legacy
+      // P&L rule, under which a positive Transfer counted as income.)
       const db = createTestDb();
       insertTransactions(db, [
         { date: monthYMD(1, 5), description: 'Transfer in from broker', amount: 250, category: 'Transfer' },
@@ -1173,7 +1173,7 @@ describe('dashboard server', () => {
       const rows = apiCashflowMonthly(db, new URLSearchParams());
       const prev = rows.find((r) => r.month === monthYm(1));
       expect(prev).toBeDefined();
-      expect(prev!.income).toBe(250);
+      expect(prev!.income).toBe(0);
       expect(prev!.expenses).toBe(80);
     });
 

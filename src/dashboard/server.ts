@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiBudgetLimits, apiCategories, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
@@ -413,6 +413,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/budgets') {
           return Response.json(apiBudgets(activeDb, url.searchParams), { headers });
         }
+        if (path === '/api/coverage') {
+          return Response.json(apiCoverage(activeDb), { headers });
+        }
         if (path === '/api/budgets/limits') {
           // Raw budget rows (sync feed for the offline mirror) — distinct from
           // /api/budgets, the vs-actual aggregation. Exact-match check, so the
@@ -422,6 +425,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/categories') {
           // Raw category rows (sync feed for the offline mirror).
           return Response.json(apiCategories(activeDb), { headers });
+        }
+        if (path === '/api/category-options') {
+          // Header category filter options (every label in transactions).
+          return Response.json(apiCategoryOptions(activeDb), { headers });
         }
         if (path === '/api/skills') {
           // Chat "/" menu source. Name/description/tier/source only — never the SKILL.md path.
@@ -447,10 +454,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           return Response.json(apiDailySpending(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/streak') {
-          return Response.json(apiStreak(activeDb), { headers });
+          return Response.json(apiStreak(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/weekly-summary') {
-          return Response.json(apiWeeklySummary(activeDb), { headers });
+          return Response.json(apiWeeklySummary(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/budget-countdown') {
           return Response.json(apiBudgetCountdown(activeDb, url.searchParams), { headers });

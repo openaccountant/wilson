@@ -1,5 +1,10 @@
 import type { Database } from './compat-sqlite.js';
-import { buildTransactionWhere, type TransactionFilters } from './transaction-where.js';
+import {
+  composeTransactionListSql,
+  type TransactionFilters,
+  type TransactionPage,
+  type TransactionWhereRules,
+} from './transaction-where.js';
 import { deleteEmbeddings } from './embedding-queries.js';
 import {
   BUDGETS_ALL_SQL,
@@ -10,6 +15,12 @@ import {
   composeBudgetActualClauses,
   composeBudgetRollupSql,
   composeBudgetFallbackSql,
+  COVERAGE_RANGE_SQL,
+  COVERAGE_MONTHS_SQL,
+  CATEGORY_OPTIONS_SQL,
+  toCategoryOptions,
+  toCoverage,
+  budgetActualRangeRow,
   budgetMonthWindow,
   summarizePnl,
   toMonthlyIncomeExpense,
@@ -19,7 +30,10 @@ import {
   type ProfitLossRow,
   type MonthlyIncomeExpense,
   type BudgetVsActualRow,
+  type CoverageResult,
+  type OverviewOptions,
 } from './overview-sql.js';
+import { hasDashboardRules, monthsInRange, type DashboardRules } from './spend-rules.js';
 
 // The filters interface moved to transaction-where.ts (shared with the offline
 // dashboard mirror); re-exported here so existing imports keep working.
@@ -160,11 +174,10 @@ export function insertTransactions(
  */
 export function getTransactions(
   db: Database,
-  filters: TransactionFilters = {}
+  filters: TransactionFilters = {},
+  options: { rules?: TransactionWhereRules; page?: TransactionPage } = {}
 ): TransactionRow[] {
-  const { whereSql, params } = buildTransactionWhere(filters);
-  const sql = `SELECT * FROM transactions ${whereSql} ORDER BY date DESC`;
-
+  const { sql, params } = composeTransactionListSql(filters, options.rules, options.page);
   return db.prepare(sql).all(params) as TransactionRow[];
 }
 
@@ -194,9 +207,10 @@ export function getSpendingSummary(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): SpendingSummaryRow[] {
-  const { sql, params } = composeSpendingSummarySql(startDate, endDate, accountId, entityId);
+  const { sql, params } = composeSpendingSummarySql(startDate, endDate, accountId, entityId, opts);
   return db.prepare(sql).all(params) as SpendingSummaryRow[];
 }
 
@@ -284,9 +298,10 @@ export function getProfitLoss(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): ProfitLossRow {
-  const { incomeSql, expensesSql, params } = composePnlSql(startDate, endDate, accountId, entityId);
+  const { incomeSql, expensesSql, params } = composePnlSql(startDate, endDate, accountId, entityId, opts);
 
   const incomeByCategory = db.prepare(incomeSql).all(params) as SpendingSummaryRow[];
   const expensesByCategory = db.prepare(expensesSql).all(params) as SpendingSummaryRow[];
@@ -306,10 +321,11 @@ export function getMonthlySavingsData(
   endMonth?: string,
   months: number = 6,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): MonthlyIncomeExpense[] {
   const { startDate, endDate } = savingsWindow(endMonth, months);
-  const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId);
+  const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId, opts);
 
   const rows = db.prepare(sql).all(params) as { month: string; income: number; expenses: number }[];
 
@@ -318,8 +334,12 @@ export function getMonthlySavingsData(
 
 export interface MonthlyCashflowRow {
   month: string;    // 'YYYY-MM', complete calendar months only (current partial month excluded)
-  income: number;   // sum of amounts where amount > 0 OR category = 'Income'  (P&L income rule)
-  expenses: number; // sum of ABS(amount) where amount < 0 AND COALESCE(category,'') NOT IN ('Income','Transfer')  (P&L expense rule)
+  // Without rules (legacy): sum of amounts where amount > 0 OR category = 'Income'.
+  // With DASHBOARD_RULES: the INCOME rule summed as ABS(amount) (spend-rules.ts).
+  income: number;
+  // Without rules (legacy): ABS(amount) where amount < 0 AND category NOT IN ('Income','Transfer').
+  // With DASHBOARD_RULES: the SPEND rule (excludes every NON_SPEND_CATEGORIES label).
+  expenses: number;
 }
 
 /**
@@ -333,6 +353,7 @@ export function getMonthlyCashflowData(
   db: Database,
   endMonth?: string,
   months: number = 24,
+  rules?: DashboardRules,
 ): MonthlyCashflowRow[] {
   const end = endMonth ?? new Date().toISOString().slice(0, 7);
   const [endYear, endMon] = end.split('-').map(Number);
@@ -345,6 +366,16 @@ export function getMonthlyCashflowData(
     const d = new Date(endYear, endMon - months - 1, 1);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   })();
+
+  // Dashboard (opt-in): the same income/expense classification as the
+  // dashboard P&L and savings cards — composeSavingsSql's dashboard branch with
+  // no account/entity filters — so a negative-stored paycheck adds to income
+  // and a credit-card payment is never an expense. Callers without rules get
+  // the historical SQL below byte-for-byte.
+  if (hasDashboardRules(rules)) {
+    const { sql, params } = composeSavingsSql(startDate, endDate, undefined, undefined, { ...rules });
+    return db.prepare(sql).all(params) as MonthlyCashflowRow[];
+  }
 
   return db.prepare(`
     SELECT strftime('%Y-%m', date) AS month,
@@ -595,6 +626,66 @@ export function getBudgetVsActual(
   }
 
   return results;
+}
+
+/**
+ * Dashboard range-mode budgets vs actual: actual spending over
+ * [startDate, endDate] compared against monthly_limit × the day-prorated
+ * months in the range (a quarter → 3; Jan 31–Feb 1 → 1/31 + 1/28; see
+ * spend-rules monthsInRange). Rows carry `limit` and
+ * `months`. Dashboard-only (CLI callers keep getBudgetVsActual's month mode).
+ */
+export function getBudgetVsActualRange(
+  db: Database,
+  startDate: string,
+  endDate: string,
+  accountId?: number,
+  entityId?: number,
+  rules?: DashboardRules
+): BudgetVsActualRow[] {
+  const budgets = getBudgets(db);
+  if (budgets.length === 0) return [];
+
+  const hasCategories = (() => {
+    try {
+      db.prepare(HAS_CATEGORIES_PROBE_SQL).get();
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  const months = monthsInRange(startDate, endDate);
+  const { acctFilter, entityFilter } = composeBudgetActualClauses(accountId, entityId, rules);
+  const sql = hasCategories
+    ? composeBudgetRollupSql(acctFilter, entityFilter)
+    : composeBudgetFallbackSql(acctFilter, entityFilter);
+
+  return budgets.map((budget) => {
+    const params: Record<string, unknown> = { category: budget.category, startDate, endDate };
+    if (accountId !== undefined) params.accountId = accountId;
+    if (entityId !== undefined) params.entityId = entityId;
+    const row = db.prepare(sql).get(params) as { actual: number };
+    return budgetActualRangeRow(budget, row.actual, months);
+  });
+}
+
+/**
+ * Distinct category labels across all transactions (one 'Uncategorized'
+ * bucket), sorted — the dashboard header's category filter options.
+ */
+export function getCategoryOptions(db: Database): string[] {
+  return toCategoryOptions(db.prepare(CATEGORY_OPTIONS_SQL).all() as { category: unknown }[]);
+}
+
+/**
+ * Data coverage: first/last transaction date and every YYYY-MM that has at
+ * least one transaction. Unfiltered by design (GET /api/coverage).
+ */
+export function getCoverage(db: Database): CoverageResult {
+  const range = db.prepare(COVERAGE_RANGE_SQL).get() as { first_date: unknown; last_date: unknown } | undefined;
+  const months = db.prepare(COVERAGE_MONTHS_SQL).all() as { month: unknown }[];
+  return toCoverage(range, months);
 }
 
 // ── Chat history queries ────────────────────────────────────────────────────

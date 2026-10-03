@@ -16,9 +16,9 @@ import type {
 } from './types.js';
 
 /**
- * The "unbounded" transactions pull: apiTransactions does `txns.slice(0, limit)`
- * with no server-side cap, so a huge limit returns the full set — no server
- * change needed.
+ * The "unbounded" transactions pull: apiTransactions applies `LIMIT @limit`
+ * in SQL with no server-side cap, so a huge limit returns the full set — no
+ * server change needed.
  */
 export const SYNC_PULL_LIMIT = 10_000_000;
 

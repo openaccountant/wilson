@@ -162,6 +162,10 @@ export interface PnlResponse {
 export interface BudgetVsActualRow {
   category: string;
   monthly_limit: number;
+  /** monthly_limit × months in the requested range (what percent_used compares against). */
+  limit?: number;
+  /** Budget months in the requested range, prorated by day (2 days of a 31-day month → 2/31). */
+  months?: number;
   actual: number;
   remaining: number;
   percent_used: number;
@@ -434,4 +438,12 @@ export interface CatalogModel {
 export interface ModelsPanel {
   tasks: ModelTaskRow[];
   catalog: CatalogModel[];
+}
+
+// Matches GET /api/coverage response (CoverageResult in src/db/overview-sql.ts):
+// months that have ANY imported transactions, unfiltered.
+export interface CoverageResponse {
+  start: string | null;
+  end: string | null;
+  months: string[];
 }

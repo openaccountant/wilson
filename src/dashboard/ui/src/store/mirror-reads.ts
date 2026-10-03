@@ -11,7 +11,13 @@
 //
 // Pure module — no browser glue, no bun:sqlite import.
 
-import { buildTransactionWhere, type TransactionFilters } from '../../../../db/transaction-where.js';
+import {
+  composeTransactionListSql,
+  type TransactionFilters,
+  type TransactionPage,
+  type TransactionWhereRules,
+} from '../../../../db/transaction-where.js';
+import { DASHBOARD_RULES } from '../../../../db/spend-rules.js';
 import { parseTransactionListParams } from '../../../../dashboard/transactions-query.js';
 import {
   parseAccountId,
@@ -20,6 +26,7 @@ import {
   parseSavingsMonths,
   parseBudgetCountdownMonth,
   parseDailySpendingRange,
+  parseDashboardOptions,
 } from '../../../../dashboard/overview-params.js';
 import {
   mirrorGetDailySpending,
@@ -29,7 +36,9 @@ import {
   mirrorGetSpendingSummary,
   mirrorGetProfitLoss,
   mirrorGetMonthlySavingsData,
-  mirrorGetBudgetVsActual,
+  mirrorGetBudgetVsActualRange,
+  mirrorGetCoverage,
+  mirrorGetCategoryOptions,
 } from './mirror-overview.js';
 import type { MirrorEntityRow, MirrorTransactionRow, SqliteBinding, SqlRow } from './types.js';
 
@@ -49,12 +58,11 @@ function stripSyncKey(row: SqlRow): Record<string, unknown> {
  */
 export async function mirrorGetTransactions(
   db: SqliteBinding,
-  filters: TransactionFilters = {}
+  filters: TransactionFilters = {},
+  options: { rules?: TransactionWhereRules; page?: TransactionPage } = {}
 ): Promise<MirrorTransactionRow[]> {
-  const { whereSql, params } = buildTransactionWhere(filters);
-  const rows = await db
-    .prepare(`SELECT * FROM transactions ${whereSql} ORDER BY date DESC`)
-    .all(params);
+  const { sql, params } = composeTransactionListSql(filters, options.rules, options.page);
+  const rows = await db.prepare(sql).all(params);
   return rows.map(stripSyncKey) as unknown as MirrorTransactionRow[];
 }
 
@@ -73,9 +81,11 @@ export async function mirrorGetEntities(db: SqliteBinding): Promise<MirrorEntity
 /**
  * Serve a dashboard API path from the mirror.
  *
- * Routes exactly the paths mirrored so far — the transactions tab's two reads
- * plus the eight approved overview cards — replicating the server handlers
- * (including the slice-to-limit and the /api/daily-spending `{ error }` shape).
+ * Routes exactly the paths mirrored so far — the transactions tab's two reads,
+ * the eight approved overview cards, /api/coverage and the header's
+ * /api/category-options — replicating the
+ * server handlers (including SQL paging, the dashboard spend rules, and the
+ * /api/daily-spending `{ error }` shape).
  * Anything else returns null: the caller turns that into an explicit
  * "requires connection" state instead of inventing a response.
  */
@@ -86,12 +96,17 @@ export async function serveApiPath(db: SqliteBinding, path: string): Promise<unk
   const params = new URLSearchParams(search);
 
   if (pathname === '/api/transactions') {
-    const { filters, limit } = parseTransactionListParams(params);
-    const rows = await mirrorGetTransactions(db, filters);
-    return rows.slice(0, limit);
+    const { filters, limit, offset } = parseTransactionListParams(params);
+    return mirrorGetTransactions(db, filters, { rules: DASHBOARD_RULES, page: { limit, offset } });
+  }
+  if (pathname === '/api/coverage') {
+    return mirrorGetCoverage(db);
   }
   if (pathname === '/api/entities') {
     return mirrorGetEntities(db);
+  }
+  if (pathname === '/api/category-options') {
+    return mirrorGetCategoryOptions(db);
   }
   // ── Overview cards (the eight approved offline aggregations) ──────────────
   if (pathname === '/api/daily-spending') {
@@ -99,13 +114,15 @@ export async function serveApiPath(db: SqliteBinding, path: string): Promise<unk
     if ('error' in range) {
       return range;
     }
-    return mirrorGetDailySpending(db, range.startDate, range.endDate);
+    const accountId = parseAccountId(params);
+    const entityId = parseEntityId(params);
+    return mirrorGetDailySpending(db, range.startDate, range.endDate, accountId, entityId, parseDashboardOptions(params));
   }
   if (pathname === '/api/streak') {
-    return mirrorGetStreak(db);
+    return mirrorGetStreak(db, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
   }
   if (pathname === '/api/weekly-summary') {
-    return mirrorGetWeeklySummary(db);
+    return mirrorGetWeeklySummary(db, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
   }
   if (pathname === '/api/budget-countdown') {
     const month = parseBudgetCountdownMonth(params);
@@ -115,25 +132,25 @@ export async function serveApiPath(db: SqliteBinding, path: string): Promise<unk
     const { startDate, endDate } = parseDateRange(params);
     const accountId = parseAccountId(params);
     const entityId = parseEntityId(params);
-    return mirrorGetSpendingSummary(db, startDate, endDate, accountId, entityId);
+    return mirrorGetSpendingSummary(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
   }
   if (pathname === '/api/pnl') {
     const { startDate, endDate } = parseDateRange(params);
     const accountId = parseAccountId(params);
     const entityId = parseEntityId(params);
-    return mirrorGetProfitLoss(db, startDate, endDate, accountId, entityId);
+    return mirrorGetProfitLoss(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
   }
   if (pathname === '/api/savings') {
     const months = parseSavingsMonths(params);
     const accountId = parseAccountId(params);
     const entityId = parseEntityId(params);
-    return mirrorGetMonthlySavingsData(db, undefined, months, accountId, entityId);
+    return mirrorGetMonthlySavingsData(db, undefined, months, accountId, entityId, { ...DASHBOARD_RULES });
   }
   if (pathname === '/api/budgets') {
-    const { month } = parseDateRange(params);
+    const { startDate, endDate } = parseDateRange(params);
     const accountId = parseAccountId(params);
     const entityId = parseEntityId(params);
-    return mirrorGetBudgetVsActual(db, month, accountId, entityId);
+    return mirrorGetBudgetVsActualRange(db, startDate, endDate, accountId, entityId, DASHBOARD_RULES);
   }
   return null;
 }
