@@ -1112,9 +1112,12 @@ export function getDashboardHtml(port: number): string {
   // neutralized before markdown tags are applied. Only our controlled
   // markdown transformations produce HTML in the output.
   var BT = String.fromCharCode(96), BT3 = BT+BT+BT;
-  function renderMd(text) {
+  // plainLinks: render [text](url) as just text (used for on-device model output).
+  // Quotes are escaped so an href value can never break out of its attribute, and
+  // only http(s)/mailto hrefs become anchors; anything else renders as plain text.
+  function renderMd(text, plainLinks) {
     if (!text) return '';
-    var s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     var codeBlockRe = new RegExp(BT3+'(\\\\w*)\\\\n([\\\\s\\\\S]*?)'+BT3,'g');
     s = s.replace(codeBlockRe, function(m,lang,code){return '<pre><code>'+code.replace(/\\n$/,'')+'</code></pre>';});
     s = s.replace(/((?:^\\|.+\\|$\\n?)+)/gm, function(block) {
@@ -1127,7 +1130,10 @@ export function getDashboardHtml(port: number): string {
     s = s.replace(/^### (.+)$/gm,'<h3>$1</h3>'); s = s.replace(/^## (.+)$/gm,'<h2>$1</h2>'); s = s.replace(/^# (.+)$/gm,'<h1>$1</h1>');
     s = s.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>'); s = s.replace(/\\*(.+?)\\*/g,'<em>$1</em>');
     s = s.replace(new RegExp(BT+'([^'+BT+']+)'+BT,'g'),'<code>$1</code>');
-    s = s.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(m,label,url){
+      if (plainLinks || !/^(https?:|mailto:)/i.test(url) || url.indexOf('<') !== -1) return label;
+      return '<a href="'+url+'" target="_blank" rel="noopener">'+label+'</a>';
+    });
     s = s.replace(/((?:^[\\-\\*] .+$\\n?)+)/gm, function(block){return '<ul>'+block.trim().split('\\n').map(function(l){return '<li>'+l.replace(/^[\\-\\*] /,'')+'</li>';}).join('')+'</ul>';});
     s = s.replace(/((?:^\\d+\\. .+$\\n?)+)/gm, function(block){return '<ol>'+block.trim().split('\\n').map(function(l){return '<li>'+l.replace(/^\\d+\\. /,'')+'</li>';}).join('')+'</ol>';});
     s = s.replace(/\\n\\n+/g,'</p><p>'); s = '<p>'+s+'</p>';
@@ -1140,8 +1146,10 @@ export function getDashboardHtml(port: number): string {
     div.appendChild(el('div','sender',sender));
     var bubble = el('div','bubble'), textDiv = el('div','text');
     if (useMarkdown && text) {
-      // Safe: renderMd escapes all HTML entities before applying markdown transforms
-      textDiv.innerHTML = renderMd(text);
+      // Safe: renderMd escapes all HTML entities before applying markdown transforms.
+      // Only history replay uses useMarkdown, and replayed messages cannot be
+      // attributed local vs server, so every reloaded message shows links as text.
+      textDiv.innerHTML = renderMd(text, true);
     } else { textDiv.textContent = text||''; }
     bubble.appendChild(textDiv); div.appendChild(bubble);
     chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight; return div;
@@ -1213,8 +1221,9 @@ export function getDashboardHtml(port: number): string {
     // in play but server answered → fallback; hybrid chunk absent → neutral.
     var prov = deriveProv(localAnswer != null, hybridPresent);
     if (localAnswer != null) {
-      // Safe: renderMd escapes all HTML entities before applying markdown transforms
-      pendingText.innerHTML = renderMd(localAnswer);
+      // Safe: renderMd escapes all HTML entities before applying markdown transforms.
+      // On-device model output is untrusted: links render as plain text.
+      pendingText.innerHTML = renderMd(localAnswer, true);
       stampProv(pending, prov);
       loadSessions();
     } else {
