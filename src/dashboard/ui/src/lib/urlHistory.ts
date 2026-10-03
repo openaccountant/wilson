@@ -14,6 +14,7 @@ import {
   type KnownProfileIds,
   type UrlState,
 } from './urlState';
+import { pushedHistoryState } from './drill';
 
 export type NavigateMode = 'push' | 'replace';
 export type UrlUpdate = UrlState | ((current: UrlState) => UrlState);
@@ -50,10 +51,14 @@ function urlWithHash(hash: string): string {
   return `${window.location.pathname}${window.location.search}${hash}`;
 }
 
-/** Write a hash and notify subscribers. */
-export function writeHash(hash: string, mode: NavigateMode): void {
-  if (mode === 'push') window.history.pushState(window.history.state, '', urlWithHash(hash));
-  else window.history.replaceState(window.history.state, '', urlWithHash(hash));
+/**
+ * Write a hash and notify subscribers. `state` (when given) becomes the
+ * entry's history.state; otherwise the current entry's state carries over.
+ */
+export function writeHash(hash: string, mode: NavigateMode, state?: unknown): void {
+  const next = state === undefined ? window.history.state : state;
+  if (mode === 'push') window.history.pushState(next, '', urlWithHash(hash));
+  else window.history.replaceState(next, '', urlWithHash(hash));
   window.dispatchEvent(new Event(URL_STATE_EVENT));
 }
 
@@ -63,7 +68,10 @@ export function writeHash(hash: string, mode: NavigateMode): void {
  * no-op when the canonical hash wouldn't change, which keeps history clean
  * and makes StrictMode's doubled effects harmless.
  */
-export function navigateUrl(update: UrlUpdate, opts: { mode?: NavigateMode } = {}): void {
+export function navigateUrl(
+  update: UrlUpdate,
+  opts: { mode?: NavigateMode; pushState?: (prev: unknown) => unknown } = {},
+): void {
   const current = readUrlState();
   const next = typeof update === 'function' ? update(current) : update;
   const hash = serializeHash(next);
@@ -71,7 +79,12 @@ export function navigateUrl(update: UrlUpdate, opts: { mode?: NavigateMode } = {
   // A push that only canonicalizes the current entry would make Back look
   // broken (two entries, same view); treat it as a replace.
   const mode = opts.mode === 'push' && hash !== serializeHash(current) ? 'push' : 'replace';
-  writeHash(hash, mode);
+  // `pushState` derives a PUSHED entry's history.state (e.g. the drill's
+  // drawer marker); replaces keep the entry's own state.
+  // Every other push starts clean of the drawer marker, which belongs to one
+  // entry only.
+  const prev = window.history.state;
+  writeHash(hash, mode, mode === 'push' ? (opts.pushState ? opts.pushState(prev) : pushedHistoryState(prev, null)) : undefined);
 }
 
 /** Switch tabs (a new history entry), keeping the global date/filter keys. */
@@ -94,9 +107,9 @@ export function dropUnknownProfileIds(known: KnownProfileIds): void {
 }
 
 /**
- * Reload after a profile switch. Account/entity/category/day values belong to
- * the old profile's database, so drop them first — with replaceState, so the
- * old-profile URL isn't one Back press away.
+ * Reload after a profile switch. Account/entity/category/day and drill
+ * (merchant/txn/by) values belong to the old profile's database, so drop them
+ * first — with replaceState, so the old-profile URL isn't one Back press away.
  */
 export function reloadForProfileSwitch(): void {
   const hash = serializeHash(stripProfileScoped(readUrlState()));

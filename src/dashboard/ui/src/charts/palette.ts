@@ -12,6 +12,7 @@
  * most distinguishable hues.
  */
 import { chartTokens, seriesSlots } from './tokens';
+import { isNeutralLabel } from '../lib/neutralLabels';
 
 export interface SummaryLike {
   category: string | null;
@@ -20,16 +21,19 @@ export interface SummaryLike {
 
 export const PALETTE_SLOT_COUNT = 7;
 
-/** Category labels that never earn a hue (no identity worth encoding). */
-const NEUTRAL_LABELS = new Set(['', 'uncategorized', 'unclassified', 'uncategorised', 'other']);
 /**
  * Not spend even when stored negative (income rows can carry negative amounts
  * under 'Income'), so it must not steal a spend slot.
  */
 const NON_SPEND_LABELS = new Set(['income']);
 
+/**
+ * Category labels that never earn a hue (no identity worth encoding): the
+ * shared neutral list (lib/neutralLabels.ts) — Uncategorized / catch-alls and
+ * payment-method labels — so the drill's grey labels never consume a slot.
+ */
 export function isNeutralCategory(category: string | null | undefined): boolean {
-  return NEUTRAL_LABELS.has((category ?? '').trim().toLowerCase());
+  return isNeutralLabel(category);
 }
 
 export interface CategoryPalette {

@@ -94,8 +94,11 @@ type KnownKey = (typeof KEY_ORDER)[number];
  */
 export const GLOBAL_KEYS: readonly KnownKey[] = ['preset', 'start', 'end', 'account', 'entity', 'cat', 'cmp'];
 
-/** Keys whose values only mean something inside one profile's database. */
-export const PROFILE_SCOPED_KEYS: readonly KnownKey[] = ['account', 'entity', 'cat', 'day'];
+/**
+ * Keys whose values only mean something inside one profile's database: ids,
+ * labels and the drill's merchant key / transaction id / grouping.
+ */
+export const PROFILE_SCOPED_KEYS: readonly KnownKey[] = ['account', 'entity', 'cat', 'day', 'merchant', 'txn', 'by'];
 
 export const DEFAULT_URL_STATE: UrlState = Object.freeze({
   tab: 'overview',

@@ -3,6 +3,7 @@ import { useApi } from '@/hooks/useApi';
 import { useAppState } from '@/state';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import { ChartCard } from '@/charts/ChartCard';
+import { FilteredBadge } from '@/components/FilteredBadge';
 import { chartTokens } from '@/charts/tokens';
 import { buildHeatmapGrid, heatmapSummary, heatmapYearRange, isFilteredHeatmap } from '@/lib/heatmapGrid';
 import { dailySpendingPath } from '@/lib/overviewQueries';
@@ -90,11 +91,16 @@ export function SpendingHeatmap({ onDayClick }: SpendingHeatmapProps) {
       height={140}
       takeaway={summary.takeaway}
       headerRight={
-        summary.tally ? (
-          <span className="text-xs text-text-muted tabular-nums">
-            Under budget <span className="text-green font-semibold">{summary.tally.under}</span> of{' '}
-            {summary.tally.total} days
-          </span>
+        summary.tally || category ? (
+          <>
+            <FilteredBadge category={category} />
+            {summary.tally && (
+              <span className="text-xs text-text-muted tabular-nums">
+                Under budget <span className="text-green font-semibold">{summary.tally.under}</span> of{' '}
+                {summary.tally.total} days
+              </span>
+            )}
+          </>
         ) : undefined
       }
       table={{

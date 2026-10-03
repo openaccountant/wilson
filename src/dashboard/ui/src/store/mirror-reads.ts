@@ -40,6 +40,12 @@ import {
   mirrorGetCoverage,
   mirrorGetCategoryOptions,
 } from './mirror-overview.js';
+import {
+  parseSpendingBreakdownParams,
+  parseSpendingSeriesParams,
+  isBadRequest,
+} from '../../../../dashboard/spending-params.js';
+import { runSpendingBreakdown, runSpendingSeries } from '../../../../db/spending-drill-sql.js';
 import type { MirrorEntityRow, MirrorTransactionRow, SqliteBinding, SqlRow } from './types.js';
 
 /**
@@ -82,8 +88,9 @@ export async function mirrorGetEntities(db: SqliteBinding): Promise<MirrorEntity
  * Serve a dashboard API path from the mirror.
  *
  * Routes exactly the paths mirrored so far — the transactions tab's two reads,
- * the eight approved overview cards, /api/coverage and the header's
- * /api/category-options — replicating the
+ * the eight approved overview cards, /api/coverage, the header's
+ * /api/category-options and the spending drill's /api/spending/breakdown +
+ * /api/spending/series — replicating the
  * server handlers (including SQL paging, the dashboard spend rules, and the
  * /api/daily-spending `{ error }` shape).
  * Anything else returns null: the caller turns that into an explicit
@@ -107,6 +114,17 @@ export async function serveApiPath(db: SqliteBinding, path: string): Promise<unk
   }
   if (pathname === '/api/category-options') {
     return mirrorGetCategoryOptions(db);
+  }
+  // ── Spending drill: the SAME parser + driver as the server handlers. A bad
+  // param returns the server's BadRequest object ({ status: 400, error }),
+  // which the fetch seam (ui/src/api.ts) raises as the same "API 400" error.
+  if (pathname === '/api/spending/breakdown') {
+    const query = parseSpendingBreakdownParams(params);
+    return isBadRequest(query) ? query : runSpendingBreakdown(db, query);
+  }
+  if (pathname === '/api/spending/series') {
+    const query = parseSpendingSeriesParams(params);
+    return isBadRequest(query) ? query : runSpendingSeries(db, query);
   }
   // ── Overview cards (the eight approved offline aggregations) ──────────────
   if (pathname === '/api/daily-spending') {

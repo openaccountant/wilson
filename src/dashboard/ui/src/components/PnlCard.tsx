@@ -1,11 +1,15 @@
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { useAppState } from '@/state';
+import { FilteredBadge } from '@/components/FilteredBadge';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import { money } from '@/format';
 import type { PnlResponse } from '@/types';
 
 export function PnlCard() {
   const params = useFilterParams();
+  // /api/pnl honors the category filter (expense-only for that category).
+  const { category } = useAppState();
   const { data, loading, offline } = useApi<PnlResponse>(`/api/pnl?${params}`, [params]);
 
   if (loading) {
@@ -27,7 +31,10 @@ export function PnlCard() {
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4">
-      <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Profit & Loss</h3>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="text-xs text-text-secondary uppercase tracking-wide m-0">Profit & Loss</h3>
+        <FilteredBadge category={category} />
+      </div>
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
           <div className="text-xs text-text-muted">Income</div>

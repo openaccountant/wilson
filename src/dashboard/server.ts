@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
@@ -24,6 +24,7 @@ import {
   apiSkills, apiMerchants,
 } from './api.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
+import { isBadRequest } from './spending-params.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
@@ -429,6 +430,16 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/category-options') {
           // Header category filter options (every label in transactions).
           return Response.json(apiCategoryOptions(activeDb), { headers });
+        }
+        if (path === '/api/spending/breakdown' || path === '/api/spending/series') {
+          // Spending drill (mirrored). A bad param is a 400 { error }, never a 500.
+          const result = path === '/api/spending/breakdown'
+            ? await apiSpendingBreakdown(activeDb, url.searchParams)
+            : await apiSpendingSeries(activeDb, url.searchParams);
+          if (isBadRequest(result)) {
+            return Response.json({ error: result.error }, { status: 400, headers });
+          }
+          return Response.json(result, { headers });
         }
         if (path === '/api/skills') {
           // Chat "/" menu source. Name/description/tier/source only — never the SKILL.md path.

@@ -447,3 +447,55 @@ export interface CoverageResponse {
   end: string | null;
   months: string[];
 }
+
+// ── Spending drill (GET /api/spending/breakdown, GET /api/spending/series) ──
+// Matches SpendingBreakdownResult / SpendingSeriesResult in
+// src/db/spending-drill-sql.ts (both endpoints are mirrored). All amounts are
+// POSITIVE spend under the dashboard spend rules. A bad param answers
+// 400 { error } online and offline alike.
+
+export type SpendingBreakdownBy = 'category' | 'merchant' | 'detailed';
+
+export interface SpendingBreakdownRow {
+  /** Group key: category label (→ cat), merchant key (→ merchant), or category_detailed ('' = none). */
+  key: string;
+  /** Display label (PFC detailed codes humanized; '' detail → 'No detail'). */
+  label: string;
+  total: number;
+  count: number;
+  /** Latest transaction date in the group (YYYY-MM-DD). */
+  last: string;
+  /** Spend in the comparison window: null = not requested or no coverage there; 0 = covered, no spend. */
+  prevTotal: number | null;
+}
+
+export interface SpendingBreakdownResponse {
+  /** Grouping applied: the `by` param, else 'merchant' when cat is set, else 'category'. */
+  by: SpendingBreakdownBy;
+  total: number;
+  count: number;
+  /** Distinct groups in the whole range. */
+  groupCount: number;
+  /** Outflows excluded as transfers & card payments (Income is not counted). */
+  excludedTotal: number;
+  /** Total spend in the comparison window: null = not requested or no coverage there. */
+  prevTotal: number | null;
+  rows: SpendingBreakdownRow[];
+  /** Spend of the groups ranked after this page (offset + limit onward). */
+  otherTotal: number;
+  /** Number of groups ranked after this page. */
+  otherCount: number;
+  /** Transactions in the groups ranked after this page. */
+  otherTxnCount: number;
+  /** More than one distinct non-blank category_detailed: show the by=detailed toggle. */
+  hasDetailed: boolean;
+}
+
+export interface SpendingSeriesResponse {
+  /** YYYY-MM, every month of the requested window. */
+  periods: string[];
+  /** null = month outside unfiltered coverage ('no data'); 0 = covered, no spend. */
+  values: (number | null)[];
+  coverageStart: string | null;
+  coverageEnd: string | null;
+}

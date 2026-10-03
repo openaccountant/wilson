@@ -75,3 +75,17 @@ export function resolveFetchOutcome({
 export function isRequiresConnectionError(err: unknown): boolean {
   return err instanceof RequiresConnectionError;
 }
+
+/**
+ * A mirrored answer that is the shared BadRequest shape (exactly
+ * `{ status: 400, error }`, see src/dashboard/spending-params.ts) means the
+ * server would have answered HTTP 400. Returns the error message the seam
+ * throws for it — byte-identical to the online `API 400: <body>` message —
+ * or null for ordinary mirrored data.
+ */
+export function mirroredHttpErrorMessage(mirrored: unknown): string | null {
+  if (typeof mirrored !== 'object' || mirrored === null || Array.isArray(mirrored)) return null;
+  const o = mirrored as Record<string, unknown>;
+  if (o.status !== 400 || typeof o.error !== 'string' || Object.keys(o).length !== 2) return null;
+  return `API 400: ${JSON.stringify({ error: o.error })}`;
+}

@@ -129,18 +129,19 @@ export function incomeAmountSql(alias?: string): string {
 }
 
 /**
- * Exact category filter. 'Uncategorized' matches NULL/blank/'Uncategorized'
- * rows (no param needed); any other value is an equality on `@<param>`.
+ * Exact category filter on the dashboard's grouping LABEL
+ * (categoryLabelSql: TRIM'd, NULL/blank → 'Uncategorized'), so a filter value
+ * taken from a grouped row matches exactly the rows that row summed — ' Dining '
+ * is in the 'Dining' bucket and the 'Dining' filter alike. 'Uncategorized'
+ * therefore matches NULL / blank / 'Uncategorized' rows. Dashboard rules only
+ * (uncategorizedMatchesBlank); the CLI keeps `category = @category`.
  */
 export function categoryFilterSql(
   category: string,
   alias?: string,
   param: string = 'category'
 ): { sql: string; params: Record<string, unknown> } {
-  if (category === UNCATEGORIZED_LABEL) {
-    return { sql: uncategorizedSql(alias), params: {} };
-  }
-  return { sql: `${col(alias, 'category')} = @${param}`, params: { [param]: category } };
+  return { sql: `${categoryLabelSql(alias)} = @${param}`, params: { [param]: category } };
 }
 
 /**

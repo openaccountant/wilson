@@ -5,6 +5,7 @@ import {
   pruneUnknownIds,
   serializeHash,
   stripProfileScoped,
+  PROFILE_SCOPED_KEYS,
   withTab,
   type UrlState,
 } from '../dashboard/ui/src/lib/urlState.js';
@@ -171,6 +172,14 @@ describe('withTab / stripProfileScoped', () => {
   test('profile switch strips account, entity, cat and day only', () => {
     const s = parseHash('#overview?preset=quarter&start=2025-01-01&account=3&entity=1&cat=Food&day=2025-02-02&cmp=prev');
     expect(serializeHash(stripProfileScoped(s))).toBe('#overview?preset=quarter&start=2025-01-01&cmp=prev');
+  });
+
+  test('profile switch also strips the drill keys (merchant, txn, by) — they name rows in the old database', () => {
+    const s = parseHash('#overview?preset=month&cat=Dining&by=detailed&merchant=KFC&txn=42&cmp=yoy&keep=me');
+    const stripped = stripProfileScoped(s);
+    expect(stripped).toMatchObject({ cat: null, merchant: null, txn: null, by: null, cmp: 'yoy' });
+    expect(serializeHash(stripped)).toBe('#overview?cmp=yoy&keep=me');
+    expect(PROFILE_SCOPED_KEYS).toEqual(expect.arrayContaining(['merchant', 'txn', 'by']));
   });
 });
 

@@ -32,6 +32,10 @@
   --color-chart-6: #008300;
   --color-chart-7: #9085e9;
   --color-chart-neutral: #5b6170;
+  /* Neutral BAR marks (grey bars, the 'more' dot): >= 3:1 on the raised
+     surface (4.38:1) and on the bar track (3.85:1). The darker
+     --color-chart-neutral stays for donut slices, which have separators. */
+  --color-chart-neutral-bar: #7a8090;
   --color-chart-grid: #2a2d37;
   --color-chart-axis: #8b949e;
   --color-chart-tooltip-bg: #1a1d27;
@@ -59,4 +63,21 @@ body {
 @keyframes ta-fade {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Windows High Contrast / forced colors: chart marks are inline-colored
+   backgrounds the UA would otherwise strip, leaving invisible bars. Keep the
+   data colors and outline every mark in CanvasText. */
+@media (forced-colors: active) {
+  .chart-mark {
+    forced-color-adjust: none;
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+  .chart-mark-svg {
+    forced-color-adjust: none;
+  }
+  .chart-mark-svg path {
+    stroke: CanvasText;
+  }
 }

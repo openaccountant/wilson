@@ -25,6 +25,7 @@ export const TOKEN_FALLBACKS = {
   chart6: '#008300',
   chart7: '#9085e9',
   chartNeutral: '#5b6170',
+  chartNeutralBar: '#7a8090',
   chartGrid: '#2a2d37',
   chartAxis: '#8b949e',
   chartTooltipBg: '#1a1d27',

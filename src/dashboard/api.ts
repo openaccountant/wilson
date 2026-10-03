@@ -80,6 +80,18 @@ import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
+import {
+  parseSpendingBreakdownParams,
+  parseSpendingSeriesParams,
+  isBadRequest,
+  type BadRequest,
+} from './spending-params.js';
+import {
+  runSpendingBreakdown,
+  runSpendingSeries,
+  type SpendingBreakdownResult,
+  type SpendingSeriesResult,
+} from '../db/spending-drill-sql.js';
 import { embedTransactionIds } from '../utils/embed-on-write.js';
 import { CATEGORIES } from '../tools/categorize/categories.js';
 import {
@@ -214,6 +226,33 @@ export function apiCategories(db: Database) {
  */
 export function apiCategoryOptions(db: Database) {
   return getCategoryOptions(db);
+}
+
+// ── Spending drill (Overview → category → merchant → transaction) ──────────
+//
+// Dashboard-only (spend rules + spendOnly). Strict params: a bad param returns
+// a BadRequest that server.ts answers with 400 `{ error }` — never a 500.
+// Both run the SAME driver as the offline mirror (src/db/spending-drill-sql.ts),
+// so serveApiPath answers identically. Mirrored.
+
+/** GET /api/spending/breakdown — ranked spend by category | merchant | detailed. */
+export async function apiSpendingBreakdown(
+  db: Database,
+  params: URLSearchParams
+): Promise<SpendingBreakdownResult | BadRequest> {
+  const query = parseSpendingBreakdownParams(params);
+  if (isBadRequest(query)) return query;
+  return runSpendingBreakdown(db, query);
+}
+
+/** GET /api/spending/series — monthly spend, null outside coverage, 0 inside. */
+export async function apiSpendingSeries(
+  db: Database,
+  params: URLSearchParams
+): Promise<SpendingSeriesResult | BadRequest> {
+  const query = parseSpendingSeriesParams(params);
+  if (isBadRequest(query)) return query;
+  return runSpendingSeries(db, query);
 }
 
 // ── Chat composer typeahead sources ─────────────────────────────────────────

@@ -4,7 +4,8 @@ import { StreakCounter } from '@/components/StreakCounter';
 import { BudgetCountdown } from '@/components/BudgetCountdown';
 import { SavingsSparkline } from '@/components/SavingsSparkline';
 import { CashflowForecast } from '@/components/CashflowForecast';
-import { DonutChart } from '@/components/DonutChart';
+import { SpendingDrill } from '@/components/spending/SpendingDrill';
+import { FilteredBadge } from '@/components/FilteredBadge';
 import { PnlCard } from '@/components/PnlCard';
 import { BudgetBars } from '@/components/BudgetBars';
 import { AlertList } from '@/components/AlertList';
@@ -35,7 +36,9 @@ export function OverviewTab() {
   const dayTotal = daySpendTotal(dayTransactions ?? []);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+    // pb-20: a safe area under the last row so the floating 'Agent access'
+    // pill (fixed bottom-left, webmcp-bridge.ts) never covers card footnotes.
+    <div className="flex-1 overflow-y-auto p-6 pb-20 space-y-4">
       {/* Offline pill — same affordance as the transactions tab */}
       {mirror.available && mirror.seeded && !mirror.online && (
         <div className="flex items-center gap-2">
@@ -64,9 +67,9 @@ export function OverviewTab() {
         <CashflowForecast />
       </div>
 
-      {/* Donut + P&L */}
-      <div className="grid grid-cols-2 gap-4">
-        <DonutChart />
+      {/* Spending drill-down (L1 categories → L2 merchants → L3 merchant → txn) + P&L */}
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-start">
+        <SpendingDrill />
         <PnlCard />
       </div>
 
@@ -83,6 +86,11 @@ export function OverviewTab() {
         onClose={() => setSelectedDate(null)}
         title={selectedDate ?? ''}
       >
+        {category && (
+          <div className="mb-3">
+            <FilteredBadge category={category} />
+          </div>
+        )}
         {dayLoading ? (
           <p className="text-text-secondary text-sm">Loading...</p>
         ) : !dayTransactions || dayTransactions.length === 0 ? (
