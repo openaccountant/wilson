@@ -1,4 +1,5 @@
 import { buildToolDescriptions } from '../tools/registry.js';
+import { resolveProvider } from '../providers.js';
 import { buildSkillMetadataSection, discoverSkills } from '../skills/index.js';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -132,7 +133,16 @@ Keep tables compact:
  * @param model - The model name (used to get appropriate tool descriptions)
  */
 export async function buildSystemPrompt(model: string, soulContent?: string | null): Promise<string> {
-  const toolDescriptions = await buildToolDescriptions(model);
+  // Local Transformers.js models get every tool's schema injected by their
+  // adapter (prompt-based tool calling); listing the rich descriptions here as
+  // well doubled the prompt (~17k tokens) past what WebGPU models can prefill.
+  const toolSection = resolveProvider(model).id === 'transformers'
+    ? ''
+    : `## Available Tools
+
+${await buildToolDescriptions(model)}
+
+`;
 
   return `You are Open Accountant, a CLI assistant for personal finance bookkeeping.
 
@@ -140,11 +150,7 @@ Current date: ${getCurrentDate()}
 
 Your output is displayed on a command line interface. Keep responses short and concise.
 
-## Available Tools
-
-${toolDescriptions}
-
-## Tool Usage Policy
+${toolSection}## Tool Usage Policy
 
 - Only use tools when the query actually requires data retrieval or computation
 - Use csv_import to import transaction data from CSV files

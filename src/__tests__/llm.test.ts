@@ -91,6 +91,19 @@ describe('callLlm', () => {
     await expect(callLlm('test', { model: 'gpt-5.2' })).rejects.toThrow('invalid api key');
   });
 
+  test('local transformers failures are not retried (greedy decoding fails the same way every time)', async () => {
+    let callCount = 0;
+    mockAdapterFn = async () => {
+      callCount++;
+      throw new Error('Unknown failure');
+    };
+
+    await expect(
+      callLlm('test', { model: 'transformers:onnx-community/granite-4.0-micro-ONNX-web' }),
+    ).rejects.toThrow('Unknown failure');
+    expect(callCount).toBe(1);
+  });
+
   test('max retries exceeded throws', async () => {
     mockAdapterFn = async () => {
       throw new Error('service unavailable');

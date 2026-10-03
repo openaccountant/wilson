@@ -235,6 +235,14 @@ describe('agent/prompts', () => {
       expect(prompt).toContain('Tool Usage Policy');
     });
 
+    test('local transformers models get no rich tool descriptions (the adapter injects the schemas once)', async () => {
+      const prompt = await buildSystemPrompt('transformers:onnx-community/granite-4.0-micro-ONNX-web');
+      expect(prompt).not.toContain('Mock Tool Descriptions');
+      expect(prompt).not.toContain('## Available Tools');
+      expect(prompt).toContain('Tool Usage Policy');
+      expect(toolDescSpy).not.toHaveBeenCalled();
+    });
+
     test('includes skills section when skills exist', async () => {
       discoverSpy.mockReturnValue([{ name: 'test-skill', description: 'A test', tier: 'free', source: 'builtin', path: '/tmp' }]);
       metadataSpy.mockReturnValue('- **test-skill**: A test');

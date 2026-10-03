@@ -322,16 +322,65 @@ export async function checkWebGpuAvailable(): Promise<boolean> {
 }
 
 /**
- * Build the system prompt with tool injection when tools are provided.
+ * Largest prompt (in tokens, chat template included) a WebGPU model is handed.
+ * Measured with granite-4.0-micro q4f16 through onnxruntime-node's WebGPU EP:
+ * 8k-token prompts ran (~22s prefill); 12k and 17k failed with ONNX Runtime's
+ * opaque "Unknown failure" — after 41s and 90s of prefill. Failing fast here
+ * beats a minute-long prefill that cannot succeed.
  */
-function buildSystemPrompt(systemPrompt: string, tools?: ToolDef[]): string {
+export const WEBGPU_PROMPT_TOKEN_BUDGET = 8192;
+
+/** Prompt-token ceiling for `modelName`, or null when none is enforced (CPU). */
+export function localPromptBudget(modelName: string): number | null {
+  return resolveTransformersDevice(modelName) === 'webgpu' ? WEBGPU_PROMPT_TOKEN_BUDGET : null;
+}
+
+/** A prompt larger than the local model's budget; raised before any inference. */
+export class LocalPromptTooLargeError extends Error {
+  constructor(readonly model: string, readonly promptTokens: number, readonly budget: number) {
+    super(
+      `Local model ${model} cannot take this ${promptTokens}-token prompt (limit ${budget} on WebGPU). ` +
+        'Start a new chat, ask something narrower, or pick a cloud model in Settings.',
+    );
+    this.name = 'LocalPromptTooLargeError';
+  }
+}
+
+export function assertWithinPromptBudget(modelName: string, promptTokens: number): void {
+  const budget = localPromptBudget(modelName);
+  if (budget !== null && promptTokens > budget) {
+    throw new LocalPromptTooLargeError(modelName.replace(/^transformers:/, ''), promptTokens, budget);
+  }
+}
+
+/**
+ * ONNX Runtime reports a failed WebGPU run as just "Unknown failure". Name the
+ * model, device and prompt size so the error says something actionable.
+ */
+export function explainGenerationError(
+  modelName: string,
+  device: TransformersDevice,
+  promptTokens: number | null,
+  err: unknown,
+): Error {
+  const reason = err instanceof Error ? err.message : String(err);
+  const size = promptTokens !== null ? ` on a ${promptTokens}-token prompt` : '';
+  const hint = device === 'webgpu' ? ' Large prompts can exceed GPU limits — try a shorter request or a cloud model.' : '';
+  return new Error(`Local model ${modelName.replace(/^transformers:/, '')} failed${size} (${device}): ${reason}.${hint}`);
+}
+
+/**
+ * System prompt plus tool schemas for prompt-injected tool calling. Compact
+ * JSON with the JSON-Schema boilerplate stripped: every token counts against a
+ * small local model's prompt budget (pretty-printing alone added ~45%).
+ */
+export function buildToolSystemPrompt(systemPrompt: string, tools?: ToolDef[]): string {
   if (!tools || tools.length === 0) return systemPrompt;
 
-  const toolSchemas = tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: z.toJSONSchema(t.schema),
-  }));
+  const toolSchemas = tools.map((t) => {
+    const { $schema: _s, additionalProperties: _a, ...parameters } = z.toJSONSchema(t.schema) as Record<string, unknown>;
+    return { name: t.name, description: t.description, parameters };
+  });
 
   return `${systemPrompt}
 
@@ -339,9 +388,23 @@ You have access to tools. To call a tool, output ONLY this exact format and noth
 <tool_call>{"name": "TOOL_NAME", "arguments": {ARGS_JSON}}</tool_call>
 
 Available tools:
-${JSON.stringify(toolSchemas, null, 2)}
+${JSON.stringify(toolSchemas)}
 
 If no tool is needed, respond normally in plain text.`;
+}
+
+/**
+ * Prompt tokens for `messages` as the model will see them (chat template and
+ * generation prompt included). Null when the tokenizer cannot say.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function countPromptTokens(pipe: any, messages: Array<{ role: string; content: string }>): number | null {
+  try {
+    const text = pipe.tokenizer.apply_chat_template(messages, { tokenize: false, add_generation_prompt: true });
+    return pipe.tokenizer.encode(String(text)).length;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -357,25 +420,34 @@ ${JSON.stringify(jsonSchema, null, 2)}
 Do not include any other text, explanation, or markdown. Output only the JSON object.`;
 }
 
-/**
- * Parse a tool call from model output.
- * Returns parsed ToolCall if found, null otherwise.
- */
-function parseToolCall(output: string): ToolCall | null {
-  const match = output.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-  if (!match) return null;
-
+/** `{name, arguments|args}` → ToolCall; `arguments` may itself be a JSON string. */
+function toToolCall(raw: string, toolNames?: readonly string[]): ToolCall | null {
   try {
-    // Support both 'arguments' (SmolLM3 native format) and 'args' (legacy)
-    const parsed = JSON.parse(match[1]) as { name: string; arguments?: Record<string, unknown>; args?: Record<string, unknown> };
-    return {
-      id: crypto.randomUUID(),
-      name: parsed.name,
-      args: parsed.arguments ?? parsed.args ?? {},
-    };
+    const parsed = JSON.parse(raw) as { name?: unknown; arguments?: unknown; args?: unknown };
+    if (typeof parsed?.name !== 'string') return null;
+    if (toolNames && !toolNames.includes(parsed.name)) return null;
+    let args = parsed.arguments ?? parsed.args ?? {};
+    if (typeof args === 'string') args = JSON.parse(args);
+    if (typeof args !== 'object' || args === null || Array.isArray(args)) return null;
+    return { id: crypto.randomUUID(), name: parsed.name, args: args as Record<string, unknown> };
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse a tool call from model output: the documented
+ * <tool_call>{...}</tool_call> form, or — only when it names one of
+ * `toolNames` — a bare or fenced JSON object, which small models (granite-4.0-
+ * micro) emit instead, often with `arguments` as a JSON string.
+ * Supports both 'arguments' (SmolLM3 native format) and 'args' (legacy).
+ */
+export function parseToolCall(output: string, toolNames?: readonly string[]): ToolCall | null {
+  const tagged = output.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+  if (tagged) return toToolCall(tagged[1]);
+  if (!toolNames?.length) return null;
+  const bare = output.replace(/```(?:json)?/g, '').trim().match(/^\{[\s\S]*\}$/);
+  return bare ? toToolCall(bare[0], toolNames) : null;
 }
 
 export class TransformersAdapter implements ProviderAdapter {
@@ -386,7 +458,7 @@ export class TransformersAdapter implements ProviderAdapter {
     if (outputSchema) {
       finalSystemPrompt = buildStructuredSystemPrompt(systemPrompt, outputSchema);
     } else if (tools && tools.length > 0) {
-      finalSystemPrompt = buildSystemPrompt(systemPrompt, tools);
+      finalSystemPrompt = buildToolSystemPrompt(systemPrompt, tools);
     }
 
     const messages = [
@@ -396,11 +468,20 @@ export class TransformersAdapter implements ProviderAdapter {
 
     const pipe = await getOrCreatePipeline(model);
 
+    const promptTokens = countPromptTokens(pipe, messages);
+    if (promptTokens !== null) assertWithinPromptBudget(model, promptTokens);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await pipe(messages as any, {
-      max_new_tokens: options.maxTokens ?? 512,
-      do_sample: false,
-    });
+    let result: any;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result = await pipe(messages as any, {
+        max_new_tokens: options.maxTokens ?? 512,
+        do_sample: false,
+      });
+    } catch (err) {
+      throw explainGenerationError(model, resolveTransformersDevice(model), promptTokens, err);
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const generated = (result as any)[0]?.generated_text;
@@ -417,7 +498,7 @@ export class TransformersAdapter implements ProviderAdapter {
 
     // Handle tool calls
     if (tools && tools.length > 0) {
-      const toolCall = parseToolCall(rawOutput);
+      const toolCall = parseToolCall(rawOutput, tools.map((t) => t.name));
       if (toolCall) {
         return { content: '', toolCalls: [toolCall] };
       }

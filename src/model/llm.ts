@@ -90,6 +90,10 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   }
 
   const adapter = getAdapter(provider.id);
+  // Local Transformers.js runs greedy (do_sample: false) in-process: a failed
+  // call fails identically on retry — and a failed WebGPU prefill on a large
+  // prompt can take a minute and a half — so it gets exactly one attempt.
+  const maxAttempts = provider.id === 'transformers' ? 1 : 3;
   const startTime = Date.now();
   const promptChars = prompt.length + finalSystemPrompt.length;
   const toolCount = tools?.length ?? 0;
@@ -108,6 +112,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
           signal,
         }),
       provider.displayName,
+      maxAttempts,
     );
 
     // Structured-output gate: when a schema was supplied, validate what came back
@@ -135,6 +140,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
               signal,
             }),
           provider.displayName,
+          maxAttempts,
         );
         const second = validateStructuredOutput(finalResponse, outputSchema);
         if (!second.ok) {
