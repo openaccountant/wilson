@@ -3,6 +3,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { createTestDb } from './helpers.js';
 import {
   createGrants, validateGrant, revokeGrant, revokeGrantsForSession, revokeGrantsForUser,
+  listGrantsForSession, cleanExpiredGrants, expireStaleOperations,
   createOperation, getOperation, listPendingOperations, markOperationStatus,
   issueApprovalToken, consumeApprovalToken,
 } from '../mcp/store.js';
@@ -133,6 +134,41 @@ describe('mcp grants', () => {
       });
       expect(result.ok).toBe(false);
     }
+  });
+});
+
+describe('mcp expiry honoured to the second (#151)', () => {
+  // expires_at is ISO ('T' separator); datetime('now') uses a space, so a plain
+  // text compare treats anything expiring later the same UTC day as still live.
+  const op = (db: Database, ttlMs: number) => createOperation(db, {
+    source: 'webmcp', grantId: 'g', toolName: 'edit_transaction', args: {}, before: null, after: null,
+    transactionId: 1, revisionAtPrepare: 1, profile: 'default',
+    origin: 'http://localhost:3141', sessionGeneration: 'tab-a', userId: 1, role: 'admin', ttlMs,
+  });
+
+  test('a grant that expired seconds ago is not listed for its session', () => {
+    const db = createTestDb();
+    const expired = makeGrant(db, { ttlMs: -5_000 });
+    const live = makeGrant(db, { ttlMs: 60_000 });
+    expect(listGrantsForSession(db, 'tab-a').map((g) => g.id)).toEqual([live.id]);
+    expect(expired.id).not.toBe(live.id);
+  });
+
+  test('cleanExpiredGrants deletes a grant that expired seconds ago', () => {
+    const db = createTestDb();
+    makeGrant(db, { ttlMs: -5_000 });
+    makeGrant(db, { ttlMs: 60_000 });
+    expect(cleanExpiredGrants(db)).toBe(1);
+  });
+
+  test('a pending operation that expired seconds ago leaves the queue and is swept', () => {
+    const db = createTestDb();
+    const stale = op(db, -5_000);
+    const live = op(db, 60_000);
+    expect(listPendingOperations(db).map((o) => o.id)).toEqual([live.id]);
+    expect(expireStaleOperations(db)).toBe(1);
+    expect(getOperation(db, stale.id)?.status).toBe('expired');
+    expect(getOperation(db, live.id)?.status).toBe('pending');
   });
 });
 

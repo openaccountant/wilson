@@ -94,6 +94,9 @@ function randomToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// expires_at is stored as ISO ('T' separator); datetime('now') uses a space, so
+// comparing them as text is wrong for the whole UTC day. Queries compare via
+// julianday() on both sides instead.
 function isoIn(ms: number): string {
   return new Date(Date.now() + ms).toISOString();
 }
@@ -153,7 +156,7 @@ export function getGrant(db: Database, id: string): McpGrant | null {
 export function listGrantsForSession(db: Database, sessionGeneration: string): McpGrant[] {
   return db.prepare(`
     SELECT * FROM mcp_grants
-    WHERE session_generation = @sessionGeneration AND revoked_at IS NULL AND expires_at > datetime('now')
+    WHERE session_generation = @sessionGeneration AND revoked_at IS NULL AND julianday(expires_at) > julianday('now')
     ORDER BY tool_name
   `).all({ sessionGeneration }) as McpGrant[];
 }
@@ -178,7 +181,7 @@ export function revokeGrantsForUser(db: Database, userId: number): number {
 }
 
 export function cleanExpiredGrants(db: Database): number {
-  const result = db.prepare("DELETE FROM mcp_grants WHERE expires_at <= datetime('now')").run();
+  const result = db.prepare("DELETE FROM mcp_grants WHERE julianday(expires_at) <= julianday('now')").run();
   return (result as { changes: number }).changes;
 }
 
@@ -277,7 +280,7 @@ export function getOperation(db: Database, id: string): McpOperation | null {
 /** Pending operations across every source (WebMCP tabs, HTTP-MCP clients, chat) — the single confirmation queue. */
 export function listPendingOperations(db: Database): McpOperation[] {
   return db.prepare(`
-    SELECT * FROM mcp_operations WHERE status = 'pending' AND expires_at > datetime('now') ORDER BY created_at ASC
+    SELECT * FROM mcp_operations WHERE status = 'pending' AND julianday(expires_at) > julianday('now') ORDER BY created_at ASC
   `).all() as McpOperation[];
 }
 
@@ -297,7 +300,7 @@ export function markOperationStatus(
 /** Sweep pending operations whose confirmation window has elapsed with nobody acting on them. */
 export function expireStaleOperations(db: Database): number {
   const rows = db.prepare(
-    "SELECT id FROM mcp_operations WHERE status = 'pending' AND expires_at <= datetime('now')"
+    "SELECT id FROM mcp_operations WHERE status = 'pending' AND julianday(expires_at) <= julianday('now')"
   ).all() as { id: string }[];
   for (const row of rows) {
     markOperationStatus(db, row.id, 'expired');
