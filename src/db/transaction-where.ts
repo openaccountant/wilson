@@ -22,7 +22,7 @@ export interface TransactionFilters {
   category?: string;
   minAmount?: number;
   maxAmount?: number;
-  /** Fuzzy: description LIKE %merchant% (historical semantics, unchanged). */
+  /** Fuzzy: the term must start a word of the description (see merchantWordStartCondition). */
   merchant?: string;
   /** Exact: COALESCE(NULLIF(TRIM(merchant_name), ''), description) = value. */
   merchantExact?: string;
@@ -35,6 +35,43 @@ export interface TransactionFilters {
 
 /** Rules this builder honors (see spend-rules.ts); all default OFF. */
 export type TransactionWhereRules = Pick<DashboardRules, 'uncategorizedMatchesBlank' | 'defaultEntityIncludesNull'>;
+
+// Characters read as a word break in a description or a merchant term (see the merchant filter below).
+const WORD_BREAK_CHARS = ['*', '.', ',', '/', '#', '-', ':', ';', '(', ')', '&', "'", '"', '_'];
+
+/** SQL twin of normalizeMerchantTerm: lower-cased, word-break characters as single spaces, a leading space. */
+function normalizedDescriptionSql(alias?: string): string {
+  let expr = `LOWER(${alias ? `${alias}.description` : 'description'})`;
+  for (const ch of WORD_BREAK_CHARS) expr = `REPLACE(${expr}, '${ch === "'" ? "''" : ch}', ' ')`;
+  for (let i = 0; i < 3; i++) expr = `REPLACE(${expr}, '  ', ' ')`;
+  return `(' ' || ${expr})`;
+}
+
+/** Lower-case, word-break characters to spaces, whitespace collapsed. May be empty. */
+function normalizeMerchantTerm(raw: string): string {
+  let t = String(raw).toLowerCase();
+  for (const ch of WORD_BREAK_CHARS) t = t.split(ch).join(' ');
+  return t.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The `merchant` filter condition. Round 4: the term must START a word of the
+ * description ("car" matches CARMAX, not CHILDCARE). Both sides are lower-cased
+ * with punctuation read as a word break, so "UBER*TRIP" and "APPLE.COM/BILL"
+ * still match "uber" and "apple", and "%" / "_" in the term are literal text,
+ * not wildcards. A term that normalizes to nothing matches no rows.
+ */
+export function merchantWordStartCondition(
+  raw: string,
+  alias?: string
+): { sql: string; params: Record<string, unknown> } {
+  const term = normalizeMerchantTerm(raw);
+  if (!term) return { sql: '0 = 1', params: {} };
+  return {
+    sql: `${normalizedDescriptionSql(alias)} LIKE @merchant ESCAPE '\\'`,
+    params: { merchant: `% ${term.replace(/[\\%_]/g, '\\$&')}%` },
+  };
+}
 
 /**
  * Build the AND-composed WHERE condition list (plus named params) for the
@@ -77,8 +114,9 @@ export function buildTransactionConditions(
     params.maxAmount = filters.maxAmount;
   }
   if (filters.merchant) {
-    conditions.push(`${c('description')} LIKE @merchant`);
-    params.merchant = `%${filters.merchant}%`;
+    const f = merchantWordStartCondition(filters.merchant, alias);
+    conditions.push(f.sql);
+    Object.assign(params, f.params);
   }
   if (filters.merchantExact) {
     conditions.push(`${merchantLabelSql(alias)} = @merchantExact`);

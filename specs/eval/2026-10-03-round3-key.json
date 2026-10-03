@@ -1,0 +1,288 @@
+{
+ "note": "id -> arm. Graders must not open this file before grading.",
+ "arms": [
+  "T",
+  "M6"
+ ],
+ "unavailable": {
+  "M17": "std::bad_alloc creating the ONNX session for onnx-community/Qwen3-1.7B-ONNX q4f16 (1,426,069,098-byte single-file model) in Chromium 153; reproduced headless, headed and with COOP/COEP"
+ },
+ "key": {
+  "0723882073": {
+   "arm": "T",
+   "row": 142,
+   "q": "will i go overdrawn next month",
+   "persona": "5-single-parent"
+  },
+  "d48b19eaf9": {
+   "arm": "T",
+   "row": 121,
+   "q": "net worth",
+   "persona": "5-single-parent"
+  },
+  "bfd46daa50": {
+   "arm": "M6",
+   "row": 76,
+   "q": "income vs expenses june",
+   "persona": "2-new-grad"
+  },
+  "7b71eab4b0": {
+   "arm": "M6",
+   "row": 141,
+   "q": "projected cash in 12 months",
+   "persona": "4-near-retiree"
+  },
+  "9b55bc82f8": {
+   "arm": "M6",
+   "row": 116,
+   "q": "what is my net worth",
+   "persona": "4-near-retiree"
+  },
+  "5a6ea5f7dc": {
+   "arm": "M6",
+   "row": 108,
+   "q": "net worth now",
+   "persona": "3-dual-income-household"
+  },
+  "cc7bfda52c": {
+   "arm": "T",
+   "row": 13,
+   "q": "navient payments",
+   "persona": "2-new-grad"
+  },
+  "47c3e5a25c": {
+   "arm": "M6",
+   "row": 132,
+   "q": "forecast next month",
+   "persona": "2-new-grad"
+  },
+  "89c6dffdab": {
+   "arm": "M6",
+   "row": 121,
+   "q": "net worth",
+   "persona": "5-single-parent"
+  },
+  "1cab9fcf2f": {
+   "arm": "T",
+   "row": 75,
+   "q": "ytd profit",
+   "persona": "1-comingled-founder"
+  },
+  "d998c09562": {
+   "arm": "T",
+   "row": 9,
+   "q": "show the card payment",
+   "persona": "1-comingled-founder"
+  },
+  "df72a6f098": {
+   "arm": "T",
+   "row": 141,
+   "q": "projected cash in 12 months",
+   "persona": "4-near-retiree"
+  },
+  "0c90c5dd50": {
+   "arm": "T",
+   "row": 115,
+   "q": "net worth last month",
+   "persona": "3-dual-income-household"
+  },
+  "7ab3f17d8a": {
+   "arm": "T",
+   "row": 2,
+   "q": "show consulting payments",
+   "persona": "1-comingled-founder"
+  },
+  "aa5050f583": {
+   "arm": "M6",
+   "row": 23,
+   "q": "how much was the mortgage payment",
+   "persona": "3-dual-income-household"
+  },
+  "8ff424215a": {
+   "arm": "M6",
+   "row": 127,
+   "q": "forecast my cash for the next 3 months",
+   "persona": "1-comingled-founder"
+  },
+  "af6a9faf49": {
+   "arm": "T",
+   "row": 36,
+   "q": "childcare payments",
+   "persona": "5-single-parent"
+  },
+  "729d31de9a": {
+   "arm": "T",
+   "row": 23,
+   "q": "how much was the mortgage payment",
+   "persona": "3-dual-income-household"
+  },
+  "c02eba6497": {
+   "arm": "M6",
+   "row": 41,
+   "q": "car payment",
+   "persona": "5-single-parent"
+  },
+  "bbbe116189": {
+   "arm": "T",
+   "row": 76,
+   "q": "income vs expenses june",
+   "persona": "2-new-grad"
+  },
+  "4af891193e": {
+   "arm": "M6",
+   "row": 36,
+   "q": "childcare payments",
+   "persona": "5-single-parent"
+  },
+  "cfd10bed5d": {
+   "arm": "M6",
+   "row": 96,
+   "q": "net worth",
+   "persona": "1-comingled-founder"
+  },
+  "a2db3ed114": {
+   "arm": "T",
+   "row": 70,
+   "q": "profit and loss for june",
+   "persona": "1-comingled-founder"
+  },
+  "d28481a038": {
+   "arm": "M6",
+   "row": 80,
+   "q": "profit loss q2",
+   "persona": "3-dual-income-household"
+  },
+  "03a9a25254": {
+   "arm": "T",
+   "row": 134,
+   "q": "when will my student loan be paid off",
+   "persona": "2-new-grad"
+  },
+  "f3f7286f84": {
+   "arm": "T",
+   "row": 96,
+   "q": "net worth",
+   "persona": "1-comingled-founder"
+  },
+  "4bbd076249": {
+   "arm": "T",
+   "row": 41,
+   "q": "car payment",
+   "persona": "5-single-parent"
+  },
+  "588490828d": {
+   "arm": "T",
+   "row": 135,
+   "q": "projected house fund in 6 months",
+   "persona": "3-dual-income-household"
+  },
+  "16fd323a84": {
+   "arm": "T",
+   "row": 108,
+   "q": "net worth now",
+   "persona": "3-dual-income-household"
+  },
+  "6ec5aee3bd": {
+   "arm": "T",
+   "row": 130,
+   "q": "will i have enough for next quarters tax",
+   "persona": "1-comingled-founder"
+  },
+  "0134efd2a4": {
+   "arm": "M6",
+   "row": 75,
+   "q": "ytd profit",
+   "persona": "1-comingled-founder"
+  },
+  "7629de95d1": {
+   "arm": "T",
+   "row": 132,
+   "q": "forecast next month",
+   "persona": "2-new-grad"
+  },
+  "0798244052": {
+   "arm": "M6",
+   "row": 135,
+   "q": "projected house fund in 6 months",
+   "persona": "3-dual-income-household"
+  },
+  "06053652f8": {
+   "arm": "M6",
+   "row": 70,
+   "q": "profit and loss for june",
+   "persona": "1-comingled-founder"
+  },
+  "b120a17cc1": {
+   "arm": "M6",
+   "row": 110,
+   "q": "balance sheet",
+   "persona": "3-dual-income-household"
+  },
+  "d19d9b369e": {
+   "arm": "T",
+   "row": 110,
+   "q": "balance sheet",
+   "persona": "3-dual-income-household"
+  },
+  "fd1c0aa36a": {
+   "arm": "T",
+   "row": 90,
+   "q": "profit for the year",
+   "persona": "5-single-parent"
+  },
+  "1863ac4eea": {
+   "arm": "T",
+   "row": 127,
+   "q": "forecast my cash for the next 3 months",
+   "persona": "1-comingled-founder"
+  },
+  "affab05e50": {
+   "arm": "M6",
+   "row": 90,
+   "q": "profit for the year",
+   "persona": "5-single-parent"
+  },
+  "1e1f16d681": {
+   "arm": "T",
+   "row": 131,
+   "q": "where will my checking be in 3 months",
+   "persona": "2-new-grad"
+  },
+  "693b96ce1e": {
+   "arm": "M6",
+   "row": 48,
+   "q": "spending ytd",
+   "persona": "3-dual-income-household"
+  },
+  "229765eab6": {
+   "arm": "T",
+   "row": 80,
+   "q": "profit loss q2",
+   "persona": "3-dual-income-household"
+  },
+  "ee0c57fb5c": {
+   "arm": "T",
+   "row": 48,
+   "q": "spending ytd",
+   "persona": "3-dual-income-household"
+  },
+  "cbc8684aad": {
+   "arm": "M6",
+   "row": 115,
+   "q": "net worth last month",
+   "persona": "3-dual-income-household"
+  },
+  "fbc07b5900": {
+   "arm": "T",
+   "row": 139,
+   "q": "will i run out of money",
+   "persona": "4-near-retiree"
+  },
+  "250e8bca43": {
+   "arm": "T",
+   "row": 116,
+   "q": "what is my net worth",
+   "persona": "4-near-retiree"
+  }
+ }
+}

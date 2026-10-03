@@ -4,6 +4,8 @@
  * (src/__tests__/dashboard-typeahead.test.ts), same pattern as demo/core.ts.
  */
 
+import { MENTION_BLOCK_PREFIX, splitInjectedContext } from '../../../local-handoff-format.js';
+
 // ── Trigger detection ──────────────────────────────────────────────────────
 
 export type TriggerKind = '/' | '@';
@@ -674,14 +676,19 @@ export function extractMentionTokens(text: string, known: Set<string>): TextSegm
 
 // ── Context block (server-resolved mentions persisted in the query) ────────
 
-export const CONTEXT_BLOCK_HEADER = '[Referenced entities';
+export const CONTEXT_BLOCK_HEADER = MENTION_BLOCK_PREFIX;
 
-/** Split a leading `[Referenced entities…]` block (up to the first blank line) from the body. */
+/**
+ * Split a leading `[Referenced entities…]` block (up to the first blank line)
+ * from the body. A leading on-device handoff block (either order, see
+ * local-handoff-format.ts) is peeled too and dropped: it is never shown, and
+ * `block` stays the mention block only so its lines can't leak into the labels.
+ */
 export function splitContextBlock(text: string): { block: string; body: string } {
-  if (!text.startsWith(CONTEXT_BLOCK_HEADER)) return { block: '', body: text };
-  const end = text.indexOf('\n\n');
-  if (end === -1) return { block: text, body: '' };
-  return { block: text.slice(0, end), body: text.slice(end + 2) };
+  const parts = splitInjectedContext(text);
+  if (!parts.mention && !parts.handoff) return { block: '', body: text };
+  const block = parts.mention.endsWith('\n\n') ? parts.mention.slice(0, -2) : parts.mention;
+  return { block, body: parts.body };
 }
 
 export function stripContextBlock(text: string): string {

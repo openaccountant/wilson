@@ -125,6 +125,57 @@ export interface MirrorCategoryRow {
 }
 
 /**
+ * Mirrors the server `accounts` table (see ACCOUNTS_TABLE, plus entity_id from
+ * migration 21's ENTITY_ID_COLUMNS accounts line). GET /api/accounts returns
+ * these rows (SELECT *, active accounts only); the mirror's own sync uses
+ * GET /api/sync/accounts, which carries the subset the executors read.
+ */
+export interface MirrorAccountRow {
+  id: number;
+  name: string;
+  account_type: 'asset' | 'liability';
+  account_subtype: string;
+  institution: string | null;
+  /** Not on the wire: GET /api/sync/accounts drops account numbers, notes and plaid ids. */
+  account_number_last4?: string | null;
+  current_balance: number;
+  currency: string | null;
+  is_active: number;
+  notes?: string | null;
+  plaid_account_id?: string | null;
+  entity_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Mirrors the server `balance_snapshots` table (see BALANCE_SNAPSHOTS_TABLE). */
+export interface MirrorBalanceSnapshotRow {
+  id: number;
+  account_id: number;
+  balance: number;
+  snapshot_date: string;
+  /** Not on the wire: the sync route projects id, account_id, balance and snapshot_date. */
+  source?: string | null;
+  created_at?: string;
+}
+
+/** Mirrors the server `loans` table (see LOANS_TABLE). */
+export interface MirrorLoanRow {
+  id: number;
+  account_id: number;
+  original_principal: number;
+  interest_rate: number;
+  term_months: number;
+  start_date: string;
+  extra_payment: number | null;
+  linked_asset_id: number | null;
+  /** Not on the wire: loans.notes never leaves the server. */
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * One full pull from the server, applied to the mirror in a single transaction.
  * The schema version is a store constant (MIRROR_SCHEMA_VERSION), not wire data.
  */
@@ -134,6 +185,17 @@ export interface SyncPayload {
   entities: MirrorEntityRow[];
   budgets: MirrorBudgetRow[];
   categories: MirrorCategoryRow[];
+  /** Mirror v4. Optional so older callers still type-check; an absent set is applied as empty. */
+  accounts?: MirrorAccountRow[];
+  balanceSnapshots?: MirrorBalanceSnapshotRow[];
+  loans?: MirrorLoanRow[];
+  /**
+   * Leave the mirror's accounts, balance_snapshots and loans exactly as they are.
+   * Set when the v4 pull failed (or was partial) so one failing fetch neither
+   * fails the sync nor wipes the last good net-worth set. Absent = apply the three
+   * sets above (an absent set is empty).
+   */
+  keepNetWorth?: boolean;
 }
 
 /** Status of the browser-side mirror, consumed by the UI. */

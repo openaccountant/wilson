@@ -131,6 +131,109 @@ describe('classifyLocalOutput', () => {
   });
 });
 
+describe('paraphrased NEED_MORE_DATA replies hand off (slice-8 defect)', () => {
+  const paraphrases = [
+    // the slice-8 failures, verbatim
+    'Need more data.',
+    // sentinel spelling variants
+    'need more data',
+    'NEED MORE DATA',
+    'Need_More_Data',
+    'need-more-data',
+    '**Need more data**',
+    '`NEED_MORE_DATA`',
+    'Need   more\ndata.',
+    // first person / other subjects
+    'I need more data.',
+    'I need more information.',
+    'I need more information to answer that.',
+    'I would need more details to answer.',
+    'I still need some additional information.',
+    'We need additional data.',
+    'This needs more context.',
+    'More data is needed.',
+    'More information is needed to answer this.',
+    'Additional data is required.',
+    'Further context is required to answer.',
+    // insufficiency
+    'Not enough data.',
+    'Not enough information to answer.',
+    "There isn't enough data to answer that.",
+    'There is insufficient information to say.',
+    'Insufficient data.',
+    'The data is insufficient.',
+    'The information provided is incomplete.',
+    'The results are missing the details needed.',
+    'No relevant data was provided.',
+    'There is no sufficient information here.',
+    // results do not contain / answer
+    'The results do not contain enough information.',
+    "The lookup results don't include that information.",
+    'The provided results do not answer the question.',
+    "The data doesn't show that.",
+    'The results do not specify the period.',
+    // cannot answer
+    "I can't answer that from the results.",
+    'I cannot determine that from the provided data.',
+    "I'm unable to answer this question.",
+    'Unable to determine.',
+    "I couldn't tell from these results.",
+    'It is not possible to determine that.',
+    "I don't know.",
+    "I'm not sure.",
+    'That information is not available.',
+    'No information available.',
+  ];
+  for (const text of paraphrases) {
+    test(JSON.stringify(text), () => {
+      expect(classifyLocalOutput(text)).toEqual({ kind: 'handoff', reason: 'outside-bundle' });
+    });
+  }
+
+  test('still hands off when the paraphrase follows a think block', () => {
+    const think = (body: string) => `${LT}think>${body}${LT}/think>`;
+    expect(classifyLocalOutput(`${think('\nhmm\n')}\n\nNeed more data.`).kind).toBe('handoff');
+  });
+
+  test('a lead-in does not hide it', () => {
+    expect(classifyLocalOutput('Sorry, I need more information about that period.').kind).toBe('handoff');
+    expect(classifyLocalOutput('Hmm. Not enough data to say $5.00.').kind).toBe('handoff');
+    expect(classifyLocalOutput('Need more data. The average is $3,677.25.').kind).toBe('handoff');
+  });
+});
+
+describe('real answers that merely mention data/information/need stay answers', () => {
+  const real = [
+    'Based on the data, you spent $54.21 on groceries.',
+    'Your data shows Dining at $390.75.',
+    'Using your transaction data, net worth is $222,050.25.',
+    'The data covers January to June: $400.00 spent.',
+    'According to the data, your net profit is $17,249.25.',
+    'You do not need more data to see this: groceries were $88.50.',
+    "You don't need additional information; rent was $1,800.00.",
+    'Information on your 3 accounts: net worth is $222,050.25.',
+    'Needs: groceries $88.50, utilities $130.50.',
+    'You need to pay $130.50 for utilities by the 10th.',
+    'Needed spend this month is $190.75.',
+    'Insufficient funds fees were $12.00.',
+    'The provided results show $3,677.25 average monthly net.',
+    'More data points: you spent $41.25 on dining and $88.50 on groceries.',
+    'Data from July: spending was $190.75.',
+    'You spent $190.75 in July 2026, compared to $190.75 in June 2026.',
+    'I found 2 Adobe charges totaling $119.50.',
+    'Your information is up to date. Net worth: $222,050.25.',
+    'Not enough room in savings? Savings are $12,000.25.',
+    'No change: July spending of $190.75 matches June.',
+    'Dining is the top category at $347.25.',
+    'You are on track: cash of $27,282.50 in three months.',
+  ];
+  for (const text of real) {
+    test(JSON.stringify(text), () => {
+      expect(classifyLocalOutput(text)).toEqual({ kind: 'answer', text });
+    });
+  }
+});
+
 describe('buildLocalUserMessage', () => {
   test('ends the user turn with the Qwen3 no-think soft switch', () => {
     expect(buildLocalUserMessage('ctx', 'Top category?').endsWith(`Question: Top category? ${NO_THINK_SWITCH}`)).toBe(true);

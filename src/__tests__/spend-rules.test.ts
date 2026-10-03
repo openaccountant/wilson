@@ -131,6 +131,8 @@ function legacySavingsSql(startDate: string, endDate: string, accountId?: number
   return { sql, params };
 }
 
+const LEGACY_MERCHANT_WORD_START_SQL = String.raw`(' ' || REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(description), '*', ' '), '.', ' '), ',', ' '), '/', ' '), '#', ' '), '-', ' '), ':', ' '), ';', ' '), '(', ' '), ')', ' '), '&', ' '), '''', ' '), '"', ' '), '_', ' '), '  ', ' '), '  ', ' '), '  ', ' ')) LIKE @merchant ESCAPE '\'`;
+
 function legacyBuildWhere(filters: TransactionFilters) {
   const conditions: string[] = [];
   const params: Record<string, unknown> = {};
@@ -139,7 +141,10 @@ function legacyBuildWhere(filters: TransactionFilters) {
   if (filters.category) { conditions.push('category = @category'); params.category = filters.category; }
   if (filters.minAmount !== undefined) { conditions.push('amount >= @minAmount'); params.minAmount = filters.minAmount; }
   if (filters.maxAmount !== undefined) { conditions.push('amount <= @maxAmount'); params.maxAmount = filters.maxAmount; }
-  if (filters.merchant) { conditions.push('description LIKE @merchant'); params.merchant = `%${filters.merchant}%`; }
+  // The one intentional change to the historical WHERE (Round 4 search precision): a merchant
+  // term must start a word of the punctuation-normalized description. Behaviour is pinned in
+  // transaction-merchant-match.test.ts; this oracle only covers plain lower-case-able terms.
+  if (filters.merchant) { conditions.push(LEGACY_MERCHANT_WORD_START_SQL); params.merchant = `% ${filters.merchant.toLowerCase().trim()}%`; }
   if (filters.isRecurring !== undefined) { conditions.push('is_recurring = @isRecurring'); params.isRecurring = filters.isRecurring ? 1 : 0; }
   if (filters.accountId !== undefined) { conditions.push('account_id = @accountId'); params.accountId = filters.accountId; }
   if (filters.entityId !== undefined) { conditions.push('entity_id = @entityId'); params.entityId = filters.entityId; }

@@ -33,6 +33,12 @@ import {
 } from '../dashboard/ui/src/lib/chatCommands.js';
 import { expandSlashCommand } from '../dashboard/chat-commands.js';
 import { CONTEXT_BLOCK_HEADER } from '../dashboard/mentions.js';
+import { HANDOFF_BLOCK_HEADER, MENTION_BLOCK_PREFIX } from '../dashboard/local-handoff-format.js';
+import { renderHandoffBlock } from '../dashboard/local-handoff.js';
+
+test('the shared mention-block prefix matches the server header', () => {
+  expect(CONTEXT_BLOCK_HEADER.startsWith(MENTION_BLOCK_PREFIX)).toBe(true);
+});
 
 // ── detectTrigger ──────────────────────────────────────────────────────────
 
@@ -384,6 +390,39 @@ describe('stripContextBlock', () => {
 
   test('labels can be read back from the block', () => {
     expect(contextBlockLabels(splitContextBlock(`${block}x`).block)).toEqual(['Visa', 'Amazon']);
+  });
+
+  // Slice 5: a reloaded history query that carried an on-device handoff block
+  // renders the user's words only, and the handoff lines never leak into the
+  // mention labels (they contain quoted JSON that would match the label regex).
+  const handoff = renderHandoffBlock(
+    {
+      v: 1,
+      reason: 'ungrounded',
+      mirror: { syncedAt: null },
+      steps: [{ tool: 'transaction_search', args: { query: 'Amazon in June' }, ok: true, summary: '' }],
+      localNote: 'You spent "$12" at "Amazon".',
+    },
+    [{ tool: 'transaction_search', args: { query: 'Amazon in June' }, ok: true, summary: 'Found 1 transaction.\n#1 2026-06-02 -$12.00 Shopping "AMZN"' }],
+  );
+
+  test('a leading handoff block is peeled (handoff only)', () => {
+    expect(handoff.startsWith(HANDOFF_BLOCK_HEADER)).toBe(true);
+    expect(stripContextBlock(`${handoff}how much at Amazon?`)).toBe('how much at Amazon?');
+    expect(splitContextBlock(`${handoff}how much at Amazon?`).block).toBe('');
+  });
+
+  test('mention block then handoff block: body is the words, block is the mention block only', () => {
+    const split = splitContextBlock(`${block}${handoff}how much at @Amazon?`);
+    expect(split.body).toBe('how much at @Amazon?');
+    expect(split.block).not.toContain(HANDOFF_BLOCK_HEADER);
+    expect(contextBlockLabels(split.block)).toEqual(['Visa', 'Amazon']);
+  });
+
+  test('handoff block then mention block also peels both', () => {
+    const split = splitContextBlock(`${handoff}${block}how much at @Amazon?`);
+    expect(split.body).toBe('how much at @Amazon?');
+    expect(contextBlockLabels(split.block)).toEqual(['Visa', 'Amazon']);
   });
 });
 

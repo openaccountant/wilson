@@ -1,0 +1,157 @@
+{
+  "persona": "4-near-retiree",
+  "as_of": "2026-06-30",
+  "transaction_months": [
+    "2026-06"
+  ],
+  "accounts": [
+    {
+      "key": "checking",
+      "name": "Retirement Checking",
+      "account_type": "asset",
+      "account_subtype": "checking",
+      "institution": "Old Mill Savings",
+      "account_number_last4": "1188",
+      "current_balance": 9860.45,
+      "notes": "Pension and Social Security land here.",
+      "ledger": {
+        "file": "4-near-retiree/checking.qif",
+        "sign": 1
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 7210.88
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 7655.4
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 8302.15
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 7480.62
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 8053.09
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 9860.45
+        }
+      ]
+    },
+    {
+      "key": "brokerage",
+      "name": "Brokerage Account",
+      "account_type": "asset",
+      "account_subtype": "investment",
+      "institution": "Summit Brokerage",
+      "account_number_last4": "6620",
+      "current_balance": 312400.18,
+      "notes": "Taxable brokerage account. Balance tracked by hand, no transactions.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 301880.45
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 305120.18
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 296744.9
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 303008.37
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 309515.62
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 312400.18
+        }
+      ]
+    },
+    {
+      "key": "ira",
+      "name": "Rollover IRA",
+      "account_type": "asset",
+      "account_subtype": "investment",
+      "institution": "Summit Brokerage",
+      "account_number_last4": "6631",
+      "current_balance": 428950.31,
+      "notes": "Retirement account rolled over from an employer plan. Balance tracked by hand, no transactions.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 421300
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 424880.55
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 417330.21
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 425610.78
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 427954.09
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 428950.31
+        }
+      ]
+    },
+    {
+      "key": "home",
+      "name": "Paid-off Home",
+      "account_type": "asset",
+      "account_subtype": "real_estate",
+      "institution": "Self-estimated",
+      "account_number_last4": "0000",
+      "current_balance": 385000,
+      "notes": "Estimated market value. No mortgage, which is why the property tax bill is the only housing payment.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 385000
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 385000
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 385000
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 385000
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 385000
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 385000
+        }
+      ]
+    }
+  ]
+}

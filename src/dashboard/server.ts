@@ -25,6 +25,7 @@ import {
 } from './api.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
 import { isBadRequest } from './spending-params.js';
+import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
@@ -42,6 +43,7 @@ import {
   getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
 import { handleMcpRoute } from './mcp-routes.js';
+import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
 import { revokeGrantsForUser } from '../mcp/store.js';
 
@@ -221,6 +223,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         delete headers['Access-Control-Allow-Origin'];
         Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
       }
+      if (path.startsWith('/api/sync/')) {
+        // Raw ledger rows for the mirror: never the wildcard (see sync-routes.ts).
+        for (const k of Object.keys(headers)) delete headers[k];
+        Object.assign(headers, syncCorsHeaders(actualPort, req.headers.get('Origin')));
+      }
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers });
@@ -286,6 +293,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           });
           if (mcpResponse) return mcpResponse;
         }
+
+        // Raw rows for the offline mirror's v4 sync (behind the auth gate above).
+        const syncResponse = handleSyncRoute(req, path, { activeDb, headers, port: actualPort });
+        if (syncResponse) return syncResponse;
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
@@ -774,7 +785,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown };
+          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
@@ -785,7 +796,16 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: mentions.error }, { status: 400, headers });
           }
           const contextBlock = resolveMentionContext(activeDb, mentions.mentions);
-          const result = await handleChatMessage(body.query, body.sessionId, contextBlock || undefined);
+          // On-device subagent handoff (advisory): validated, its steps re-run
+          // on this DB, rendered as a framed untrusted block after the mention
+          // block. Invalid or oversized payloads render '' and never fail the chat.
+          // Honoured only while subagent.enabled is on: with the flag off the field
+          // is not even parsed, so a forged handoff cannot inject a block or make the
+          // server run tools on a path the feature does not expose.
+          const handoffBlock = apiLocalChatConfig().subagent.enabled
+            ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
+            : '';
+          const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined);
           return Response.json(result, { headers });
         }
 

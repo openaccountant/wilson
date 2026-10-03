@@ -9,6 +9,10 @@ import { defineConfig } from 'vite';
  * inlining — they are copied next to the chunk as same-origin static files by
  * scripts/copy-ort-web-assets.ts and served at /assets/ort/.
  *
+ * The local model runs in a Web Worker inlined into this same file (see
+ * `worker` below), so the main-thread half of the chunk contains no
+ * transformers.js. scripts/check-hybrid-build.ts enforces that.
+ *
  * Run: npm run build:hybrid (from src/dashboard/ui)
  */
 export default defineConfig({
@@ -21,6 +25,12 @@ export default defineConfig({
       'onnxruntime-web-use-extern-wasm',
     ],
   },
+  // The model worker (src/hybrid/model.worker.ts) is pulled in by standalone.ts
+  // via `?worker&inline`: Vite bundles it separately (transformers.js + ORT
+  // included) and inlines it into hybrid-chat.js as a blob module worker, so
+  // the output stays a single file. ES format because ORT loads its wasm
+  // loader with a dynamic import().
+  worker: { format: 'es' },
   build: {
     outDir: 'dist-hybrid',
     emptyOutDir: true,

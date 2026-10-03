@@ -232,9 +232,10 @@ export async function mirrorGetMonthlySavingsData(
   months: number = 6,
   accountId?: number,
   entityId?: number,
-  opts?: OverviewOptions
+  opts?: OverviewOptions,
+  now: Date = new Date()
 ): Promise<MonthlyIncomeExpense[]> {
-  const { startDate, endDate } = savingsWindow(endMonth, months);
+  const { startDate, endDate } = savingsWindow(endMonth, months, now);
   const { sql, params } = composeSavingsSql(startDate, endDate, accountId, entityId, opts);
 
   const rows = (await db.prepare(sql).all(params)) as unknown as { month: string; income: number; expenses: number }[];

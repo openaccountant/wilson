@@ -1,0 +1,130 @@
+{
+  "persona": "5-single-parent",
+  "as_of": "2026-06-30",
+  "transaction_months": [
+    "2026-06"
+  ],
+  "accounts": [
+    {
+      "key": "checking",
+      "name": "Community Checking",
+      "account_type": "asset",
+      "account_subtype": "checking",
+      "institution": "Eastside Credit Union",
+      "account_number_last4": "9904",
+      "current_balance": 577.2,
+      "notes": "Only cash account. Starts June overdrawn and goes further negative before the mid-month paycheck.",
+      "ledger": {
+        "file": "5-single-parent/checking.csv",
+        "sign": 1
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 140.25
+        },
+        {
+          "date": "2026-02-28",
+          "balance": -60.1
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 215.8
+        },
+        {
+          "date": "2026-04-30",
+          "balance": -120.45
+        },
+        {
+          "date": "2026-05-31",
+          "balance": -285
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 577.2
+        }
+      ]
+    },
+    {
+      "key": "car",
+      "name": "Used Sedan",
+      "account_type": "asset",
+      "account_subtype": "vehicle",
+      "institution": "Self-estimated",
+      "account_number_last4": "0000",
+      "current_balance": 11050,
+      "notes": "Estimated resale value, falling a little each month.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 11800
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 11650
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 11500
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 11350
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 11200
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 11050
+        }
+      ]
+    },
+    {
+      "key": "auto_loan",
+      "name": "Auto Loan",
+      "account_type": "liability",
+      "account_subtype": "auto_loan",
+      "institution": "CarMax Financial",
+      "account_number_last4": "3320",
+      "current_balance": 8713.2,
+      "notes": "Five-year car loan, one payment of $265 each month.",
+      "loan": {
+        "original_principal": 13200,
+        "interest_rate": 0.075,
+        "term_months": 60,
+        "start_date": "2024-08-01",
+        "extra_payment": 0,
+        "linked_asset_key": "car",
+        "notes": "60-month loan, first payment August 2024."
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 9744.01
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 9540.4
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 9335.53
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 9129.38
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 8921.93
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 8713.2
+        }
+      ]
+    }
+  ]
+}

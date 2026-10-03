@@ -1,0 +1,207 @@
+{
+  "persona": "3-dual-income-household",
+  "as_of": "2026-06-30",
+  "transaction_months": [
+    "2026-06"
+  ],
+  "accounts": [
+    {
+      "key": "checking",
+      "name": "Joint Checking",
+      "account_type": "asset",
+      "account_subtype": "checking",
+      "institution": "Meridian Trust Bank",
+      "account_number_last4": "2234",
+      "current_balance": 6588.61,
+      "notes": "Both paychecks land here. June 30 balance is the statement ledger balance.",
+      "ledger": {
+        "file": "3-dual-income-household/joint-checking.ofx",
+        "sign": 1
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 1020.35
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 860.9
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 1475.2
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 730.45
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 600
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 6588.61
+        }
+      ]
+    },
+    {
+      "key": "house_fund",
+      "name": "House Fund Savings",
+      "account_type": "asset",
+      "account_subtype": "savings",
+      "institution": "Meridian Trust Bank",
+      "account_number_last4": "2290",
+      "current_balance": 14500,
+      "notes": "Receives two $500 transfers from joint checking every month.",
+      "ledger": {
+        "file": "3-dual-income-household/joint-checking.ofx",
+        "match": "SAVINGS HOUSE FUND",
+        "sign": -1
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 9500
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 10500
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 11500
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 12500
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 13500
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 14500
+        }
+      ]
+    },
+    {
+      "key": "k401",
+      "name": "Joint 401(k)",
+      "account_type": "asset",
+      "account_subtype": "investment",
+      "institution": "Harbor Steel Retirement Plan",
+      "account_number_last4": "5503",
+      "current_balance": 96412.3,
+      "notes": "Employer retirement plan. Balance tracked by hand, no transactions.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 88410.22
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 90155.8
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 87904.35
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 92233.1
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 94870.66
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 96412.3
+        }
+      ]
+    },
+    {
+      "key": "home",
+      "name": "Family Home",
+      "account_type": "asset",
+      "account_subtype": "real_estate",
+      "institution": "Self-estimated",
+      "account_number_last4": "0000",
+      "current_balance": 440000,
+      "notes": "Estimated market value, updated by hand.",
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 438000
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 438000
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 440000
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 440000
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 440000
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 440000
+        }
+      ]
+    },
+    {
+      "key": "mortgage",
+      "name": "Home Mortgage",
+      "account_type": "liability",
+      "account_subtype": "mortgage",
+      "institution": "Lakeview Home Loans",
+      "account_number_last4": "8841",
+      "current_balance": 329366.85,
+      "notes": "Thirty-year fixed mortgage on the family home.",
+      "loan": {
+        "original_principal": 350000,
+        "interest_rate": 0.06,
+        "term_months": 360,
+        "start_date": "2022-03-01",
+        "extra_payment": 0,
+        "linked_asset_key": "home",
+        "notes": "30-year fixed, first payment March 2022."
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 331591.33
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 331150.86
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 330708.19
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 330263.3
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 329816.19
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 329366.85
+        }
+      ]
+    }
+  ]
+}

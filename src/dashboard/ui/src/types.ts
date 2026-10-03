@@ -1,5 +1,7 @@
 /** Shared API response types for the Wilson dashboard. */
 
+import type { LocalHandoffV1 } from '../../local-handoff-format.js';
+
 export interface Transaction {
   id: number;
   date: string;
@@ -240,6 +242,11 @@ export interface ChatRequest {
   query: string;
   sessionId?: string;
   mentions?: Mention[];
+  /**
+   * On-device browser-subagent notes for the server agent (specs/browser-subagent.md
+   * section 8). Optional; the server validates, re-executes and frames it as untrusted.
+   */
+  localHandoff?: LocalHandoffV1;
 }
 
 // Matches GET /api/skills
@@ -498,4 +505,31 @@ export interface SpendingSeriesResponse {
   values: (number | null)[];
   coverageStart: string | null;
   coverageEnd: string | null;
+}
+
+// ── open-jev pre-labeler (specs/open-jev-labeler.md §9.1) ───────────────────
+
+// Matches PRELABEL_MODEL in src/prelabel/config.ts, as served in /api/prelabel/config
+export interface PrelabelPins {
+  repo: string;
+  dtype: 'q4f16';
+  device: 'webgpu';
+  temperature: number;
+  templateVersion: 'prelabel-tmpl-v1';
+  modelId: string;
+  revision: string;
+  configSha: string;
+  approxDownloadBytes: number;
+}
+
+// Matches GET /api/prelabel/config (see src/prelabel/routes.ts)
+export interface PrelabelConfig {
+  enabled: boolean;
+  profile: string;
+  pins: PrelabelPins;
+  labels: string[];
+  labelSetVersion: string;
+  marginCut: number;
+  maxRowsPerRun: number;
+  approxDownloadBytes: number;
 }

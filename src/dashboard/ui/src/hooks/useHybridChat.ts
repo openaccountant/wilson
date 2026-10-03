@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { authedFetch, getBaseUrl } from '@/api';
 import type { HybridResult } from '@/hybrid/core';
+import type { PriorLocalTurn } from '@/hybrid/worker-protocol';
 import type {
   WilsonHybridChatGlobal,
   CategorizeSampleResult,
   CategorizeSampleOpts,
 } from '@/hybrid/standalone';
+import {
+  fetchActiveMirrorProfile,
+  getMirrorState,
+  openToolPort,
+  syncMirror,
+} from '@/store/mirror-client';
+import { mirrorStatusViaPort, prepareMirrorForRun } from '@/store/mirror-subagent';
+import { chooseToolWithHost } from '@/openjev/choose-tool';
+import { getOpenJevHost } from '@/openjev/instance';
 
 /**
  * React binding for the prebuilt hybrid chat chunk (/assets/hybrid-chat.js).
@@ -20,6 +30,30 @@ import type {
 type ChunkStatus = 'unknown' | 'available' | 'unavailable';
 
 let chunkPromise: Promise<WilsonHybridChatGlobal | null> | null = null;
+
+/** Per-turn options ChatTab passes to tryLocal (the browser subagent). */
+export interface TryLocalExtras {
+  /** Turns answered on-device earlier in this session, most recent last. */
+  priorLocalTurns?: PriorLocalTurn[];
+}
+
+/**
+ * Dev-only: `localStorage['wilson-subagent-debug']==='1'` exposes
+ * `window.__wilsonDebug.mirrorStatus()`, which opens a tool port and sends
+ * `status` (live-Chrome verification, specs/browser-subagent.md section 14).
+ */
+function installDebugHelper(): void {
+  try {
+    if (localStorage.getItem('wilson-subagent-debug') !== '1') return;
+    const w = window as unknown as { __wilsonDebug?: Record<string, unknown> };
+    w.__wilsonDebug = {
+      ...(w.__wilsonDebug ?? {}),
+      mirrorStatus: () => mirrorStatusViaPort(() => openToolPort()),
+    };
+  } catch {
+    // storage unavailable: no debug helper, nothing else changes
+  }
+}
 
 function loadHybridChunk(baseUrl: string): Promise<WilsonHybridChatGlobal | null> {
   chunkPromise ??= (async () => {
@@ -42,6 +76,7 @@ export interface UseHybridChatResult {
     query: string,
     onProgress?: (label: string) => void,
     sessionId?: string | null,
+    extras?: TryLocalExtras,
   ): Promise<HybridResult>;
   /** Speed Showdown browser arm; resolves {ok:false, reason:'unavailable'} without a chunk. */
   categorizeSample(opts: CategorizeSampleOpts): Promise<CategorizeSampleResult>;
@@ -77,6 +112,7 @@ export function useHybridChat(): UseHybridChatResult {
   }, []);
 
   useEffect(() => {
+    installDebugHelper();
     let alive = true;
     void ensure().then((hybrid) => {
       if (alive) setStatus(hybrid ? 'available' : 'unavailable');
@@ -91,10 +127,29 @@ export function useHybridChat(): UseHybridChatResult {
       query: string,
       onProgress?: (label: string) => void,
       sessionId?: string | null,
+      extras?: TryLocalExtras,
     ): Promise<HybridResult> => {
       const hybrid = await ensure();
       if (!hybrid) return { ok: false };
-      return hybrid.tryLocal(query, onProgress, sessionId);
+      // The mirror half of the browser subagent. Only invoked by the hybrid
+      // chunk after the gate passed and only when the server enabled the flag,
+      // so with the flag off nothing here ever runs.
+      return hybrid.tryLocal(query, onProgress, sessionId, {
+        subagent: {
+          priorLocalTurns: extras?.priorLocalTurns ?? [],
+          prepareMirror: () =>
+            prepareMirrorForRun({
+              getState: getMirrorState,
+              syncMirror,
+              fetchActiveProfile: fetchActiveMirrorProfile,
+              openToolPort,
+              now: () => Date.now(),
+            }),
+          // Round 4: the open-jev tiebreak. The hybrid chunk calls this only for a 0 / 2+ keyword-hit
+          // question, with the server flag on and the cut frozen. It never prompts, downloads or waits.
+          chooseTool: (req) => chooseToolWithHost(getOpenJevHost(), req),
+        },
+      });
     },
     [ensure],
   );

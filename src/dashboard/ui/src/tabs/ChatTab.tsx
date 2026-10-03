@@ -1,6 +1,4 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useApi } from '@/hooks/useApi';
 import { useHybridChat } from '@/hooks/useHybridChat';
 import { useTypeahead, type ActiveTrigger, type AcceptMode } from '@/hooks/useTypeahead';
@@ -16,9 +14,13 @@ import {
 } from '@/hooks/useMentionSources';
 import { api, getBaseUrl } from '@/api';
 import { parseTaxExportArgs } from '@/lib/taxExport';
-import type { BudgetVsActualRow, ChatHistoryRow, ChatRequest, ChatResponse, ChatSessionRow } from '@/types';
+import type { BudgetVsActualRow, ChatHistoryRow, ChatResponse, ChatSessionRow } from '@/types';
 import { moneyWhole, parseDbTimestamp } from '@/format';
-import { deriveChatProvenance, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
+import { ChatMarkdown, LocalChatMarkdown } from '@/lib/chatMarkdown';
+import { buildChatRequest, hasHandoffPayload } from '@/lib/chat-request';
+import { syncMirror } from '@/store/mirror-client';
+import type { PriorLocalTurn } from '@/hybrid/worker-protocol';
+import { deriveChatProvenance, isLocalProvenance, linksRenderAsText, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
 import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 import { Typeahead, type TypeaheadItem } from '@/components/Typeahead';
 import { ComposerBackdrop, MentionIcon } from '@/components/ComposerBackdrop';
@@ -74,8 +76,12 @@ interface DisplayMessage {
    * "Local model unavailable: … requires … shader-f16". Never persisted.
    */
   notice?: string;
+  /** Reloaded from /api/chat/sessions/:id: links render as plain text (Round 3 "History links"). */
+  fromHistory?: boolean;
   /** Dashboard-command exchange: ran in the browser, never sent or persisted. */
   local?: boolean;
+  /** Subagent answers only: tools that ran on this device and how long each took. Live-only, never persisted. */
+  localSteps?: { tool: string; ms: number }[];
   /** Labels to render as mention chips in this (user) bubble. */
   mentionLabels?: string[];
   /** Mentions sent with this (user) message — restored by ArrowUp recall. */
@@ -93,6 +99,8 @@ type ComposerItem = TypeaheadItem &
 const LISTBOX_ID = 'chat-composer-listbox';
 const ARG_TITLES = { profiles: 'Profiles', categories: 'Categories', skills: 'Skills' } as const;
 const MAX_MENTIONS = 10;
+/** On-device turns remembered for the server handoff (spec Q6: last 3, no history hydration). */
+const PRIOR_LOCAL_TURNS_MAX = 3;
 
 function storage(): Storage | undefined {
   try {
@@ -140,84 +148,6 @@ function UserContent({ text, known }: { text: string; known: Set<string> }) {
   );
 }
 
-// Markdown element map for assistant replies, tuned to the Forensic Noir theme.
-// Note: react-markdown escapes raw HTML by default and strips javascript: URLs —
-// do NOT add rehype-raw; that is the XSS boundary for model output.
-const markdownComponents: Components = {
-  h1: ({ node: _node, ...props }) => (
-    <h1 {...props} className="text-base font-bold mt-3 mb-1.5 first:mt-0" />
-  ),
-  h2: ({ node: _node, ...props }) => (
-    <h2 {...props} className="text-[0.95rem] font-semibold mt-3 mb-1.5 first:mt-0" />
-  ),
-  h3: ({ node: _node, ...props }) => (
-    <h3 {...props} className="text-sm font-semibold mt-2.5 mb-1 first:mt-0" />
-  ),
-  p: ({ node: _node, ...props }) => (
-    <p {...props} className="my-2 first:mt-0 last:mb-0 leading-relaxed" />
-  ),
-  ul: ({ node: _node, ...props }) => (
-    <ul {...props} className="list-disc pl-5 my-2 space-y-1 first:mt-0 last:mb-0" />
-  ),
-  ol: ({ node: _node, ...props }) => (
-    <ol {...props} className="list-decimal pl-5 my-2 space-y-1 first:mt-0 last:mb-0" />
-  ),
-  li: ({ node: _node, ...props }) => (
-    <li {...props} className="marker:text-green [&:has(>input)]:list-none" />
-  ),
-  strong: ({ node: _node, ...props }) => <strong {...props} className="font-semibold" />,
-  em: ({ node: _node, ...props }) => <em {...props} className="italic" />,
-  del: ({ node: _node, ...props }) => <del {...props} className="text-text-muted line-through" />,
-  blockquote: ({ node: _node, ...props }) => (
-    <blockquote
-      {...props}
-      className="border-l-2 border-green/50 pl-3 my-2 text-text-secondary italic first:mt-0 last:mb-0"
-    />
-  ),
-  hr: ({ node: _node, ...props }) => <hr {...props} className="border-border my-3" />,
-  a: ({ node: _node, href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-green underline underline-offset-2 hover:text-green/80"
-    >
-      {children}
-    </a>
-  ),
-  pre: ({ node: _node, children }) => (
-    <pre className="bg-bg border border-border-muted rounded-lg p-3 my-2 overflow-x-auto font-mono text-xs leading-relaxed first:mt-0 last:mb-0">
-      {children}
-    </pre>
-  ),
-  code: ({ className, children }) => {
-    // Fenced blocks come through as <pre><code class="language-*">; inline code does not.
-    const isBlock = /language-/.test(className ?? '') || String(children).includes('\n');
-    if (isBlock) return <code className={className}>{children}</code>;
-    return (
-      <code className="font-mono text-[0.85em] bg-surface-raised border border-border-muted rounded px-1 py-0.5">
-        {children}
-      </code>
-    );
-  },
-  table: ({ node: _node, children }) => (
-    <div className="overflow-x-auto my-2 first:mt-0 last:mb-0">
-      <table className="w-full text-xs border-collapse">{children}</table>
-    </div>
-  ),
-  thead: ({ node: _node, ...props }) => <thead {...props} className="bg-surface-raised" />,
-  th: ({ node: _node, ...props }) => (
-    <th {...props} className="border border-border px-2 py-1.5 text-left font-semibold text-text" />
-  ),
-  td: ({ node: _node, ...props }) => (
-    <td {...props} className="border border-border px-2 py-1 text-text" />
-  ),
-  // GFM task-list checkbox (rendered disabled by remark-gfm)
-  input: ({ node: _node, ...props }) => (
-    <input {...props} readOnly className="mr-1.5 align-middle accent-green" />
-  ),
-};
-
 function formatSessionDate(iso: string): string {
   const d = parseDbTimestamp(iso);
   const now = new Date();
@@ -241,6 +171,8 @@ export function ChatTab() {
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const hybrid = useHybridChat();
+  // Turns answered on-device in this chat, so a later server handoff can close the history gap.
+  const priorLocalTurnsRef = useRef<PriorLocalTurn[]>([]);
   const { sources, loaded: sourcesLoaded, ensureLoaded } = useMentionSources();
   // The server agent blocks POST /api/chat on approval-gated tools (e.g.
   // categorize); surface that pending approval inline so the request can finish.
@@ -490,6 +422,7 @@ export function ChatTab() {
   // ── Sessions ──────────────────────────────────────────────────────────
   async function loadSession(sid: string) {
     if (sid === activeSessionId) return;
+    priorLocalTurnsRef.current = [];
     setActiveSessionId(sid);
     setSessionId(sid);
     try {
@@ -506,7 +439,7 @@ export function ChatTab() {
           mentionLabels: contextBlockLabels(block),
           mentions: pruneMentions(body, contextBlockMentions(block)),
         });
-        loaded.push({ id: newId(), role: 'assistant', content: row.answer });
+        loaded.push({ id: newId(), role: 'assistant', content: row.answer, fromHistory: true });
       }
       setMessages(loaded);
     } catch {
@@ -516,6 +449,7 @@ export function ChatTab() {
   }
 
   function handleNewChat() {
+    priorLocalTurnsRef.current = [];
     setMessages([]);
     setSessionId(null);
     setActiveSessionId(null);
@@ -686,12 +620,21 @@ export function ChatTab() {
     // hybrid problems can never reach the Error: bubble below, which is
     // reserved for genuine server-path failures. When the local MODEL itself
     // failed, the reason rides along as a small note under the server answer.
-    let local: { answer: string; sessionId: string | null } | null = null;
+    let local: {
+      answer: string;
+      sessionId: string | null;
+      mode?: 'subagent';
+      steps?: { tool: string; ms: number }[];
+    } | null = null;
+    let hybridResult: HybridResult | null = null;
     let notice: string | null = null;
     if (!needsServer) {
       try {
-        const r: HybridResult = await hybrid.tryLocal(query, setProgressLabel, sessionId);
-        if (r.ok) local = { answer: r.answer, sessionId: r.sessionId };
+        const r: HybridResult = await hybrid.tryLocal(query, setProgressLabel, sessionId, {
+          priorLocalTurns: priorLocalTurnsRef.current,
+        });
+        hybridResult = r;
+        if (r.ok) local = { answer: r.answer, sessionId: r.sessionId, mode: r.mode, steps: r.steps };
         else notice = localUnavailableNotice(r.detail);
       } catch {
         local = null;
@@ -699,8 +642,20 @@ export function ChatTab() {
       setProgressLabel(null);
     }
 
+    // A cancelled on-device run (superseded or torn down) sends nothing anywhere.
+    if (!local && hybridResult && !hybridResult.ok && hybridResult.reason === 'cancelled') {
+      setSending(false);
+      inputRef.current?.focus();
+      return;
+    }
+
+    // The server request, with the on-device handoff when the subagent produced one
+    // (never alongside @mentions; a handoff with nothing in it is not sent).
+    const request = local ? null : buildChatRequest(query, sessionId, sentMentions, hybridResult, priorLocalTurnsRef.current);
+
     // Provenance of THIS exchange, decided at send time from the actual path
-    // (never from message text): local answered → on-device; local layer was
+    // (never from message text): local answered → on-device (bundle or tools);
+    // a handoff with a payload went to the server → continued; local layer was
     // in play but the server answered → fallback; hybrid layer absent, or
     // deliberately skipped for a command/mention → neutral server agent.
     // getStatus() (not the stale `status` state) is authoritative here
@@ -708,6 +663,8 @@ export function ChatTab() {
     const provenance = deriveChatProvenance({
       localAnswered: local !== null,
       hybridLayerPresent: !needsServer && hybrid.getStatus() !== 'unavailable',
+      localMode: local?.mode === 'subagent' ? 'subagent' : 'bundle',
+      handoffSent: hasHandoffPayload(request?.localHandoff),
     });
 
     try {
@@ -716,27 +673,25 @@ export function ChatTab() {
           setSessionId(local.sessionId);
           setActiveSessionId(local.sessionId);
         }
+        priorLocalTurnsRef.current = [...priorLocalTurnsRef.current, { q: query, a: local.answer }].slice(
+          -PRIOR_LOCAL_TURNS_MAX,
+        );
         setMessages((prev) => [
           ...prev,
-          { id: newId(), role: 'assistant', content: local.answer, provenance },
+          {
+            id: newId(),
+            role: 'assistant',
+            content: local.answer,
+            provenance,
+            ...(local.steps && local.steps.length > 0 ? { localSteps: local.steps } : {}),
+          },
         ]);
         refetchSessions();
       } else {
-        const body: ChatRequest = { query };
-        if (sessionId) body.sessionId = sessionId;
-        if (sentMentions.length > 0) {
-          body.mentions = sentMentions.slice(0, MAX_MENTIONS).map(({ type, id, key, label }) => ({
-            type,
-            ...(id !== undefined ? { id } : {}),
-            ...(key !== undefined ? { key } : {}),
-            label: label.slice(0, 120),
-          }));
-        }
-
         setServerInFlight(true);
         const res = await api<ChatResponse>('/api/chat', {
           method: 'POST',
-          body: JSON.stringify(body),
+          body: JSON.stringify(request),
         });
 
         setSessionId(res.sessionId);
@@ -746,6 +701,9 @@ export function ChatTab() {
           { id: newId(), role: 'assistant', content: res.answer, provenance, ...(notice ? { notice } : {}) },
         ]);
         refetchSessions();
+        // A server turn after on-device work may have changed data: re-sync the mirror
+        // (deduplicated, never blocks the UI) so the next local lookup sees it.
+        if (hybridResult && !hybridResult.ok && hybridResult.handoff) void syncMirror();
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
@@ -888,16 +846,34 @@ export function ChatTab() {
                 </div>
               ) : (
                 <div className="max-w-[75%] rounded-lg px-4 py-2.5 text-sm bg-surface border border-border text-text">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                    {msg.content}
-                  </ReactMarkdown>
+                  {linksRenderAsText(msg) ? (
+                    // On-device answers (Round 2) and every history-loaded message (Round 3): links render as inert text.
+                    <LocalChatMarkdown>{msg.content}</LocalChatMarkdown>
+                  ) : (
+                    <ChatMarkdown>{msg.content}</ChatMarkdown>
+                  )}
                   {msg.provenance && (
                     <div
                       className={`mt-1.5 text-xs tracking-wide ${
-                        msg.provenance === 'local-with-context' ? 'text-green' : 'text-text-muted'
+                        isLocalProvenance(msg.provenance)
+                          ? 'text-green'
+                          : 'text-text-muted'
                       }`}
                     >
                       {PROVENANCE_BADGES[msg.provenance]}
+                    </div>
+                  )}
+                  {msg.localSteps && msg.localSteps.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {msg.localSteps.map((st, i) => (
+                        <span
+                          key={i}
+                          className="rounded px-1.5 py-px font-mono text-[0.7rem] bg-surface-raised border border-border-muted text-text-muted"
+                          title={`${st.tool} · ${Math.round(st.ms)} ms on this device`}
+                        >
+                          {st.tool}
+                        </span>
+                      ))}
                     </div>
                   )}
                   {msg.notice && (
