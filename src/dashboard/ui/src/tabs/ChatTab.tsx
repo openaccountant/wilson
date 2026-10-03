@@ -22,6 +22,8 @@ import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 import { Typeahead, type TypeaheadItem } from '@/components/Typeahead';
 import { ComposerBackdrop, MentionIcon } from '@/components/ComposerBackdrop';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
+import { ChatApprovalCard } from '@/components/ChatApprovalCard';
+import { usePendingChatApproval } from '@/hooks/usePendingChatApproval';
 import { navigateToTab, reloadForProfileSwitch } from '@/hooks/useUrlState';
 import {
   applySelection,
@@ -231,12 +233,17 @@ export function ChatTab() {
   const [caret, setCaret] = useState(0);
   const [mentions, setMentions] = useState<MentionEntry[]>([]);
   const [sending, setSending] = useState(false);
+  /** True only while POST /api/chat is in flight (not the on-device path). */
+  const [serverInFlight, setServerInFlight] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const hybrid = useHybridChat();
   const { sources, loaded: sourcesLoaded, ensureLoaded } = useMentionSources();
+  // The server agent blocks POST /api/chat on approval-gated tools (e.g.
+  // categorize); surface that pending approval inline so the request can finish.
+  const approval = usePendingChatApproval(sending && serverInFlight);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -258,7 +265,7 @@ export function ChatTab() {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, sending]);
+  }, [messages, sending, approval.operation?.id]);
 
   // Focus input on mount and after each send completes. Must run after commit:
   // focusing while the input is still `disabled` is a no-op.
@@ -680,6 +687,7 @@ export function ChatTab() {
           }));
         }
 
+        setServerInFlight(true);
         const res = await api<ChatResponse>('/api/chat', {
           method: 'POST',
           body: JSON.stringify(body),
@@ -700,6 +708,7 @@ export function ChatTab() {
         { id: newId(), role: 'assistant', content: `Error: ${errMsg}`, provenance, ...(notice ? { notice } : {}) },
       ]);
     } finally {
+      setServerInFlight(false);
       setSending(false);
     }
   }
@@ -859,6 +868,15 @@ export function ChatTab() {
               )}
             </div>
           ))}
+
+          {sending && approval.operation && (
+            <ChatApprovalCard
+              operation={approval.operation}
+              responding={approval.responding}
+              error={approval.error}
+              onRespond={(decision) => void approval.respond(decision)}
+            />
+          )}
 
           {sending && (
             <div className="flex justify-start">
