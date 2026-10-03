@@ -104,6 +104,7 @@ export const categorizeTool = defineTool({
       return formatToolResult({
         message: 'All transactions are already categorized.',
         categorized: 0,
+        stillUncategorized: 0,
       });
     }
 
@@ -225,6 +226,7 @@ export const categorizeTool = defineTool({
       routedForReview: totalRoutedForReview,
       errors: errors.length > 0 ? errors : undefined,
       notAttempted: notAttempted > 0 ? notAttempted : undefined,
+      stillUncategorized: countUncategorized(database),
       message:
         `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
         (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
@@ -236,3 +238,8 @@ export const categorizeTool = defineTool({
     });
   },
 });
+
+/** Transactions with no category (those held in the review queue included). */
+function countUncategorized(database: Database): number {
+  return (database.prepare('SELECT COUNT(*) AS n FROM transactions WHERE category IS NULL').get() as { n: number }).n;
+}

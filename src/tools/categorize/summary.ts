@@ -15,6 +15,8 @@ interface CategorizeResultData {
   categoriesApplied?: Record<string, number>;
   errors?: string[];
   notAttempted?: number;
+  /** Transactions with no category after the run (held-for-review included). */
+  stillUncategorized?: number;
 }
 
 /** Parse the tool's JSON result (formatToolResult wraps it in `data`). */

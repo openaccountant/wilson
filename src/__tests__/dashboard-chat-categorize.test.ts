@@ -4,7 +4,8 @@ import { initCategorizeTool } from '../tools/categorize/categorize.js';
 import { insertTransactions, addRule } from '../db/queries.js';
 import { handleChatMessage } from '../dashboard/chat.js';
 import * as llmModule from '../model/llm.js';
-import { createTestDb } from './helpers.js';
+import { createTestDb, ensureTestProfile } from './helpers.js';
+import { saveConfig, setSetting } from '../utils/config.js';
 
 // "/categorize" in the dashboard chat must never go through the agent loop:
 // the agent prompt (~17k tokens with every tool schema) overwhelms local
@@ -67,5 +68,38 @@ describe('dashboard /categorize', () => {
     const res = await handleChatMessage('/categorize');
     expect(res.answer).toBe('All transactions are already categorized.');
     expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('on a local model a bare /categorize does one chunk of 50 and says how many remain', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 60 }, (_, i) => ({ date: '2026-02-15', description: `AMAZON ${i}`, amount: -10 })));
+      addRule(db, '*AMAZON*', 'Shopping');
+      const res = await handleChatMessage('/categorize');
+      expect(res.answer).toStartWith('Categorized **50** of 50 transactions');
+      expect(res.answer).toContain('10 transactions are still uncategorized');
+      expect(res.answer).toContain('/categorize');
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('an explicit limit is honoured on a local model, with the remainder noted', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 5 }, (_, i) => ({ date: '2026-02-15', description: `AMAZON ${i}`, amount: -10 })));
+      addRule(db, '*AMAZON*', 'Shopping');
+      const res = await handleChatMessage('/categorize 3');
+      expect(res.answer).toStartWith('Categorized **3** of 3 transactions');
+      expect(res.answer).toContain('2 transactions are still uncategorized');
+    } finally {
+      saveConfig({});
+    }
   });
 });

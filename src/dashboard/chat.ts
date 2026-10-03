@@ -8,6 +8,8 @@ import { logger } from '../utils/logger.js';
 import { createOperation, getOperation, markOperationStatus, type McpOperation } from '../mcp/store.js';
 import { expandSlashCommand } from './chat-commands.js';
 import { categorizeTool } from '../tools/categorize/categorize.js';
+import { getTaskModel } from '../model/task-models.js';
+import { resolveProvider } from '../providers.js';
 import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
 
 let chatHistory: InMemoryChatHistory | null = null;
@@ -250,6 +252,13 @@ export async function handleChatMessage(
 }
 
 /**
+ * A bare "/categorize" on a local model does this many transactions per run:
+ * at ~15s per batch of 10, a backlog of hundreds would otherwise keep the chat
+ * silent for twenty minutes or more. The answer says how many remain.
+ */
+const LOCAL_CATEGORIZE_CHUNK = 50;
+
+/**
  * "/categorize [n]": the categorize tool, called directly — the same path as
  * the terminal's /categorize (src/cli.ts). Typing the command is the consent,
  * so there is no approval round-trip, and the categorizer's own small batch
@@ -258,10 +267,17 @@ export async function handleChatMessage(
  */
 async function runCategorizeCommand(limit?: number): Promise<string> {
   const startTime = Date.now();
+  const local = resolveProvider(getTaskModel('categorization')).id === 'transformers';
+  const effectiveLimit = limit ?? (local ? LOCAL_CATEGORIZE_CHUNK : undefined);
   try {
-    const resultJson = await categorizeTool.func(limit !== undefined ? { limit } : {});
-    const answer = formatCategorizeSummary(parseCategorizeResult(resultJson), { errorDetail: true });
-    logger.info(`Dashboard /categorize`, { durationMs: Date.now() - startTime, limit });
+    const resultJson = await categorizeTool.func(effectiveLimit !== undefined ? { limit: effectiveLimit } : {});
+    const data = parseCategorizeResult(resultJson);
+    let answer = formatCategorizeSummary(data, { errorDetail: true });
+    const remaining = effectiveLimit !== undefined ? data.stillUncategorized ?? 0 : 0;
+    if (remaining > 0) {
+      answer += `\n\n${remaining} transactions are still uncategorized — send \`/categorize\` again for the next ${effectiveLimit}.`;
+    }
+    logger.info(`Dashboard /categorize`, { durationMs: Date.now() - startTime, limit: effectiveLimit, remaining });
     return answer;
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
