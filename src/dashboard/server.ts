@@ -46,6 +46,7 @@ import { handleMcpRoute } from './mcp-routes.js';
 import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
 import { revokeGrantsForUser } from '../mcp/store.js';
+import { handlePrelabelRoute } from '../prelabel/routes.js';
 
 const DEFAULT_PORT = 3141;
 
@@ -543,6 +544,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
+
+        // ── open-jev pre-labeler (own origin gate, specs/open-jev-labeler.md §9.0) ──
+        const pre = await handlePrelabelRoute(req, url, { db: activeDb, headers, authEnabled, currentUser, canWrite, port: actualPort, profile: getCurrentProfileName(), peerAddress: server.requestIP(req)?.address }); if (pre) return pre;
 
         // ── Goals ──────────────────────────────────────────────────
 

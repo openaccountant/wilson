@@ -1,0 +1,91 @@
+{
+ "tag": "open-jev-q4-wasm",
+ "cfg": {
+  "model": "open-jev",
+  "dtype": "q4",
+  "device": "wasm"
+ },
+ "date": "2026-10-03T02:15:21.570Z",
+ "headed": false,
+ "unsafe_webgpu": false,
+ "browser": "153.0.8010.12",
+ "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+ "adapter": {
+  "webgpu": true,
+  "vendor": "apple",
+  "architecture": "metal-3",
+  "device": "",
+  "description": "",
+  "is_fallback_adapter": null,
+  "shader_f16": true,
+  "features": [
+   "bgra8unorm-storage",
+   "clip-distances",
+   "core-features-and-limits",
+   "depth-clip-control",
+   "depth32float-stencil8",
+   "dual-source-blending",
+   "float32-blendable",
+   "float32-filterable",
+   "indirect-first-instance",
+   "primitive-index",
+   "rg11b10ufloat-renderable",
+   "shader-f16",
+   "subgroup-size-control",
+   "subgroups",
+   "texture-component-swizzle",
+   "texture-compression-astc",
+   "texture-compression-astc-sliced-3d",
+   "texture-compression-bc",
+   "texture-compression-bc-sliced-3d",
+   "texture-compression-etc2",
+   "texture-formats-tier1",
+   "texture-formats-tier2",
+   "timestamp-query"
+  ],
+  "maxBufferSize": 4294967292,
+  "maxStorageBufferBindingSize": 4294967292
+ },
+ "versions": {
+  "transformers": "4.3.0",
+  "ort": {
+   "common": "1.31.0-dev.20260911-2a43ec07e",
+   "web": "1.31.0-dev.20260914-8d85527a0"
+  },
+  "crossOriginIsolated": true
+ },
+ "info_cold": {
+  "isCached": false,
+  "downloadSize": 486677869,
+  "files": [
+   "config.json",
+   "onnx/model_q4.onnx",
+   "onnx/model_q4.onnx_data",
+   "tokenizer.json",
+   "tokenizer_config.json"
+  ],
+  "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "family": "open-jev",
+  "device": "wasm",
+  "dtype": "q4"
+ },
+ "load_cold": {
+  "ok": false,
+  "error": "Error: Can't create a session. ERROR_CODE: 9, ERROR_MESSAGE: Could not find an implementation for GatherBlockQuantized(1) node with name '/backbone/embeddings/word_embeddings/Gather_Q4'\n    at V (http://127.0.0.1:61512/@fs/<redacted-local-path>)\n    at tr (http://127.0.0.1:61512/@fs/<redacted-local-path>)\n    at async gr.loadModel (http://127.0.0.1:61512/@fs/<redacted-local-path>)\n    at async yr.createInferenceSessionHandler (http://127.0.0.1:61512/@fs/<redacted-local-path>)\n    at async a.create (http://127.0.0.1:61512/@fs/<redacted-local-path>)\n    at async createInferenceSession (http://127.0.0.1:61512/@fs/<redacted-local-path>",
+  "load_ms": 23579.43499994278,
+  "wall_ms": 23581
+ },
+ "network_cold": {
+  "hf_bytes": 480312921,
+  "jsdelivr_bytes": 5574243,
+  "total_bytes": 493197739,
+  "n_requests": 41
+ },
+ "status": "load-failed",
+ "console": [
+  "debug: [vite] connecting...",
+  "debug: [vite] connected.",
+  "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "error: Failed to load resource: the server responded with a status of 404 ()"
+ ]
+}

@@ -1,0 +1,1594 @@
+{
+ "tag": "open-jev-q4f16-webgpu-noul",
+ "cfg": {
+  "model": "open-jev",
+  "dtype": "q4f16",
+  "device": "webgpu"
+ },
+ "date": "2026-10-03T02:20:31.936Z",
+ "headed": false,
+ "unsafe_webgpu": false,
+ "browser": "153.0.8010.12",
+ "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+ "adapter": {
+  "webgpu": true,
+  "vendor": "apple",
+  "architecture": "metal-3",
+  "device": "",
+  "description": "",
+  "is_fallback_adapter": null,
+  "shader_f16": true,
+  "features": [
+   "bgra8unorm-storage",
+   "clip-distances",
+   "core-features-and-limits",
+   "depth-clip-control",
+   "depth32float-stencil8",
+   "dual-source-blending",
+   "float32-blendable",
+   "float32-filterable",
+   "indirect-first-instance",
+   "primitive-index",
+   "rg11b10ufloat-renderable",
+   "shader-f16",
+   "subgroup-size-control",
+   "subgroups",
+   "texture-component-swizzle",
+   "texture-compression-astc",
+   "texture-compression-astc-sliced-3d",
+   "texture-compression-bc",
+   "texture-compression-bc-sliced-3d",
+   "texture-compression-etc2",
+   "texture-formats-tier1",
+   "texture-formats-tier2",
+   "timestamp-query"
+  ],
+  "maxBufferSize": 4294967292,
+  "maxStorageBufferBindingSize": 4294967292
+ },
+ "versions": {
+  "transformers": "4.3.0",
+  "ort": {
+   "common": "1.31.0-dev.20260911-2a43ec07e",
+   "web": "1.31.0-dev.20260914-8d85527a0"
+  },
+  "crossOriginIsolated": true
+ },
+ "info_cold": {
+  "isCached": false,
+  "downloadSize": 357050727,
+  "files": [
+   "config.json",
+   "onnx/model_q4f16.onnx",
+   "onnx/model_q4f16.onnx_data",
+   "tokenizer.json",
+   "tokenizer_config.json"
+  ],
+  "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "family": "open-jev",
+  "device": "webgpu",
+  "dtype": "q4f16"
+ },
+ "load_cold": {
+  "ok": true,
+  "load_ms": 24321.585000038147,
+  "runtime": {
+   "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+   "family": "open-jev",
+   "device": "webgpu",
+   "dtype": "q4f16"
+  },
+  "progress_loaded": 346834075,
+  "progress_total": 348391650,
+  "wall_ms": 24324
+ },
+ "network_cold": {
+  "hf_bytes": 350633748,
+  "jsdelivr_bytes": 5574226,
+  "total_bytes": 363524283,
+  "n_requests": 41
+ },
+ "workloads": {
+  "route-noul": {
+   "n": 42,
+   "first_decision_ms": 121.63499999046326,
+   "p50_ms": 50.2150000333786,
+   "p95_ms": 51.174999952316284,
+   "min_ms": 48.67999994754791,
+   "max_ms": 54.39999997615814,
+   "mean_ms": 50.26023809398924,
+   "accuracy": 0.8571428571428571,
+   "correct": 36,
+   "margin_p10": 0.1717371926247926,
+   "margin_p50": 0.71757254377253,
+   "margin_p90": 0.812058841089538,
+   "results": [
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8870089915514326,
+     "margin": 0.7740179831028653,
+     "p_yes": 0.8870089915514326,
+     "ms": 48.83999991416931,
+     "label": "Show me every Whole Foods charge last month",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8715789977221526,
+     "margin": 0.7431579954443053,
+     "p_yes": 0.8715789977221526,
+     "ms": 48.77500009536743,
+     "label": "Find all transactions over $200 in June",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.7969253718105298,
+     "margin": 0.5938507436210596,
+     "p_yes": 0.7969253718105298,
+     "ms": 48.67999994754791,
+     "label": "When did I last pay Comcast?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8567438215818742,
+     "margin": 0.7134876431637485,
+     "p_yes": 0.8567438215818742,
+     "ms": 48.89999997615814,
+     "label": "List my Uber rides this year",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8431093526484303,
+     "margin": 0.6862187052968607,
+     "p_yes": 0.8431093526484303,
+     "ms": 48.955000042915344,
+     "label": "Did I get charged twice by Adobe?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.7900679125049768,
+     "margin": 0.5801358250099535,
+     "p_yes": 0.7900679125049768,
+     "ms": 50.16499996185303,
+     "label": "Search for anything from Ticketmaster",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.874159106884145,
+     "margin": 0.74831821376829,
+     "p_yes": 0.874159106884145,
+     "ms": 49.02500009536743,
+     "label": "Where did my money go this month?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9107875198971005,
+     "margin": 0.821575039794201,
+     "p_yes": 0.9107875198971005,
+     "ms": 50.0699999332428,
+     "label": "Break down my spending by category for the quarter",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8653650124966834,
+     "margin": 0.7307300249933668,
+     "p_yes": 0.8653650124966834,
+     "ms": 50.2150000333786,
+     "label": "How much did I spend on dining compared to last month?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8740567601125863,
+     "margin": 0.7481135202251725,
+     "p_yes": 0.8740567601125863,
+     "ms": 50.62999999523163,
+     "label": "What are my biggest expense categories this year?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8645502411310466,
+     "margin": 0.7291004822620932,
+     "p_yes": 0.8645502411310466,
+     "ms": 50.4650000333786,
+     "label": "Am I spending more on groceries than before?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.858786271886265,
+     "margin": 0.71757254377253,
+     "p_yes": 0.858786271886265,
+     "ms": 49.64999997615814,
+     "label": "Give me a profit and loss for last quarter",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8927941915028592,
+     "margin": 0.7855883830057184,
+     "p_yes": 0.8927941915028592,
+     "ms": 49.50499999523163,
+     "label": "How much did my business make versus spend in May?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8999618351392534,
+     "margin": 0.7999236702785069,
+     "p_yes": 0.8999618351392534,
+     "ms": 49.5900000333786,
+     "label": "Income vs expenses for the year so far",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.776493834455315,
+     "margin": 0.5529876689106299,
+     "p_yes": 0.776493834455315,
+     "ms": 49.58999991416931,
+     "label": "Did I come out ahead last month?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9031804050553937,
+     "margin": 0.8063608101107873,
+     "p_yes": 0.9031804050553937,
+     "ms": 49.675000071525574,
+     "label": "P&L by category for this month",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8892268837550925,
+     "margin": 0.778453767510185,
+     "p_yes": 0.8892268837550925,
+     "ms": 50.05499994754791,
+     "label": "What is my net worth?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9208676508865453,
+     "margin": 0.8417353017730906,
+     "p_yes": 0.9208676508865453,
+     "ms": 50.25499999523163,
+     "label": "Show my net worth trend over the last 12 months",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9208168055903525,
+     "margin": 0.841633611180705,
+     "p_yes": 0.9208168055903525,
+     "ms": 50.40500009059906,
+     "label": "Give me my balance sheet with assets and liabilities",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9051747152293584,
+     "margin": 0.8103494304587169,
+     "p_yes": 0.9051747152293584,
+     "ms": 50.39999997615814,
+     "label": "Am I worth more than I was six months ago?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8611383168372971,
+     "margin": 0.7222766336745943,
+     "p_yes": 0.8611383168372971,
+     "ms": 50.875,
+     "label": "What will my savings look like in three months?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.7050506034784705,
+     "margin": 0.41010120695694097,
+     "p_yes": 0.7050506034784705,
+     "ms": 51.174999952316284,
+     "label": "If I cancel Netflix, how much will I save by year end?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8483869395753444,
+     "margin": 0.6967738791506888,
+     "p_yes": 0.8483869395753444,
+     "ms": 50.550000071525574,
+     "label": "Project my cash flow for the next six months",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.7530863785524324,
+     "margin": 0.5061727571048649,
+     "p_yes": 0.7530863785524324,
+     "ms": 51.074999928474426,
+     "label": "What if I cut dining out by $100 a month?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.5051151489209658,
+     "margin": 0.010230297841931524,
+     "p_yes": 0.5051151489209658,
+     "ms": 51.25499999523163,
+     "label": "Will I have enough cash by September at my current pace?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.5858685963123963,
+     "margin": 0.1717371926247926,
+     "p_yes": 0.5858685963123963,
+     "ms": 51.0550000667572,
+     "label": "Recategorize that Starbucks charge as Dining",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.8283709705455835,
+     "margin": 0.656741941091167,
+     "p_yes": 0.8283709705455835,
+     "ms": 49.87999999523163,
+     "label": "Hi, what can you do?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.5537351291266271,
+     "margin": 0.10747025825325429,
+     "p_yes": 0.5537351291266271,
+     "ms": 49.949999928474426,
+     "label": "Explain what a Roth IRA is",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.5438325053576957,
+     "margin": 0.08766501071539134,
+     "p_yes": 0.5438325053576957,
+     "ms": 50.580000042915344,
+     "label": "Delete the duplicate Adobe transaction",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.8372401058569958,
+     "margin": 0.6744802117139916,
+     "p_yes": 0.8372401058569958,
+     "ms": 50.9099999666214,
+     "label": "Import my new bank statement",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "yes",
+     "conf": 0.8424315295658122,
+     "margin": 0.6848630591316245,
+     "p_yes": 0.8424315295658122,
+     "ms": 50.88499999046326,
+     "label": "Help me write an email to my accountant",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "no",
+     "conf": 0.6308148893779795,
+     "margin": 0.26162977875595883,
+     "p_yes": 0.3691851106220206,
+     "ms": 50.2150000333786,
+     "label": "Flag this charge as tax deductible",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8738518528294652,
+     "margin": 0.7477037056589304,
+     "p_yes": 0.8738518528294652,
+     "ms": 54.39999997615814,
+     "label": "How much did I pay in total to Costco this year?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.906029420544769,
+     "margin": 0.812058841089538,
+     "p_yes": 0.906029420544769,
+     "ms": 50.674999952316284,
+     "label": "Pull up my rent payments from the last three months",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8462815166172688,
+     "margin": 0.6925630332345376,
+     "p_yes": 0.8462815166172688,
+     "ms": 50.87000000476837,
+     "label": "What did I spend per category in the last 30 days?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8016993588824909,
+     "margin": 0.6033987177649818,
+     "p_yes": 0.8016993588824909,
+     "ms": 50.14999997615814,
+     "label": "Which category grew the most compared to the previous period?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9043532888972657,
+     "margin": 0.8087065777945315,
+     "p_yes": 0.9043532888972657,
+     "ms": 50.56500005722046,
+     "label": "Show income minus expenses for the previous quarter",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8500541776910296,
+     "margin": 0.7001083553820593,
+     "p_yes": 0.8500541776910296,
+     "ms": 49.625,
+     "label": "What was my profit last year?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.9073278631729356,
+     "margin": 0.8146557263458711,
+     "p_yes": 0.9073278631729356,
+     "ms": 50.74000000953674,
+     "label": "How have my assets and debts changed over the past year?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.8699041568409048,
+     "margin": 0.7398083136818097,
+     "p_yes": 0.8699041568409048,
+     "ms": 50.949999928474426,
+     "label": "What do my total assets minus liabilities come to?",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "yes",
+     "pred": "yes",
+     "conf": 0.6980403755074882,
+     "margin": 0.3960807510149764,
+     "p_yes": 0.6980403755074882,
+     "ms": 50.670000076293945,
+     "label": "Estimate my savings at the end of the year if I keep spending like this",
+     "top3": [],
+     "state_tokens": 0
+    },
+    {
+     "expected": "no",
+     "pred": "no",
+     "conf": 0.576587386945526,
+     "margin": 0.15317477389105194,
+     "p_yes": 0.42341261305447403,
+     "ms": 50.0349999666214,
+     "label": "Change my budget goal to $500 a month",
+     "top3": [],
+     "state_tokens": 0
+    }
+   ]
+  },
+  "route": {
+   "n": 42,
+   "first_decision_ms": 81.94500005245209,
+   "p50_ms": 80.88999998569489,
+   "p95_ms": 82.48500001430511,
+   "min_ms": 79.22500002384186,
+   "max_ms": 91.2849999666214,
+   "mean_ms": 81.13904762551898,
+   "accuracy": 0.8333333333333334,
+   "correct": 35,
+   "margin_p10": 0.039826442471472545,
+   "margin_p50": 0.16166423024952065,
+   "margin_p90": 0.42199708220784116,
+   "results": [
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4787893049466761,
+     "margin": 0.2417714119337271,
+     "top3": [
+      [
+       "transaction_search",
+       0.4788
+      ],
+      [
+       "spending_summary",
+       0.237
+      ],
+      [
+       "profit_loss",
+       0.1061
+      ]
+     ],
+     "ms": 82.48500001430511,
+     "state_tokens": 8,
+     "label": "Show me every Whole Foods charge last month"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.6278736983408209,
+     "margin": 0.5091871269726519,
+     "top3": [
+      [
+       "transaction_search",
+       0.6279
+      ],
+      [
+       "spending_summary",
+       0.1187
+      ],
+      [
+       "profit_loss",
+       0.0795
+      ]
+     ],
+     "ms": 81.42499995231628,
+     "state_tokens": 8,
+     "label": "Find all transactions over $200 in June"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4012966527972064,
+     "margin": 0.2539148040719206,
+     "top3": [
+      [
+       "transaction_search",
+       0.4013
+      ],
+      [
+       "none",
+       0.1474
+      ],
+      [
+       "spending_summary",
+       0.1429
+      ]
+     ],
+     "ms": 80.61500000953674,
+     "state_tokens": 7,
+     "label": "When did I last pay Comcast?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.45045568480167303,
+     "margin": 0.2536387144782368,
+     "top3": [
+      [
+       "transaction_search",
+       0.4505
+      ],
+      [
+       "spending_summary",
+       0.1968
+      ],
+      [
+       "none",
+       0.1244
+      ]
+     ],
+     "ms": 80.98500001430511,
+     "state_tokens": 6,
+     "label": "List my Uber rides this year"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.3100601906147237,
+     "margin": 0.13317948614679906,
+     "top3": [
+      [
+       "transaction_search",
+       0.3101
+      ],
+      [
+       "none",
+       0.1769
+      ],
+      [
+       "spending_summary",
+       0.1669
+      ]
+     ],
+     "ms": 81.3199999332428,
+     "state_tokens": 8,
+     "label": "Did I get charged twice by Adobe?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.47077167537168985,
+     "margin": 0.3297355497059496,
+     "top3": [
+      [
+       "transaction_search",
+       0.4708
+      ],
+      [
+       "spending_summary",
+       0.141
+      ],
+      [
+       "none",
+       0.1283
+      ]
+     ],
+     "ms": 80.56000006198883,
+     "state_tokens": 5,
+     "label": "Search for anything from Ticketmaster"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.3270514308707443,
+     "margin": 0.025421080911662952,
+     "top3": [
+      [
+       "spending_summary",
+       0.3271
+      ],
+      [
+       "transaction_search",
+       0.3016
+      ],
+      [
+       "profit_loss",
+       0.1287
+      ]
+     ],
+     "ms": 81.44000005722046,
+     "state_tokens": 8,
+     "label": "Where did my money go this month?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.7171892739865592,
+     "margin": 0.6124947691705241,
+     "top3": [
+      [
+       "spending_summary",
+       0.7172
+      ],
+      [
+       "transaction_search",
+       0.1047
+      ],
+      [
+       "profit_loss",
+       0.0677
+      ]
+     ],
+     "ms": 80.54499995708466,
+     "state_tokens": 9,
+     "label": "Break down my spending by category for the quarter"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.33553578727791133,
+     "margin": 0.06310208615270729,
+     "top3": [
+      [
+       "spending_summary",
+       0.3355
+      ],
+      [
+       "transaction_search",
+       0.2724
+      ],
+      [
+       "profit_loss",
+       0.1349
+      ]
+     ],
+     "ms": 81.68500006198883,
+     "state_tokens": 12,
+     "label": "How much did I spend on dining compared to last month?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.4366535099032652,
+     "margin": 0.2564317016804337,
+     "top3": [
+      [
+       "spending_summary",
+       0.4367
+      ],
+      [
+       "transaction_search",
+       0.1802
+      ],
+      [
+       "profit_loss",
+       0.152
+      ]
+     ],
+     "ms": 81.09500002861023,
+     "state_tokens": 9,
+     "label": "What are my biggest expense categories this year?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.2604056699697901,
+     "margin": 0.0010272876422971478,
+     "top3": [
+      [
+       "spending_summary",
+       0.2604
+      ],
+      [
+       "transaction_search",
+       0.2594
+      ],
+      [
+       "none",
+       0.1543
+      ]
+     ],
+     "ms": 81.15499997138977,
+     "state_tokens": 9,
+     "label": "Am I spending more on groceries than before?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.5472893656764857,
+     "margin": 0.3967055147344455,
+     "top3": [
+      [
+       "profit_loss",
+       0.5473
+      ],
+      [
+       "transaction_search",
+       0.1506
+      ],
+      [
+       "spending_summary",
+       0.1115
+      ]
+     ],
+     "ms": 80.71000003814697,
+     "state_tokens": 9,
+     "label": "Give me a profit and loss for last quarter"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.38324053583205336,
+     "margin": 0.17556309482440563,
+     "top3": [
+      [
+       "profit_loss",
+       0.3832
+      ],
+      [
+       "transaction_search",
+       0.2077
+      ],
+      [
+       "spending_summary",
+       0.1906
+      ]
+     ],
+     "ms": 82.25499999523163,
+     "state_tokens": 11,
+     "label": "How much did my business make versus spend in May?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.3295620049102163,
+     "margin": 0.1270339632464212,
+     "top3": [
+      [
+       "profit_loss",
+       0.3296
+      ],
+      [
+       "transaction_search",
+       0.2025
+      ],
+      [
+       "spending_summary",
+       0.1798
+      ]
+     ],
+     "ms": 81.56499993801117,
+     "state_tokens": 8,
+     "label": "Income vs expenses for the year so far"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.29970646066835843,
+     "margin": 0.07063905026094608,
+     "top3": [
+      [
+       "profit_loss",
+       0.2997
+      ],
+      [
+       "transaction_search",
+       0.2291
+      ],
+      [
+       "spending_summary",
+       0.1755
+      ]
+     ],
+     "ms": 81.32500004768372,
+     "state_tokens": 8,
+     "label": "Did I come out ahead last month?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.38940208649859664,
+     "margin": 0.19587060309948823,
+     "top3": [
+      [
+       "profit_loss",
+       0.3894
+      ],
+      [
+       "spending_summary",
+       0.1935
+      ],
+      [
+       "transaction_search",
+       0.1894
+      ]
+     ],
+     "ms": 80.875,
+     "state_tokens": 8,
+     "label": "P&L by category for this month"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.6457737900577943,
+     "margin": 0.532416984189204,
+     "top3": [
+      [
+       "net_worth",
+       0.6458
+      ],
+      [
+       "transaction_search",
+       0.1134
+      ],
+      [
+       "none",
+       0.0819
+      ]
+     ],
+     "ms": 80.88999998569489,
+     "state_tokens": 6,
+     "label": "What is my net worth?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.7325288602078626,
+     "margin": 0.6418747426665258,
+     "top3": [
+      [
+       "net_worth",
+       0.7325
+      ],
+      [
+       "transaction_search",
+       0.0907
+      ],
+      [
+       "none",
+       0.0567
+      ]
+     ],
+     "ms": 81.24500000476837,
+     "state_tokens": 10,
+     "label": "Show my net worth trend over the last 12 months"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.511996032665646,
+     "margin": 0.33919797603772284,
+     "top3": [
+      [
+       "net_worth",
+       0.512
+      ],
+      [
+       "transaction_search",
+       0.1728
+      ],
+      [
+       "none",
+       0.1028
+      ]
+     ],
+     "ms": 80.14999997615814,
+     "state_tokens": 9,
+     "label": "Give me my balance sheet with assets and liabilities"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.5608749480502514,
+     "margin": 0.42199708220784116,
+     "top3": [
+      [
+       "net_worth",
+       0.5609
+      ],
+      [
+       "transaction_search",
+       0.1389
+      ],
+      [
+       "none",
+       0.1068
+      ]
+     ],
+     "ms": 81.20999991893768,
+     "state_tokens": 11,
+     "label": "Am I worth more than I was six months ago?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.3045900348370129,
+     "margin": 0.11559326365891714,
+     "top3": [
+      [
+       "forecast",
+       0.3046
+      ],
+      [
+       "transaction_search",
+       0.189
+      ],
+      [
+       "spending_summary",
+       0.1749
+      ]
+     ],
+     "ms": 81.05000007152557,
+     "state_tokens": 10,
+     "label": "What will my savings look like in three months?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.31956040802661523,
+     "margin": 0.13812697091316128,
+     "top3": [
+      [
+       "forecast",
+       0.3196
+      ],
+      [
+       "transaction_search",
+       0.1814
+      ],
+      [
+       "spending_summary",
+       0.1665
+      ]
+     ],
+     "ms": 81.82000005245209,
+     "state_tokens": 14,
+     "label": "If I cancel Netflix, how much will I save by year end?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27557154114181254,
+     "margin": 0.06539088336116483,
+     "top3": [
+      [
+       "forecast",
+       0.2756
+      ],
+      [
+       "transaction_search",
+       0.2102
+      ],
+      [
+       "spending_summary",
+       0.158
+      ]
+     ],
+     "ms": 80.72000002861023,
+     "state_tokens": 9,
+     "label": "Project my cash flow for the next six months"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27572573433959985,
+     "margin": 0.0806967078625152,
+     "top3": [
+      [
+       "forecast",
+       0.2757
+      ],
+      [
+       "spending_summary",
+       0.195
+      ],
+      [
+       "transaction_search",
+       0.1853
+      ]
+     ],
+     "ms": 81.00999999046326,
+     "state_tokens": 12,
+     "label": "What if I cut dining out by $100 a month?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.3065277799435643,
+     "margin": 0.10247211715065521,
+     "top3": [
+      [
+       "forecast",
+       0.3065
+      ],
+      [
+       "transaction_search",
+       0.2041
+      ],
+      [
+       "spending_summary",
+       0.1623
+      ]
+     ],
+     "ms": 83.75,
+     "state_tokens": 12,
+     "label": "Will I have enough cash by September at my current pace?"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.28870131447756037,
+     "margin": 0.06143220326873486,
+     "top3": [
+      [
+       "transaction_search",
+       0.2887
+      ],
+      [
+       "none",
+       0.2273
+      ],
+      [
+       "spending_summary",
+       0.2007
+      ]
+     ],
+     "ms": 81.875,
+     "state_tokens": 8,
+     "label": "Recategorize that Starbucks charge as Dining"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.295001037707259,
+     "margin": 0.10198843733286636,
+     "top3": [
+      [
+       "transaction_search",
+       0.295
+      ],
+      [
+       "none",
+       0.193
+      ],
+      [
+       "spending_summary",
+       0.1834
+      ]
+     ],
+     "ms": 80.09500002861023,
+     "state_tokens": 7,
+     "label": "Hi, what can you do?"
+    },
+    {
+     "expected": "none",
+     "pred": "none",
+     "conf": 0.2619886275203382,
+     "margin": 0.024871977914108223,
+     "top3": [
+      [
+       "none",
+       0.262
+      ],
+      [
+       "transaction_search",
+       0.2371
+      ],
+      [
+       "net_worth",
+       0.1415
+      ]
+     ],
+     "ms": 79.74000000953674,
+     "state_tokens": 6,
+     "label": "Explain what a Roth IRA is"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.4635490202004842,
+     "margin": 0.293066440014498,
+     "top3": [
+      [
+       "transaction_search",
+       0.4635
+      ],
+      [
+       "none",
+       0.1705
+      ],
+      [
+       "spending_summary",
+       0.1225
+      ]
+     ],
+     "ms": 79.60500001907349,
+     "state_tokens": 5,
+     "label": "Delete the duplicate Adobe transaction"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.28015832597145773,
+     "margin": 0.0689429446802301,
+     "top3": [
+      [
+       "transaction_search",
+       0.2802
+      ],
+      [
+       "spending_summary",
+       0.2112
+      ],
+      [
+       "none",
+       0.1547
+      ]
+     ],
+     "ms": 79.50499999523163,
+     "state_tokens": 5,
+     "label": "Import my new bank statement"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.2376638696941856,
+     "margin": 0.04559121078544209,
+     "top3": [
+      [
+       "transaction_search",
+       0.2377
+      ],
+      [
+       "spending_summary",
+       0.1921
+      ],
+      [
+       "none",
+       0.1855
+      ]
+     ],
+     "ms": 80.08000004291534,
+     "state_tokens": 8,
+     "label": "Help me write an email to my accountant"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.3364114767704344,
+     "margin": 0.16166423024952065,
+     "top3": [
+      [
+       "transaction_search",
+       0.3364
+      ],
+      [
+       "spending_summary",
+       0.1747
+      ],
+      [
+       "none",
+       0.1745
+      ]
+     ],
+     "ms": 80.31500005722046,
+     "state_tokens": 6,
+     "label": "Flag this charge as tax deductible"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "spending_summary",
+     "conf": 0.29677215084203923,
+     "margin": 0.001376874906138359,
+     "top3": [
+      [
+       "spending_summary",
+       0.2968
+      ],
+      [
+       "transaction_search",
+       0.2954
+      ],
+      [
+       "profit_loss",
+       0.1426
+      ]
+     ],
+     "ms": 80.59500002861023,
+     "state_tokens": 12,
+     "label": "How much did I pay in total to Costco this year?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4308031526130153,
+     "margin": 0.26789968963052235,
+     "top3": [
+      [
+       "transaction_search",
+       0.4308
+      ],
+      [
+       "spending_summary",
+       0.1629
+      ],
+      [
+       "none",
+       0.1243
+      ]
+     ],
+     "ms": 80.72000002861023,
+     "state_tokens": 10,
+     "label": "Pull up my rent payments from the last three months"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.3969164326150487,
+     "margin": 0.1318236393374898,
+     "top3": [
+      [
+       "spending_summary",
+       0.3969
+      ],
+      [
+       "transaction_search",
+       0.2651
+      ],
+      [
+       "profit_loss",
+       0.1268
+      ]
+     ],
+     "ms": 80.7849999666214,
+     "state_tokens": 12,
+     "label": "What did I spend per category in the last 30 days?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.29577176303318703,
+     "margin": 0.039826442471472545,
+     "top3": [
+      [
+       "spending_summary",
+       0.2958
+      ],
+      [
+       "transaction_search",
+       0.2559
+      ],
+      [
+       "profit_loss",
+       0.1632
+      ]
+     ],
+     "ms": 80.97000002861023,
+     "state_tokens": 11,
+     "label": "Which category grew the most compared to the previous period?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.5063859825049561,
+     "margin": 0.34060849142830163,
+     "top3": [
+      [
+       "profit_loss",
+       0.5064
+      ],
+      [
+       "transaction_search",
+       0.1658
+      ],
+      [
+       "spending_summary",
+       0.114
+      ]
+     ],
+     "ms": 79.85000002384186,
+     "state_tokens": 8,
+     "label": "Show income minus expenses for the previous quarter"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.4120779738297912,
+     "margin": 0.2216963377265283,
+     "top3": [
+      [
+       "profit_loss",
+       0.4121
+      ],
+      [
+       "transaction_search",
+       0.1904
+      ],
+      [
+       "spending_summary",
+       0.1432
+      ]
+     ],
+     "ms": 80.96499991416931,
+     "state_tokens": 7,
+     "label": "What was my profit last year?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.4115782327539729,
+     "margin": 0.20074787770246216,
+     "top3": [
+      [
+       "net_worth",
+       0.4116
+      ],
+      [
+       "transaction_search",
+       0.2108
+      ],
+      [
+       "spending_summary",
+       0.1198
+      ]
+     ],
+     "ms": 80.12999999523163,
+     "state_tokens": 12,
+     "label": "How have my assets and debts changed over the past year?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.4469663634779302,
+     "margin": 0.2780491784318426,
+     "top3": [
+      [
+       "net_worth",
+       0.447
+      ],
+      [
+       "transaction_search",
+       0.1689
+      ],
+      [
+       "none",
+       0.1223
+      ]
+     ],
+     "ms": 91.2849999666214,
+     "state_tokens": 10,
+     "label": "What do my total assets minus liabilities come to?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27334535758620815,
+     "margin": 0.04502047828864067,
+     "top3": [
+      [
+       "forecast",
+       0.2733
+      ],
+      [
+       "spending_summary",
+       0.2283
+      ],
+      [
+       "transaction_search",
+       0.1785
+      ]
+     ],
+     "ms": 80.2150000333786,
+     "state_tokens": 15,
+     "label": "Estimate my savings at the end of the year if I keep spending like this"
+    },
+    {
+     "expected": "none",
+     "pred": "none",
+     "conf": 0.2448654189019076,
+     "margin": 0.04182237156523905,
+     "top3": [
+      [
+       "none",
+       0.2449
+      ],
+      [
+       "spending_summary",
+       0.203
+      ],
+      [
+       "transaction_search",
+       0.194
+      ]
+     ],
+     "ms": 79.22500002384186,
+     "state_tokens": 9,
+     "label": "Change my budget goal to $500 a month"
+    }
+   ]
+  }
+ },
+ "status": "measured",
+ "console_tail": [
+  "debug: [vite] connecting...",
+  "debug: [vite] connected.",
+  "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "error: Failed to load resource: the server responded with a status of 404 ()"
+ ],
+ "info_warm": {
+  "isCached": true,
+  "downloadSize": 357050727,
+  "files": [
+   "config.json",
+   "onnx/model_q4f16.onnx",
+   "onnx/model_q4f16.onnx_data",
+   "tokenizer.json",
+   "tokenizer_config.json"
+  ],
+  "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "family": "open-jev",
+  "device": "webgpu",
+  "dtype": "q4f16"
+ },
+ "load_warmcache": {
+  "ok": true,
+  "load_ms": 997.6599999666214,
+  "runtime": {
+   "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+   "family": "open-jev",
+   "device": "webgpu",
+   "dtype": "q4f16"
+  },
+  "progress_loaded": 346701794,
+  "progress_total": 348391650,
+  "wall_ms": 999
+ },
+ "network_warmcache": {
+  "hf_bytes": 684,
+  "jsdelivr_bytes": 0,
+  "total_bytes": 1696,
+  "n_requests": 30
+ }
+}

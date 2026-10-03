@@ -1,0 +1,170 @@
+[
+ {
+  "question": "Show me every Whole Foods charge last month",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "Find all transactions over $200 in June",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "When did I last pay Comcast?",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "List my Uber rides this year",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "Did I get charged twice by Adobe?",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "Search for anything from Ticketmaster",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "Where did my money go this month?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "Break down my spending by category for the quarter",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "How much did I spend on dining compared to last month?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "What are my biggest expense categories this year?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "Am I spending more on groceries than before?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "Give me a profit and loss for last quarter",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "How much did my business make versus spend in May?",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "Income vs expenses for the year so far",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "Did I come out ahead last month?",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "P&L by category for this month",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "What is my net worth?",
+  "expected": "net_worth"
+ },
+ {
+  "question": "Show my net worth trend over the last 12 months",
+  "expected": "net_worth"
+ },
+ {
+  "question": "Give me my balance sheet with assets and liabilities",
+  "expected": "net_worth"
+ },
+ {
+  "question": "Am I worth more than I was six months ago?",
+  "expected": "net_worth"
+ },
+ {
+  "question": "What will my savings look like in three months?",
+  "expected": "forecast"
+ },
+ {
+  "question": "If I cancel Netflix, how much will I save by year end?",
+  "expected": "forecast"
+ },
+ {
+  "question": "Project my cash flow for the next six months",
+  "expected": "forecast"
+ },
+ {
+  "question": "What if I cut dining out by $100 a month?",
+  "expected": "forecast"
+ },
+ {
+  "question": "Will I have enough cash by September at my current pace?",
+  "expected": "forecast"
+ },
+ {
+  "question": "Recategorize that Starbucks charge as Dining",
+  "expected": "none"
+ },
+ {
+  "question": "Hi, what can you do?",
+  "expected": "none"
+ },
+ {
+  "question": "Explain what a Roth IRA is",
+  "expected": "none"
+ },
+ {
+  "question": "Delete the duplicate Adobe transaction",
+  "expected": "none"
+ },
+ {
+  "question": "Import my new bank statement",
+  "expected": "none"
+ },
+ {
+  "question": "Help me write an email to my accountant",
+  "expected": "none"
+ },
+ {
+  "question": "Flag this charge as tax deductible",
+  "expected": "none"
+ },
+ {
+  "question": "How much did I pay in total to Costco this year?",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "Pull up my rent payments from the last three months",
+  "expected": "transaction_search"
+ },
+ {
+  "question": "What did I spend per category in the last 30 days?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "Which category grew the most compared to the previous period?",
+  "expected": "spending_summary"
+ },
+ {
+  "question": "Show income minus expenses for the previous quarter",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "What was my profit last year?",
+  "expected": "profit_loss"
+ },
+ {
+  "question": "How have my assets and debts changed over the past year?",
+  "expected": "net_worth"
+ },
+ {
+  "question": "What do my total assets minus liabilities come to?",
+  "expected": "net_worth"
+ },
+ {
+  "question": "Estimate my savings at the end of the year if I keep spending like this",
+  "expected": "forecast"
+ },
+ {
+  "question": "Change my budget goal to $500 a month",
+  "expected": "none"
+ }
+]

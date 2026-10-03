@@ -1,0 +1,49 @@
+{
+ "cats": [
+  "Dining",
+  "Groceries",
+  "Transport",
+  "Shopping",
+  "Subscriptions",
+  "Utilities",
+  "Health",
+  "Entertainment",
+  "Travel",
+  "Education",
+  "Home",
+  "Personal Care",
+  "Insurance",
+  "Gifts",
+  "Fees & Interest",
+  "Income",
+  "Transfer",
+  "Other"
+ ],
+ "descs": {
+  "Dining": "Restaurants, fast food, coffee shops, bars, takeout",
+  "Groceries": "Supermarkets, grocery stores, farmers markets, food delivery",
+  "Transport": "Gas, ride-share, parking, tolls, public transit, car maintenance",
+  "Shopping": "Retail, clothing, electronics, household items, online shopping",
+  "Subscriptions": "Streaming services, software, memberships, recurring digital services",
+  "Utilities": "Electric, gas, water, internet, phone, trash",
+  "Health": "Doctor visits, pharmacy, dental, vision, gym, fitness",
+  "Entertainment": "Movies, concerts, games, hobbies, sports events",
+  "Travel": "Flights, hotels, rental cars, vacation expenses",
+  "Education": "Tuition, books, courses, training, school supplies",
+  "Home": "Rent, mortgage, repairs, furniture, home improvement",
+  "Personal Care": "Haircuts, salon, skincare, spa",
+  "Insurance": "Health, auto, home, life, renters insurance premiums",
+  "Gifts": "Gifts for others, donations, charitable contributions",
+  "Fees & Interest": "Bank fees, ATM fees, credit card interest, late fees",
+  "Income": "Salary, freelance income, refunds, reimbursements",
+  "Transfer": "Account transfers, Venmo/Zelle/PayPal between own accounts",
+  "Other": "Transactions that do not fit any other category"
+ },
+ "tools": {
+  "transaction_search": "Search transactions using a natural language query.",
+  "spending_summary": "Spending breakdown by category for the current month, quarter, or year.",
+  "profit_loss": "Profit & loss report: income vs. expenses by category for a given period.",
+  "net_worth": "Net worth summary, trend over time, or full balance sheet.",
+  "forecast": "Trailing-rate projection of end-of-period cash/savings, with optional what-if adjustments (adjust a category's monthly spend, or drop a recurring expense)."
+ }
+}

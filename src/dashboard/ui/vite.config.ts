@@ -89,7 +89,9 @@ export default defineConfig({
       // grant made through the dev server matches what the same tab's later
       // GETs (which carry no Origin header) resolve to — i.e. dev behaves
       // exactly like `wilson --dashboard`.
-      '/api': { target: DASHBOARD_ORIGIN, headers: { origin: DASHBOARD_ORIGIN } },
+      // changeOrigin rewrites Host to the dashboard's own, so /api/prelabel/* passes its Host check
+      // (a Host of localhost:5173 is refused as DNS rebinding).
+      '/api': { target: DASHBOARD_ORIGIN, changeOrigin: true, headers: { origin: DASHBOARD_ORIGIN } },
       '/mcp': { target: DASHBOARD_ORIGIN, headers: { origin: DASHBOARD_ORIGIN } },
       '/webmcp-bridge.js': DASHBOARD_ORIGIN,
       // Prebuilt hybrid chunk + ort binaries are served by the API server.

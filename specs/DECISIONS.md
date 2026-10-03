@@ -53,3 +53,31 @@ Binding for implementation. "Jd" = decided by Jd; "default" = orchestrator defau
 | v3 | Burned (round-4 fixes come from its failures). v4 from a fresh author | default |
 | Blinding | The key file stays outside the repo (scratchpad) until the grades are committed | default |
 | Legacy XSS | Fix on `fix/legacy-rendermd-xss` off release/0.10.0 and merge that branch into this one. Merging into release/0.10.0 is Jd's call | Jd |
+
+---
+
+# Decisions for specs/open-jev-labeler.md (2026-10-02)
+
+Scope: build **B1-a only (S0–S6)**. B1-b (S8–S12) parked until judge v33 merges and v34 is free.
+
+| OQ | Decision | By |
+|---|---|---|
+| OQ1 blind disagreement in B1-a | Accept (alternative hidden on DISAGREES rows) | default (rec) |
+| OQ2 v34 sequencing | Wait for judge v33; B1-b parked | Jd |
+| OQ3 B1-c backlog | DROP | Jd |
+| OQ4 export default for one-click accepts | Deferred to B1-b | default |
+| OQ5 feature default | Off; revisit after ≥200 user-verified rows | default |
+| OQ6 wasm fp32 override | Leave out entirely | Jd |
+| OQ7 weights | Pin HF commit via env.remotePathTemplate + config.json sha256 | Jd |
+| OQ8 in-app label export | NO — S7 not built; extractor stays the only exporter | Jd |
+| OQ9 bulk confirm | NO | Jd |
+| OQ10 extractor follow-up | Deferred to B1-b | default |
+| OQ11 ship order vs judge P0b | Ship B1-a now; its own routes are origin-gated per S3 | Jd |
+
+## Round 3 (2026-10-03)
+
+| Item | Decision | By |
+|---|---|---|
+| Lock release | Release on worker crash/onerror and on profile_changed; add hook-wiring tests | Jd |
+| LAN gate | Port judge P0b's loopback-peer/Host check into the interim gate now; once P0b lands, the interim file becomes a plain re-export | Jd |
+| Git history paths | Squash-merge at PR time; scan before any push | Jd |
