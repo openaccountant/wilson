@@ -15,6 +15,7 @@ import {
   type MentionCandidate,
 } from '@/hooks/useMentionSources';
 import { api, getBaseUrl } from '@/api';
+import { parseTaxExportArgs } from '@/lib/taxExport';
 import type { BudgetVsActualRow, ChatHistoryRow, ChatRequest, ChatResponse, ChatSessionRow } from '@/types';
 import { moneyWhole, parseDbTimestamp } from '@/format';
 import { deriveChatProvenance, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
@@ -577,9 +578,14 @@ export function ChatTab() {
         }
         return;
       case 'export': {
-        const fmt = rest.toLowerCase();
+        const words = rest.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words[0] === 'tax') {
+          await exportTax(raw, words.slice(1));
+          return;
+        }
+        const fmt = words.join(' ');
         if (fmt !== 'csv' && fmt !== 'xlsx') {
-          pushLocal(raw, 'Usage: `/export csv` or `/export xlsx`.');
+          pushLocal(raw, 'Usage: `/export csv`, `/export xlsx`, or `/export tax [year] [csv|xlsx]`.');
           return;
         }
         let token: string | null = null;
@@ -597,6 +603,46 @@ export function ChatTab() {
       }
       case 'agent':
         return;
+    }
+  }
+
+  /**
+   * `/export tax` fetches first (rather than an <a href> download like the
+   * other exports) so a 402/400 shows up as a chat message instead of being
+   * saved to disk as a JSON "spreadsheet".
+   */
+  async function exportTax(raw: string, words: string[]) {
+    const args = parseTaxExportArgs(words, new Date().getFullYear());
+    if (!args.ok) {
+      pushLocal(raw, args.error);
+      return;
+    }
+    let token: string | null = null;
+    try {
+      token = window.localStorage.getItem('wilson_auth_token');
+    } catch {
+      token = null;
+    }
+    try {
+      const res = await fetch(`${getBaseUrl()}/api/export/tax?year=${args.year}&format=${args.format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string; upgradeUrl?: string };
+        const upgrade = res.status === 402 && body.upgradeUrl ? ` [Upgrade to Pro](${body.upgradeUrl})` : '';
+        pushLocal(raw, `${body.error ?? `Export failed (HTTP ${res.status}).`}${upgrade}`);
+        return;
+      }
+      const filename = `schedule-c-${args.year}.${args.format}`;
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      pushLocal(raw, `Downloading \`${filename}\` — Schedule C totals by line plus every flagged deduction.`);
+    } catch (err) {
+      pushLocal(raw, `Error: ${err instanceof Error ? err.message : 'tax export failed'}`);
     }
   }
 

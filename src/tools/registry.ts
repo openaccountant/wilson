@@ -243,6 +243,7 @@ Export transactions to CSV or XLSX files.
 
 - When the user is asking about or querying transactions (use transaction_search)
 - When the user wants to import data (use csv_import or monarch_import)
+- When the user wants a tax / Schedule C export of flagged deductions (use tax_flag with action: export)
 
 ## Usage Notes
 
@@ -445,6 +446,7 @@ const TAX_FLAG_DESCRIPTION = `
 - When the user wants to flag a transaction as tax-deductible
 - When the user asks about tax deductions, Schedule C, or business expenses
 - When the user wants a tax summary or list of flagged deductions
+- When the user wants a Schedule C export / file for taxes, tax software, or their accountant (action: export)
 
 ## When NOT to Use
 
@@ -454,8 +456,10 @@ const TAX_FLAG_DESCRIPTION = `
 ## Usage Notes
 
 - Uses official IRS Schedule C categories (22 categories)
-- Actions: flag, unflag, summary, list
+- Actions: flag, unflag, summary, list, export
 - Summary shows total deductions by IRS category
+- export writes a Schedule C file to filePath: xlsx (default) has a per-line Summary sheet plus a Transactions sheet; csv is the per-line summary only
+- export filePath must end in .xlsx or .csv to match the format
 `.trim();
 
 const SAVINGS_RATE_DESCRIPTION = `

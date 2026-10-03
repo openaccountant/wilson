@@ -28,6 +28,9 @@ import { isBadRequest } from './spending-params.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
+import { hasLicense } from '../licensing/license.js';
+import { getCheckoutUrl } from '../licensing/upsell.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
   isAuthEnabled, enableAuth, disableAuth,
@@ -708,6 +711,39 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
               ...headers,
               'Content-Type': 'text/csv; charset=utf-8',
               'Content-Disposition': 'attachment; filename="net-worth.csv"',
+            },
+          });
+        }
+        if (path === '/api/export/tax') {
+          // Schedule C export of flagged deductions — Pro, like tax_flag itself.
+          if (!hasLicense('pro')) {
+            return Response.json(
+              { error: 'Tax export is a Pro feature.', upgradeUrl: getCheckoutUrl('annual') },
+              { status: 402, headers },
+            );
+          }
+          const yearParam = url.searchParams.get('year');
+          const year = yearParam ? Number(yearParam) : new Date().getFullYear();
+          const format = url.searchParams.get('format') ?? 'xlsx';
+          if (!Number.isInteger(year) || year < 1900 || year > 9999 || (format !== 'csv' && format !== 'xlsx')) {
+            return Response.json({ error: 'year must be a 4-digit year and format csv or xlsx' }, { status: 400, headers });
+          }
+          const report = buildScheduleC(activeDb, year);
+          const filename = `schedule-c-${year}.${format}`;
+          if (format === 'csv') {
+            return new Response(scheduleCToCsv(report), {
+              headers: {
+                ...headers,
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+              },
+            });
+          }
+          return new Response(new Uint8Array(scheduleCToXlsxBuffer(report)), {
+            headers: {
+              ...headers,
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'Content-Disposition': `attachment; filename="${filename}"`,
             },
           });
         }

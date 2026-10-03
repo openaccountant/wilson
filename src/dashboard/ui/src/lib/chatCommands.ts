@@ -58,7 +58,7 @@ export const CHAT_COMMANDS: ChatCommand[] = [
   { id: 'import', name: 'import', description: 'Import a bank statement (CSV, OFX, QIF)', group: 'Actions', kind: 'client', run: { type: 'import' } },
   { id: 'budget', name: 'budget', description: 'Budgets vs. actual this month', group: 'Actions', kind: 'client', run: { type: 'budget' } },
   { id: 'profile', name: 'profile', args: '[name]', description: 'List profiles, or switch to one', group: 'Actions', kind: 'client', run: { type: 'profile' } },
-  { id: 'export', name: 'export', args: '<csv|xlsx>', description: 'Download transactions', group: 'Actions', kind: 'client', requiresArgs: true, run: { type: 'export' } },
+  { id: 'export', name: 'export', args: '<csv|xlsx|tax [year]>', description: 'Download transactions, or a Schedule C tax export', group: 'Actions', kind: 'client', requiresArgs: true, run: { type: 'export' } },
   // ── Actions (agent) ──
   { id: 'categorize', name: 'categorize', args: '[n]', description: 'AI-categorize uncategorized transactions', group: 'Actions', kind: 'agent', run: { type: 'agent' } },
   { id: 'sync', name: 'sync', description: 'Pull latest transactions from linked banks', group: 'Actions', kind: 'agent', run: { type: 'agent' } },
