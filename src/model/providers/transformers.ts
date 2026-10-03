@@ -15,7 +15,8 @@
  *
  * WebGPU models (q4f16) — require a GPU that ORT's bundled WebGPU EP can drive:
  * - onnx-community/granite-4.0-micro-ONNX-web  ~3B Micro, IBM tool-calling   ~2.3GB
- * - onnx-community/LFM2-1.2B-Tool-ONNX         ~1.2B, purpose-built for tool use ~870MB
+ * - onnx-community/Qwen3-1.7B-ONNX             ~1.7B, Qwen3 architecture     ~1.4GB
+ * - LiquidAI/LFM2.5-1.2B-Instruct-ONNX         ~1.2B, trained for tool use   ~760MB
  * - onnx-community/granite-4.0-350m-ONNX-web   ~350M, IBM Granite, fast      ~350MB
  * - onnx-community/Qwen3-0.6B-ONNX             ~0.6B, Qwen3 architecture     ~570MB
  *

@@ -167,36 +167,6 @@
           "model_fp16.onnx": true
         }
       }
-    },
-    "onnx-community/LFM2-1.2B-Tool-ONNX": {
-      "siblings": [
-        "onnx/model.onnx",
-        "onnx/model.onnx_data",
-        "onnx/model.onnx_data_1",
-        "onnx/model.onnx_data_2",
-        "onnx/model_fp16.onnx",
-        "onnx/model_fp16.onnx_data",
-        "onnx/model_fp16.onnx_data_1",
-        "onnx/model_q4.onnx",
-        "onnx/model_q4.onnx_data",
-        "onnx/model_q4f16.onnx",
-        "onnx/model_q4f16.onnx_data",
-        "onnx/model_quantized.onnx",
-        "onnx/model_quantized.onnx_data"
-      ],
-      "transformers.js_config": {
-        "use_external_data_format": {
-          "model.onnx": 3,
-          "model_fp16.onnx": 2,
-          "model_quantized.onnx": 1,
-          "model_q4.onnx": 1,
-          "model_q4f16.onnx": 1
-        },
-        "kv_cache_dtype": {
-          "q4f16": "float16",
-          "fp16": "float16"
-        }
-      }
     }
   }
 }

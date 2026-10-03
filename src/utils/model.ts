@@ -45,7 +45,8 @@ const PROVIDER_MODELS: Record<string, Model[]> = {
     //
     // WebGPU models — require a GPU that ORT's bundled WebGPU EP can drive
     { id: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', displayName: 'Granite 4.0 Micro 3B (WebGPU)', tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~2.3GB' },
-    { id: 'transformers:onnx-community/LFM2-1.2B-Tool-ONNX',        displayName: 'LFM2 1.2B Tool (WebGPU)',       tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~870MB' },
+    { id: 'transformers:onnx-community/Qwen3-1.7B-ONNX',            displayName: 'Qwen3 1.7B (WebGPU)',           tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~1.4GB' },
+    { id: 'transformers:LiquidAI/LFM2.5-1.2B-Instruct-ONNX',        displayName: 'LFM2.5 1.2B Instruct (WebGPU)', tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~760MB' },
     { id: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',  displayName: 'Granite 4.0 350M (WebGPU)',     tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~350MB' },
     { id: 'transformers:onnx-community/Qwen3-0.6B-ONNX',            displayName: 'Qwen3 0.6B (WebGPU)',           tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~570MB' },
     // CPU/WASM models — work out of the box, no GPU required
