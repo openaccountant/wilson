@@ -6,6 +6,7 @@ export { getCurrentDate, buildSystemPrompt, buildIterationPrompt, DEFAULT_SYSTEM
 
 export type {
   ApprovalDecision,
+  ToolApprovalRequest,
   AgentConfig,
   Message,
   AgentEvent,

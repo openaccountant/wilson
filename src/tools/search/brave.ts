@@ -19,6 +19,7 @@ interface BraveSearchResponse {
 
 export const braveSearch = defineTool({
   name: 'web_search',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Search the web for current information on any topic. Returns relevant search results with URLs and content snippets.',
   schema: z.object({

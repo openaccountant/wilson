@@ -70,6 +70,7 @@ const MAX_CONSECUTIVE_BATCH_FAILURES = 2;
  */
 export const categorizeTool = defineTool({
   name: 'categorize',
+  mutates: true,
   description:
     'Categorize uncategorized transactions using AI. ' +
     'Assigns each transaction to a spending category with a confidence score. ' +

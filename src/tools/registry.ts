@@ -4,6 +4,7 @@ import { discoverSkills } from '../skills/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
 import { getOrchestrationTools } from '../orchestration/registry.js';
 import { getCachedMcpTools } from '../mcp/adapter.js';
+import { mayMutate } from './mutation.js';
 
 const require = createRequire(import.meta.url);
 
@@ -1122,7 +1123,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  // Orchestration: chains + teams registered as tools
+  // Orchestration: chains + teams registered as tools.
   for (const orchTool of await getOrchestrationTools()) {
     tools.push({
       name: orchTool.name,
@@ -1131,7 +1132,34 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  return tools;
+  // Last, once every tool is registered (conditional, MCP and orchestration
+  // tools included), so no tool a chain names is missed for being pushed later.
+  return resolveOrchestrationMutation(tools);
+}
+
+/**
+ * Set the mutation flag of every chain/team tool (#152). Their steps/members
+ * call tools directly, without the executor's approval gate, so a chain or
+ * team is mutating — and approved once as a whole — when any tool it names:
+ *   - can write,
+ *   - is itself a chain or team (nested orchestration), or
+ *   - is not registered at all (a typo, or a tool behind a missing env var):
+ *     what it would run cannot be shown to be read-only.
+ */
+export function resolveOrchestrationMutation(tools: RegisteredTool[]): RegisteredTool[] {
+  const byName = new Map(tools.map((t) => [t.name, t.tool]));
+  const toolMutates = (name: string): boolean => {
+    const target = byName.get(name);
+    if (!target) return true;
+    if (target.usesTools !== undefined) return true;
+    return mayMutate(target);
+  };
+  return tools.map((entry) => {
+    const uses = entry.tool.usesTools;
+    if (uses === undefined) return entry;
+    const mutates = uses.some(toolMutates);
+    return { ...entry, tool: { ...entry.tool, mutates } };
+  });
 }
 
 /**

@@ -1,10 +1,26 @@
+import type { SessionApprovalScope } from '../tools/mutation.js';
+
 /**
  * User's response to a tool approval prompt.
  * - 'allow-once': approve this single invocation
- * - 'allow-session': approve all invocations of this tool for the rest of the session
+ * - 'allow-session': approve this tool (or this tool + action, for tools whose
+ *   writes depend on the action) for the rest of the session; not offered
+ *   for chain/team tools, where it counts as 'allow-once'
  * - 'deny': reject and immediately end the agent's turn
  */
 export type ApprovalDecision = 'allow-once' | 'allow-session' | 'deny';
+
+/**
+ * A tool call waiting for the user's approval. `session` is what
+ * 'allow-session' would cover (the tool, or the tool + action), or null when
+ * the call can only be approved once (chain/team tools) — see
+ * src/tools/mutation.ts::sessionApprovalScope.
+ */
+export interface ToolApprovalRequest {
+  tool: string;
+  args: Record<string, unknown>;
+  session: SessionApprovalScope | null;
+}
 
 /**
  * Agent configuration
@@ -19,8 +35,8 @@ export interface AgentConfig {
   /** AbortSignal for cancelling agent execution */
   signal?: AbortSignal;
   /** Called when a tool needs explicit user approval to proceed */
-  requestToolApproval?: (request: { tool: string; args: Record<string, unknown> }) => Promise<ApprovalDecision>;
-  /** Shared set of tool names that have been session-approved (persists across queries) */
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<ApprovalDecision>;
+  /** Shared set of session approval keys (SessionApprovalScope.key; persists across queries) */
   sessionApprovedTools?: Set<string>;
 }
 

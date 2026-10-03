@@ -32,7 +32,24 @@ export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
   description: string;
   schema: TSchema;
   func: (args: z.infer<TSchema>, config?: ToolInvokeConfig) => Promise<string>;
+  /**
+   * Whether a call writes to the DB, the filesystem, or an external service.
+   * `true` for every call, or a predicate over the (unvalidated) call args for
+   * tools that mix reads and writes. The agent executor asks the user to
+   * approve every mutating call before it runs (#152). Read-only tools declare
+   * `false`; omitted = treated as mutating (fail closed).
+   * Helpers: src/tools/mutation.ts.
+   */
+  mutates?: MutationFlag;
+  /**
+   * Orchestration (chain/team) tools only: the tool names their steps or
+   * members may call. The registry flags the orchestration tool as mutating
+   * when any of them is.
+   */
+  usesTools?: readonly string[];
 }
+
+export type MutationFlag = boolean | ((args: Record<string, unknown>) => boolean);
 
 export interface ToolInvokeConfig {
   metadata?: Record<string, unknown>;

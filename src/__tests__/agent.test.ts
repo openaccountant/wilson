@@ -123,7 +123,9 @@ describe('Agent', () => {
       makeResponse('', [{ id: 'tc1', name: 'csv_import', args: {} }]),
     ];
 
-    const agent = await Agent.create({ maxIterations: 2 });
+    // csv_import writes, so it is approval-gated (#152): approve every call so
+    // the loop keeps iterating instead of ending on a denial.
+    const agent = await Agent.create({ maxIterations: 2, requestToolApproval: async () => 'allow-once' });
     const events = await collectEvents(agent.run('infinite loop'));
 
     const doneEvent = events.find((e) => e.type === 'done')!;
@@ -141,7 +143,9 @@ describe('Agent', () => {
       makeResponse('Import failed: you must provide a file path.'),
     ];
 
-    const agent = await Agent.create({ maxIterations: 5 });
+    // Approval (#152) comes before argument validation; approve so the call
+    // reaches the schema guard.
+    const agent = await Agent.create({ maxIterations: 5, requestToolApproval: async () => 'allow-once' });
     const events = await collectEvents(agent.run('import my file'));
 
     const toolError = events.find((e) => e.type === 'tool_error')!;

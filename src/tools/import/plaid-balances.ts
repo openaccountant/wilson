@@ -16,6 +16,7 @@ export function initPlaidBalancesTool(database: Database) {
 
 export const plaidBalancesTool = defineTool({
   name: 'plaid_balances',
+  mutates: true,
   description: 'Show current account balances for all linked bank accounts via Plaid. Also updates account records and balance snapshots.',
   schema: z.object({}),
   func: async () => {

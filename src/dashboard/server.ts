@@ -810,6 +810,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
             : '';
           const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined);
+          // One chat run at a time (chat.ts activeChatRun): a concurrent
+          // message is refused, never queued behind another run's approval.
+          if (result.busy) {
+            return Response.json({ error: result.answer, sessionId: result.sessionId }, { status: 409, headers });
+          }
           return Response.json(result, { headers });
         }
 

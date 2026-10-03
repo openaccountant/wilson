@@ -47,6 +47,7 @@ function formatPnl(pnl: ProfitLossRow, label: string): string {
 
 export const profitLossTool = defineTool({
   name: 'profit_loss',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Generate a profit & loss report showing income vs expenses by category for a given period.',
   schema: z.object({

@@ -55,6 +55,26 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodType {
   }
 }
 
+/**
+ * MCP tool annotations as servers declare them (all optional hints). Only
+ * the two that decide whether a call can change anything are read here.
+ */
+interface McpToolAnnotations {
+  readOnlyHint?: unknown;
+  destructiveHint?: unknown;
+}
+
+/**
+ * Whether a wrapped MCP tool counts as mutating for the approval gate (#152).
+ * External tools are unknown code, so they write by default; a tool is
+ * read-only only when its server declares `readOnlyHint: true` and does not
+ * also declare `destructiveHint: true`.
+ */
+export function mcpToolMutates(annotations: McpToolAnnotations | undefined): boolean {
+  const readOnly = annotations?.readOnlyHint === true && annotations?.destructiveHint !== true;
+  return !readOnly;
+}
+
 // Cached MCP tools — populated once at startup, read synchronously by the registry
 let cachedMcpTools: ToolDef[] = [];
 
@@ -84,7 +104,14 @@ async function getMcpTools(): Promise<ToolDef[]> {
     const client = getMcpClient(serverName);
     if (!client) continue;
 
-    let toolList: { tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> };
+    let toolList: {
+      tools: Array<{
+        name: string;
+        description?: string;
+        inputSchema?: Record<string, unknown>;
+        annotations?: McpToolAnnotations;
+      }>;
+    };
     try {
       toolList = await client.listTools();
     } catch {
@@ -101,6 +128,7 @@ async function getMcpTools(): Promise<ToolDef[]> {
         name: toolName,
         description,
         schema: zodSchema,
+        mutates: mcpToolMutates(mcpTool.annotations),
         func: async (args: unknown) => {
           const mcpClient = getMcpClient(serverName);
           if (!mcpClient) {

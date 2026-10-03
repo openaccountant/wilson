@@ -41,6 +41,7 @@ function computeDeltas(current: SpendingSummaryRow[], previous: SpendingSummaryR
 
 export const profitDiffTool = defineTool({
   name: 'profit_diff',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Compare profit & loss between two periods. Shows per-category deltas, percent changes, and biggest movers.',
   schema: z.object({

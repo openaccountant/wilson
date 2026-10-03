@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import {
   getCategories,
@@ -40,6 +41,7 @@ function formatTree(nodes: CategoryTreeNode[], indent: number = 0): string {
 
 export const categoryManageTool = defineTool({
   name: 'category_manage',
+  mutates: mutatesUnlessAction('list'),
   description:
     'Manage spending categories. Add custom categories, delete custom categories, or list all categories in a tree.',
   schema: z.object({

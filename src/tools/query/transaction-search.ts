@@ -196,6 +196,7 @@ function formatResults(transactions: TransactionRow[]): string {
  */
 export const transactionSearchTool = defineTool({
   name: 'transaction_search',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Search transactions using natural language. Examples: "dining in January", ' +
     '"Amazon purchases", "over $100", "recurring charges last month".',

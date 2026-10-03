@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import {
@@ -17,6 +18,7 @@ export function initMemoryManageTool(database: Database) {
 
 export const memoryManageTool = defineTool({
   name: 'memory_manage',
+  mutates: mutatesUnlessAction('list', 'search'),
   description: 'Store and retrieve memories — context about the user, insights discovered, and advice given.',
   schema: z.object({
     action: z.enum(['add', 'list', 'search', 'deactivate']).describe('Action to perform'),

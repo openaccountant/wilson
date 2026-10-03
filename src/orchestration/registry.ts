@@ -7,6 +7,10 @@ import { runTeam } from './team.js';
 import * as loader from './loader.js';
 import * as licenseModule from '../licensing/license.js';
 
+function uniqueToolNames(lists: Array<string[] | undefined>): string[] {
+  return [...new Set(lists.flatMap((l) => l ?? []))];
+}
+
 /**
  * Convert a chain definition into a tool that the main agent can invoke.
  */
@@ -16,6 +20,12 @@ export function chainToTool(chain: ChainDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${chain.name}" chain: ${chain.description}`,
+    // Step agents call these tools directly (no per-call approval), so the
+    // registry gates the whole chain when any of them can write (#152).
+    usesTools: uniqueToolNames(chain.steps.map((s) => s.tools)),
+    // Conservative until the tool registry resolves usesTools (it may relax
+    // this to false when every tool the chain can call is read-only).
+    mutates: true,
     schema: z.object({
       input: z.string().describe('Input for the chain (e.g., file path, query, or context)'),
     }),
@@ -38,6 +48,9 @@ export function teamToTool(team: TeamDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${team.name}" team: ${team.description}`,
+    // Members call these tools directly — see chainToTool.
+    usesTools: uniqueToolNames(team.members.map((m) => m.tools)),
+    mutates: true, // see chainToTool
     schema: z.object({
       query: z.string().describe('Query or task for the team to work on'),
     }),

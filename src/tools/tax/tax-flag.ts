@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { flagTaxDeduction, unflagTaxDeduction, getTaxDeductions, getTaxSummary } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
 import { IRS_CATEGORIES } from './irs-categories.js';
@@ -23,6 +24,7 @@ function getDb(): Database {
 
 export const taxFlagTool = defineTool({
   name: 'tax_flag',
+  mutates: mutatesUnlessAction('summary', 'list'),
   description:
     'Flag transactions as tax-deductible with IRS Schedule C categories. ' +
     'Supports flag, unflag, summary, list, and export (Schedule C CSV/XLSX file) actions. Requires Pro license.',

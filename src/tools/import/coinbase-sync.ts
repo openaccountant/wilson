@@ -179,6 +179,7 @@ export async function syncCoinbaseConnection(
 
 export const coinbaseSyncTool = defineTool({
   name: 'coinbase_sync',
+  mutates: true,
   description: 'Sync transactions from linked Coinbase crypto accounts.',
   schema: z.object({}),
   func: async () => {

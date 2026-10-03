@@ -1,5 +1,6 @@
 import { Container, Text } from '@mariozechner/pi-tui';
 import type { ApprovalDecision } from '../agent/types.js';
+import type { SessionApprovalScope } from '../tools/mutation.js';
 import { createApprovalSelector } from './select-list.js';
 import { theme } from '../theme.js';
 
@@ -8,6 +9,16 @@ function formatToolLabel(tool: string): string {
     .split('_')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+/**
+ * What the "don't ask again" option covers, for its label: the tool, or the
+ * tool and action ("Memory Manage (add)"). Null when there is no session
+ * option (chain/team tools).
+ */
+export function sessionApprovalLabel(tool: string, session: SessionApprovalScope | null): string | null {
+  if (!session) return null;
+  return session.action ? `${formatToolLabel(tool)} (${session.action})` : formatToolLabel(tool);
 }
 
 function formatValue(value: unknown): string {
@@ -50,9 +61,14 @@ export class ApprovalPromptComponent extends Container {
   readonly selector: any;
   onSelect?: (decision: ApprovalDecision) => void;
 
-  constructor(tool: string, args: Record<string, unknown>, delta?: ApprovalDelta) {
+  /**
+   * `session` is what 'allow-session' would cover (ToolApprovalRequest.session);
+   * null removes that option. Omitted = the whole tool.
+   */
+  constructor(tool: string, args: Record<string, unknown>, delta?: ApprovalDelta, session?: SessionApprovalScope | null) {
     super();
-    this.selector = createApprovalSelector((decision) => this.onSelect?.(decision));
+    const sessionLabel = session === undefined ? formatToolLabel(tool) : sessionApprovalLabel(tool, session);
+    this.selector = createApprovalSelector((decision) => this.onSelect?.(decision), sessionLabel);
     const width = Math.max(20, process.stdout.columns ?? 80);
     const border = theme.warning('─'.repeat(width));
 

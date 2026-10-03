@@ -1364,6 +1364,8 @@ export async function runCli() {
       const prompt = new ApprovalPromptComponent(
         agentRunner.pendingApproval.tool,
         agentRunner.pendingApproval.args,
+        undefined,
+        agentRunner.pendingApproval.session,
       );
       prompt.onSelect = (decision: ApprovalDecision) => {
         agentRunner.respondToApproval(decision);

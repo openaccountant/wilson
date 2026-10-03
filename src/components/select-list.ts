@@ -90,12 +90,28 @@ export function createModelSelector(
   return list;
 }
 
-export function createApprovalSelector(onSelect: (decision: ApprovalDecision) => void) {
-  const items: SelectItem[] = [
+/**
+ * Choices for a tool approval prompt. 'allow-session' covers only what is
+ * being approved — one tool, or one action of a tool (AgentToolExecutor) — so
+ * the label names it. `null` means the call has no session option at all
+ * (chain/team tools are approved every time).
+ */
+export function approvalSelectorItems(sessionLabel?: string | null): SelectItem[] {
+  if (sessionLabel === null) {
+    return [
+      { value: 'allow-once', label: '1. Yes' },
+      { value: 'deny', label: '2. No' },
+    ];
+  }
+  return [
     { value: 'allow-once', label: '1. Yes' },
-    { value: 'allow-session', label: '2. Yes, allow all edits this session' },
+    { value: 'allow-session', label: `2. Yes, and don't ask again for ${sessionLabel ?? 'this tool'} this session` },
     { value: 'deny', label: '3. No' },
   ];
+}
+
+export function createApprovalSelector(onSelect: (decision: ApprovalDecision) => void, sessionLabel?: string | null) {
+  const items = approvalSelectorItems(sessionLabel);
   const list = new VimSelectList(items, 5, selectListTheme);
   list.onSelect = (item) => onSelect(item.value as ApprovalDecision);
   list.onCancel = () => onSelect('deny');

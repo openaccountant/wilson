@@ -151,6 +151,8 @@ export function mockTool(name: string, fn: (args: unknown) => Promise<string>): 
     description: `Mock tool: ${name}`,
     schema: z.object({}).passthrough(),
     func: fn,
+    // Explicit: an undeclared tool would need approval (fail closed, #152).
+    mutates: false,
   };
 }
 

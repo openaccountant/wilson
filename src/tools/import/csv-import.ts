@@ -292,6 +292,7 @@ async function importSingleFile(
  */
 export const csvImportTool = defineTool({
   name: 'csv_import',
+  mutates: true,
   description:
     'Import transactions from a bank file or directory (CSV, OFX, or QIF). Auto-detects file format ' +
     'and bank (Chase, Amex, BofA, generic). Prevents duplicates by file hash and per-transaction ID. ' +

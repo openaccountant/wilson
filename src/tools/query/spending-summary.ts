@@ -148,6 +148,7 @@ function formatSummary(
  */
 export const spendingSummaryTool = defineTool({
   name: 'spending_summary',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Get a spending breakdown by category for the current month, quarter, or year. ' +
     'Optionally compare with the previous period to see changes.',

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import {
@@ -24,6 +25,7 @@ export function initAccountManageTool(database: Database) {
 
 export const accountManageTool = defineTool({
   name: 'account_manage',
+  mutates: mutatesUnlessAction('list'),
   description: 'Add, update, remove, or list financial accounts (checking, savings, real estate, loans, etc.)',
   schema: z.object({
     action: z.enum(['add', 'update', 'remove', 'list']).describe('Action to perform'),

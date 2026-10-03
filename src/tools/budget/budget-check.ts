@@ -12,6 +12,7 @@ export function initBudgetCheckTool(database: Database) {
 
 export const budgetCheckTool = defineTool({
   name: 'budget_check',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description: 'Compare actual spending vs budget limits for the current or specified month.',
   schema: z.object({
     month: z.string().optional().describe('Month to check (YYYY-MM), defaults to current month'),

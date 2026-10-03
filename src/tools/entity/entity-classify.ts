@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessDryRun } from '../mutation.js';
 import { getEntities, getUnassignedTransactions, assignEntityToTransactions } from '../../db/entity-queries.js';
 import { buildEntityClassificationPrompt, type ClassificationInput } from './entity-classify-prompt.js';
 import { formatToolResult } from '../types.js';
@@ -35,6 +36,7 @@ const BATCH_SIZE = 50;
 
 export const entityClassifyTool = defineTool({
   name: 'entity_classify',
+  mutates: mutatesUnlessDryRun,
   description:
     'Classify unassigned transactions into business entities using AI. ' +
     'Assigns each transaction to an entity with confidence scores and reasoning.',

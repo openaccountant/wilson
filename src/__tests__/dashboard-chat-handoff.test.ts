@@ -16,7 +16,7 @@ mock.module('../dashboard/chat.js', () => ({
     return { answer: 'stub answer', sessionId: 'stub-session' };
   },
   getPendingChatOperation: () => null,
-  respondToChatOperation: () => false,
+  respondToChatOperation: () => ({ ok: false, error: 'stub' }),
   refreshChatModel: () => {},
   getAppliedChatModel: () => null,
   getActiveChatHistory: () => null,

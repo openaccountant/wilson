@@ -297,6 +297,21 @@ export function markOperationStatus(
   resolveWaiters(id);
 }
 
+/**
+ * Expire every still-pending operation from one source — e.g. chat cards whose
+ * agent runner is gone (session replaced, server restarted), which nothing can
+ * answer any more.
+ */
+export function expirePendingOperationsBySource(db: Database, source: OperationSource, reason: string): number {
+  const rows = db.prepare(
+    "SELECT id FROM mcp_operations WHERE status = 'pending' AND source = @source"
+  ).all({ source }) as { id: string }[];
+  for (const row of rows) {
+    markOperationStatus(db, row.id, 'expired', { reason });
+  }
+  return rows.length;
+}
+
 /** Sweep pending operations whose confirmation window has elapsed with nobody acting on them. */
 export function expireStaleOperations(db: Database): number {
   const rows = db.prepare(
