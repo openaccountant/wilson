@@ -64,6 +64,8 @@ export interface UrlState {
   merchant: string | null;
   txn: string | null;
   q: string | null;
+  /** Chat tab: the active chat session id (a server-issued UUID). */
+  session: string | null;
   /** Unknown keys, preserved verbatim (decoded) in first-seen order. */
   extra: Array<[string, string]>;
 }
@@ -82,6 +84,7 @@ export const KEY_ORDER = [
   'merchant',
   'txn',
   'q',
+  'session',
 ] as const;
 
 type KnownKey = (typeof KEY_ORDER)[number];
@@ -98,7 +101,7 @@ export const GLOBAL_KEYS: readonly KnownKey[] = ['preset', 'start', 'end', 'acco
  * Keys whose values only mean something inside one profile's database: ids,
  * labels and the drill's merchant key / transaction id / grouping.
  */
-export const PROFILE_SCOPED_KEYS: readonly KnownKey[] = ['account', 'entity', 'cat', 'day', 'merchant', 'txn', 'by'];
+export const PROFILE_SCOPED_KEYS: readonly KnownKey[] = ['account', 'entity', 'cat', 'day', 'merchant', 'txn', 'by', 'session'];
 
 export const DEFAULT_URL_STATE: UrlState = Object.freeze({
   tab: 'overview',
@@ -114,6 +117,7 @@ export const DEFAULT_URL_STATE: UrlState = Object.freeze({
   merchant: null,
   txn: null,
   q: null,
+  session: null,
   extra: [],
 }) as UrlState;
 
@@ -141,6 +145,11 @@ export function isIsoDate(v: string | null | undefined): v is string {
   const [y, m, d] = v.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+/** Chat session ids are UUIDs; accept any URL-safe token, nothing that could escape a path. */
+export function isSessionId(v: string | null | undefined): v is string {
+  return !!v && /^[A-Za-z0-9_-]{1,64}$/.test(v);
 }
 
 function parseId(v: string): number | null {
@@ -218,6 +227,9 @@ function applyKnown(state: UrlState, key: KnownKey, value: string): void {
     case 'cmp':
       if (isCompare(value)) state.cmp = value;
       return;
+    case 'session':
+      if (isSessionId(value)) state.session = value;
+      return;
     case 'cat':
     case 'by':
     case 'merchant':
@@ -282,6 +294,11 @@ export function withTab(state: UrlState, tab: string): UrlState {
   for (const key of GLOBAL_KEYS) (next as unknown as Record<string, unknown>)[key] = state[key];
   next.extra = [...state.extra];
   return normalize(next);
+}
+
+/** Set (or clear, with null) the chat session id. An invalid id clears it. */
+export function withSession(state: UrlState, id: string | null): UrlState {
+  return { ...state, extra: [...state.extra], session: isSessionId(id) ? id : null };
 }
 
 /** Drop keys that reference rows in the current profile's database. */

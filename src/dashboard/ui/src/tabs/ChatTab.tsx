@@ -27,7 +27,8 @@ import { ComposerBackdrop, MentionIcon } from '@/components/ComposerBackdrop';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
 import { ChatApprovalCard } from '@/components/ChatApprovalCard';
 import { usePendingChatApproval } from '@/hooks/usePendingChatApproval';
-import { navigateToTab, reloadForProfileSwitch } from '@/hooks/useUrlState';
+import { navigateToTab, navigateUrl, readUrlState, reloadForProfileSwitch, useUrlState } from '@/hooks/useUrlState';
+import { withSession } from '@/lib/urlState';
 import {
   applySelection,
   contextBlockLabels,
@@ -169,6 +170,15 @@ export function ChatTab() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  // `?session=<id>` is the source of truth for the open conversation, so a
+  // reload or a shared link restores it. The effect below reconciles it with
+  // the local state; ids the server assigns are written back (replace).
+  const { state: urlState } = useUrlState();
+  const urlSession = urlState.session;
+  const activeSessionRef = useRef<string | null>(null);
+  activeSessionRef.current = activeSessionId;
+  /** Guards loadSession against a slower, superseded history fetch. */
+  const loadSeq = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
   const hybrid = useHybridChat();
   // Turns answered on-device in this chat, so a later server handoff can close the history gap.
@@ -420,13 +430,30 @@ export function ChatTab() {
   }, [input, caret, allCommands]);
 
   // ── Sessions ──────────────────────────────────────────────────────────
+  /** Mirror a session id into the URL; no-op if the user already left the chat tab. */
+  function syncUrlSession(id: string | null, mode: 'push' | 'replace') {
+    if (readUrlState().tab !== 'chat') return;
+    navigateUrl((s) => withSession(s, id), { mode });
+  }
+
+  /** Sidebar pick: a user navigation (push); the URL effect does the loading. */
+  function selectSession(sid: string) {
+    if (sid === activeSessionId) return;
+    syncUrlSession(sid, 'push');
+  }
+
   async function loadSession(sid: string) {
     if (sid === activeSessionId) return;
     priorLocalTurnsRef.current = [];
+    const seq = ++loadSeq.current;
     setActiveSessionId(sid);
     setSessionId(sid);
     try {
       const rows = await api<ChatHistoryRow[]>(`/api/chat/sessions/${sid}`);
+      if (seq !== loadSeq.current) return;
+      // An unknown/deleted id comes back empty (every real session has a
+      // turn): fall back to a fresh chat and drop the param.
+      if (rows.length === 0) throw new Error('empty session');
       const loaded: DisplayMessage[] = [];
       for (const row of rows) {
         // Persisted queries carry the server-resolved mention block: show the
@@ -443,18 +470,38 @@ export function ChatTab() {
       }
       setMessages(loaded);
     } catch {
+      if (seq !== loadSeq.current) return;
       setMessages([]);
+      setSessionId(null);
+      setActiveSessionId(null);
+      syncUrlSession(null, 'replace');
     }
     inputRef.current?.focus();
   }
 
-  function handleNewChat() {
+  function resetChat() {
     priorLocalTurnsRef.current = [];
+    loadSeq.current++;
     setMessages([]);
     setSessionId(null);
     setActiveSessionId(null);
     inputRef.current?.focus();
   }
+
+  function handleNewChat() {
+    resetChat();
+    syncUrlSession(null, 'push');
+  }
+
+  // URL -> state: initial load, Back/Forward, a pasted link, a sidebar pick.
+  // Keyed on the URL only; a server-assigned id updates state and URL together
+  // so they already agree by the time this runs.
+  useEffect(() => {
+    if (urlSession === activeSessionRef.current) return;
+    if (urlSession) void loadSession(urlSession);
+    else resetChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSession]);
 
   // ── Client-side commands (never sent to a model, never persisted) ─────
   function pushLocal(userText: string, answer: string) {
@@ -672,6 +719,7 @@ export function ChatTab() {
         if (local.sessionId) {
           setSessionId(local.sessionId);
           setActiveSessionId(local.sessionId);
+          syncUrlSession(local.sessionId, 'replace');
         }
         priorLocalTurnsRef.current = [...priorLocalTurnsRef.current, { q: query, a: local.answer }].slice(
           -PRIOR_LOCAL_TURNS_MAX,
@@ -695,7 +743,10 @@ export function ChatTab() {
         });
 
         setSessionId(res.sessionId);
-        if (res.sessionId) setActiveSessionId(res.sessionId);
+        if (res.sessionId) {
+          setActiveSessionId(res.sessionId);
+          syncUrlSession(res.sessionId, 'replace');
+        }
         setMessages((prev) => [
           ...prev,
           { id: newId(), role: 'assistant', content: res.answer, provenance, ...(notice ? { notice } : {}) },
@@ -806,7 +857,7 @@ export function ChatTab() {
           {sessions?.map((s) => (
             <button
               key={s.id}
-              onClick={() => loadSession(s.id)}
+              onClick={() => selectSession(s.id)}
               className={`w-full text-left px-3 py-2.5 text-sm transition-colors border-l-2 ${
                 activeSessionId === s.id
                   ? 'border-l-green bg-surface text-text'

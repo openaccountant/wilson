@@ -7,6 +7,7 @@ import {
   stripProfileScoped,
   PROFILE_SCOPED_KEYS,
   withTab,
+  withSession,
   type UrlState,
 } from '../dashboard/ui/src/lib/urlState.js';
 import {
@@ -433,5 +434,89 @@ describe('pruneUnknownIds', () => {
     expect(pruned.entity).toBeNull();
     expect(pruned.cat).toBe('Food');
     expect(pruneUnknownIds(s, { accounts: [1], entities: null }).entity).toBe(9);
+  });
+});
+
+describe('chat session key', () => {
+  const SID = '0b8f6c1e-5a52-4c3e-9d0a-7a3f1f6d2b11';
+
+  test('?session=<id> parses and round-trips on the chat tab', () => {
+    const s = parseHash(`#chat?session=${SID}`);
+    expect(s).toMatchObject({ tab: 'chat', session: SID });
+    expect(serializeHash(s)).toBe(`#chat?session=${SID}`);
+  });
+
+  test('absent or malformed ids parse to null (and are dropped on canonicalize)', () => {
+    expect(parseHash('#chat').session).toBeNull();
+    expect(parseHash('#chat?session=').session).toBeNull();
+    expect(parseHash('#chat?session=a%20b').session).toBeNull();
+    expect(parseHash('#chat?session=<script>').session).toBeNull();
+    expect(serializeHash(parseHash('#chat?session=../x'))).toBe('#chat');
+  });
+
+  test('coexists with global keys in canonical order and is tab-scoped', () => {
+    const s = parseHash(`#chat?session=${SID}&cmp=yoy&preset=ytd`);
+    expect(serializeHash(s)).toBe(`#chat?preset=ytd&cmp=yoy&session=${SID}`);
+    expect(serializeHash(withTab(s, 'overview'))).toBe('#overview?preset=ytd&cmp=yoy');
+  });
+
+  test('a profile switch strips it (the id names a row in the old database)', () => {
+    expect(PROFILE_SCOPED_KEYS).toContain('session');
+    expect(serializeHash(stripProfileScoped(parseHash(`#chat?session=${SID}&cmp=prev`)))).toBe('#chat?cmp=prev');
+  });
+
+  test('withSession sets and clears the id without disturbing other keys', () => {
+    const base = parseHash('#chat?preset=ytd&keep=me');
+    expect(serializeHash(withSession(base, SID))).toBe(`#chat?preset=ytd&session=${SID}&keep=me`);
+    expect(serializeHash(withSession(withSession(base, SID), null))).toBe('#chat?preset=ytd&keep=me');
+    expect(withSession(base, 'bad id!').session).toBeNull();
+  });
+});
+
+describe('chat session navigation', () => {
+  const SID = '0b8f6c1e-5a52-4c3e-9d0a-7a3f1f6d2b11';
+  let hash = '#chat';
+  const calls: string[] = [];
+
+  beforeEach(() => {
+    hash = '#chat?preset=ytd';
+    calls.length = 0;
+    const win = {
+      location: {
+        pathname: '/',
+        search: '',
+        get hash() {
+          return hash;
+        },
+      },
+      history: {
+        state: null,
+        pushState: (_s: unknown, _t: string, url: string) => {
+          calls.push('push');
+          hash = url.slice(url.indexOf('#'));
+        },
+        replaceState: (_s: unknown, _t: string, url: string) => {
+          calls.push('replace');
+          hash = url.slice(url.indexOf('#'));
+        },
+      },
+      dispatchEvent: () => true,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    (globalThis as { window?: unknown }).window = win;
+  });
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  test('server-assigned ids replace; user switches push; clearing is idempotent', () => {
+    navigateUrl((s) => withSession(s, SID), { mode: 'replace' });
+    expect(hash).toBe(`#chat?preset=ytd&session=${SID}`);
+    navigateUrl((s) => withSession(s, 'other-id'), { mode: 'push' });
+    navigateUrl((s) => withSession(s, null), { mode: 'replace' });
+    expect(hash).toBe('#chat?preset=ytd');
+    expect(calls).toEqual(['replace', 'push', 'replace']);
+    expect(readUrlState().session).toBeNull();
   });
 });
