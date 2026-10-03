@@ -6,21 +6,28 @@
  * execution providers). Models are cached to ~/.openaccountant/models/ on
  * first download.
  *
- * WebGPU models — require a GPU that ORT's bundled WebGPU EP can drive:
- * - onnx-community/granite-4.0-micro-ONNX-web  ~3B Micro, IBM tool-calling
- * - onnx-community/LFM2-1.2B-Tool-ONNX         ~1.2B, purpose-built for tool use
- * - onnx-community/granite-4.0-350m-ONNX-web   ~350M, IBM Granite, fast
- * - onnx-community/Qwen3-0.6B-ONNX             ~0.6B, Qwen3 architecture
+ * Device and dtype come from the model catalog (src/utils/model.ts), which pins
+ * both per entry. Repos outside the catalog (user-typed ids) route by
+ * LEGACY_WEBGPU_MODEL_PATTERNS and resolve their dtype from the Hub file list
+ * via the shared resolver in src/model/transformers-dtype.ts — the same one the
+ * browser hybrid client uses. No dtype is hardcoded: repos publish different
+ * subsets (granite-4.0-micro-ONNX-web ships only q4f16).
  *
- * CPU/WASM models (default, no GPU required):
- * - HuggingFaceTB/SmolLM3-3B-ONNX         ~2GB, 92.3% BFCL score
- * - onnx-community/Qwen2.5-1.5B-Instruct  ~900MB, solid instruction following
+ * WebGPU models (q4f16) — require a GPU that ORT's bundled WebGPU EP can drive:
+ * - onnx-community/granite-4.0-micro-ONNX-web  ~3B Micro, IBM tool-calling   ~2.3GB
+ * - onnx-community/LFM2-1.2B-Tool-ONNX         ~1.2B, purpose-built for tool use ~870MB
+ * - onnx-community/granite-4.0-350m-ONNX-web   ~350M, IBM Granite, fast      ~350MB
+ * - onnx-community/Qwen3-0.6B-ONNX             ~0.6B, Qwen3 architecture     ~570MB
+ *
+ * CPU/WASM models (q4, no GPU required):
+ * - HuggingFaceTB/SmolLM3-3B-ONNX         ~2.8GB, 92.3% BFCL score
+ * - onnx-community/Qwen2.5-1.5B-Instruct  ~1.8GB, solid instruction following
  *
  * Tool call format: <tool_call>{"name": "TOOL_NAME", "arguments": {...}}</tool_call>
  *
  * Limitations:
  * - Small models (0.5B) are far less capable than Claude/GPT for complex reasoning.
- * - First run downloads the model from HuggingFace Hub (~270MB–500MB).
+ * - First run downloads the model from HuggingFace Hub (~350MB–2.8GB).
  * - Subsequent runs load from cache (<2s startup time).
  * - Tool calling via prompt injection is unreliable — works for simple single-tool
  *   calls, fails on complex multi-tool chains.
@@ -32,8 +39,25 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 import type { ProviderAdapter, ProviderCallOptions, LlmResponse, ToolCall, ToolDef } from '../types.js';
+import { getTransformersCatalogEntry } from '../../utils/model.js';
+import { resolveTransformersDtype, type ResolvedDtype, type TransformersDevice } from '../transformers-dtype.js';
 
+/**
+ * Device routing for repos that are NOT in the model catalog (user-typed ids).
+ * Catalog entries carry an explicit `device` and never consult this list.
+ */
 export const WEBGPU_MODEL_PATTERNS = ['-ONNX-web', 'LFM2-1.2B-Tool-ONNX', 'Qwen3-0.6B-ONNX'];
+
+/**
+ * Where `modelName` (bare repo or `transformers:`-prefixed id) runs: the
+ * catalog entry's `device` when there is one, else the legacy name patterns.
+ */
+export function resolveTransformersDevice(modelName: string): TransformersDevice {
+  const entry = getTransformersCatalogEntry(modelName);
+  if (entry?.device) return entry.device;
+  return WEBGPU_MODEL_PATTERNS.some((p) => modelName.includes(p)) ? 'webgpu' : 'cpu';
+}
+
 const cacheDir = join(homedir(), '.openaccountant', 'models');
 
 interface OnnxBackend {
@@ -76,6 +100,26 @@ async function bootstrapTransformers(webgpu: boolean) {
   }
 }
 
+/**
+ * The dtype the server loads for `modelName` on `device`: the catalog pin, or
+ * (for user-typed repos) the shared Hub-file-list resolution. Offline, it walks
+ * the same preference chain over what is already in ~/.openaccountant/models.
+ * Throws TransformersDtypeError ("no ONNX weights for <repo> in any of: …")
+ * when the Hub says the repo has nothing loadable — before any download.
+ */
+export async function resolveServerDtype(modelName: string, device: TransformersDevice): Promise<ResolvedDtype> {
+  const repo = modelName.replace(/^transformers:/, '');
+  const entry = getTransformersCatalogEntry(repo);
+  const { env, ModelRegistry } = await import('@huggingface/transformers');
+  const { dtype } = await resolveTransformersDtype(repo, device, {
+    // A catalog dtype only applies on the device it was pinned for.
+    catalogDtype: entry?.device === device ? entry.dtype : undefined,
+    hubUrl: env.remoteHost,
+    localDtypes: (r) => ModelRegistry.get_available_dtypes(r, { cache_dir: cacheDir, local_files_only: true }),
+  });
+  return dtype;
+}
+
 // Singleton pipeline cache: model name → pipeline instance
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pipelineCache = new Map<string, any>();
@@ -84,12 +128,11 @@ async function getOrCreatePipeline(modelName: string) {
   const cached = pipelineCache.get(modelName);
   if (cached) return cached;
 
-  const isWebGpu = WEBGPU_MODEL_PATTERNS.some((p) => modelName.includes(p));
-  await bootstrapTransformers(isWebGpu);
+  const device = resolveTransformersDevice(modelName);
+  await bootstrapTransformers(device === 'webgpu');
 
   const { pipeline } = await import('@huggingface/transformers'); // module-cached after first import
-  const device = isWebGpu ? 'webgpu' : 'cpu';
-  const dtype = isWebGpu ? 'fp16' : 'q4';
+  const dtype = await resolveServerDtype(modelName, device);
 
   // Suppress library console output during load to avoid corrupting TUI rendering
   const noop = () => {};

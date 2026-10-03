@@ -27,6 +27,12 @@ import {
   type HybridResult,
 } from './core.js';
 import { parseCategorizationDecision, type ParsedDecision } from '../demo/core.js';
+import {
+  isOnnxDtype,
+  resolveTransformersDtype,
+  TransformersDtypeError,
+  type DtypeFetch,
+} from '../../../../model/transformers-dtype.js';
 
 export type { HybridResult } from './core.js';
 
@@ -48,8 +54,33 @@ export interface LocalChatConfigResponse {
   repo: string;
   displayName: string;
   downloadSize: string;
+  /** Catalog-pinned ONNX dtype (e.g. 'q4f16'); null → resolve from the Hub file list. */
+  dtype?: string | null;
   bundle: BundleParams;
 }
+
+/**
+ * Whether the browser's WebGPU adapter exposes `shader-f16`, which fp16 and
+ * q4f16 weights need. transformers.js 4.3.0 only pre-checks this for 'fp16',
+ * so a q4f16 load on such a GPU would otherwise fail late, at session
+ * creation. Undefined when it cannot be determined (treated as supported).
+ */
+async function detectShaderF16(): Promise<boolean | undefined> {
+  try {
+    const gpu = (globalThis.navigator as { gpu?: { requestAdapter?: () => Promise<unknown> } } | undefined)?.gpu;
+    const adapter = (await gpu?.requestAdapter?.()) as { features?: { has(name: string): boolean } } | null | undefined;
+    if (!adapter?.features) return undefined;
+    return adapter.features.has('shader-f16');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Hub metadata requests go straight to huggingface.co with the global fetch,
+ * never through the dashboard's fetchImpl (which may attach auth headers).
+ */
+const hubFetch: DtypeFetch = (url) => globalThis.fetch(url);
 
 /** Session-storage key for the per-session capability verdict (Track D). */
 export const CAPABILITY_STORAGE_KEY = 'wilson-hybrid-capability';
@@ -155,7 +186,7 @@ export function createHybridChat(opts: HybridOpts) {
     }
     // Optimistic: layers 1-2 passed. The real-generation layer (loadModel)
     // downgrades to 'failed' if the GPU cannot actually run the model
-    // (e.g. adapter without shader-f16 fails fp16 session creation).
+    // (e.g. a q4f16-only repo on an adapter without shader-f16).
     verdict = 'ready';
     persist();
     return 'ready';
@@ -164,6 +195,8 @@ export function createHybridChat(opts: HybridOpts) {
   // ── Model load + real-generation proof (layer 3) ────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pipelinePromise: Promise<AnyPipeline> | null = null;
+  /** Clear reason the last load failed, when known (dtype/shader-f16). */
+  let lastLoadError: string | null = null;
 
   async function loadModel(onProgress?: ProgressCb): Promise<AnyPipeline | null> {
     const cfg = await fetchConfig();
@@ -191,9 +224,20 @@ export function createHybridChat(opts: HybridOpts) {
           }
         };
 
+        // Shared resolver (same module as the server adapter): the catalog
+        // pin from /api/config/local-chat wins without network; only a GPU
+        // without shader-f16 (or an uncatalogued repo) consults the Hub file
+        // list. Never a hardcoded dtype — repos publish different subsets.
+        const { dtype } = await resolveTransformersDtype(cfg.repo, 'webgpu', {
+          catalogDtype: isOnnxDtype(cfg.dtype) ? cfg.dtype : undefined,
+          shaderF16: await detectShaderF16(),
+          fetchImpl: hubFetch,
+          hubUrl: env.remoteHost,
+        });
+
         const pipe: AnyPipeline = await pipeline('text-generation', cfg.repo, {
           device: 'webgpu',
-          dtype: 'fp16',
+          dtype,
           progress_callback: progress,
         });
 
@@ -212,11 +256,17 @@ export function createHybridChat(opts: HybridOpts) {
     try {
       const pipe = await pipelinePromise;
       provenRepo = cfg.repo;
+      lastLoadError = null;
       verdict = 'ready';
       persist();
       return pipe;
-    } catch {
+    } catch (err) {
       pipelinePromise = null;
+      // A dtype error is a precise, user-actionable reason (e.g. "requires a
+      // GPU with WebGPU shader-f16 support"); keep it for the UI and the
+      // console instead of collapsing it into a generic failure.
+      lastLoadError = err instanceof TransformersDtypeError ? err.message : null;
+      if (lastLoadError) console.warn(`[hybrid-chat] ${lastLoadError}`);
       verdict = 'failed';
       persist();
       return null;
@@ -359,7 +409,7 @@ export function createHybridChat(opts: HybridOpts) {
       opts.onProgress?.('Loading local model…');
       const loadStart = performance.now();
       const pipe = await loadModel(opts.onProgress);
-      if (!pipe) return failed('failed');
+      if (!pipe) return lastLoadError ? { ...failed('failed'), detail: lastLoadError } : failed('failed');
       const loadMs = performance.now() - loadStart;
 
       opts.onProgress?.('Thinking locally…');
@@ -416,6 +466,8 @@ export interface CategorizeSampleResult {
   loadFresh: boolean;
   /** When ok=false: why the browser path was not usable. */
   reason?: 'unavailable' | 'failed' | 'error';
+  /** When ok=false and known: a human-readable cause (e.g. GPU lacks shader-f16). */
+  detail?: string;
 }
 
 export interface CategorizeSampleOpts {

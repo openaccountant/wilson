@@ -117,7 +117,7 @@ check that the `webgpu` device resolves to the WebGPU execution provider, that
 every `webgpu`-tagged model matches the dispatch patterns, and that the
 capability probe returns a boolean without throwing.
 
-Layers 3 and 4 download roughly 600 MB and need a working GPU, so they are
+Layers 3 and 4 download roughly 570 MB and need a working GPU, so they are
 skipped unless you opt in:
 
 ```bash

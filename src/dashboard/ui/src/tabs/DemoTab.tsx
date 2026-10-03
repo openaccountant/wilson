@@ -358,7 +358,11 @@ export function DemoTab() {
           setLocalArm(arm);
           return;
         }
-        onLocalProgress('browser GPU unavailable — using this machine…');
+        onLocalProgress(
+          r.detail
+            ? `browser GPU can't run this model (${r.detail}) — using this machine…`
+            : 'browser GPU unavailable — using this machine…',
+        );
         try {
           const res = await api<ShowdownArmResponse>('/api/demo/showdown/local', {
             method: 'POST',

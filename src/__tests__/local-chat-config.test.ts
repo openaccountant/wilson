@@ -41,6 +41,20 @@ describe('local chat config', () => {
     expect(cfg.bundle).toEqual({ ...LOCAL_CHAT_BUNDLE_DEFAULTS });
   });
 
+  test('config carries the catalog-pinned dtype so the browser loads the right ONNX file', () => {
+    const fastModel = getProviderById('transformers')!.fastModel!;
+    const catalogEntry = getModelsForProvider('transformers').find((m) => m.id === fastModel)!;
+    const cfg = getLocalChatModelConfig();
+
+    // Never left to a hardcoded browser default: the reported failure was the
+    // client forcing fp16 on a repo (granite-4.0-micro-ONNX-web) that only
+    // publishes q4f16.
+    expect(catalogEntry.device).toBe('webgpu');
+    expect(catalogEntry.dtype).toBeDefined();
+    expect(cfg.dtype).toBe(catalogEntry.dtype!);
+    expect(cfg.dtype).toBe('q4f16');
+  });
+
   test('bundle defaults fit a 0.6B-class context window', () => {
     // 6000 chars ≈ ~1500 tokens of transaction context — bounded, and well
     // inside the window the 0.6B model can attend over alongside the rules.

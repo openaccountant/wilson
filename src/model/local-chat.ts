@@ -14,6 +14,7 @@
 
 import { getProviderById } from '../providers.js';
 import { getModelsForProvider } from '../utils/model.js';
+import type { OnnxDtype } from './transformers-dtype.js';
 
 export const LOCAL_CHAT_PROVIDER_ID = 'transformers';
 
@@ -40,6 +41,13 @@ export interface LocalChatModelConfig {
   displayName: string;
   /** Approximate first-run download size from the model catalog. */
   downloadSize: string;
+  /**
+   * ONNX dtype pinned by the catalog entry (e.g. 'q4f16'), so the browser loads
+   * exactly onnx/model_<dtype>.onnx without probing the Hub. Null when the
+   * fastModel is not catalogued — the browser then resolves it from the Hub
+   * file list with the shared resolver (src/model/transformers-dtype.ts).
+   */
+  dtype: OnnxDtype | null;
   bundle: { days: number; limit: number; maxChars: number };
 }
 
@@ -60,6 +68,7 @@ export function getLocalChatModelConfig(): LocalChatModelConfig {
       repo: '',
       displayName: '',
       downloadSize: '',
+      dtype: null,
       bundle: { ...LOCAL_CHAT_BUNDLE_DEFAULTS },
     };
   }
@@ -74,6 +83,8 @@ export function getLocalChatModelConfig(): LocalChatModelConfig {
     repo,
     displayName: catalogEntry?.displayName ?? repo,
     downloadSize: catalogEntry?.downloadSize ?? 'unknown',
+    // The browser always runs WebGPU, so a pin only applies to a webgpu entry.
+    dtype: catalogEntry?.device === 'webgpu' ? (catalogEntry.dtype ?? null) : null,
     bundle: { ...LOCAL_CHAT_BUNDLE_DEFAULTS },
   };
 }
