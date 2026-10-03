@@ -14,7 +14,12 @@
  * (granite-4.0-micro-ONNX-web publishes only q4f16), so no single hardcoded
  * dtype works for every repo. Resolution order:
  *
- *   1. Explicit catalog dtype (src/utils/model.ts) — no network.
+ *   1. Explicit catalog dtype (src/utils/model.ts) — no network when the
+ *      pinned file is already cached (or no cache probe is supplied). When a
+ *      cache probe says the pin is NOT cached, one Hub metadata request checks
+ *      reachability: online, the pin still wins (it is about to download);
+ *      offline, step 5's local-cache walk runs instead, so an offline user
+ *      whose cache holds a different dtype still loads.
  *   2. Hub metadata, fetched once per repo and cached in memory: the onnx/
  *      file list (api/models/<repo> siblings) and config.json's
  *      `transformers.js_config`.
@@ -22,9 +27,14 @@
  *      `device_config[device]` overlay) when that file exists and suits the
  *      device.
  *   4. The first available dtype in the device's fallback chain.
- *   5. Hub unreachable (offline / air-gapped / rate-limited): an optional
- *      caller-supplied probe of locally cached dtypes, then `'auto'` (which
- *      makes Transformers.js honour the cached config's dtype).
+ *   5. Hub unreachable (offline / air-gapped / rate-limited / 5xx): an
+ *      optional caller-supplied probe of locally cached dtypes, then `'auto'`
+ *      (which makes Transformers.js honour the cached config's dtype).
+ *
+ * A Hub answer of 401/403/404 is NOT "unreachable": the repo does not exist or
+ * is gated/private, so resolution fails fast with a TransformersDtypeError
+ * (`repo-not-found`) instead of degrading to `'auto'` (which on WebGPU would
+ * download the largest, fp32, weights).
  */
 
 /** Concrete ONNX dtypes Transformers.js 4.x maps to a file suffix. */
@@ -91,7 +101,7 @@ export function dtypesFromFileList(files: readonly string[]): Set<OnnxDtype> {
   return out;
 }
 
-export type DtypeErrorCode = 'no-onnx-weights' | 'no-usable-dtype' | 'requires-shader-f16';
+export type DtypeErrorCode = 'no-onnx-weights' | 'no-usable-dtype' | 'requires-shader-f16' | 'repo-not-found';
 
 /** A repo that cannot be loaded at all on the requested device — a clear, early error. */
 export class TransformersDtypeError extends Error {
@@ -182,7 +192,46 @@ export function pickDtype(input: PickDtypeInput): OnnxDtype {
 // ── Hub metadata (cached per repo) ─────────────────────────────────────────
 
 /** Structural fetch type, so this module never depends on a DOM or Bun lib. */
-export type DtypeFetch = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+export type DtypeFetch = (
+  url: string,
+  init?: { headers?: Record<string, string> },
+) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+
+/** Options shared by every Hub request this module makes. */
+export interface HubRequestOptions {
+  fetchImpl?: DtypeFetch;
+  hubUrl?: string;
+  /**
+   * Hugging Face access token, sent as `Authorization: Bearer` (the server
+   * passes HF_TOKEN; the browser never sends one). Needed for gated/private
+   * repos.
+   */
+  hubToken?: string;
+}
+
+/** HTTP statuses that mean "this repo does not exist or you may not read it" — not an outage. */
+const REPO_NOT_FOUND_STATUSES = new Set([401, 403, 404]);
+
+function hubBase(hubUrl: string | undefined): string {
+  return (hubUrl ?? DEFAULT_HUB).replace(/\/+$/, '');
+}
+
+function encodeRepo(repo: string): string {
+  return repo.split('/').map(encodeURIComponent).join('/');
+}
+
+function hubInit(hubToken: string | undefined): { headers?: Record<string, string> } | undefined {
+  return hubToken ? { headers: { Authorization: `Bearer ${hubToken}` } } : undefined;
+}
+
+function repoNotFound(repo: string, status: number): TransformersDtypeError {
+  return new TransformersDtypeError(
+    `repo not found or gated: ${repo} (Hub answered HTTP ${status}). Check the model id; for a gated or ` +
+      `private repo, accept its terms on huggingface.co and set HF_TOKEN.`,
+    'repo-not-found',
+    repo,
+  );
+}
 
 export interface RepoOnnxMetadata {
   available: Set<OnnxDtype>;
@@ -199,17 +248,26 @@ export function clearDtypeMetadataCache(): void {
 
 const DEFAULT_HUB = 'https://huggingface.co';
 
-async function fetchRepoMetadata(repo: string, fetchImpl: DtypeFetch, hubUrl: string): Promise<RepoOnnxMetadata> {
-  const hub = hubUrl.replace(/\/+$/, '');
-  const encoded = repo.split('/').map(encodeURIComponent).join('/');
+async function fetchRepoMetadata(
+  repo: string,
+  fetchImpl: DtypeFetch,
+  hubUrl: string | undefined,
+  hubToken: string | undefined,
+): Promise<RepoOnnxMetadata> {
+  const hub = hubBase(hubUrl);
+  const encoded = encodeRepo(repo);
+  const init = hubInit(hubToken);
 
   // Both requests in parallel: the api/models response carries the file list,
   // but (verified 2026-10) not `transformers.js_config`, so config.json is
   // fetched alongside it. A config.json failure is non-fatal.
   const [apiRes, cfgRes] = await Promise.all([
-    fetchImpl(`${hub}/api/models/${encoded}`),
-    fetchImpl(`${hub}/${encoded}/resolve/main/config.json`).catch(() => null),
+    fetchImpl(`${hub}/api/models/${encoded}`, init),
+    fetchImpl(`${hub}/${encoded}/resolve/main/config.json`, init).catch(() => null),
   ]);
+  // 401/403/404: the repo is missing, private or gated — a definitive answer,
+  // not an outage. Anything else (429, 5xx) is treated like a network failure.
+  if (REPO_NOT_FOUND_STATUSES.has(apiRes.status)) throw repoNotFound(repo, apiRes.status);
   if (!apiRes.ok) throw new Error(`Hub metadata request for ${repo} failed: HTTP ${apiRes.status}`);
 
   const api = (await apiRes.json()) as {
@@ -232,16 +290,14 @@ async function fetchRepoMetadata(repo: string, fetchImpl: DtypeFetch, hubUrl: st
 /**
  * Fetch (once per repo, cached in memory) the dtypes a repo publishes and its
  * transformers.js_config. A failed fetch is not cached, so the next call
- * retries.
+ * retries. Rejects with TransformersDtypeError (`repo-not-found`) on
+ * 401/403/404, and with a plain Error on network failures, 429 and 5xx.
  */
-export function getRepoOnnxMetadata(
-  repo: string,
-  opts: { fetchImpl?: DtypeFetch; hubUrl?: string } = {},
-): Promise<RepoOnnxMetadata> {
+export function getRepoOnnxMetadata(repo: string, opts: HubRequestOptions = {}): Promise<RepoOnnxMetadata> {
   const cached = metadataCache.get(repo);
   if (cached) return cached;
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as DtypeFetch);
-  const p = fetchRepoMetadata(repo, fetchImpl, opts.hubUrl ?? DEFAULT_HUB);
+  const p = fetchRepoMetadata(repo, fetchImpl, opts.hubUrl, opts.hubToken);
   metadataCache.set(repo, p);
   p.catch(() => metadataCache.delete(repo));
   return p;
@@ -256,16 +312,18 @@ export interface DtypeResolution {
   source: DtypeSource;
 }
 
-export interface ResolveDtypeOptions {
-  /** Explicit dtype from the model catalog; wins without any network call. */
+export interface ResolveDtypeOptions extends HubRequestOptions {
+  /**
+   * Explicit dtype from the model catalog. Wins without any network call when
+   * it is cached locally or no `localDtypes` probe is supplied.
+   */
   catalogDtype?: OnnxDtype | null;
   /** Browser only: adapter.features.has('shader-f16'). Undefined = assume yes. */
   shaderF16?: boolean;
-  fetchImpl?: DtypeFetch;
-  hubUrl?: string;
   /**
-   * Offline fallback: list the dtypes already in the local model cache (the
-   * server passes ModelRegistry.get_available_dtypes with local_files_only).
+   * List the dtypes already in the local model cache (the server lists
+   * ~/.openaccountant/models/<repo>/onnx). Used offline, and to tell whether a
+   * catalog pin still needs a download.
    */
   localDtypes?: (repo: string) => Promise<readonly string[]>;
 }
@@ -283,31 +341,54 @@ export async function resolveTransformersDtype(
   opts: ResolveDtypeOptions = {},
 ): Promise<DtypeResolution> {
   const { catalogDtype, shaderF16 } = opts;
+  const chain = chainFor(device, shaderF16);
   const needsF16Downgrade = (d: OnnxDtype) => device === 'webgpu' && shaderF16 === false && F16_DTYPES.has(d);
 
-  // 1. Catalog dtype — trusted, no network (a unit test pins it against the
-  //    recorded Hub file lists). Only an f16 dtype on a browser GPU without
-  //    shader-f16 needs the file list, to find a non-f16 alternative.
+  /** Locally cached dtypes; a failing probe counts as "nothing cached". */
+  const probeLocal = async (): Promise<OnnxDtype[]> => {
+    if (!opts.localDtypes) return [];
+    try {
+      return (await opts.localDtypes(repo)).filter(isOnnxDtype);
+    } catch {
+      return [];
+    }
+  };
+  const localHit = (local: readonly OnnxDtype[]) => chain.find((d) => local.includes(d));
+
+  // 1. Catalog dtype — trusted (a unit test pins it against the recorded Hub
+  //    file lists). Only an f16 dtype on a browser GPU without shader-f16
+  //    needs the file list, to find a non-f16 alternative.
   if (catalogDtype && !needsF16Downgrade(catalogDtype)) {
-    return { dtype: catalogDtype, source: 'catalog' };
+    if (!opts.localDtypes) return { dtype: catalogDtype, source: 'catalog' };
+    const local = await probeLocal();
+    if (local.includes(catalogDtype)) return { dtype: catalogDtype, source: 'catalog' };
+
+    // The pin is not cached, so loading it means a download. One metadata
+    // request tells whether that can work: online → the pin (unchanged
+    // behaviour); repo missing/gated → a clear error now; offline → whatever
+    // the cache already holds, walking the device chain.
+    try {
+      await getRepoOnnxMetadata(repo, opts);
+      return { dtype: catalogDtype, source: 'catalog' };
+    } catch (err) {
+      if (err instanceof TransformersDtypeError) throw err;
+      const hit = localHit(local);
+      if (hit) return { dtype: hit, source: 'local-cache' };
+      // Nothing usable cached either: try the pin and let the load report it.
+      return { dtype: catalogDtype, source: 'catalog' };
+    }
   }
 
   // 2. Hub metadata.
   let meta: RepoOnnxMetadata;
   try {
     meta = await getRepoOnnxMetadata(repo, opts);
-  } catch {
+  } catch (err) {
+    // A definitive "no such repo / no access" is not an outage: fail fast.
+    if (err instanceof TransformersDtypeError) throw err;
     // 5. Hub unreachable — walk the same chain over what is cached locally.
-    if (opts.localDtypes) {
-      try {
-        const local = (await opts.localDtypes(repo)).filter(isOnnxDtype);
-        const chain = chainFor(device, shaderF16);
-        const hit = chain.find((d) => local.includes(d));
-        if (hit) return { dtype: hit, source: 'local-cache' };
-      } catch {
-        // fall through to 'auto'
-      }
-    }
+    const hit = localHit(await probeLocal());
+    if (hit) return { dtype: hit, source: 'local-cache' };
     if (catalogDtype) {
       // Offline and the catalog dtype is f16 on a no-f16 GPU: let it fail at
       // session creation rather than guess.
@@ -321,4 +402,107 @@ export async function resolveTransformersDtype(
   const dtype = pickDtype({ repo, device, available: meta.available, configDtype, shaderF16 });
   const source: DtypeSource = configDtype && dtype === configDtype ? 'config' : 'fallback';
   return { dtype, source };
+}
+
+// ── Damaged cache diagnosis ────────────────────────────────────────────────
+
+/**
+ * ONNX Runtime messages that mean a model file on disk is unreadable — almost
+ * always a truncated download (a 770 MB copy of a 2.09 GB
+ * `model_q4f16.onnx_data` fails with "Deserialize tensor … out of bounds").
+ */
+const CORRUPT_MODEL_RE =
+  /can ?not be read in full|external initializer|deseriali[sz]e tensor|protobuf parsing failed|invalid protobuf|failed to parse (the )?(onnx )?model/i;
+
+/** Whether a model-load error looks like a damaged (truncated/corrupt) cached file. */
+export function isCorruptModelFileError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  return CORRUPT_MODEL_RE.test(msg);
+}
+
+/** A cached model that cannot be loaded; the message names exactly what to delete. */
+export class TransformersCacheError extends Error {
+  constructor(
+    message: string,
+    readonly repo: string,
+    readonly cachePath: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'TransformersCacheError';
+  }
+}
+
+/** One cached file whose size disagrees with the Hub. */
+export interface CacheSizeMismatch {
+  /** Repo-relative path, e.g. 'onnx/model_q4f16.onnx_data'. */
+  path: string;
+  localSize: number;
+  remoteSize: number;
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} MB`;
+  return `${n} B`;
+}
+
+/**
+ * The error for a load that failed on a damaged cache. Never deletes anything
+ * itself: it names the repo and the cache path, tells the user to delete it,
+ * and lists the files whose size disagrees with the Hub when that is known.
+ */
+export function corruptCacheError(
+  repo: string,
+  cachePath: string,
+  cause: unknown,
+  mismatches: readonly CacheSizeMismatch[] = [],
+): TransformersCacheError {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  const firstLine = (detail.split('\n')[0] ?? '').slice(0, 300);
+  const sizes = mismatches.length
+    ? ` Size mismatch vs the Hub: ${mismatches
+        .map((m) => `${m.path} is ${formatBytes(m.localSize)}, expected ${formatBytes(m.remoteSize)}`)
+        .join('; ')}.`
+    : '';
+  return new TransformersCacheError(
+    `The cached model files for ${repo} look incomplete or corrupt (likely an interrupted download).${sizes} ` +
+      `Delete ${cachePath} and retry to download it again. ONNX Runtime said: ${firstLine}`,
+    repo,
+    cachePath,
+    { cause },
+  );
+}
+
+/**
+ * Sizes of the files under onnx/ on the Hub (api/models/<repo>/tree/main/onnx),
+ * keyed by repo-relative path. Rejects on any failure; callers treat it as
+ * best effort.
+ */
+export async function fetchOnnxTreeSizes(repo: string, opts: HubRequestOptions = {}): Promise<Map<string, number>> {
+  const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as DtypeFetch);
+  const url = `${hubBase(opts.hubUrl)}/api/models/${encodeRepo(repo)}/tree/main/onnx`;
+  const res = await fetchImpl(url, hubInit(opts.hubToken));
+  if (!res.ok) throw new Error(`Hub tree request for ${repo} failed: HTTP ${res.status}`);
+  const entries = await res.json();
+  const out = new Map<string, number>();
+  for (const e of Array.isArray(entries) ? entries : []) {
+    const entry = e as { type?: unknown; path?: unknown; size?: unknown; lfs?: { size?: unknown } };
+    const size = typeof entry.lfs?.size === 'number' ? entry.lfs.size : entry.size;
+    if (entry.type === 'file' && typeof entry.path === 'string' && typeof size === 'number') out.set(entry.path, size);
+  }
+  return out;
+}
+
+/** Cached files (repo-relative path → bytes on disk) whose size differs from the Hub's. */
+export function findCacheSizeMismatches(
+  local: ReadonlyMap<string, number>,
+  remote: ReadonlyMap<string, number>,
+): CacheSizeMismatch[] {
+  const out: CacheSizeMismatch[] = [];
+  for (const [path, localSize] of local) {
+    const remoteSize = remote.get(path);
+    if (remoteSize !== undefined && remoteSize !== localSize) out.push({ path, localSize, remoteSize });
+  }
+  return out;
 }

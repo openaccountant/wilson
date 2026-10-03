@@ -205,7 +205,25 @@ export type LocalVerdict = { kind: 'answer'; text: string } | { kind: 'handoff';
 /** Result of a local attempt — the UI treats {ok:false} as "use the server path", never as an error. */
 export type HybridResult =
   | { ok: true; answer: string; sessionId: string | null; source: 'local' }
-  | { ok: false; reason?: HandoffReason };
+  | {
+      ok: false;
+      reason?: HandoffReason;
+      /**
+       * Why the local model could not be used, when the local model itself
+       * failed (load error, GPU lacks shader-f16, damaged cache, …). Absent
+       * for ordinary hand-offs and for "no WebGPU" — those are expected and
+       * not worth a notice. The UI shows it as a small, non-blocking note.
+       */
+      detail?: string;
+    };
+
+/** The small non-blocking note ChatTab renders when the local model was unavailable. */
+export function localUnavailableNotice(detail: string | undefined | null, maxChars = 220): string | null {
+  const text = detail?.trim();
+  if (!text) return null;
+  const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1).trimEnd()}…` : text;
+  return `Local model unavailable: ${clipped}`;
+}
 
 /** Deterministic opt-out the local system prompt teaches the model. */
 export const NEED_MORE_SENTINEL = 'NEED_MORE_DATA';

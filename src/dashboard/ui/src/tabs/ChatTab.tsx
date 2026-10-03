@@ -5,7 +5,7 @@ import { useApi } from '@/hooks/useApi';
 import { useHybridChat } from '@/hooks/useHybridChat';
 import { api } from '@/api';
 import type { ChatHistoryRow, ChatResponse, ChatSessionRow } from '@/types';
-import { deriveChatProvenance, PROVENANCE_BADGES } from '@/hybrid/core';
+import { deriveChatProvenance, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
 import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 
 interface DisplayMessage {
@@ -17,6 +17,11 @@ interface DisplayMessage {
    * indicator (no chat-history schema change).
    */
   provenance?: ChatProvenance;
+  /**
+   * Live-only note when the on-device model could not be used, e.g.
+   * "Local model unavailable: … requires … shader-f16". Never persisted.
+   */
+  notice?: string;
 }
 
 // Markdown element map for assistant replies, tuned to the Forensic Noir theme.
@@ -171,13 +176,16 @@ export function ChatTab() {
     // ── Local-first: try the on-device WebGPU path ────────────────────────
     // Every hybrid failure resolves {ok:false} (no WebGPU, model load or
     // generation failure, tool-call attempt, question outside the bundle) and
-    // falls through to the server agent silently. The belt-and-braces catch
-    // guarantees hybrid problems can never reach the Error: bubble below,
-    // which is reserved for genuine server-path failures.
+    // falls through to the server agent. The belt-and-braces catch guarantees
+    // hybrid problems can never reach the Error: bubble below, which is
+    // reserved for genuine server-path failures. When the local MODEL itself
+    // failed, the reason rides along as a small note under the server answer.
     let local: { answer: string; sessionId: string | null } | null = null;
+    let notice: string | null = null;
     try {
       const r: HybridResult = await hybrid.tryLocal(query, setProgressLabel, sessionId);
       if (r.ok) local = { answer: r.answer, sessionId: r.sessionId };
+      else notice = localUnavailableNotice(r.detail);
     } catch {
       local = null;
     }
@@ -217,7 +225,7 @@ export function ChatTab() {
         if (res.sessionId) setActiveSessionId(res.sessionId);
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content: res.answer, provenance },
+          { role: 'assistant', content: res.answer, provenance, ...(notice ? { notice } : {}) },
         ]);
         refetchSessions();
       }
@@ -225,7 +233,7 @@ export function ChatTab() {
       const errMsg = err instanceof Error ? err.message : 'Something went wrong';
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: `Error: ${errMsg}`, provenance },
+        { role: 'assistant', content: `Error: ${errMsg}`, provenance, ...(notice ? { notice } : {}) },
       ]);
     } finally {
       setSending(false);
@@ -308,6 +316,11 @@ export function ChatTab() {
                       }`}
                     >
                       {PROVENANCE_BADGES[msg.provenance]}
+                    </div>
+                  )}
+                  {msg.notice && (
+                    <div className="mt-0.5 text-xs text-text-muted break-words" title={msg.notice}>
+                      {msg.notice}
                     </div>
                   )}
                 </div>

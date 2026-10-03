@@ -36,12 +36,25 @@
  * - Not recommended for: multi-tool agent tasks.
  */
 
+import { readdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { z } from 'zod';
 import type { ProviderAdapter, ProviderCallOptions, LlmResponse, ToolCall, ToolDef } from '../types.js';
 import { getTransformersCatalogEntry } from '../../utils/model.js';
-import { resolveTransformersDtype, type ResolvedDtype, type TransformersDevice } from '../transformers-dtype.js';
+import {
+  corruptCacheError,
+  dtypesFromFileList,
+  fetchOnnxTreeSizes,
+  findCacheSizeMismatches,
+  isCorruptModelFileError,
+  resolveTransformersDtype,
+  type DtypeFetch,
+  type HubRequestOptions,
+  type OnnxDtype,
+  type ResolvedDtype,
+  type TransformersDevice,
+} from '../transformers-dtype.js';
 
 /**
  * Device routing for repos that are NOT in the model catalog (user-typed ids).
@@ -102,21 +115,105 @@ async function bootstrapTransformers(webgpu: boolean) {
 }
 
 /**
+ * Hugging Face token for gated/private repos: the same env vars transformers.js
+ * itself sends on model downloads (HF_TOKEN, legacy HF_ACCESS_TOKEN).
+ */
+function hubToken(): string | undefined {
+  return process.env.HF_TOKEN || process.env.HF_ACCESS_TOKEN || undefined;
+}
+
+/** Hub requests from the server: env.remoteHost, HF_TOKEN, and a short timeout. */
+async function serverHubOptions(): Promise<HubRequestOptions> {
+  const { env } = await import('@huggingface/transformers');
+  const fetchImpl: DtypeFetch = (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
+  return { hubUrl: env.remoteHost, hubToken: hubToken(), fetchImpl };
+}
+
+/** Where transformers.js caches `repo`: <cacheDir>/<org>/<name> (FileCache keys are repo-relative paths). */
+export function modelCachePath(repo: string, dir = cacheDir): string {
+  return join(dir, repo.replace(/^transformers:/, ''));
+}
+
+/**
+ * dtypes whose main model file (onnx/model<suffix>.onnx) is already in the
+ * local cache. A plain directory listing: no network, no transformers.js
+ * memoization, and in-flight `.tmp.*` downloads never match.
+ */
+export async function listCachedDtypes(repo: string, dir = cacheDir): Promise<OnnxDtype[]> {
+  try {
+    const files = await readdir(join(modelCachePath(repo, dir), 'onnx'));
+    return [...dtypesFromFileList(files.map((f) => `onnx/${f}`))];
+  } catch {
+    return [];
+  }
+}
+
+/** Bytes on disk of every cached onnx/ file (repo-relative path → size), skipping in-flight temp files. */
+export async function cachedOnnxFileSizes(repo: string, dir = cacheDir): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const onnxDir = join(modelCachePath(repo, dir), 'onnx');
+  let files: string[];
+  try {
+    files = await readdir(onnxDir);
+  } catch {
+    return out;
+  }
+  for (const f of files) {
+    if (f.includes('.tmp.')) continue;
+    try {
+      const st = await stat(join(onnxDir, f));
+      if (st.isFile()) out.set(`onnx/${f}`, st.size);
+    } catch {
+      // vanished mid-listing — ignore
+    }
+  }
+  return out;
+}
+
+/**
+ * Turn a pipeline() failure into something actionable. A damaged cached file
+ * (truncated download → "Deserialize tensor … out of bounds") becomes a
+ * TransformersCacheError naming the repo and the folder to delete, plus — when
+ * the Hub is reachable — which cached files are the wrong size. Nothing is
+ * ever deleted here. Any other error is returned unchanged.
+ */
+export async function explainModelLoadError(
+  repo: string,
+  err: unknown,
+  opts: { dir?: string; hub?: HubRequestOptions } = {},
+): Promise<unknown> {
+  if (!isCorruptModelFileError(err)) return err;
+  const path = modelCachePath(repo, opts.dir);
+  let mismatches: ReturnType<typeof findCacheSizeMismatches> = [];
+  try {
+    const [local, remote] = await Promise.all([
+      cachedOnnxFileSizes(repo, opts.dir),
+      fetchOnnxTreeSizes(repo, opts.hub ?? (await serverHubOptions())),
+    ]);
+    mismatches = findCacheSizeMismatches(local, remote);
+  } catch {
+    // offline or Hub error — the message still names the folder to delete
+  }
+  return corruptCacheError(repo, path, err, mismatches);
+}
+
+/**
  * The dtype the server loads for `modelName` on `device`: the catalog pin, or
  * (for user-typed repos) the shared Hub-file-list resolution. Offline, it walks
- * the same preference chain over what is already in ~/.openaccountant/models.
- * Throws TransformersDtypeError ("no ONNX weights for <repo> in any of: …")
- * when the Hub says the repo has nothing loadable — before any download.
+ * the same preference chain over what is already in ~/.openaccountant/models —
+ * including for a catalog pin whose file is not cached. Throws
+ * TransformersDtypeError ("no ONNX weights for <repo> in any of: …", or "repo
+ * not found or gated: <repo>") when the Hub says nothing is loadable — before
+ * any download.
  */
 export async function resolveServerDtype(modelName: string, device: TransformersDevice): Promise<ResolvedDtype> {
   const repo = modelName.replace(/^transformers:/, '');
   const entry = getTransformersCatalogEntry(repo);
-  const { env, ModelRegistry } = await import('@huggingface/transformers');
   const { dtype } = await resolveTransformersDtype(repo, device, {
     // A catalog dtype only applies on the device it was pinned for.
     catalogDtype: entry?.device === device ? entry.dtype : undefined,
-    hubUrl: env.remoteHost,
-    localDtypes: (r) => ModelRegistry.get_available_dtypes(r, { cache_dir: cacheDir, local_files_only: true }),
+    ...(await serverHubOptions()),
+    localDtypes: (r) => listCachedDtypes(r),
   });
   return dtype;
 }
@@ -147,6 +244,8 @@ async function getOrCreatePipeline(modelName: string) {
   let pipe: any;
   try {
     pipe = await pipeline('text-generation', modelName, { device, dtype });
+  } catch (err) {
+    throw await explainModelLoadError(modelName.replace(/^transformers:/, ''), err);
   } finally {
     console.log = origLog;
     console.warn = origWarn;

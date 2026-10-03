@@ -7,9 +7,10 @@
  *
  * Hard contract for the UIs: every failure path — no WebGPU, config/bundle
  * fetch failure, model load/download failure, generation error, tool-call or
- * NEED_MORE_DATA output — resolves {ok:false} (→ silent server path). Nothing
- * here ever throws into a UI catch block, so no hybrid-eligible failure can
- * surface as an error bubble.
+ * NEED_MORE_DATA output — resolves {ok:false} (→ server path). Nothing here
+ * ever throws into a UI catch block, so no hybrid-eligible failure can surface
+ * as an error bubble. When the local MODEL itself failed, {ok:false} carries a
+ * `detail` the UI shows as a small note, and the cause is console.warn'ed.
  */
 
 import {
@@ -27,12 +28,16 @@ import {
   type HybridResult,
 } from './core.js';
 import { parseCategorizationDecision, type ParsedDecision } from '../demo/core.js';
+import { isOnnxDtype, resolveTransformersDtype, type DtypeFetch } from '../../../../model/transformers-dtype.js';
 import {
-  isOnnxDtype,
-  resolveTransformersDtype,
-  TransformersDtypeError,
-  type DtypeFetch,
-} from '../../../../model/transformers-dtype.js';
+  capabilityKey,
+  classifyLoadFailure,
+  describeLoadFailure,
+  parsePersistedCapability,
+  restoreCapability,
+  type LoadPhase,
+  type PersistedCapability,
+} from './capability.js';
 
 export type { HybridResult } from './core.js';
 
@@ -42,9 +47,30 @@ export type { HybridResult } from './core.js';
  */
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** The slice of @huggingface/transformers the client uses. */
+export interface TransformersModule {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pipeline: (...args: any[]) => Promise<AnyPipeline>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  env: any;
+}
+
 export interface HybridOpts {
   baseUrl: string;
   fetchImpl: FetchLike;
+  /** Test hook: replaces the dynamic import of @huggingface/transformers. */
+  loadTransformers?: () => Promise<TransformersModule>;
+  /** Test hook: replaces the global fetch for Hub metadata requests. */
+  hubFetch?: DtypeFetch;
+}
+
+/** A loadModel failure tagged with where it happened, for classification. */
+class LoadFailure {
+  constructor(
+    readonly cause: unknown,
+    readonly phase: LoadPhase,
+    readonly dtype: string | null,
+  ) {}
 }
 
 /** GET /api/config/local-chat response. */
@@ -80,7 +106,7 @@ async function detectShaderF16(): Promise<boolean | undefined> {
  * Hub metadata requests go straight to huggingface.co with the global fetch,
  * never through the dashboard's fetchImpl (which may attach auth headers).
  */
-const hubFetch: DtypeFetch = (url) => globalThis.fetch(url);
+const defaultHubFetch: DtypeFetch = (url, init) => globalThis.fetch(url, init);
 
 /** Session-storage key for the per-session capability verdict (Track D). */
 export const CAPABILITY_STORAGE_KEY = 'wilson-hybrid-capability';
@@ -121,27 +147,41 @@ export function createHybridChat(opts: HybridOpts) {
   // ── Session-cached capability verdict ──────────────────────────────────
   // Layered-probe philosophy (never trust static lists): the verdict is only
   // cached after real probes, and only for the rest of the browser session.
-  let verdict: HybridCapability = 'unknown';
-  let provenRepo: string | null = null;
+  // 'ready'/'failed' are keyed by the model config (capability.ts), so a
+  // changed config — or a resolver fix — retries instead of staying disabled.
+  let stored: PersistedCapability | null = null;
   try {
-    const raw = sessionStorage.getItem(CAPABILITY_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as { verdict?: HybridCapability; repo?: string | null };
-      if (parsed.verdict === 'ready' || parsed.verdict === 'unavailable' || parsed.verdict === 'failed') {
-        verdict = parsed.verdict;
-        provenRepo = parsed.repo ?? null;
-      }
-    }
+    stored = parsePersistedCapability(sessionStorage.getItem(CAPABILITY_STORAGE_KEY));
   } catch {
     // storage unavailable — start from 'unknown'
   }
+  // Before the config is known only the config-independent verdict applies.
+  let verdict: HybridCapability = restoreCapability(stored, null);
+  /** Config key the in-memory verdict was reconciled against (null = not yet). */
+  let syncedKey: string | null = null;
+  /** Human-readable reason behind a 'failed' verdict. */
+  let failureDetail: string | null = null;
+  let provenRepo: string | null = null;
 
   function persist(): void {
+    if (verdict === 'unknown') return;
+    const record: PersistedCapability = { verdict, key: syncedKey, repo: provenRepo, detail: failureDetail };
+    stored = record;
     try {
-      sessionStorage.setItem(CAPABILITY_STORAGE_KEY, JSON.stringify({ verdict, repo: provenRepo }));
+      sessionStorage.setItem(CAPABILITY_STORAGE_KEY, JSON.stringify(record));
     } catch {
       // storage unavailable — session-only behavior degrades gracefully
     }
+  }
+
+  /** Adopt the persisted verdict only if it was recorded for this exact config. */
+  function syncWithConfig(cfg: LocalChatConfigResponse): void {
+    const key = capabilityKey(cfg);
+    if (syncedKey === key) return;
+    syncedKey = key;
+    if (verdict === 'unavailable') return;
+    verdict = restoreCapability(stored, key);
+    failureDetail = verdict === 'failed' ? (stored?.detail ?? null) : null;
   }
 
   // ── Config (model choice rides the server's fastModel field) ───────────
@@ -193,63 +233,77 @@ export function createHybridChat(opts: HybridOpts) {
   }
 
   // ── Model load + real-generation proof (layer 3) ────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pipelinePromise: Promise<AnyPipeline> | null = null;
-  /** Clear reason the last load failed, when known (dtype/shader-f16). */
+  /** Repo the in-flight/loaded pipelinePromise is for. */
+  let pipelineRepo: string | null = null;
+  /** Reason the last load failed (any failure, not only dtype errors). */
   let lastLoadError: string | null = null;
+  const loadTransformers =
+    opts.loadTransformers ?? (() => import('@huggingface/transformers') as unknown as Promise<TransformersModule>);
+  const hubFetch = opts.hubFetch ?? defaultHubFetch;
 
   async function loadModel(onProgress?: ProgressCb): Promise<AnyPipeline | null> {
     const cfg = await fetchConfig();
     if (!cfg) return null;
+    syncWithConfig(cfg);
 
-    if (!pipelinePromise || provenRepo !== cfg.repo) {
+    if (!pipelinePromise || pipelineRepo !== cfg.repo) {
+      pipelineRepo = cfg.repo;
       pipelinePromise = (async () => {
-        const { pipeline, env } = await import('@huggingface/transformers');
-        // Same-origin static ort binaries (scripts/copy-ort-web-assets.ts);
-        // the library default points at a public CDN, which we must not need.
-        // Main-thread inference (proxy=false) matches the server-side adapter.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const onnx = (env as any).backends?.onnx;
-        if (onnx?.wasm) {
-          onnx.wasm.wasmPaths = `${base}/assets/ort/`;
-          onnx.wasm.proxy = false;
-        }
-        env.allowLocalModels = false;
-
-        const progress = (p: ProgressEvent) => {
-          if (p.status === 'progress' && typeof p.progress === 'number') {
-            onProgress?.(`Downloading local model… ${Math.round(p.progress)}%`);
-          } else if (p.status === 'initiate') {
-            onProgress?.('Downloading local model…');
+        let phase: LoadPhase = 'resolve';
+        let dtypeUsed: string | null = isOnnxDtype(cfg.dtype) ? cfg.dtype : null;
+        try {
+          const { pipeline, env } = await loadTransformers();
+          // Same-origin static ort binaries (scripts/copy-ort-web-assets.ts);
+          // the library default points at a public CDN, which we must not need.
+          // Main-thread inference (proxy=false) matches the server-side adapter.
+          const onnx = env.backends?.onnx;
+          if (onnx?.wasm) {
+            onnx.wasm.wasmPaths = `${base}/assets/ort/`;
+            onnx.wasm.proxy = false;
           }
-        };
+          env.allowLocalModels = false;
 
-        // Shared resolver (same module as the server adapter): the catalog
-        // pin from /api/config/local-chat wins without network; only a GPU
-        // without shader-f16 (or an uncatalogued repo) consults the Hub file
-        // list. Never a hardcoded dtype — repos publish different subsets.
-        const { dtype } = await resolveTransformersDtype(cfg.repo, 'webgpu', {
-          catalogDtype: isOnnxDtype(cfg.dtype) ? cfg.dtype : undefined,
-          shaderF16: await detectShaderF16(),
-          fetchImpl: hubFetch,
-          hubUrl: env.remoteHost,
-        });
+          const progress = (p: ProgressEvent) => {
+            if (p.status === 'progress' && typeof p.progress === 'number') {
+              onProgress?.(`Downloading local model… ${Math.round(p.progress)}%`);
+            } else if (p.status === 'initiate') {
+              onProgress?.('Downloading local model…');
+            }
+          };
 
-        const pipe: AnyPipeline = await pipeline('text-generation', cfg.repo, {
-          device: 'webgpu',
-          dtype,
-          progress_callback: progress,
-        });
+          // Shared resolver (same module as the server adapter): the catalog
+          // pin from /api/config/local-chat wins without network; only a GPU
+          // without shader-f16 (or an uncatalogued repo) consults the Hub file
+          // list. Never a hardcoded dtype — repos publish different subsets.
+          const { dtype } = await resolveTransformersDtype(cfg.repo, 'webgpu', {
+            catalogDtype: isOnnxDtype(cfg.dtype) ? cfg.dtype : undefined,
+            shaderF16: await detectShaderF16(),
+            fetchImpl: hubFetch,
+            hubUrl: env.remoteHost,
+          });
+          dtypeUsed = dtype;
 
-        // Layer 3 — a real generation doubles as warmup and is the only proof
-        // that counts. An adapter that passes requestAdapter() but cannot run
-        // the model fails here → capability 'failed' for the session.
-        onProgress?.('Warming up local model…');
-        await pipe([{ role: 'user', content: 'Reply with the single word OK.' }], {
-          max_new_tokens: 16,
-          do_sample: false,
-        });
-        return pipe;
+          phase = 'load';
+          const pipe: AnyPipeline = await pipeline('text-generation', cfg.repo, {
+            device: 'webgpu',
+            dtype,
+            progress_callback: progress,
+          });
+
+          // Layer 3 — a real generation doubles as warmup and is the only proof
+          // that counts. An adapter that passes requestAdapter() but cannot run
+          // the model fails here → capability 'failed' for this config.
+          phase = 'warmup';
+          onProgress?.('Warming up local model…');
+          await pipe([{ role: 'user', content: 'Reply with the single word OK.' }], {
+            max_new_tokens: 16,
+            do_sample: false,
+          });
+          return pipe;
+        } catch (err) {
+          throw new LoadFailure(err, phase, dtypeUsed);
+        }
       })();
     }
 
@@ -257,20 +311,31 @@ export function createHybridChat(opts: HybridOpts) {
       const pipe = await pipelinePromise;
       provenRepo = cfg.repo;
       lastLoadError = null;
+      failureDetail = null;
       verdict = 'ready';
       persist();
       return pipe;
-    } catch (err) {
+    } catch (thrown) {
       pipelinePromise = null;
-      // A dtype error is a precise, user-actionable reason (e.g. "requires a
-      // GPU with WebGPU shader-f16 support"); keep it for the UI and the
-      // console instead of collapsing it into a generic failure.
-      lastLoadError = err instanceof TransformersDtypeError ? err.message : null;
-      if (lastLoadError) console.warn(`[hybrid-chat] ${lastLoadError}`);
-      verdict = 'failed';
-      persist();
+      pipelineRepo = null;
+      const failure = thrown instanceof LoadFailure ? thrown : new LoadFailure(thrown, 'load', null);
+      // Always say why — a silently disabled local model is undebuggable.
+      lastLoadError = describeLoadFailure(failure.cause, cfg.repo, failure.dtype);
+      console.warn(`[hybrid-chat] local model load failed (${failure.phase}): ${lastLoadError}`, failure.cause);
+      // Only a genuine capability failure sticks for the session (keyed by
+      // config). Network errors, 404s and damaged caches retry next time.
+      if (classifyLoadFailure(failure.cause, failure.phase) === 'capability') {
+        verdict = 'failed';
+        failureDetail = lastLoadError;
+        persist();
+      }
       return null;
     }
+  }
+
+  /** {ok:false} carrying the local-model failure reason, when there is one. */
+  function unavailableResult(detail: string | null): HybridResult {
+    return detail ? { ok: false, detail } : { ok: false };
   }
 
   // ── Local attempt ───────────────────────────────────────────────────────
@@ -280,12 +345,14 @@ export function createHybridChat(opts: HybridOpts) {
     sessionId?: string | null,
   ): Promise<HybridResult> {
     try {
-      if (!shouldAttemptLocal(verdict)) return { ok: false };
-      if (verdict === 'unknown') await probe();
-      if (!shouldAttemptLocal(verdict)) return { ok: false };
+      if (verdict === 'unavailable') return { ok: false };
 
       const cfg = await fetchConfig();
       if (!cfg) return { ok: false };
+      syncWithConfig(cfg);
+
+      if (verdict === 'unknown') await probe();
+      if (!shouldAttemptLocal(verdict)) return unavailableResult(verdict === 'failed' ? failureDetail : null);
 
       // ── Pre-fetched context bundle (localhost only, existing endpoints) ──
       onProgress?.('Fetching your recent transactions…');
@@ -329,7 +396,7 @@ export function createHybridChat(opts: HybridOpts) {
       // ── Model + generation ──────────────────────────────────────────────
       onProgress?.('Loading local model…');
       const pipe = await loadModel(onProgress);
-      if (!pipe) return { ok: false };
+      if (!pipe) return unavailableResult(lastLoadError);
 
       onProgress?.('Thinking locally…');
       const messages = [
@@ -368,8 +435,9 @@ export function createHybridChat(opts: HybridOpts) {
       }
 
       return { ok: true, answer: classified.text, sessionId: recordedSessionId, source: 'local' };
-    } catch {
-      // Any unexpected failure silently hands off to the server path.
+    } catch (err) {
+      // Any unexpected failure hands off to the server path — never silently.
+      console.warn('[hybrid-chat] local attempt failed; using the server path:', err);
       return { ok: false, reason: 'error' };
     }
   }
@@ -395,12 +463,15 @@ export function createHybridChat(opts: HybridOpts) {
       reason,
     });
     try {
-      if (!shouldAttemptLocal(verdict)) return failed('unavailable');
-      if (verdict === 'unknown') await probe();
-      if (!shouldAttemptLocal(verdict)) return failed('unavailable');
+      if (verdict === 'unavailable') return failed('unavailable');
 
       const cfg = await fetchConfig();
       if (!cfg) return failed('unavailable');
+      syncWithConfig(cfg);
+
+      if (verdict === 'unknown') await probe();
+      if (verdict === 'failed') return failureDetail ? { ...failed('failed'), detail: failureDetail } : failed('failed');
+      if (!shouldAttemptLocal(verdict)) return failed('unavailable');
 
       // Track whether this call initiated the model load, so the UI can say
       // "model already loaded (12 ms)" honestly.
@@ -436,7 +507,8 @@ export function createHybridChat(opts: HybridOpts) {
         loadMs,
         loadFresh: !wasLoaded,
       };
-    } catch {
+    } catch (err) {
+      console.warn('[hybrid-chat] browser categorization failed:', err);
       return failed('error');
     }
   }
