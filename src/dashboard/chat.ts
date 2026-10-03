@@ -6,6 +6,7 @@ import { getConfiguredModel } from '../utils/config.js';
 import { initAgentTools } from '../agent/init-tools.js';
 import { logger } from '../utils/logger.js';
 import { createOperation, getOperation, markOperationStatus, type McpOperation } from '../mcp/store.js';
+import { expandSlashCommand } from './chat-commands.js';
 
 let chatHistory: InMemoryChatHistory | null = null;
 let agentRunner: AgentRunnerController | null = null;
@@ -159,10 +160,21 @@ export function initChatSession(db: Database): void {
  * Handle a chat message from the dashboard UI.
  * If sessionId is provided, messages are appended to that session.
  * Returns the agent's response text.
+ *
+ * Slash commands are expanded first (chat-commands.ts); help, usage errors
+ * and unknown commands are answered directly without calling any model.
+ * `contextBlock` (resolved "@" mentions, see mentions.ts) is prepended to the
+ * query — runQuery only takes a string, and this keeps the ids in history.
  */
 export async function handleChatMessage(
-  query: string, sessionId?: string
+  query: string, sessionId?: string, contextBlock?: string
 ): Promise<{ answer: string; sessionId: string | null }> {
+  const expansion = expandSlashCommand(query);
+  if ('direct' in expansion) {
+    return { answer: expansion.direct, sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
+  }
+  query = contextBlock ? `${contextBlock}${expansion.query}` : expansion.query;
+
   if (!agentRunner || !chatHistory) {
     logger.warn(`Dashboard chat: session not initialized`);
     return { answer: 'Chat session not initialized.', sessionId: null };

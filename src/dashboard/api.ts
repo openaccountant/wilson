@@ -99,6 +99,7 @@ import {
 } from '../demo/showdown.js';
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
+import { discoverSkills } from '../skills/registry.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,48 @@ export function apiBudgetLimits(db: Database) {
  */
 export function apiCategories(db: Database) {
   return getCategories(db);
+}
+
+// ── Chat composer typeahead sources ─────────────────────────────────────────
+
+/**
+ * Skills for the chat "/" menu. Never exposes the absolute SKILL.md `path`.
+ * discoverSkills() caches after the first scan.
+ */
+export function apiSkills() {
+  return discoverSkills().map(({ name, description, tier, source }) => ({ name, description, tier, source }));
+}
+
+export interface MerchantRow {
+  label: string;
+  n: number;
+  last: string;
+}
+
+/** Escape LIKE wildcards (`%`, `_`) and the escape char itself. */
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Distinct merchants for the chat "@" menu: merchant_name (or description when
+ * blank) with transaction counts. Read-only aggregate over data /api/transactions
+ * already serves. `limit` defaults to 20, max 50.
+ */
+export function apiMerchants(db: Database, q: string | null, limitRaw: string | null): MerchantRow[] {
+  const parsed = parseInt(limitRaw ?? '', 10);
+  const limit = Math.min(50, Math.max(1, Number.isFinite(parsed) ? parsed : 20));
+  const pattern = `%${escapeLike((q ?? '').trim())}%`;
+  return db.prepare(`
+    SELECT COALESCE(NULLIF(TRIM(merchant_name), ''), description) AS label,
+           COUNT(*) AS n,
+           MAX(date) AS last
+    FROM transactions
+    WHERE COALESCE(NULLIF(TRIM(merchant_name), ''), description) LIKE @pattern ESCAPE '\\'
+    GROUP BY label
+    ORDER BY n DESC, label ASC
+    LIMIT @limit
+  `).all({ pattern, limit }) as MerchantRow[];
 }
 
 // ── Transactions ────────────────────────────────────────────────────────────

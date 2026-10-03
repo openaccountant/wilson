@@ -21,7 +21,9 @@ import {
   apiImport, apiDemoTraceStep, type ImportRequestBody,
   apiReviewQueue, apiConfirmReview, apiCorrectReview,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
+  apiSkills, apiMerchants,
 } from './api.js';
+import { validateMentions, resolveMentionContext } from './mentions.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
@@ -421,6 +423,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           // Raw category rows (sync feed for the offline mirror).
           return Response.json(apiCategories(activeDb), { headers });
         }
+        if (path === '/api/skills') {
+          // Chat "/" menu source. Name/description/tier/source only — never the SKILL.md path.
+          return Response.json(apiSkills(), { headers });
+        }
+        if (path === '/api/merchants') {
+          // Chat "@" menu source: distinct merchants with txn counts (read-only aggregate).
+          return Response.json(
+            apiMerchants(activeDb, url.searchParams.get('q'), url.searchParams.get('limit')),
+            { headers },
+          );
+        }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });
         }
@@ -696,11 +709,18 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string };
+          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown };
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
-          const result = await handleChatMessage(body.query, body.sessionId);
+          // "@" mentions: shape-checked here, then every entity is re-read from
+          // the DB (client labels are never trusted) into a context block.
+          const mentions = validateMentions(body.mentions);
+          if (!mentions.ok) {
+            return Response.json({ error: mentions.error }, { status: 400, headers });
+          }
+          const contextBlock = resolveMentionContext(activeDb, mentions.mentions);
+          const result = await handleChatMessage(body.query, body.sessionId, contextBlock || undefined);
           return Response.json(result, { headers });
         }
 

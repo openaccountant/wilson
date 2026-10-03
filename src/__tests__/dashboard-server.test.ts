@@ -6,7 +6,8 @@ import { createUser, enableAuth } from '../dashboard/auth.js';
 import { insertTransactions } from '../db/queries.js';
 import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount, insertBalanceSnapshot } from '../db/net-worth-queries.js';
-import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly } from '../dashboard/api.js';
+import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly, apiMerchants } from '../dashboard/api.js';
+import { validateMentions } from '../dashboard/mentions.js';
 import type { Account, NetWorthResponse, NetWorthTrendPoint, MonthlyCashflowRow } from '../dashboard/ui/src/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 
@@ -945,6 +946,99 @@ describe('dashboard server', () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.error).toContain('query is required');
+    });
+
+    test('POST /api/chat rejects non-array mentions with 400', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '/help', mentions: { type: 'account', id: 1 } }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain('mentions must be an array');
+    });
+
+    test('POST /api/chat drops invalid mention entries and answers slash help without the LLM', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: '/help',
+          sessionId: 'sess-typeahead',
+          mentions: [{ type: 'bogus', id: 1, label: 'x' }, { type: 'account', id: 'nope', label: 'y' }, 7],
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.sessionId).toBe('sess-typeahead');
+      expect(data.answer).toContain('/categorize');
+    });
+
+    test('validateMentions keeps only well-formed entries (used by POST /api/chat)', () => {
+      const r = validateMentions([
+        { type: 'bogus', id: 1, label: 'x' },
+        { type: 'account', id: 'nope', label: 'y' },
+        { type: 'category', id: 3, label: 'Dining' },
+      ]);
+      expect(r).toEqual({ ok: true, mentions: [{ type: 'category', id: 3, label: 'Dining' }] });
+    });
+  });
+
+  // ── Chat typeahead sources ───────────────────────────────────────────────
+
+  describe('chat typeahead sources', () => {
+    test('GET /api/skills returns name/description/tier/source — never the SKILL.md path', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/skills');
+      expect(res.status).toBe(200);
+      const data = await res.json() as Array<Record<string, unknown>>;
+      expect(Array.isArray(data)).toBe(true);
+      // No count assertion: other files mock.module the skills layer
+      // process-wide in a full `bun test` run, so discovery can be empty here.
+      expect(JSON.stringify(data)).not.toContain('"path"');
+      for (const s of data) {
+        expect(Object.keys(s).sort()).toEqual(['description', 'name', 'source', 'tier']);
+        expect(s.path).toBeUndefined();
+      }
+    });
+
+    test('GET /api/merchants filters by q, counts txns and clamps the limit', async () => {
+      const { db, base } = await start();
+      insertTransactions(db, [
+        { date: '2026-09-01', description: 'AMZN Mktp', amount: -10, merchant_name: 'Amazon' },
+        { date: '2026-09-03', description: 'AMZN Mktp', amount: -12, merchant_name: 'Amazon' },
+        { date: '2026-09-02', description: 'Corner Cafe', amount: -5 },
+        { date: '2026-09-02', description: 'Blank merchant', amount: -5, merchant_name: '  ' },
+      ]);
+
+      const all = await (await fetch(base + '/api/merchants')).json() as Array<{ label: string; n: number; last: string }>;
+      expect(all[0]).toEqual({ label: 'Amazon', n: 2, last: '2026-09-03' });
+      expect(all.map((m) => m.label)).toContain('Corner Cafe');
+      expect(all.map((m) => m.label)).toContain('Blank merchant');
+
+      const q = await (await fetch(base + '/api/merchants?q=caf')).json() as Array<{ label: string }>;
+      expect(q.map((m) => m.label)).toEqual(['Corner Cafe']);
+
+      const one = await (await fetch(base + '/api/merchants?limit=1')).json() as unknown[];
+      expect(one).toHaveLength(1);
+      expect(apiMerchants(db, null, '9999').length).toBeLessThanOrEqual(50);
+      expect(apiMerchants(db, null, 'junk').length).toBe(3);
+    });
+
+    test('GET /api/merchants escapes LIKE wildcards', async () => {
+      const { db, base } = await start();
+      insertTransactions(db, [
+        { date: '2026-09-01', description: '100% Juice', amount: -4 },
+        { date: '2026-09-01', description: 'Snake_Case Shop', amount: -4 },
+        { date: '2026-09-01', description: 'Plain Store', amount: -4 },
+      ]);
+      const pct = await (await fetch(base + '/api/merchants?q=' + encodeURIComponent('%'))).json() as Array<{ label: string }>;
+      expect(pct.map((m) => m.label)).toEqual(['100% Juice']);
+      const us = await (await fetch(base + '/api/merchants?q=' + encodeURIComponent('_'))).json() as Array<{ label: string }>;
+      expect(us.map((m) => m.label)).toEqual(['Snake_Case Shop']);
     });
   });
 

@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import type { Database } from '../db/compat-sqlite.js';
 import { insertChatMessage, updateChatAnswer, getRecentChatHistory, createChatSession, updateSessionTitle } from '../db/queries.js';
+import { stripMentionContextBlock } from '../dashboard/mentions.js';
 
 /**
  * Represents a single conversation turn (query + answer + summary)
@@ -131,8 +132,9 @@ Generate a brief 1-2 sentence summary of this answer.`;
       });
       return response.content.trim();
     } catch {
-      // Fallback to a simple summary if LLM fails
-      return `Answer to: ${query.slice(0, 100)}`;
+      // Fallback to a simple summary if LLM fails (the user's words, not the
+      // dashboard's "@" mention context block).
+      return `Answer to: ${stripMentionContextBlock(query).slice(0, 100)}`;
     }
   }
 
@@ -181,7 +183,7 @@ Generate a brief 1-2 sentence summary of this answer.`;
         updateChatAnswer(this.db, this.lastDbId, answer, lastMessage.summary);
         // Auto-title the session from the first Q&A
         if (!this.sessionTitled && this.sessionId) {
-          const title = lastMessage.summary || lastMessage.query.slice(0, 100);
+          const title = lastMessage.summary || stripMentionContextBlock(lastMessage.query).trim().slice(0, 100);
           updateSessionTitle(this.db, this.sessionId, title);
           this.sessionTitled = true;
         }

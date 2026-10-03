@@ -35,3 +35,9 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* Chat composer typeahead popover fade-in (disabled under motion-reduce). */
+@keyframes ta-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

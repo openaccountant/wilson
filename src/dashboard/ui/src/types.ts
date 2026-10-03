@@ -218,6 +218,57 @@ export interface ChatResponse {
   sessionId: string | null;
 }
 
+// "@" mention wire format for POST /api/chat (validated + re-resolved from the
+// DB server-side in src/dashboard/mentions.ts). Max 10 per message.
+export type MentionType = 'account' | 'category' | 'merchant' | 'goal' | 'entity';
+
+export interface Mention {
+  type: MentionType;
+  /** DB id — required for every type except merchant. */
+  id?: number;
+  /** Merchant raw key (TRIM(merchant_name) or description from /api/merchants) — matched exactly server-side. */
+  key?: string;
+  /** ≤ 120 chars; display only — the server uses DB labels. */
+  label: string;
+}
+
+export interface ChatRequest {
+  query: string;
+  sessionId?: string;
+  mentions?: Mention[];
+}
+
+// Matches GET /api/skills
+export interface SkillListItem {
+  name: string;
+  description: string;
+  tier: 'free' | 'paid';
+  source: string;
+}
+
+// Matches GET /api/merchants?q=&limit=
+export interface MerchantListItem {
+  label: string;
+  n: number;
+  last: string;
+}
+
+// Matches GET /api/categories (CategoryRow in src/db/queries.ts)
+export interface CategoryListItem {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description: string | null;
+}
+
+// Matches GET /api/budgets/limits (BudgetRow in src/db/queries.ts)
+export interface BudgetLimitRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
+}
+
 export interface LogRow {
   ts: string;
   level: string;
