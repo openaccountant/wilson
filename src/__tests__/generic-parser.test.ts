@@ -133,4 +133,33 @@ describe('parseGenericCSV', () => {
     expect(txns).toHaveLength(1);
     expect(txns[0].description).toBe('VALID');
   });
+
+  test('parses amounts with $, thousands separators and parentheses', () => {
+    const csv = [
+      'Date,Description,Amount',
+      '2026-01-01,Rent,"-1,234.56"',
+      '2026-01-02,Coffee,-4.50',
+      '2026-01-03,Paycheck,"$2,000.00"',
+      '2026-01-04,Refund,(12.00)',
+    ].join('\n');
+
+    const txns = parseGenericCSV(csv);
+    expect(txns.map((t) => [t.description, t.amount])).toEqual([
+      ['Rent', -1234.56],
+      ['Coffee', -4.5],
+      ['Paycheck', 2000],
+      ['Refund', -12],
+    ]);
+  });
+
+  test('parses debit/credit columns with thousands separators', () => {
+    const csv = [
+      'Date,Description,Withdrawal,Deposit',
+      '2026-01-01,Rent,"1,234.56",',
+      '2026-01-02,Paycheck,,"$2,000.00"',
+    ].join('\n');
+
+    const txns = parseGenericCSV(csv);
+    expect(txns.map((t) => t.amount)).toEqual([-1234.56, 2000]);
+  });
 });

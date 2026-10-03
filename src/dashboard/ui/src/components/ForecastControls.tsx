@@ -44,6 +44,8 @@ interface ForecastControlsProps {
   shockYear: number;
   onShockYearChange: (v: number) => void;
   medianMonthlyIncome: number;
+  /** True when income comes from the manual-inputs form (too little history). */
+  manual: boolean;
   /** Fired on pointerup / keyup / blur of any slider — escalates to the release-quality run. */
   onSettled: () => void;
   onReset: () => void;
@@ -61,6 +63,7 @@ export function ForecastControls({
   shockYear,
   onShockYearChange,
   medianMonthlyIncome,
+  manual,
   onSettled,
   onReset,
 }: ForecastControlsProps) {
@@ -114,7 +117,9 @@ export function ForecastControls({
           />
           {savingsDisabled && (
             <p className="text-xs text-red mt-1">
-              Enter monthly income to use the savings-rate slider.
+              {manual
+                ? 'Enter monthly income to use the savings-rate slider.'
+                : 'Median monthly income in your history is $0 or less, so the savings-rate slider is unavailable.'}
             </p>
           )}
         </div>

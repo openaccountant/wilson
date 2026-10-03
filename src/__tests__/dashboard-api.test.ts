@@ -33,10 +33,12 @@ import {
   apiReviewQueue,
   apiConfirmReview,
   apiCorrectReview,
+  apiGoals,
 } from '../dashboard/api.js';
 import { createChatSession, insertChatMessage, insertTransactions, getBudgets, getCategories } from '../db/queries.js';
 import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
+import { upsertGoal, updateGoalStatus } from '../db/goal-queries.js';
 import { traceStore } from '../utils/trace-store.js';
 import { apiModels, apiSetTaskModel } from '../dashboard/api.js';
 import { setSetting, saveConfig, getConfiguredModel } from '../utils/config.js';
@@ -1047,5 +1049,20 @@ describe('apiSetTaskModel', () => {
     // Nothing was persisted.
     expect(getTaskOverride('categorization')).toBeNull();
     expect(getTaskOverride('entity-classification')).toBeNull();
+  });
+});
+
+describe('apiGoals', () => {
+  test('returns goals of every status, not just active', () => {
+    const db = createTestDb();
+    upsertGoal(db, { title: 'Active', goalType: 'financial', targetAmount: 1000 });
+    const doneId = upsertGoal(db, { title: 'Done', goalType: 'financial', targetAmount: 500 });
+    const pausedId = upsertGoal(db, { title: 'Paused', goalType: 'behavioral' });
+    updateGoalStatus(db, doneId, 'completed');
+    updateGoalStatus(db, pausedId, 'paused');
+
+    const result = apiGoals(db);
+    expect(result.map((g) => g.status).sort()).toEqual(['active', 'completed', 'paused']);
+    expect(result.every((g) => 'effective_target' in g)).toBe(true);
   });
 });

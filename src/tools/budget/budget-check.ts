@@ -18,7 +18,8 @@ export const budgetCheckTool = defineTool({
     category: z.string().optional().describe('Specific category, or all if omitted'),
   }),
   func: async ({ month, category }) => {
-    const targetMonth = month ?? new Date().toISOString().slice(0, 7);
+    const now = new Date();
+    const targetMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let results = getBudgetVsActual(db, targetMonth);
 
     if (category) {

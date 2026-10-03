@@ -988,7 +988,8 @@ export async function runCli() {
         }
       } else {
         // Show current month budget vs actual
-        const currentMonth = new Date().toISOString().slice(0, 7);
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const results = getBudgetVsActual(db, currentMonth);
         if (results.length === 0) {
           chatLog.finalizeAnswer('No budgets set. Use `/budget set <category> <amount>` to create one.');

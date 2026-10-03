@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { useMirrorStatus } from '@/hooks/useMirrorSync';
@@ -235,6 +235,13 @@ export function TransactionsTab() {
     }
     return Array.from(set).sort();
   }, [data]);
+
+  // Drop a tab-local category filter whose category is no longer in the
+  // loaded page (date range / account / entity changed); otherwise the select
+  // falls back to "All Categories" while every row is still filtered out.
+  useEffect(() => {
+    if (categoryFilter && data && !categories.includes(categoryFilter)) setCategoryFilter('');
+  }, [categories, categoryFilter, data]);
 
   const filtered = useMemo(() => {
     if (!data) return [];

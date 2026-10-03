@@ -1,5 +1,6 @@
 import { parse } from 'csv-parse/sync';
 import type { ParsedTransaction } from './chase.js';
+import { parseAmount } from './amount.js';
 
 /** Patterns used to auto-detect column roles from headers. */
 const DATE_PATTERNS = /^(date|transaction\s*date|trans\s*date|posted?\s*date)$/i;
@@ -62,13 +63,13 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     let amount: number;
 
     if (hasSeparateDebitCredit) {
-      const debit = debitCol ? parseFloat(row[debitCol] || '0') : 0;
-      const credit = creditCol ? parseFloat(row[creditCol] || '0') : 0;
+      const debit = debitCol ? parseAmount(row[debitCol] || '0') : 0;
+      const credit = creditCol ? parseAmount(row[creditCol] || '0') : 0;
       // Debit = negative (expense), credit = positive (income)
       amount = isNaN(debit) ? 0 : -Math.abs(debit);
       amount += isNaN(credit) ? 0 : Math.abs(credit);
     } else {
-      amount = parseFloat(row[amountCol!] ?? '0');
+      amount = parseAmount(row[amountCol!] ?? '0');
       if (isNaN(amount)) continue;
     }
 

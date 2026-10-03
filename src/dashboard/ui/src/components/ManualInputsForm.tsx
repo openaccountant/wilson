@@ -22,8 +22,10 @@ interface NumberFieldProps {
  * clamped silently.
  */
 function NumberField({ label, ariaLabel, defaultValue, clamp, onChange }: NumberFieldProps) {
-  const [raw, setRaw] = useState(() => String(defaultValue));
-  const lastGoodRef = useRef(defaultValue);
+  // Round the seed to cents so float noise (e.g. 183475.98199999996) never shows in the field.
+  const seed = Math.round(defaultValue * 100) / 100;
+  const [raw, setRaw] = useState(() => String(seed));
+  const lastGoodRef = useRef(seed);
   const parsed = Number(raw);
   const invalid = raw.trim() === '' || !Number.isFinite(parsed);
   const effective = invalid ? lastGoodRef.current : clamp ? clamp(parsed) : parsed;

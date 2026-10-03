@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/types';
+import { parseDbTimestamp } from '@/format';
 import { WILSON_MCP_SESSION_KEY, WILSON_GRANTS_CHANGED_EVENT } from '@webmcp-session';
 
 const AUTH_KEY = 'wilson_auth_token';
@@ -348,7 +349,7 @@ function MemoryCard({
         </div>
         <div className="text-sm text-text">{memory.content}</div>
         <div className="text-xs text-text-muted mt-1">
-          {new Date(memory.created_at).toLocaleDateString()}
+          {parseDbTimestamp(memory.created_at).toLocaleDateString()}
         </div>
       </div>
       <button

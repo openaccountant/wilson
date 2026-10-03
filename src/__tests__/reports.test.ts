@@ -283,6 +283,8 @@ describe("reports", () => {
       expect(output).toContain("LIABILITIES");
       expect(output).toContain("Car Loan");
       expect(output).toContain("NET WORTH");
+      expect(output).toContain("-$5,000.00");
+      expect(output).not.toContain("$-");
     });
 
     test("no accounts prints message", async () => {

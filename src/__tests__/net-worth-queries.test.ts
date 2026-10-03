@@ -314,6 +314,25 @@ describe('net-worth-queries', () => {
       expect(trend[2].netWorth).toBe(10000);
     });
 
+    test('getNetWorthTrend carries balances forward for accounts not snapshotted that day', () => {
+      const db = createTestDb();
+      const checking = insertAccount(db, { name: 'Checking', account_type: 'asset', account_subtype: 'checking', current_balance: 0 });
+      const mortgage = insertAccount(db, { name: 'Mortgage', account_type: 'liability', account_subtype: 'mortgage', current_balance: 0 });
+
+      // Snapshot before the window seeds the mortgage balance
+      insertBalanceSnapshot(db, { account_id: mortgage, balance: 200000, snapshot_date: daysAgo(400) });
+      insertBalanceSnapshot(db, { account_id: checking, balance: 5000, snapshot_date: daysAgo(60) });
+      insertBalanceSnapshot(db, { account_id: checking, balance: 6000, snapshot_date: daysAgo(30) });
+      insertBalanceSnapshot(db, { account_id: mortgage, balance: 199000, snapshot_date: daysAgo(30) });
+      insertBalanceSnapshot(db, { account_id: checking, balance: 7000, snapshot_date: daysAgo(10) });
+
+      const trend = getNetWorthTrend(db, 6);
+      expect(trend.map((p) => p.date)).toEqual([daysAgo(60), daysAgo(30), daysAgo(10)]);
+      expect(trend[0]).toMatchObject({ totalAssets: 5000, totalLiabilities: 200000, netWorth: -195000 });
+      expect(trend[1]).toMatchObject({ totalAssets: 6000, totalLiabilities: 199000, netWorth: -193000 });
+      expect(trend[2]).toMatchObject({ totalAssets: 7000, totalLiabilities: 199000, netWorth: -192000 });
+    });
+
     test('getEquitySummary', () => {
       const db = createTestDb();
       const houseId = insertAccount(db, { name: 'House', account_type: 'asset', account_subtype: 'real_estate', current_balance: 400000 });

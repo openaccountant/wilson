@@ -395,40 +395,45 @@ export function getNetWorthTrend(db: Database, months: number = 12): NetWorthTre
     return d.toISOString().slice(0, 10);
   })();
 
-  // Get all snapshots in range, grouped by date and account type
+  // Per-account snapshots up to endDate. Snapshots before startDate seed each
+  // account's balance, and accounts not snapshotted on a given date carry
+  // their last known balance forward instead of counting as 0.
   const rows = db.prepare(`
     SELECT
       bs.snapshot_date AS date,
+      bs.account_id,
       a.account_type,
-      SUM(bs.balance) AS total
+      bs.balance
     FROM balance_snapshots bs
     JOIN accounts a ON a.id = bs.account_id
-    WHERE bs.snapshot_date >= @startDate AND bs.snapshot_date <= @endDate
+    WHERE bs.snapshot_date <= @endDate
       AND a.is_active = 1
-    GROUP BY bs.snapshot_date, a.account_type
-    ORDER BY bs.snapshot_date
-  `).all({ startDate, endDate }) as { date: string; account_type: string; total: number }[];
+    ORDER BY bs.snapshot_date, bs.account_id
+  `).all({ endDate }) as { date: string; account_id: number; account_type: string; balance: number }[];
 
-  // Build date→{assets, liabilities} map
-  const dateMap = new Map<string, { assets: number; liabilities: number }>();
-  for (const row of rows) {
-    if (!dateMap.has(row.date)) {
-      dateMap.set(row.date, { assets: 0, liabilities: 0 });
+  const latest = new Map<number, { type: string; balance: number }>();
+  const points: NetWorthTrendPoint[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    latest.set(row.account_id, { type: row.account_type, balance: row.balance });
+    const isLastOfDate = i === rows.length - 1 || rows[i + 1].date !== row.date;
+    if (!isLastOfDate || row.date < startDate) continue;
+
+    let assets = 0;
+    let liabilities = 0;
+    for (const { type, balance } of latest.values()) {
+      if (type === 'asset') assets += balance;
+      else liabilities += balance;
     }
-    const entry = dateMap.get(row.date)!;
-    if (row.account_type === 'asset') {
-      entry.assets = row.total;
-    } else {
-      entry.liabilities = row.total;
-    }
+    points.push({
+      date: row.date,
+      totalAssets: assets,
+      totalLiabilities: liabilities,
+      netWorth: assets - liabilities,
+    });
   }
 
-  return Array.from(dateMap.entries()).map(([date, { assets, liabilities }]) => ({
-    date,
-    totalAssets: assets,
-    totalLiabilities: liabilities,
-    netWorth: assets - liabilities,
-  }));
+  return points;
 }
 
 export function getEquitySummary(db: Database): EquitySummaryRow[] {

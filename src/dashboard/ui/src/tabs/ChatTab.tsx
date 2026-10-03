@@ -16,6 +16,7 @@ import {
 } from '@/hooks/useMentionSources';
 import { api, getBaseUrl } from '@/api';
 import type { BudgetVsActualRow, ChatHistoryRow, ChatRequest, ChatResponse, ChatSessionRow } from '@/types';
+import { parseDbTimestamp } from '@/format';
 import { deriveChatProvenance, localUnavailableNotice, PROVENANCE_BADGES } from '@/hybrid/core';
 import type { ChatProvenance, HybridResult } from '@/hybrid/core';
 import { Typeahead, type TypeaheadItem } from '@/components/Typeahead';
@@ -218,7 +219,7 @@ const markdownComponents: Components = {
 };
 
 function formatSessionDate(iso: string): string {
-  const d = new Date(iso);
+  const d = parseDbTimestamp(iso);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   if (diff < 86400000) {
@@ -262,10 +263,11 @@ export function ChatTab() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
-  // Focus input on mount
+  // Focus input on mount and after each send completes. Must run after commit:
+  // focusing while the input is still `disabled` is a no-op.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (!sending) inputRef.current?.focus();
+  }, [sending]);
 
   // Auto-grow the textarea (capped by max-h-40) and restore a pending caret.
   useLayoutEffect(() => {
@@ -701,7 +703,6 @@ export function ChatTab() {
       ]);
     } finally {
       setSending(false);
-      inputRef.current?.focus();
     }
   }
 

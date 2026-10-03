@@ -25,7 +25,8 @@ const DEFAULT_SAVINGS_DELTA_PP = 0;
 const DEFAULT_SHOCK_AMOUNT = 0;
 
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function median(values: number[]): number {
@@ -265,6 +266,7 @@ export function ForecastTab() {
         shockYear={shockYear}
         onShockYearChange={setShockYear}
         medianMonthlyIncome={medianMonthlyIncomeForControls}
+        manual={manual}
         onSettled={handleSettled}
         onReset={handleReset}
       />

@@ -890,7 +890,7 @@ export function getDashboardHtml(port: number): string {
   async function loadGoals() {
     var el = document.getElementById('goalsContent');
     try {
-      var goals = await (await authFetch(BASE+'/api/goals')).json();
+      var goals = (await (await authFetch(BASE+'/api/goals')).json()).filter(function(g) { return g.status === 'active'; });
       el.replaceChildren();
       if (!goals.length) {
         var emptyP = document.createElement('p');

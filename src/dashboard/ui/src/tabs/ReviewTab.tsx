@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
-import type { ReviewQueueItem, SpendingSummaryItem } from '@/types';
+import type { ReviewQueueItem } from '@/types';
+import { CATEGORIES } from '../../../../tools/categorize/categories.js';
 
 /** Confidence at or below which a suggestion landed in the review queue (src/tools/categorize). */
 const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -140,16 +141,14 @@ export function ReviewTab() {
 
   const { data: reviews, loading, error, refetch } = useApi<ReviewQueueItem[]>('/api/reviews');
   const { data: authStatus } = useApi<AuthStatus>('/api/auth/status');
-  // Same category derivation as App.tsx: sorted unique from the all-time summary.
-  const { data: allSummary } = useApi<SpendingSummaryItem[]>('/api/summary?startDate=2000-01-01&endDate=2099-12-31');
+  // Offer exactly what apiCorrectReview accepts: names in the categories table,
+  // falling back to the static CATEGORIES list it also validates against.
+  const { data: categoryRows } = useApi<{ name: string }[]>('/api/categories');
 
   const categories = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of allSummary ?? []) {
-      if (s.category) set.add(s.category);
-    }
-    return [...set].sort();
-  }, [allSummary]);
+    const names = (categoryRows ?? []).map((r) => r.name).filter(Boolean);
+    return [...new Set(names.length > 0 ? names : CATEGORIES)].sort();
+  }, [categoryRows]);
 
   // Server stays the authority — the UI only hides the controls when the
   // viewer can't act (auth enabled and not admin).

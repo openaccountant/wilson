@@ -235,5 +235,23 @@ PSomething
       expect(txns).toHaveLength(1);
       expect(txns[0].amount).toBe(0);
     });
+
+    test('amounts with thousands separators are parsed fully', () => {
+      const qif = `!Type:Bank
+D01/15/2026
+T-1,234.56
+PRent
+^
+D01/16/2026
+T-2,000.00
+PSplit
+S Housing
+$-1,500.00
+S Utilities
+$-500.00
+^`;
+      const txns = parseQif(qif);
+      expect(txns.map((t) => t.amount)).toEqual([-1234.56, -1500, -500]);
+    });
   });
 });

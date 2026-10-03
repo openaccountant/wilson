@@ -109,7 +109,10 @@ function NetWorthChart({ data }: { data: NetWorthTrendPoint[] }) {
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const isPositive = account.current_balance >= 0;
+  // Liabilities are stored as positive amounts owed, so a positive balance is bad.
+  const isGood = account.account_type === 'liability'
+    ? account.current_balance <= 0
+    : account.current_balance >= 0;
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4 flex items-center justify-between">
@@ -119,7 +122,7 @@ function AccountCard({ account }: { account: Account }) {
           <div className="text-xs text-text-muted mt-0.5">{account.institution}</div>
         )}
       </div>
-      <div className={`text-sm font-bold font-mono ${isPositive ? 'text-green' : 'text-red'}`}>
+      <div className={`text-sm font-bold font-mono ${isGood ? 'text-green' : 'text-red'}`}>
         {account.current_balance < 0 && '-'}
         {fmt(account.current_balance)}
       </div>
