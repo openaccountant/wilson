@@ -1,7 +1,7 @@
 import { initDatabase } from '../db/database.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
-import { startDashboardServer } from './server.js';
+import { startDashboardServer, stopDashboardServer } from './server.js';
 import { setInitialProfile, closeAll } from './db-manager.js';
 import { getActiveProfileName } from '../profile/index.js';
 
@@ -17,20 +17,24 @@ export async function runStandalone(port?: number): Promise<void> {
   logger.setDatabase(db);
   traceStore.setDatabase(db);
 
-  const { url } = await startDashboardServer(db, port);
+  const { server, url } = await startDashboardServer(db, port);
 
   console.log(`Open Accountant Dashboard running at ${url}`);
   console.log(`Profile: ${profileName}`);
   console.log('Press Ctrl+C to stop.');
 
-  // Block until signal
+  // Block until signal. Stop the server before closing the DBs (no request
+  // may hit a closed handle), then exit: Bun.serve and onnxruntime's threads
+  // otherwise keep the process — and the port — alive after "shutdown".
   await new Promise<void>((resolve) => {
     const shutdown = () => {
       console.log('\nShutting down dashboard...');
+      stopDashboardServer(server);
       closeAll();
       resolve();
     };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
   });
+  process.exit(0);
 }
