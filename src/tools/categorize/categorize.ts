@@ -107,11 +107,15 @@ export const categorizeTool = defineTool({
 
     if (uncategorized.length === 0) {
       const stillUncategorized = countUncategorized(database);
+      const pendingReview = skipPendingReview ? countUncategorizedPendingReview(database) : 0;
       return formatToolResult({
-        message: 'All transactions are already categorized.',
+        // Only held rows remain: "all categorized" would be false.
+        message: pendingReview > 0
+          ? `No new transactions to categorize — ${pendingReview} are waiting for your review in the Review tab.`
+          : 'All transactions are already categorized.',
         categorized: 0,
         stillUncategorized,
-        ...(skipPendingReview ? { pendingReview: countUncategorizedPendingReview(database) } : {}),
+        ...(skipPendingReview ? { pendingReview } : {}),
       });
     }
 

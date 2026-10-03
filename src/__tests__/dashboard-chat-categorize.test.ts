@@ -135,4 +135,49 @@ describe('dashboard /categorize', () => {
       saveConfig({});
     }
   });
+
+  // No limit (non-local provider): the unchunked path must still name the backlog.
+  test('unchunked run with only held transactions left answers coherently', async () => {
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'HELD ONE', amount: -10 },
+      { date: '2026-03-02', description: 'HELD TWO', amount: -10 },
+    ]);
+    for (const t of getTransactions(db)) addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    const res = await handleChatMessage('/categorize');
+    expect(res.answer).toBe('No new transactions to categorize — 2 are waiting for your review in the Review tab.');
+    expect(res.answer).not.toContain('already categorized');
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('unchunked run that categorizes some still notes the held backlog', async () => {
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'HELD ONE', amount: -10 },
+      { date: '2026-02-01', description: 'AMAZON A', amount: -10 },
+      { date: '2026-02-02', description: 'AMAZON B', amount: -10 },
+    ]);
+    addRule(db, '*AMAZON*', 'Shopping');
+    for (const t of getTransactions(db).filter((t) => t.description.startsWith('HELD'))) {
+      addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    }
+    const res = await handleChatMessage('/categorize');
+    expect(res.answer).toStartWith('Categorized **2** of 2 transactions');
+    expect(res.answer).toContain('1 transactions are still uncategorized (1 of them waiting in the Review tab).');
+    expect(res.answer).not.toContain('send `/categorize` again');
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('chunked run where every remaining transaction is held answers coherently', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, [{ date: '2026-03-01', description: 'HELD ONE', amount: -10 }]);
+      for (const t of getTransactions(db)) addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+      const res = await handleChatMessage('/categorize 5');
+      expect(res.answer).toBe('No new transactions to categorize — 1 are waiting for your review in the Review tab.');
+    } finally {
+      saveConfig({});
+    }
+  });
 });

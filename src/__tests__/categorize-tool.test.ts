@@ -347,6 +347,8 @@ describe('categorize tool', () => {
     expect(result.data.categorized).toBe(0);
     expect(result.data.stillUncategorized).toBe(1);
     expect(result.data.pendingReview).toBe(1);
+    expect(result.data.message).toBe('No new transactions to categorize — 1 are waiting for your review in the Review tab.');
+    expect(result.data.message).not.toContain('already categorized');
     expect(llmSpy).not.toHaveBeenCalled();
   });
 
