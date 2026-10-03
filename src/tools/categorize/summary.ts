@@ -14,6 +14,7 @@ interface CategorizeResultData {
   routedForReview?: number;
   categoriesApplied?: Record<string, number>;
   errors?: string[];
+  notAttempted?: number;
 }
 
 /** Parse the tool's JSON result (formatToolResult wraps it in `data`). */
@@ -50,6 +51,9 @@ export function formatCategorizeSummary(data: CategorizeResultData, opts: { erro
   }
   if (data.errors && data.errors.length > 0) {
     msg += `\n${data.errors.length} batch errors occurred.`;
+  }
+  if (data.notAttempted) {
+    msg += `\nStopped after repeated batch failures; ${data.notAttempted} transactions were not attempted.`;
   }
   return msg + detail;
 }

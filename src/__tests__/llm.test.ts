@@ -104,6 +104,16 @@ describe('callLlm', () => {
     expect(callCount).toBe(1);
   });
 
+  test('maxTokens reaches the adapter', async () => {
+    let seen: unknown;
+    mockAdapterFn = async (opts: { maxTokens?: number }) => {
+      seen = opts.maxTokens;
+      return makeLlmResponse();
+    };
+    await callLlm('test', { model: 'gpt-5.2', maxTokens: 1234 });
+    expect(seen).toBe(1234);
+  });
+
   test('max retries exceeded throws', async () => {
     mockAdapterFn = async () => {
       throw new Error('service unavailable');

@@ -364,6 +364,51 @@ describe('categorize tool', () => {
     }
   });
 
+  test('every batch asks for enough output tokens for its rows', async () => {
+    insertTransactions(db, Array.from({ length: 3 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+    initCategorizeTool(db);
+    llmSpy.mockRejectedValue(new Error('boom'));
+    await categorizeTool.func({});
+    const opts = llmSpy.mock.calls[0][1] as { maxTokens?: number };
+    // ~25 tokens per {"id","category","confidence"} row, plus the wrapper.
+    expect(opts.maxTokens).toBeGreaterThanOrEqual(3 * 30);
+  });
+
+  test('local transformers models get small batches', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 25 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+      initCategorizeTool(db);
+      llmSpy.mockImplementation(async () => ({ response: { content: '', structured: { transactions: [] } }, metadata: {} }));
+      await categorizeTool.func({});
+      expect(llmSpy.mock.calls.length).toBe(3); // 10 + 10 + 5
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('stops after two consecutive failed batches instead of grinding through the rest', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 50 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+      initCategorizeTool(db);
+      llmSpy.mockRejectedValue(new Error('LLM structured output failed schema validation after one repair attempt'));
+      const result = JSON.parse((await categorizeTool.func({})) as string);
+      expect(llmSpy.mock.calls.length).toBe(2);
+      expect(result.data.categorized).toBe(0);
+      expect(result.data.message).toContain('Stopped after 2 failed batches in a row');
+      expect(result.data.message).toContain('30 transactions were not attempted');
+    } finally {
+      saveConfig({});
+    }
+  });
+
   test('LLM model resolves the per-task pin at call time; reset restores the chat model', async () => {
     ensureTestProfile();
     saveConfig({});
