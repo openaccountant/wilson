@@ -316,6 +316,55 @@ describe('categorize tool', () => {
     expect(result.data.totalUncategorized).toBe(2);
   });
 
+  test('skipPendingReview leaves held-for-review transactions out of the run', async () => {
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'HELD VENDOR', amount: -50 },
+      { date: '2026-02-01', description: 'AMAZON OLD', amount: -20 },
+    ]);
+    addRule(db, '*AMAZON*', 'Shopping');
+    const txns = getTransactions(db);
+    const held = txns.find((t) => t.description === 'HELD VENDOR')!;
+    addPendingCategorizationReview(db, held.id, 'Other', 0.5);
+    initCategorizeTool(db);
+
+    // limit 1 would pick the newest (held) row without the flag
+    const raw = await categorizeTool.func({ limit: 1, skipPendingReview: true });
+    const result = JSON.parse(raw as string);
+    expect(result.data.totalUncategorized).toBe(1);
+    expect(result.data.categorized).toBe(1);
+    expect(result.data.stillUncategorized).toBe(1);
+    expect(result.data.pendingReview).toBe(1);
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('skipPendingReview with only held transactions left reports the backlog', async () => {
+    insertTransactions(db, [{ date: '2026-03-01', description: 'HELD VENDOR', amount: -50 }]);
+    const [t] = getTransactions(db);
+    addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    initCategorizeTool(db);
+
+    const result = JSON.parse((await categorizeTool.func({ skipPendingReview: true })) as string);
+    expect(result.data.categorized).toBe(0);
+    expect(result.data.stillUncategorized).toBe(1);
+    expect(result.data.pendingReview).toBe(1);
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('without skipPendingReview held transactions are retried and no pendingReview field is returned', async () => {
+    insertTransactions(db, [{ date: '2026-03-01', description: 'HELD VENDOR', amount: -50 }]);
+    const [t] = getTransactions(db);
+    addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    llmSpy.mockResolvedValue({
+      response: { content: '', structured: { transactions: [{ id: t.id, category: 'Other', confidence: 0.95 }] } },
+      metadata: {},
+    });
+    initCategorizeTool(db);
+
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    expect(result.data.categorized).toBe(1);
+    expect(result.data.pendingReview).toBeUndefined();
+  });
+
   test('LLM error is reported in errors array', async () => {
     insertTransactions(db, [
       { date: '2026-02-15', description: 'Mystery Store', amount: -50 },

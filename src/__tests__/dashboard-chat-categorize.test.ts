@@ -1,7 +1,8 @@
 import { describe, expect, test, beforeEach, afterEach, spyOn } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { initCategorizeTool } from '../tools/categorize/categorize.js';
-import { insertTransactions, addRule } from '../db/queries.js';
+import { insertTransactions, addRule, getTransactions } from '../db/queries.js';
+import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { handleChatMessage } from '../dashboard/chat.js';
 import * as llmModule from '../model/llm.js';
 import { createTestDb, ensureTestProfile } from './helpers.js';
@@ -98,6 +99,38 @@ describe('dashboard /categorize', () => {
       const res = await handleChatMessage('/categorize 3');
       expect(res.answer).toStartWith('Categorized **3** of 3 transactions');
       expect(res.answer).toContain('2 transactions are still uncategorized');
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('held-for-review transactions do not stall chunks and the note names the review backlog', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, [
+        { date: '2026-03-01', description: 'HELD ONE', amount: -10 },
+        { date: '2026-03-02', description: 'HELD TWO', amount: -10 },
+        { date: '2026-02-01', description: 'AMAZON A', amount: -10 },
+        { date: '2026-02-02', description: 'AMAZON B', amount: -10 },
+        { date: '2026-02-03', description: 'AMAZON C', amount: -10 },
+      ]);
+      addRule(db, '*AMAZON*', 'Shopping');
+      for (const t of getTransactions(db).filter((t) => t.description.startsWith('HELD'))) {
+        addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+      }
+      const res = await handleChatMessage('/categorize 2');
+      expect(res.answer).toStartWith('Categorized **2** of 2 transactions');
+      expect(res.answer).toContain('3 transactions are still uncategorized (2 of them waiting in the Review tab)');
+      expect(res.answer).toContain('send `/categorize` again');
+
+      const last = await handleChatMessage('/categorize 2');
+      expect(last.answer).toStartWith('Categorized **1** of 1 transactions');
+      expect(last.answer).toContain('2 transactions are still uncategorized (2 of them waiting in the Review tab).');
+      expect(last.answer).not.toContain('send `/categorize` again');
+      expect(llmSpy).not.toHaveBeenCalled();
     } finally {
       saveConfig({});
     }

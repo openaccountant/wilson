@@ -279,11 +279,17 @@ export function recordImport(
  */
 export function getUncategorizedTransactions(
   db: Database,
-  limit?: number
+  limit?: number,
+  opts: { excludePendingReview?: boolean } = {}
 ): TransactionRow[] {
+  // Held-for-review rows stay category IS NULL; a chunked caller excludes them
+  // so the same newest-by-date rows are not re-processed every run.
+  const where = opts.excludePendingReview
+    ? `category IS NULL AND id NOT IN (SELECT transaction_id FROM categorization_reviews WHERE status = 'pending')`
+    : 'category IS NULL';
   const sql = limit
-    ? 'SELECT * FROM transactions WHERE category IS NULL ORDER BY date DESC LIMIT @limit'
-    : 'SELECT * FROM transactions WHERE category IS NULL ORDER BY date DESC';
+    ? `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC LIMIT @limit`
+    : `SELECT * FROM transactions WHERE ${where} ORDER BY date DESC`;
 
   return db.prepare(sql).all(limit ? { limit } : {}) as TransactionRow[];
 }

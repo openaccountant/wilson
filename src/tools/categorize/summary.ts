@@ -17,6 +17,8 @@ interface CategorizeResultData {
   notAttempted?: number;
   /** Transactions with no category after the run (held-for-review included). */
   stillUncategorized?: number;
+  /** Of those, how many wait in the review queue (set only when the run skipped them). */
+  pendingReview?: number;
 }
 
 /** Parse the tool's JSON result (formatToolResult wraps it in `data`). */

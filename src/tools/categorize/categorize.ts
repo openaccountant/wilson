@@ -84,8 +84,12 @@ export const categorizeTool = defineTool({
       .number()
       .optional()
       .describe('Optional entity ID to assign to categorized transactions'),
+    skipPendingReview: z
+      .boolean()
+      .optional()
+      .describe('Skip transactions already waiting in the review queue (default: false)'),
   }),
-  func: async ({ limit, entityId }) => {
+  func: async ({ limit, entityId, skipPendingReview }) => {
     const database = getDb();
     const threshold = getCategorizationConfidenceThreshold();
 
@@ -99,13 +103,15 @@ export const categorizeTool = defineTool({
     }
 
     // 1. Get uncategorized transactions
-    const uncategorized = getUncategorizedTransactions(database, limit);
+    const uncategorized = getUncategorizedTransactions(database, limit, { excludePendingReview: skipPendingReview });
 
     if (uncategorized.length === 0) {
+      const stillUncategorized = countUncategorized(database);
       return formatToolResult({
         message: 'All transactions are already categorized.',
         categorized: 0,
-        stillUncategorized: 0,
+        stillUncategorized,
+        ...(skipPendingReview ? { pendingReview: countUncategorizedPendingReview(database) } : {}),
       });
     }
 
@@ -228,6 +234,7 @@ export const categorizeTool = defineTool({
       errors: errors.length > 0 ? errors : undefined,
       notAttempted: notAttempted > 0 ? notAttempted : undefined,
       stillUncategorized: countUncategorized(database),
+      ...(skipPendingReview ? { pendingReview: countUncategorizedPendingReview(database) } : {}),
       message:
         `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
         (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
@@ -243,4 +250,12 @@ export const categorizeTool = defineTool({
 /** Transactions with no category (those held in the review queue included). */
 function countUncategorized(database: Database): number {
   return (database.prepare('SELECT COUNT(*) AS n FROM transactions WHERE category IS NULL').get() as { n: number }).n;
+}
+
+/** Uncategorized transactions that are waiting in the review queue. */
+function countUncategorizedPendingReview(database: Database): number {
+  return (database.prepare(
+    `SELECT COUNT(*) AS n FROM transactions WHERE category IS NULL
+     AND id IN (SELECT transaction_id FROM categorization_reviews WHERE status = 'pending')`
+  ).get() as { n: number }).n;
 }

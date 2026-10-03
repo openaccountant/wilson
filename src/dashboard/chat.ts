@@ -496,12 +496,18 @@ async function runCategorizeCommand(limit?: number): Promise<string> {
   const local = resolveProvider(getTaskModel('categorization')).id === 'transformers';
   const effectiveLimit = limit ?? (local ? LOCAL_CATEGORIZE_CHUNK : undefined);
   try {
-    const resultJson = await categorizeTool.func(effectiveLimit !== undefined ? { limit: effectiveLimit } : {});
+    const resultJson = await categorizeTool.func({ ...(effectiveLimit !== undefined ? { limit: effectiveLimit } : {}), skipPendingReview: true });
     const data = parseCategorizeResult(resultJson);
     let answer = formatCategorizeSummary(data, { errorDetail: true });
     const remaining = effectiveLimit !== undefined ? data.stillUncategorized ?? 0 : 0;
+    const held = Math.min(data.pendingReview ?? 0, remaining);
     if (remaining > 0) {
-      answer += `\n\n${remaining} transactions are still uncategorized — send \`/categorize\` again for the next ${effectiveLimit}.`;
+      answer += `\n\n${remaining} transactions are still uncategorized` +
+        (held > 0 ? ` (${held} of them waiting in the Review tab)` : '');
+      // Held rows are skipped, so only the rest has a next chunk to run.
+      answer += remaining > held
+        ? ` — send \`/categorize\` again for the next ${effectiveLimit}.`
+        : '.';
     }
     logger.info(`Dashboard /categorize`, { durationMs: Date.now() - startTime, limit: effectiveLimit, remaining });
     return answer;
