@@ -28,12 +28,18 @@ interface ProfilesResponse {
   active: string;
 }
 
+// Mirrors the server-side check in /api/profiles/switch — keep in sync.
+const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 function ProfileSection() {
   const { data, loading, refetch } = useApi<ProfilesResponse>('/api/profiles');
   const [switching, setSwitching] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
 
   async function handleSwitch(name: string) {
     setSwitching(true);
+    setAddError(null);
     try {
       await api('/api/profiles/switch', {
         method: 'POST',
@@ -43,10 +49,24 @@ function ProfileSection() {
       // Reload to refresh all data (dropping the old profile's filter ids)
       setTimeout(reloadForProfileSwitch, 300);
     } catch {
-      // silent
+      setAddError('Could not switch profile.');
     } finally {
       setSwitching(false);
     }
+  }
+
+  function handleAdd() {
+    const name = newName.trim();
+    if (!PROFILE_NAME_RE.test(name)) {
+      setAddError('Use letters, numbers, "-" or "_" only (max 64 chars).');
+      return;
+    }
+    if (data?.profiles.includes(name)) {
+      setAddError(`Profile "${name}" already exists.`);
+      return;
+    }
+    setNewName('');
+    handleSwitch(name);
   }
 
   if (loading) {
@@ -60,7 +80,7 @@ function ProfileSection() {
     );
   }
 
-  if (!data || data.profiles.length <= 1) return null;
+  if (!data) return null;
 
   return (
     <div>
@@ -70,20 +90,45 @@ function ProfileSection() {
           Switch between database profiles. Each profile has its own transactions, budgets, and settings.
         </p>
         <div className="flex items-center gap-3">
-          <select
-            value={data.active}
-            onChange={(e) => handleSwitch(e.target.value)}
-            disabled={switching}
-            className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-text"
-          >
-            {data.profiles.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+          {data.profiles.length > 1 ? (
+            <select
+              value={data.active}
+              onChange={(e) => handleSwitch(e.target.value)}
+              disabled={switching}
+              className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-text"
+            >
+              {data.profiles.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="text-sm text-text">{data.active} (only profile)</span>
+          )}
           {switching && <span className="text-xs text-text-muted">Switching...</span>}
         </div>
+
+        <div className="mt-3 pt-3 border-t border-border-muted flex items-center gap-2">
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+            disabled={switching}
+            placeholder="New profile name"
+            className="bg-surface border border-border rounded px-3 py-1.5 text-sm text-text flex-1"
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={switching || !newName.trim()}
+            className="bg-green text-black px-3 py-1.5 rounded text-sm font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            + Add
+          </button>
+        </div>
+        {addError && <p className="text-xs text-red-500 mt-2">{addError}</p>}
       </div>
     </div>
   );

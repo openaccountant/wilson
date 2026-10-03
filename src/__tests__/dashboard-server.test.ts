@@ -845,6 +845,34 @@ describe('dashboard server', () => {
       const data = await res.json();
       expect(data.error).toContain('name required');
     });
+
+    test('POST /api/profiles/switch rejects path-traversal names', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/profiles/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: '../../etc' }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain('letters, numbers');
+    });
+
+    test('POST /api/profiles/switch creates a new profile by name', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/profiles/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'brand-new-profile' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.active).toBe('brand-new-profile');
+
+      const list = await fetch(base + '/api/profiles');
+      const listData = await list.json();
+      expect(listData.profiles).toContain('brand-new-profile');
+    });
   });
 
   // ── Data API routes ─────────────────────────────────────────────────

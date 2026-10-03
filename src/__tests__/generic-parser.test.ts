@@ -42,6 +42,71 @@ describe('parseGenericCSV', () => {
     });
   });
 
+  describe('report-style preamble stripping', () => {
+    test('strips a Quicken-style title + "Report Created" preamble before the header row', () => {
+      const csv = [
+        'All Transactions',
+        'Report Created: 2026-08-29 11:52:17 -0400',
+        '',
+        'Date,Payee,Category,Amount',
+        '2026-02-15,GROCERY STORE,Food,-50.00',
+        '2026-02-18,GAS STATION,Auto,-30.00',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns).toHaveLength(2);
+      expect(txns[0].description).toBe('GROCERY STORE');
+    });
+
+    test('still throws the column-detection error when no real header row exists', () => {
+      const csv = ['All Transactions', 'Report Created: 2026-08-29 11:52:17 -0400'].join('\n');
+      expect(() => parseGenericCSV(csv)).toThrow('date column');
+    });
+
+    test('handles the real Quicken "Transaction Report" shape: BOM, filter-criteria preamble, and a "Payee/Security" column', () => {
+      const csv =
+        '﻿' +
+        [
+          'All Transactions Report Created: 2026-08-29 11:52:17 -0400',
+          ',',
+          'Filter Criteria:,Spending',
+          ',This Year',
+          ',All Accounts',
+          ',All Accounts',
+          ',',
+          ',Scheduled,Split,Date,Payee/Security,Business,Client,Billable,Category,Amount,Account',
+          ',,,2026-02-15,GROCERY STORE,,,,Food,-50.00,Checking',
+          ',,,2026-02-18,GAS STATION,,,,Auto,-30.00,Checking',
+        ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns).toHaveLength(2);
+      expect(txns[0].description).toBe('GROCERY STORE');
+      expect(txns[0].date).toBe('2026-02-15');
+    });
+  });
+
+  describe('per-row account name (multi-account combined exports)', () => {
+    test('captures an "Account" column into account_name', () => {
+      const csv = [
+        'Date,Payee,Amount,Account',
+        '2026-02-15,GROCERY STORE,-50.00,Checking',
+        '2026-02-18,CREDIT PAYMENT,-30.00,Credit Card',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns).toHaveLength(2);
+      expect(txns[0].account_name).toBe('Checking');
+      expect(txns[1].account_name).toBe('Credit Card');
+    });
+
+    test('leaves account_name undefined when there is no Account column', () => {
+      const csv = 'Date,Description,Amount\n2026-02-15,TEST,-10\n';
+      const txns = parseGenericCSV(csv);
+      expect(txns[0].account_name).toBeUndefined();
+    });
+  });
+
   describe('sign convention detection', () => {
     test('negates when >60% of amounts are positive (bank uses positive=expense)', () => {
       const csv = [

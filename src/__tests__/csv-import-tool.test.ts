@@ -4,6 +4,7 @@ import { join } from 'path';
 import type { Database } from '../db/compat-sqlite.js';
 import { initImportTool, csvImportTool } from '../tools/import/csv-import.js';
 import { getTransactions } from '../db/queries.js';
+import { insertAccount } from '../db/net-worth-queries.js';
 import { createTestDb, makeTmpPath } from './helpers.js';
 
 const CHASE_CSV = `Transaction Date,Post Date,Description,Category,Type,Amount,Memo
@@ -116,6 +117,46 @@ describe('csv_import tool', () => {
     const result = JSON.parse(raw as string);
     expect(result.data.alreadyImported).toBe(true);
     expect(result.data.message).toContain('already exist');
+  });
+
+  test('two rows in the same file that hash to the same external_id are skipped, not crashed', async () => {
+    // Same date + description + amount on two separate rows — a legitimate
+    // Quicken-export shape, not just a copy-paste error in the CSV.
+    const csv = `Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+01/15/2026,01/16/2026,COFFEE SHOP,Dining,Sale,-5.00,
+01/15/2026,01/16/2026,COFFEE SHOP,Dining,Sale,-5.00,
+01/18/2026,01/19/2026,ELECTRIC CO,Utilities,Sale,-120.00,`;
+    const fp = writeTmp(csv);
+    const raw = await csvImportTool.func({ filePath: fp });
+    const result = JSON.parse(raw as string);
+    expect(result.data.success).toBe(true);
+    expect(result.data.transactionsImported).toBe(2); // one COFFEE SHOP row + ELECTRIC CO
+    expect(result.data.transactionsSkipped).toBe(1); // the second identical COFFEE SHOP row
+  });
+
+  test('a combined multi-account export carries account_name per row and auto-links to a matching existing account', async () => {
+    insertAccount(db, {
+      name: 'Checking',
+      account_type: 'asset',
+      account_subtype: 'checking',
+    });
+
+    const csv = [
+      'Date,Payee,Amount,Account',
+      '01/15/2026,GROCERY STORE,-50.00,Checking',
+      '01/18/2026,CREDIT PAYMENT,-30.00,Credit Card', // no matching account yet — stays unlinked
+    ].join('\n');
+    const fp = writeTmp(csv);
+    await csvImportTool.func({ filePath: fp });
+
+    const txns = getTransactions(db);
+    const grocery = txns.find((t) => t.description === 'GROCERY STORE');
+    const credit = txns.find((t) => t.description === 'CREDIT PAYMENT');
+
+    expect(grocery?.account_name).toBe('Checking');
+    expect(grocery?.account_id).not.toBeNull(); // auto-linked, matching account exists
+    expect(credit?.account_name).toBe('Credit Card');
+    expect(credit?.account_id).toBeNull(); // no "Credit Card" account tracked yet
   });
 
   test('nonexistent file returns error', async () => {

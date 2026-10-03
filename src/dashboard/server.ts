@@ -136,6 +136,11 @@ export async function serveDashboardAsset(
   return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
 }
 
+// Profile names become path segments (see resolveProfile in profile/context.ts),
+// so the HTTP API validates them — unlike the CLI's --profile flag, this accepts
+// arbitrary input over the network and must not allow "../" traversal.
+const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
 type Role = 'admin' | 'viewer';
@@ -398,6 +403,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const body = await req.json() as { name?: string };
           if (!body.name) {
             return Response.json({ error: 'name required' }, { status: 400, headers });
+          }
+          if (!PROFILE_NAME_RE.test(body.name)) {
+            return Response.json(
+              { error: 'name must be 1-64 characters of letters, numbers, "-" or "_"' },
+              { status: 400, headers },
+            );
           }
           switchProfile(body.name);
           return Response.json({ active: getCurrentProfileName() }, { headers });

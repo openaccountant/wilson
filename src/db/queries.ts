@@ -88,6 +88,8 @@ export interface TransactionRow {
   authorized_date: string | null;
   entity_id: number | null;
   revision: number;
+  account_id: number | null;
+  account_name: string | null;
   created_at: string;
   updated_at: string;
 }

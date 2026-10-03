@@ -18,6 +18,7 @@ import type {
 } from './agent/index.js';
 import { getModelDisplayName } from './utils/model.js';
 import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js';
+import { parseFilePathArg } from './utils/path-arg.js';
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
 import { traceStore } from './utils/trace-store.js';
@@ -505,8 +506,9 @@ export async function runCli() {
         return;
       }
 
-      // Strip surrounding quotes and leading @ (from file autocomplete)
-      const filePath = rawPath.replace(/^["']|["']$/g, '').replace(/^@/, '');
+      // Undo shell-style quoting/escaping (the TUI editor isn't a shell, so it
+      // never gets tokenized) and strip a leading @ from file autocomplete.
+      const filePath = parseFilePathArg(rawPath);
 
       chatLog.finalizeAnswer(`Importing **${filePath}**...`);
       tui.requestRender();
@@ -1241,6 +1243,13 @@ export async function runCli() {
           })];
           const { execFileSync } = await import('child_process');
           tui.stop();
+          // Release the dashboard's port before the child tries to bind it —
+          // otherwise the respawned process crashes with EADDRINUSE.
+          if ((globalThis as any).__oaDashboard) {
+            const { stopDashboardServer } = await import('./dashboard/server.js');
+            stopDashboardServer((globalThis as any).__oaDashboard);
+            (globalThis as any).__oaDashboard = null;
+          }
           try {
             execFileSync(process.argv[0], [oaPath, ...newArgs], { stdio: 'inherit' });
           } catch {
