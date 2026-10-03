@@ -257,3 +257,22 @@ describe('logger.setDatabase', () => {
     expect(row!.data).toBeNull();
   });
 });
+
+describe('OA_LOG_FILE', () => {
+  // Read at module load, so it is exercised in a child process.
+  test('redirects the debug log file', async () => {
+    const { mkdtempSync, existsSync, readFileSync } = await import('fs');
+    const { join } = await import('path');
+    const { tmpdir } = await import('os');
+    const target = join(mkdtempSync(join(tmpdir(), 'oa-log-')), 'nested', 'dashboard.log');
+    const proc = Bun.spawn(
+      ['bun', '-e', `const { logger, LOG_FILE } = await import(${JSON.stringify(join(import.meta.dir, '..', 'utils', 'logger.js'))}); logger.info('redirected'); console.log(LOG_FILE); await logger.shutdown();`],
+      { env: { ...process.env, OA_DEBUG: '1', OA_LOG_FILE: target }, stdout: 'pipe' },
+    );
+    const out = (await new Response(proc.stdout).text()).trim();
+    await proc.exited;
+    expect(out).toBe(target);
+    expect(existsSync(target)).toBe(true);
+    expect(readFileSync(target, 'utf8')).toContain('redirected');
+  }, 20_000);
+});

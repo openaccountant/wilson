@@ -1,14 +1,18 @@
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import winston from 'winston';
 import { BufferTransport, type LogEntry, type LogLevel, type LogSubscriber } from './logger-buffer-transport.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 export type { LogEntry, LogLevel };
 
-const LOG_DIR = join(homedir(), '.openaccountant', 'logs');
-export const LOG_FILE = join(LOG_DIR, 'agent.log');
+/**
+ * The debug log (written when OA_DEBUG=1). OA_LOG_FILE moves it — e.g. so a
+ * long-running dashboard keeps a log that nothing else rotates or deletes.
+ */
+export const LOG_FILE = process.env.OA_LOG_FILE || join(homedir(), '.openaccountant', 'logs', 'agent.log');
+const LOG_DIR = dirname(LOG_FILE);
 const MAX_DATA_LENGTH = 50000;
 
 /**
