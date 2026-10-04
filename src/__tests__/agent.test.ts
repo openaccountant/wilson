@@ -3,13 +3,7 @@ import { ensureTestProfile, collectEvents, mockTool } from './helpers.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
 import * as realPrompts from '../agent/prompts.js';
 import * as skillsIndex from '../skills/index.js';
-import * as realSkillLoader from '../skills/loader.js';
 import * as realOrchRegistry from '../orchestration/registry.js';
-
-// Link the real modules BEFORE mock.module below so bun mutates them in place
-// (instead of wholesale-replacing them and their re-export graph) — keeps
-// ../skills/loader.js real for skills-loader.test.ts.
-void skillsIndex;
 
 // Spy (not mock.module) on getOrchestrationTools so the agent's tool registry
 // stays light while orchestration-registry.test.ts keeps the real function
@@ -62,19 +56,16 @@ mock.module('../mcp/adapter.js', () => ({
 
 // Mock orchestration registry (used by tool registry) — see spy above.
 
-// Mock skill discovery (used by tool registry). The factory carries the REAL
-// loader functions — mock.module follows index.js's re-export graph and would
-// otherwise replace ../skills/loader.js with null-throwing mocks, breaking
-// skills-loader.test.ts.
-mock.module('../skills/index.js', () => ({
-  discoverSkills: mock(() => []),
-  getSkill: mock(async () => null),
-  buildSkillMetadataSection: mock(() => ''),
-  clearSkillCache: mock(() => {}),
-  parseSkillFile: realSkillLoader.parseSkillFile,
-  loadSkillFromPath: realSkillLoader.loadSkillFromPath,
-  extractSkillMetadata: realSkillLoader.extractSkillMetadata,
-}));
+// Stub skill discovery (used by tool registry) with spies, not mock.module: a
+// module mock on skills/index.js is never undone, and another file's spy
+// restore (tool-registry.test.ts) over it left discoverSkills() returning
+// undefined for later files (tool-selection-recall) without --isolate.
+const skillSpies = [
+  spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => []),
+  spyOn(skillsIndex, 'getSkill').mockImplementation(async () => undefined),
+  spyOn(skillsIndex, 'buildSkillMetadataSection').mockImplementation(() => ''),
+  spyOn(skillsIndex, 'clearSkillCache').mockImplementation(() => {}),
+];
 
 const { Agent } = await import('../agent/agent.js');
 const { getTools } = await import('../tools/registry.js');
@@ -89,7 +80,7 @@ const LOCAL_MODEL = 'transformers:onnx-community/granite-4.0-micro-ONNX-web';
 /** Local runs never load a real model here: a chars/4 tokenizer and word-overlap embeddings. */
 function stubLocalModel() {
   const counter = spyOn(transformersModule, 'getLocalTokenCounter').mockResolvedValue((t: string) => Math.ceil(t.length / 4));
-  const embedder = spyOn(toolCards, 'getCardEmbedder').mockReturnValue(createFakeEmbedder().embed);
+  const embedder = spyOn(toolCards, 'getCardEmbedder').mockReturnValue(createFakeEmbedder({ isolatedVocabulary: true }).embed);
   return () => {
     counter.mockRestore();
     embedder.mockRestore();
@@ -105,6 +96,7 @@ afterAll(() => {
   // Undo the orchestration spy so later-loading test files
   // (orchestration-registry.test.ts) exercise the real implementation.
   orchToolsSpy.mockRestore();
+  for (const s of skillSpies) s.mockRestore();
 });
 
 function makeResponse(content: string, toolCalls: LlmResponse['toolCalls'] = []): LlmResponse {

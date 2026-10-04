@@ -1,38 +1,33 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { initAgentTools } from '../agent/init-tools.js';
 import type { Database } from '../db/compat-sqlite.js';
+import * as chatModule from '../dashboard/chat.js';
 
-// ── Module mock (before the server module chain is imported) ────────────────
+// ── Chat stub (spies on the real module) ────────────────────────────────────
 //
 // Capture exactly what POST /api/chat hands to handleChatMessage, instead of
 // running the agent. initChatSession still wires the agent's tools to the DB,
 // because the server re-executes handoff steps through the same tool
 // singletons the agent uses (DECISIONS Q11).
 //
-// Bun shares one module registry across every file in a plain `bun test` run
-// and mock.module patches the module in place, so without the afterAll below
-// this stub would replace the real dashboard chat for every later file
-// (chat-viewer-approval, approval-surfaces, dashboard-chat-* ...). Snapshot
-// the real exports first and put them back when this file is done. (Static
-// imports are hoisted, so chat.js is already loaded at this point.)
-const realChat = { ...(await import('../dashboard/chat.js')) };
-afterAll(() => {
-  mock.module('../dashboard/chat.js', () => realChat);
-});
-
+// Spies, not mock.module: a module mock is process-wide and never undone, so
+// without --isolate it replaced chat.js for every later test file.
 const captured: Array<{ query: string; sessionId: string | undefined; contextBlock: string | undefined; argc: number }> = [];
-mock.module('../dashboard/chat.js', () => ({
-  initChatSession: (db: Database) => initAgentTools(db),
-  handleChatMessage: async (...args: [string, string | undefined, string | undefined]) => {
+const chatSpies = [
+  spyOn(chatModule, 'initChatSession').mockImplementation((db: Database) => initAgentTools(db)),
+  spyOn(chatModule, 'handleChatMessage').mockImplementation((async (...args: [string, string | undefined, string | undefined]) => {
     captured.push({ query: args[0], sessionId: args[1], contextBlock: args[2], argc: args.length });
     return { answer: 'stub answer', sessionId: 'stub-session' };
-  },
-  getPendingChatOperation: () => null,
-  respondToChatOperation: () => ({ ok: false, error: 'stub' }),
-  refreshChatModel: () => {},
-  getAppliedChatModel: () => null,
-  getActiveChatHistory: () => null,
-}));
+  }) as unknown as typeof chatModule.handleChatMessage),
+  spyOn(chatModule, 'getPendingChatOperation').mockImplementation(() => null),
+  spyOn(chatModule, 'respondToChatOperation').mockImplementation(() => ({ ok: false, error: 'stub' }) as never),
+  spyOn(chatModule, 'refreshChatModel').mockImplementation(() => {}),
+  spyOn(chatModule, 'getAppliedChatModel').mockImplementation(() => null),
+  spyOn(chatModule, 'getActiveChatHistory').mockImplementation(() => null),
+];
+afterAll(() => {
+  for (const s of chatSpies) s.mockRestore();
+});
 
 import { createTestDb, seedTestData } from './helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';

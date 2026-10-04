@@ -3,6 +3,7 @@ import { Database } from '../db/compat-sqlite.js';
 import { runMigrations } from '../db/migrations.js';
 import * as licenseModule from '../licensing/license.js';
 import * as realPlaidClient from '../plaid/client.js';
+import * as realPlaidSync from '../tools/import/plaid-sync.js';
 import { ensureTestProfile } from './helpers.js';
 
 // Link the real client module before mocking so bun mutates it in place —
@@ -37,7 +38,10 @@ mock.module('../plaid/client.js', () => ({
   hasLocalPlaidCreds: () => false,
 }));
 
+// Spread the real module so plaidSyncTool stays exported: the tool registry
+// (tool-selection-recall, tool-registry) drops plaid_sync when it's missing.
 mock.module('../tools/import/plaid-sync.js', () => ({
+  ...realPlaidSync,
   initPlaidSyncTool: () => {},
   syncPlaidItem: async () => ({ added: 0, modified: 0, removed: 0, linked: 0, skipped: 0 }),
 }));
