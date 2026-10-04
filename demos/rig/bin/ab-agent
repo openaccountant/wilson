@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+// ab-agent: the ONLY command the actor (a headless Claude) may run. Receives argv straight from the OS (no shell parsing
+// here), validates it against lib/ab-policy.mjs, injects the fixed --cdp/--session and an isolated daemon environment
+// from env vars set by actor.mjs, runs the vendored agent-browser with an argv ARRAY (no shell), and appends one JSONL
+// audit record per invocation to the take's ab-audit.jsonl:
+//   {ts, endTs, argv (as received), accepted, reason?, exitCode, signal?, stdout, stderr, daemon?}
+// Exit codes: the child's, or 64 when the argv was refused, 70 on wrapper setup errors.
+import fs from 'node:fs';
+import { spawn } from 'node:child_process';
+import { validateArgv } from '../lib/ab-policy.mjs';
+import { verifyDaemon, readPidFile } from '../lib/ab-daemon.mjs';
+
+const argv = process.argv.slice(2);
+const need = ['AB_AGENT_BIN', 'AB_AGENT_CDP', 'AB_AGENT_SESSION', 'AB_AGENT_SOCKET_DIR', 'AB_AGENT_HOME', 'AB_AGENT_CONFIG', 'AB_AGENT_AUDIT', 'AB_AGENT_CHROME'];
+const missing = need.filter((k) => !process.env[k]);
+if (missing.length) { console.error(`ab-agent: not configured (${missing.join(', ')} unset). It is started by demos/rig/actor.mjs.`); process.exit(70); }
+const E = (k) => process.env[k];
+const CAP = 256 * 1024;
+const cap = (s) => (s.length > CAP ? s.slice(0, CAP) + `\n[truncated ${s.length - CAP} chars]` : s);
+const ts = new Date().toISOString();
+const audit = (rec) => { try { fs.appendFileSync(E('AB_AGENT_AUDIT'), JSON.stringify({ ts, endTs: new Date().toISOString(), argv, ...rec }) + '\n'); } catch (e) { console.error(`ab-agent: could not write audit: ${e.message}`); process.exit(70); } };
+
+const v = validateArgv(argv);
+if (!v.ok) {
+  audit({ accepted: false, kind: v.kind, reason: v.reason, exitCode: 64, stdout: '', stderr: '' });
+  console.error(`ab-agent: refused: ${v.reason}`);
+  process.exit(64);
+}
+
+fs.mkdirSync(E('AB_AGENT_SOCKET_DIR'), { recursive: true });
+fs.mkdirSync(E('AB_AGENT_HOME'), { recursive: true });
+if (!fs.existsSync(E('AB_AGENT_CONFIG'))) fs.writeFileSync(E('AB_AGENT_CONFIG'), '{}\n');
+
+// Child env: nothing inherited except PATH/LANG; no ambient AGENT_BROWSER_*; HOME is the take's scratch home, so
+// ~/.agent-browser is never read or written.
+const env = {
+  PATH: process.env.PATH ?? '/usr/bin:/bin', LANG: process.env.LANG ?? 'en_US.UTF-8',
+  HOME: E('AB_AGENT_HOME'), TMPDIR: E('AB_AGENT_HOME'),
+  AGENT_BROWSER_SOCKET_DIR: E('AB_AGENT_SOCKET_DIR'), AGENT_BROWSER_CONFIG: E('AB_AGENT_CONFIG'),
+  AGENT_BROWSER_EXECUTABLE_PATH: E('AB_AGENT_CHROME'), AGENT_BROWSER_SESSION: E('AB_AGENT_SESSION'),
+};
+const childArgs = ['--cdp', E('AB_AGENT_CDP'), '--session', E('AB_AGENT_SESSION'), ...v.argv];
+const child = spawn(E('AB_AGENT_BIN'), childArgs, { env, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
+let stdout = ''; let stderr = '';
+child.stdout.on('data', (d) => { stdout += d; process.stdout.write(d); });
+child.stderr.on('data', (d) => { stderr += d; process.stderr.write(d); });
+
+let done = false;
+const finish = (exitCode, signal, extra = {}) => {
+  if (done) return; done = true;
+  const sess = E('AB_AGENT_SESSION');
+  const pid = readPidFile(E('AB_AGENT_SOCKET_DIR'), sess);
+  let daemon;
+  if (pid) { const r = verifyDaemon({ pid, bin: E('AB_AGENT_BIN'), socketDir: E('AB_AGENT_SOCKET_DIR'), session: sess }); daemon = { pid, verified: r.ok, ...(r.ok ? {} : { problem: r.problem }) }; }
+  audit({ accepted: true, kind: v.kind, exitCode, ...(signal ? { signal } : {}), stdout: cap(stdout), stderr: cap(stderr), ...(daemon ? { daemon } : {}), ...extra });
+  process.exit(exitCode ?? 1);
+};
+child.on('error', (e) => { stderr += `ab-agent: could not start agent-browser: ${e.message}\n`; finish(70, null); });
+child.on('close', (code, signal) => finish(code, signal));
+// If the caller's tool timeout kills us, still leave a record so the stream/audit check stays 1:1.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, () => { try { child.kill('SIGTERM'); } catch { /* gone */ } finish(128, sig, { interrupted: true }); });

@@ -7,8 +7,7 @@ Founder request (verbatim):
 
 How to work:
 
-- Every command starts with exactly this prefix (it is the only thing you are allowed to run):
-  `{{AB}} --cdp {{CDP}} --session {{SESSION}} <subcommand>`
+- Every command is `{{AB}} <subcommand>` (the wrapper is the only thing you are allowed to run; it already knows which browser and session to use, so never pass --cdp or --session). It accepts exactly: `webmcp list [--json]`, `webmcp invoke <tool> --params '<inline json>' [--detach]`, `webmcp result <id>`, `snapshot`, `get url`. `--params` is required on invoke (use `'{}'` for none), must be inline JSON (never `@file`), and anything else is refused.
 - Look first. Run `webmcp list --json` to see which tools you were granted. Use read-only tools (transaction_search, spending_summary) to find what is still uncategorized before proposing anything.
 - Where the data is: the September statements are imported, but the dashboard's "current month" is October (empty), so month-based reads must name September (e.g. query "September"). transaction_search matches merchant, category, month and "over $N"; it has no "uncategorized" keyword, so list September rows and look for the ones whose category is null. Ask for up to 25 rows per call.
 - Work biggest first: the founder cares about dollar size, so make your first proposal the largest uncategorized expense (money going out), then, only if you still have one, the next largest.

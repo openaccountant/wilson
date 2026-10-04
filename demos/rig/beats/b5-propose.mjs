@@ -23,11 +23,12 @@ export const meta = {
   expectedStates: [
     'ledger-before: Transactions, September, search for the target; the SQ *KILN & CO STUDIO -$240.00 row shows Uncategorized',
     'grants-applied: bridge panel shows 3 tools live in this tab (granted on camera)',
+    'every card the agent raises is read and decided on camera (target approved, any other change Rejected, read cards allowed); no card is pending at beat end',
     'card-shown: confirmation card "Confirm: Categorize Transaction" naming SQ *KILN & CO STUDIO and -$240.00, Category Uncategorized -> the agent\'s chosen category, no unchanged entity_id row',
     'card-read-checked: the human script verified tool, description and amount before acting (events card-checked)',
     'approve-held (decision=approve): Hold to approve in progress',
     'card-resolved: approve -> "Done. The change was applied."; deny -> "Rejected. Nothing was changed."',
-    'ledger-after: approve -> the target row carries the agent\'s category; deny -> the target row is still Uncategorized',
+    'ledger-after: search cleared; approve -> the target row carries the agent\'s category; deny -> still Uncategorized; every other decided row shown and checked; held 3+ s',
   ],
 };
 
@@ -147,7 +148,6 @@ export async function humanScript(page, ctx) {
   TARGET = targetFrom(ctx.opts);
   const decision = ctx.opts.decision === 'deny' ? 'deny' : ctx.opts.decision === undefined || ctx.opts.decision === 'approve' ? 'approve' : null;
   if (!decision) throw new Error(`opts.decision must be "approve" or "deny", got ${JSON.stringify(ctx.opts.decision)}`);
-  let chosenCategory = null;
 
   // 1. The ledger before.
   await h.pause(1200);
@@ -184,93 +184,143 @@ export async function humanScript(page, ctx) {
   await h.pause(1600);
   await h.click(launcher, { pause: 700 }); // close the panel so the card has the room
 
-  // 3. Wait for the agent's confirmation card(s). Read each BEFORE acting; never blind-approve.
-  const reject = async (card, i, reason, extra = {}) => {
-    log('card-unexpected', { index: i, reason, ...extra });
-    const btn = card.getByRole('button', { name: /Reject|Don't allow/ });
-    await h.click(btn, { pause: 300 });
-    log('reject-clicked', { index: i, reason });
-    rejectedOther++;
-    await h.pause(1500);
+  // 3. Decide EVERY card the agent raises, on camera, by reading it. Only the beat's target change (categorize_transaction,
+  //    the target description, -$240.00, Uncategorized -> a real category) is approved; any other change card is Rejected
+  //    (a legitimate "you decide" moment); a read card for a granted read-only tool is allowed. The human keeps waiting
+  //    until the actor process has exited (run-beat.sh posts `actor-exited`), then sweeps up any last card. No card may be
+  //    left pending at beat end.
+  const actorExited = async () => !!(await ctx.waitEvent('actor-exited', 1));
+  const nextCard = async () => {
+    const t0 = Date.now(); let exitedAt = null;
+    for (;;) {
+      const loc = page.locator(CARD).first();
+      if ((await loc.count()) > 0) return loc;
+      if (await actorExited()) { exitedAt ??= Date.now(); if (Date.now() - exitedAt > 4000) return null; }
+      else if (Date.now() - t0 > 12 * 60_000) throw new Error(`no confirmation card for 12 minutes while the agent is still running (${decided.length} decided so far)`);
+      await h.pause(400);
+    }
   };
-  // The agent chooses its own proposals. A card that is not the target change is rejected (never approved) and the
-  // human keeps waiting for the agent's next proposal; only a take with no resolved target card fails.
-  let rejectedOther = 0;
-  for (let i = 0; i < 8; i++) {
-    const card = page.locator(CARD).first();
-    await card.waitFor({ timeout: rejectedOther ? 150_000 : 10 * 60_000 }).catch((e) => {
-      if (rejectedOther) throw new Error(`the agent proposed ${rejectedOther} other change(s), which were rejected, and then never proposed the target ${TARGET.description}: ${e.message}`);
-      throw e;
-    });
+  /** Wait for this card to show its outcome text or leave the DOM; returns the text seen ('card cleared' if it just went away). */
+  const settle = async (opId, re) => {
+    if (!opId) { await h.pause(900); return 'card cleared'; }
+    const seen = await page.waitForFunction(({ id, src }) => {
+      const n = [...document.querySelectorAll('[data-card-id]')].find((x) => x.getAttribute('data-card-id') === id);
+      if (!n) return '__gone__';
+      const t = (n.textContent || '').replace(/\s+/g, ' ');
+      return new RegExp(src).test(t) ? t : null;
+    }, { id: opId, src: re.source }, { timeout: 8000 }).then((hnd) => hnd.jsonValue(), () => null);
+    if (seen === null) return null;
+    return seen === '__gone__' ? 'card cleared' : (re.exec(seen)?.[0] ?? 'card cleared');
+  };
+  const decided = []; // every card handled: {index, opId, txId, tool, kind, decision, target, before, after, outcome}
+  let target = null;  // the decided target change card
+  for (let i = 0; i < 24; i++) {
+    const card = await nextCard();
+    if (!card) break;
     await h.pause(1800); // the card arms after 800 ms; give a viewer time to read it
+    const opId = await card.getAttribute('data-card-id').catch(() => null);
     const text = await readCard(card);
     const heading = headingOf(text);
     const isRead = (await card.getByRole('button', { name: /Hold to allow/ }).count()) > 0;
     const tool = toolFromHeading(heading);
-    log('card-shown', { index: i, tool, change: !isRead, text: text.slice(0, 700) }, { keyframe: !isRead });
+    const txId = /#(\d+)/.exec(text)?.[1] ?? null;
+    log('card-shown', { index: i, opId, txId, tool, change: !isRead, text: text.slice(0, 700) }, { keyframe: !isRead });
     await h.moveTo(card, { settle: 2200 });
+    const rec = { index: i, opId, txId, tool, kind: isRead ? 'read' : 'change' };
+
+    const doReject = async (reason, extra = {}) => {
+      const btn = card.getByRole('button', { name: /Reject|Don't allow/ });
+      await h.click(btn, { pause: 100 });
+      log('reject-clicked', { index: i, opId, txId, reason });
+      const outcome = await settle(opId, /Rejected\. Nothing was changed\./);
+      if (outcome === null && opId) throw new Error(`card ${opId} did not show Rejected or leave the page after Reject`);
+      await h.pause(400);
+      log('card-resolved', { index: i, opId, txId, kind: rec.kind, tool, decision: 'reject', target: !!extra.target, reason, outcome }, { keyframe: rec.kind === 'change' });
+      decided.push({ ...rec, decision: 'reject', target: !!extra.target, outcome, ...extra });
+      await h.pause(1400);
+    };
+
     if (isRead) {
       // A read card is allowed only for a tool we granted that is read-only.
-      if (!READ_TOOLS.has(tool)) { await reject(card, i, `read card for unexpected tool ${JSON.stringify(tool)}`, { text }); continue; }
-      log('card-checked', { index: i, tool, kind: 'read', problems: [] });
+      if (!READ_TOOLS.has(tool)) { log('card-unexpected', { index: i, opId, reason: `read card for unexpected tool ${JSON.stringify(tool)}`, text }); await doReject(`read card for unexpected tool ${JSON.stringify(tool)}`); continue; }
+      log('card-checked', { index: i, opId, txId, tool, kind: 'read', problems: [] });
       const allow = card.getByRole('button', { name: /Hold to allow/ });
       await allow.waitFor({ timeout: 10000 });
-      await h.hold(allow, 1200, { onDown: async () => { log('allow-pressed', { index: i }); }, onUp: async () => { log('allow-released', { index: i }); } });
+      await h.hold(allow, 1200, { onDown: async () => { log('allow-pressed', { index: i, opId }); }, onUp: async () => { log('allow-released', { index: i, opId }); } });
       await h.pause(900);
-      log('card-resolved', { index: i, kind: 'read', tool });
-      await h.pause(2800); // a read card clears itself; the agent's next call may bring the change card
+      log('card-resolved', { index: i, opId, txId, kind: 'read', tool, decision: 'allow', target: false });
+      decided.push({ ...rec, decision: 'allow', target: false });
+      await h.pause(2200); // a read card clears itself; the agent's next call may bring the next card
       continue;
     }
-    const check = await checkChangeCard(card);
-    log('card-checked', { index: i, tool: check.tool, kind: 'change', rows: check.rows, problems: check.problems });
-    if (check.problems.length) { await reject(card, i, check.problems.join('; '), { text: check.text }); continue; }
-    chosenCategory = check.rows.find((r) => /^categor/i.test(r[0] ?? ''))?.[2] ?? null;
 
+    const check = await checkChangeCard(card);
+    const cat = check.rows.find((r) => /^categor/i.test(r[0] ?? ''));
+    const before = cat?.[1] ?? null; const after = cat?.[2] ?? null;
+    const isTarget = check.problems.length === 0 && !target;
+    log('card-checked', { index: i, opId, txId, tool: check.tool, kind: 'change', rows: check.rows, problems: check.problems, target: isTarget });
+    if (!isTarget) {
+      const reason = check.problems.length ? check.problems.join('; ') : `the target ${TARGET.description} was already decided; not deciding it twice`;
+      log('card-unexpected', { index: i, opId, reason, text: check.text });
+      await doReject(reason, { before, after });
+      continue;
+    }
     if (decision === 'deny') {
-      await h.click(card.getByRole('button', { name: /Reject/ }), { pause: 100 });
-      log('reject-clicked', { index: i, reason: 'opts.decision=deny' });
-      await page.getByText('Rejected. Nothing was changed.').first().waitFor({ timeout: 8000 });
-      await h.pause(400);
-      log('card-resolved', { index: i, decision, outcome: 'Rejected. Nothing was changed.' }, { keyframe: true });
-      await h.pause(1200);
+      await doReject('opts.decision=deny', { before, after, target: true });
+      target = decided.at(-1);
     } else {
       const approve = card.getByRole('button', { name: /Hold to approve/ });
       await approve.waitFor({ timeout: 10000 });
       await h.hold(approve, 1200, {
-        onDown: async () => { log('approve-pressed', { index: i }); await h.pause(500); log('approve-held', { index: i }, { keyframe: true }); },
-        onUp: async () => { log('approve-released', { index: i }); },
+        onDown: async () => { log('approve-pressed', { index: i, opId, txId }); await h.pause(500); log('approve-held', { index: i, opId, txId }, { keyframe: true }); },
+        onUp: async () => { log('approve-released', { index: i, opId, txId }); },
       });
-      await page.getByText('Done. The change was applied.').first().waitFor({ timeout: 8000 });
+      const outcome = await settle(opId, /Done\. The change was applied\./);
+      if (outcome === null && opId) throw new Error(`card ${opId} did not show "Done. The change was applied." or leave the page after Approve`);
       await h.pause(300);
-      log('card-resolved', { index: i, decision, outcome: 'Done. The change was applied.' }, { keyframe: true });
-      await h.pause(1200);
+      log('card-resolved', { index: i, opId, txId, kind: 'change', tool, decision: 'approve', target: true, outcome: outcome ?? 'card cleared' }, { keyframe: true });
+      target = { ...rec, decision: 'approve', target: true, before, after, outcome };
+      decided.push(target);
+      await h.pause(1400);
     }
-    break;
   }
-  if (chosenCategory === null) throw new Error(`no change card for the target was resolved (${rejectedOther} other card(s) rejected)`);
+  if (!target) throw new Error(`the target ${TARGET.description} was never proposed and decided (${decided.length} card(s) decided: ${decided.map((d) => `${d.tool}/${d.decision}`).join(', ') || 'none'})`);
+  await h.pause(1500);
+  const pendingLeft = await page.locator(CARD).count();
+  if (pendingLeft > 0) throw new Error(`${pendingLeft} confirmation card(s) still pending at beat end; every card must be decided on camera`);
+  const chosenCategory = target.after;
 
-  // 4. The ledger after: switch away and back so the Transactions tab refetches, then show the row.
-  await h.pause(2600);
+  // 4. The ledger after: switch away and back so the Transactions tab refetches, CLEAR the search so every decided row is
+  //    in the list, then show the target row first and each other decided change row.
+  await h.pause(2000);
   await ctx.gotoTabHuman('Overview');
   await h.pause(500);
   await ctx.gotoTabHuman('Transactions');
   const search = page.getByPlaceholder('Search by merchant or description...');
-  if ((await search.inputValue()) !== TARGET.search) await h.type(search, TARGET.search, { delay: 60, pause: 500 });
-  const after = page.locator('tr[data-tx-id]', { hasText: rowRe() }).first();
-  await after.waitFor({ timeout: 20000 });
+  if ((await search.inputValue()) !== '') { await h.click(search, { pause: 200 }); await page.keyboard.press('Meta+a'); await page.keyboard.press('Backspace'); await h.pause(700); }
+  const changeCards = decided.filter((d) => d.kind === 'change' && d.txId);
+  const rowFor = (txId) => page.locator(`tr[data-tx-id="${txId}"]`).first();
+  const anchor = rowFor(target.txId ?? '0');
+  if (!(await anchor.waitFor({ timeout: 4000 }).then(() => true, () => false))) await h.click(page.getByRole('button', { name: '←' }), { pause: 900 });
+  await anchor.waitFor({ timeout: 20000 });
   if (decision === 'approve') {
-    await page.waitForFunction((src) => {
-      const re = new RegExp(src, 'i');
-      const r = [...document.querySelectorAll('tr[data-tx-id]')].find((x) => re.test(x.textContent || ''));
-      return r && !/Uncategorized/.test(r.textContent || '');
-    }, rowRe().source, { timeout: 20000 });
+    await page.waitForFunction((id) => { const r = document.querySelector(`tr[data-tx-id="${id}"]`); return r && !/Uncategorized/.test(r.textContent || ''); }, target.txId, { timeout: 20000 });
   }
-  await h.moveTo(after, { dx: 60 });
-  await h.pause(900);
-  const rowAfter = (await after.innerText()).replace(/\s+/g, ' ');
-  if (decision === 'deny' && !/Uncategorized/.test(rowAfter)) throw new Error(`deny must leave the row uncategorized, got: ${rowAfter}`);
-  if (decision === 'approve' && !rowAfter.toLowerCase().includes(String(chosenCategory).toLowerCase())) throw new Error(`row does not carry the approved category ${chosenCategory}: ${rowAfter}`);
-  log('ledger-after', { decision, category: chosenCategory, row: rowAfter }, { keyframe: true });
-  await h.pause(2800);
+  const rows = [];
+  for (const d of [target, ...changeCards.filter((c) => c !== target)]) {
+    const r = rowFor(d.txId);
+    await r.waitFor({ timeout: 20000 });
+    await h.moveTo(r, { dx: 60 });
+    await h.pause(d === target ? 900 : 1100);
+    const text = (await r.innerText()).replace(/\s+/g, ' ');
+    if (d.decision === 'approve' && !text.toLowerCase().includes(String(d.after).toLowerCase())) throw new Error(`row #${d.txId} does not carry the approved category ${d.after}: ${text}`);
+    if (d.decision === 'reject' && d.after && d.before !== d.after && text.toLowerCase().includes(String(d.after).toLowerCase())) throw new Error(`row #${d.txId} carries ${d.after} although its card was rejected: ${text}`);
+    if (d.decision === 'reject' && /^uncategorized$/i.test(d.before ?? '') && !/Uncategorized/.test(text)) throw new Error(`row #${d.txId} was rejected but is no longer uncategorized: ${text}`);
+    rows.push({ txId: d.txId, opId: d.opId, decision: d.decision, target: d.target, row: text });
+  }
+  await h.moveTo(anchor, { dx: 60 });
+  const rowAfter = rows.find((r) => r.target)?.row ?? '';
+  log('ledger-after', { decision: target.decision, category: chosenCategory, row: rowAfter, rows }, { keyframe: true });
+  await h.pause(3200); // ledger-after hold (the cut asserts >= 2.5 s)
   log('beat-end');
 }

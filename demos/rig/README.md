@@ -42,7 +42,7 @@ runs while the tab is visible.
 
 ## Agent attach (for beats with an agent side)
 
-After `recording-started`, attach the agent to the same browser: `agent-browser --session s --cdp 9333 ...` (vendored 0.38.2 in `demos/rig/node_modules`, resolved by `lib/agent-browser.mjs`; do NOT run `agent-browser close`). `demos/run-beat.sh` drives all of this; `actor.mjs` is the real agent runner. Only the recorded tab exists, so the agent cannot pick the wrong one.
+After `recording-started`, attach the agent to the same browser through the wrapper `bin/ab-agent` only (argv-validating; it injects `--cdp <port> --session <unique>` and an isolated daemon environment under the take dir, runs the vendored 0.38.2 in `demos/rig/node_modules`, resolved by `lib/agent-browser.mjs`, and logs every attempt to `ab-audit.jsonl`; do NOT run `agent-browser close`, and nothing under `~/.agent-browser` is used). See `demos/README.md` for the allowed command set. `demos/run-beat.sh` drives all of this; `actor.mjs` is the real agent runner. Only the recorded tab exists, so the agent cannot pick the wrong one.
 Grants are per tab (sessionStorage), so a new recorded tab starts with zero tools. Declarative-form tools block until a
 submit: call them with `--detach`.
 

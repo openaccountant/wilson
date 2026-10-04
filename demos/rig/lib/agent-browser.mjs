@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 export const AGENT_BROWSER_VERSION = '0.38.2';
 export const SYSTEM_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const RIG_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const RIG_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Pure: parse "agent-browser 0.38.2" -> "0.38.2" (or null). */
 export function parseVersion(out) {
@@ -40,14 +40,22 @@ export function agentBrowserEnv(base = process.env, chrome = SYSTEM_CHROME) {
   return { ...base, AGENT_BROWSER_EXECUTABLE_PATH: chrome };
 }
 
-/** Subcommands the actor may run (WebMCP plus read-only snapshot/get url). Mirrors ALLOWED_SUBCOMMANDS in actor-log.mjs. */
-export const ALLOWED_SUBCOMMAND_PATTERNS = ['webmcp list', 'webmcp invoke', 'webmcp result', 'snapshot', 'get url'];
+/** The ONLY thing the actor may run: the argv-validating wrapper (see lib/ab-policy.mjs). */
+export const WRAPPER = path.join(RIG_DIR, 'bin', 'ab-agent');
 
-/**
- * The exact Bash allow patterns the actor is restricted to: one per allowed subcommand, each with the absolute-path
- * prefix, our CDP port and session. `close`, `eval`, `click`, `fill`, `screenshot`, `state save`, `open` and any
- * re-targeted --cdp are NOT covered, so headless mode denies them.
- */
-export function allowedBashPatterns(bin, cdpPort, session) {
-  return ALLOWED_SUBCOMMAND_PATTERNS.map((sub) => `Bash(${bin} --cdp ${cdpPort} --session ${session} ${sub}:*)`);
+/** Per-take isolated state, all under the take dir (scratch): socket dir (daemon .sock/.pid), HOME for the daemon, empty config. */
+export function takeIsolation(takeDir) {
+  const root = path.join(takeDir, 'ab');
+  return { root, socketDir: path.join(root, 'sock'), home: path.join(root, 'home'), config: path.join(root, 'config.json'), audit: path.join(takeDir, 'ab-audit.jsonl') };
+}
+
+/** Env vars the wrapper reads (set by actor.mjs). The wrapper builds the child's env itself; none of these reach agent-browser as-is. */
+export function wrapperEnv({ bin, cdpPort, session, takeDir, chrome = SYSTEM_CHROME }) {
+  const iso = takeIsolation(takeDir);
+  return { AB_AGENT_BIN: bin, AB_AGENT_CDP: String(cdpPort), AB_AGENT_SESSION: session, AB_AGENT_SOCKET_DIR: iso.socketDir, AB_AGENT_HOME: iso.home, AB_AGENT_CONFIG: iso.config, AB_AGENT_AUDIT: iso.audit, AB_AGENT_CHROME: chrome };
+}
+
+/** The single claude -p allow pattern: the wrapper's absolute path, any args (the wrapper validates argv exactly). */
+export function allowedBashPatterns(wrapper = WRAPPER) {
+  return [`Bash(${wrapper}:*)`];
 }

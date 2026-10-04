@@ -146,40 +146,76 @@ cut keyframe stills, copy everything into the take dir, then build and render th
 the host (verified pid-file kill) on any failure.
 
 Output, never committed: `/private/tmp/claude-501/wilson-demos/<beat>/take<N>/` with `video.mp4`, `events.json`,
-`actor.log`, `actor.jsonl` (raw stream-json), `host.log`, `frames/`, `cut.mp4`. Existing takes are never overwritten.
+`ab-audit.jsonl`, `actor.log`, `actor.jsonl` (raw stream-json), `host.log`, `frames/`, `cut.mp4`. Existing takes are never overwritten.
 
-The agent: `rig/actor.mjs` runs `claude -p --output-format stream-json --verbose` with `--tools Bash` and five narrow
-`--allowedTools` patterns, each the exact absolute path of the vendored agent-browser with `--cdp <port> --session s`
-plus one subcommand: `webmcp list`, `webmcp invoke`, `webmcp result`, `snapshot`, `get url`. `close`, `eval`, `click`,
-`fill`, `screenshot`, `state save`, `open` and a re-targeted `--cdp` are not allowed (so the model cannot press Approve
-on its own card). No `--dangerously-skip-permissions`; cwd is an empty directory inside the take. The brief is
-`rig/beats/<beat>.brief.md`. After the run the harness audits `actor.jsonl` and fails the take (actor exit 5, and again
-in the HyperFrames build) if any tool use falls outside that set, including a command that was attempted and denied.
+The agent: `rig/actor.mjs` runs `claude -p --output-format stream-json --verbose` with `--tools Bash` and ONE
+`--allowedTools` pattern, the absolute path of the wrapper `rig/bin/ab-agent`. The wrapper is the only thing the actor can
+run. It receives argv straight from the OS (no shell parsing of its own) and accepts exactly:
 
-Transcript integrity: the harness (not the model) writes `actor.jsonl` (raw stream-json plus a harness receipt time `_rx`
-per line) and `actor.log`, a readable view (commands collapsed to one line, every tool-output line indented, so model-
-or page-controlled text cannot forge a command or `[SUMMARY]` line). The cut does not parse `actor.log`; `build.mjs`
-replays `actor.jsonl` through `rig/lib/actor-log.mjs` and renders structured entries. Compose copy lives in
-`compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all timing from `events.json` and
-the receipt times.
+| command | notes |
+|---|---|
+| `webmcp list [--json]` | |
+| `webmcp invoke <tool> --params '<inline json object>' [--detach]` | `--params` required, `--detach` optional, either order; tool must match `[a-z][a-z0-9_]*` |
+| `webmcp result <id>` | id must match `[A-Za-z0-9-]+` |
+| `snapshot` | no flags |
+| `get url` | |
 
-What varies between takes: which reads the agent runs, which rows it proposes and the categories it picks, how long
+Everything else is refused (exit 64) and recorded: any other subcommand (`close`, `eval`, `click`, `fill`, `open`,
+`screenshot`, `state save`, ...), any other flag, `--cdp` / `--session` / `--executable-path` / `--config` overrides,
+`--params @file` (a file read), `--params` that is not valid inline JSON, odd tool names or ids. The wrapper injects the
+fixed `--cdp <port> --session <name>` itself, runs the vendored agent-browser with an argv array (no shell), and appends
+one JSON line per attempt to `<take>/ab-audit.jsonl`: `{ts, endTs, argv (as received), accepted, exitCode, stdout, stderr}`.
+The grammar lives in `rig/lib/ab-policy.mjs` and is unit-tested as an accept/reject table.
+
+Isolation (nothing under `~/.agent-browser` is read or written): per take, `actor.mjs` creates `<take>/ab/{sock,home}` and
+the wrapper runs agent-browser with `AGENT_BROWSER_SOCKET_DIR=<take>/ab/sock`, `HOME=<take>/ab/home`, an empty config
+file, no ambient `AGENT_BROWSER_*` variables, and a unique session name per take. The daemon agent-browser starts is
+verified after each command (its pid must be the vendored native binary and must hold `<take>/ab/sock/<session>.sock`),
+the actor refuses to start if that socket dir already has a live daemon, and the daemon is stopped by its verified pid
+(SIGTERM) in `actor.mjs` and again in `run-beat.sh` cleanup. `agent-browser close` is never run (it would close the
+attached recording browser). No `--dangerously-skip-permissions`; cwd is an empty directory inside the take.
+
+Audit, stream and the cut: `ab-audit.jsonl` is the source of truth for commands and outputs (`actor.log` and the terminal
+pane in the cut are rendered from it). `actor.jsonl` (raw stream-json plus a harness receipt time `_rx`) remains for the
+model's own text and its SUMMARY. The take FAILS (actor exit 5, and again in the HyperFrames build) if any stream
+`tool_use` is not a Bash call of exactly the wrapper, does not correspond 1:1 (same order, same argv) to an audit record,
+if there is an audit record with no `tool_use`, or if the wrapper refused any attempt (a refusal is evidence of the model
+trying something outside the set). Exit 6: the daemon could not be verified as the take's own.
+
+Transcript integrity: the harness (not the model) writes `actor.jsonl`, `ab-audit.jsonl` and `actor.log` (commands
+collapsed to one line, every output line indented, so model- or page-controlled text cannot forge a command or `[SUMMARY]`
+line). `build.mjs` renders structured audit entries, never parsed `actor.log` text. Compose copy lives in
+`compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all timing from `events.json` and the
+audit timestamps. The brief is `rig/beats/<beat>.brief.md`.
+
+The human decides every card. The on-camera human script reads each card the agent raises and decides it: it approves
+only the beat's target (`SQ *KILN & CO STUDIO`, -$240.00, `categorize_transaction`, Uncategorized to a real category),
+Rejects any other change card (a legitimate on-camera "you decide" moment), and allows a read card only for a granted
+read-only tool. It keeps waiting until the actor exits (`run-beat.sh` posts `actor-exited`), sweeps up any last card,
+fails if one is still pending, then shows the ledger with the search cleared so every decided row is visible (held 3+ s).
+
+The cut binds each callout and caption to the card it describes: every card event carries the card's op id
+(`data-card-id`) and transaction id, `build.mjs` binds each change card to the audited `--detach` invoke with the same
+tool, transaction id and category, and generates that card's captions and callouts from its own data and events. A card
+that cannot be bound or was never resolved refuses the cut; lower-thirds are clipped so none overlaps another; each decided
+card (approve and reject) gets its own beats; the ledger-after hold must be at least 2.5 s.
+
+Takes vary. Nothing is staged: the agent is a real LLM, so every take differs and the number of cards, their order and which ones the human rejects change from run to run, and the cut is generated from whatever happened. What varies between takes: which reads the agent runs, which rows it proposes and the categories it picks, how long
 gemma takes to categorize, and the Approve timing. The cut's captions are filled from the take's own data
 (`{category}`, `{id}`).
 
 **Most takes can still fail, and that is by design.** The agent is a real LLM choosing its own actions and the human on
 camera is a script that only approves the explicit target (`SQ *KILN & CO STUDIO`, -$240.00, Uncategorized to a real
 category). The brief steers the agent (read September, biggest uncategorized expense first) but cannot force it. Any
-other change card is rejected on camera and never approved; the human then waits up to 150 s for a proposal for the
-target. If the agent never proposes it (it finishes, or proposes only other rows), the human script errors and the take
-fails with the reason in `events.json` (`human-script-error`). Other known failure causes: the agent's first reads
+other change card is rejected on camera and never approved; the human keeps deciding cards until the agent exits. If the agent
+never proposes the target (it finishes, or proposes only other rows), the human script errors and the take fails with the reason in `events.json` (`human-script-error`). Other known failure causes: the agent's first reads
 return nothing and it spends time re-querying (the brief now says September and lists the search semantics), a
-proposal that times out because the human is gone, gemma leaving the target categorized. Expect to run a few takes
+proposal that times out because the human is gone, gemma leaving the target categorized, a wrapper refusal (the model tried a command outside the table above). Expect to run a few takes
 and keep the good one; do not expect every take to produce a cut.
 
 How failures surface (non-zero exit, a `[run-beat] FAILED: ...` line): preflight problems name the missing piece; host
 failure shows `host.log`; the actor exits 2 (setup), 3 (timeout, default 600 s), 4 (claude error) or 5 (policy
-violation); the beat not ending means the human script errored (see `human-script-error` in `events.json`, `host.log`);
+violation / stream not 1:1 with the audit) or 6 (daemon not verified); the beat not ending means the human script errored (see `human-script-error` in `events.json`, `host.log`);
 a take with no mutating proposal fails in the HyperFrames build. On ANY failure the take dir keeps the evidence
 (`host.log`, `actor.log`/`actor.jsonl`, and the partial `video.mp4`/`video.webm`, `events.json`, `human-error.png` when
 the rig produced them) plus a `FAILED` file with the exit code and reason. A failed take dir is moved aside to

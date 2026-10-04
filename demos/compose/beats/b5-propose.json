@@ -3,11 +3,12 @@
   "kicker": "OPEN ACCOUNTANT / BEAT 5",
   "titleLead": "It proposes.",
   "titleAccent": "You decide.",
-  "subtitle": "A real recording: an AI agent over WebMCP, a confirmation card, a human who holds Approve.",
+  "subtitle": "A real recording: an AI agent over WebMCP, a confirmation card for every change, a human who reads each one and decides.",
   "headerTitle": "It proposes. You decide.",
   "terminalTitle": "Agent (Claude Code, headless) — via WebMCP",
   "target": "SQ *KILN & CO STUDIO",
   "titleSeconds": 4,
+  "minLedgerHoldSeconds": 2.5,
   "segments": [
     {
       "from": {
@@ -25,7 +26,7 @@
         "offset": -1
       },
       "to": {
-        "event": "card-resolved",
+        "event": "last-card-resolved",
         "offset": 3
       }
     },
@@ -35,8 +36,7 @@
         "offset": -1.2
       },
       "to": {
-        "event": "ledger-after",
-        "offset": 3.5
+        "event": "beat-end"
       }
     }
   ],
@@ -55,37 +55,6 @@
       "y": 300,
       "txt": "Agent sees only the tools you granted",
       "sub": "{tools}"
-    },
-    {
-      "id": "co2",
-      "at": {
-        "event": "card-shown",
-        "offset": 0.2
-      },
-      "end": {
-        "event": "approve-pressed",
-        "offset": -0.1
-      },
-      "x": 80,
-      "y": 520,
-      "txt": "Exact row + before/after, shown on the card",
-      "sub": "#{id} · Uncategorized → {category}",
-      "when": "approve"
-    },
-    {
-      "id": "co3",
-      "at": {
-        "event": "approve-pressed"
-      },
-      "end": {
-        "event": "card-resolved",
-        "offset": 1.6
-      },
-      "x": 80,
-      "y": 520,
-      "txt": "Nothing changes until you hold Approve",
-      "sub": "Hold to approve / Reject",
-      "when": "approve"
     }
   ],
   "captions": [
@@ -117,49 +86,10 @@
         "edge": "s"
       },
       "end": {
-        "cmd": "firstProposal"
+        "event": "first-proposal"
       },
-      "t": "The agent reads before it proposes: read-only tool calls, then a lookup."
-    },
-    {
-      "at": {
-        "cmd": "firstProposal"
-      },
-      "end": {
-        "event": "card-shown"
-      },
-      "t": "The agent proposes categorize_transaction {proposalArgs}. It chose {category} itself."
-    },
-    {
-      "at": {
-        "event": "card-shown"
-      },
-      "end": {
-        "event": "approve-pressed"
-      },
-      "t": "A confirmation card appears in the dashboard. Nothing has changed yet.",
-      "when": "approve"
-    },
-    {
-      "at": {
-        "event": "approve-pressed"
-      },
-      "end": {
-        "event": "approve-released"
-      },
-      "t": "The human presses and holds Approve.",
-      "when": "approve"
-    },
-    {
-      "at": {
-        "event": "approve-released"
-      },
-      "end": {
-        "seg": 1,
-        "edge": "e"
-      },
-      "t": "“Done. The change was applied.”",
-      "when": "approve"
+      "t": "The agent reads before it proposes: read-only tool calls, then a lookup.",
+      "optional": true
     },
     {
       "at": {
@@ -170,30 +100,34 @@
         "seg": 2,
         "edge": "e"
       },
-      "t": "Ledger afterwards: {target} is now {category}.",
-      "when": "approve"
-    },
-    {
-      "at": {
-        "event": "card-shown"
-      },
-      "end": {
-        "event": "card-resolved"
-      },
-      "t": "A confirmation card appears. The human rejects it.",
-      "when": "deny"
-    },
-    {
-      "at": {
-        "seg": 2,
-        "edge": "s"
-      },
-      "end": {
-        "seg": 2,
-        "edge": "e"
-      },
-      "t": "Ledger afterwards: {target} is unchanged.",
-      "when": "deny"
+      "t": "Ledger afterwards, search cleared: {ledgerLine}"
     }
-  ]
+  ],
+  "perCard": {
+    "resolvedHold": 1.5,
+    "propose": "The agent proposes categorize_transaction {proposalArgs}. It chose {category} itself.",
+    "shown": "Card for transaction #{txId}: {before} → {category}. Nothing has changed yet.",
+    "hold": "The human has read it and holds Approve for #{txId}.",
+    "resolved": {
+      "approve": "“Done. The change was applied.” (#{txId} is now {category})",
+      "reject": "The human rejects #{txId}. Nothing was changed.",
+      "rejectOther": "Not the {target} charge, so the human rejects #{txId}. Nothing was changed."
+    },
+    "coShown": {
+      "x": 80,
+      "y": 520,
+      "txt": "Exact row + before/after, shown on the card",
+      "sub": "#{txId} · {before} → {category}"
+    },
+    "coDecide": {
+      "approve": {
+        "txt": "Nothing changes until you hold Approve",
+        "sub": "#{txId} · Hold to approve / Reject"
+      },
+      "reject": {
+        "txt": "Reject leaves the books untouched",
+        "sub": "#{txId} stays {before}"
+      }
+    }
+  }
 }

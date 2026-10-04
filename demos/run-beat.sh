@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One command to record and cut a beat: real dashboard, real LLM agent (Claude Code headless), real footage.
 #   demos/run-beat.sh <beat> [--take N] [--with-injection] [--short-history] [--no-render]
-# Output: /private/tmp/claude-501/wilson-demos/<beat>/take<N>/{video.mp4,events.json,actor.log,actor.jsonl,frames/,cut.mp4}
+# Output: /private/tmp/claude-501/wilson-demos/<beat>/take<N>/{video.mp4,events.json,ab-audit.jsonl,actor.log,actor.jsonl,frames/,cut.mp4}
 set -uo pipefail
 
 BEAT="${1:-}"; [[ -z "$BEAT" || "$BEAT" == --* ]] && { sed -n '2,4p' "$0"; exit 2; }
@@ -75,6 +75,10 @@ cleanup() {
     say "stopping host (cleanup)"
     node "$RIG/stop.mjs" --name "$NAME" || say "WARNING: stop.mjs reported a problem; check: lsof -iTCP:$DASH_PORT,$CDP_PORT,$CTL_PORT -sTCP:LISTEN"
   fi
+  # The take's own agent-browser daemon (socket dir inside the take): stopped by its VERIFIED pid only, never via `close`.
+  if [[ -d "$TAKE_DIR/ab/sock" ]]; then
+    node "$RIG/ab-daemon.mjs" stop --take-dir "$TAKE_DIR" || say "WARNING: could not verify/stop the take's agent-browser daemon; see $TAKE_DIR/ab/sock/*.pid"
+  fi
   if [[ $rc -ne 0 ]]; then
     # Keep the evidence IN the take dir: whatever the rig produced (partial video, events, human-error screenshot).
     for f in "$SRC"/*; do [[ -f "$f" && ! -e "$TAKE_DIR/$(basename "$f")" ]] && cp "$f" "$TAKE_DIR/" 2>/dev/null; done
@@ -108,11 +112,15 @@ say "$(grep '^READY ' "$TAKE_DIR/host.log")"
 # Sync only: the agent is started once the human has granted tools on camera (a tab with zero grants has nothing to list).
 "${CTL[@]}" wait grants-applied 180000 >/dev/null || die "human never reached grants-applied (see $TAKE_DIR/host.log)"
 say "grants applied; starting the agent"
-node "$RIG/actor.mjs" --beat "$BEAT" --take-dir "$TAKE_DIR" --cdp-port $CDP_PORT --session s
+SESSION="abt${TAKE}-$(( RANDOM % 9000 + 1000 ))-$$"   # unique per take; the daemon's files live in $TAKE_DIR/ab/sock
+node "$RIG/ab-daemon.mjs" preflight --take-dir "$TAKE_DIR" || die "take socket dir already has a live agent-browser daemon"
+node "$RIG/actor.mjs" --beat "$BEAT" --take-dir "$TAKE_DIR" --cdp-port $CDP_PORT --session "$SESSION"
 ACTOR_RC=$?
+# Tell the human script the agent is done, so it sweeps any last card and then shows the ledger.
+"${CTL[@]}" event actor-exited "{\"rc\":$ACTOR_RC}" >/dev/null 2>&1 || true
 if [[ $ACTOR_RC -ne 0 ]]; then
-  case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; 5) W="actor ran a command outside the allowed set (policy violation)";; *) W="claude failed or reported an error";; esac
-  die "$W (exit $ACTOR_RC). See $TAKE_DIR/actor.log and actor.jsonl"
+  case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; 5) W="actor ran a command outside the allowed set, or its stream did not match ab-audit.jsonl (policy violation)";; 6) W="agent-browser daemon could not be verified as the take's own";; *) W="claude failed or reported an error";; esac
+  die "$W (exit $ACTOR_RC). See $TAKE_DIR/actor.log, ab-audit.jsonl and actor.jsonl"
 fi
 "${CTL[@]}" wait beat-end 180000 >/dev/null || {
   "${CTL[@]}" events 2>/dev/null | grep -A3 'human-script-error' | head -8 >&2
@@ -141,7 +149,7 @@ say "done."
 echo "  take dir  : $TAKE_DIR"
 echo "  footage   : $TAKE_DIR/video.mp4"
 echo "  events    : $TAKE_DIR/events.json"
-echo "  transcript: $TAKE_DIR/actor.log  (raw stream: $TAKE_DIR/actor.jsonl)"
+echo "  transcript: $TAKE_DIR/actor.log  (source of truth: ab-audit.jsonl; model stream: actor.jsonl)"
 echo "  keyframes : $TAKE_DIR/frames ($FRAMES stills)"
 [[ -n "$CUT" ]] && echo "  cut       : $CUT"
 exit 0
