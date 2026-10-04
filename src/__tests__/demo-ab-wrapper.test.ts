@@ -22,6 +22,7 @@ describe('ab-agent argv policy (accept/reject table)', () => {
     ['invoke detach before (as the model writes it)', ['webmcp', 'invoke', 'categorize_transaction', '--detach', '--params', P]],
     ['empty params', ['webmcp', 'invoke', 'spending_summary', '--params', '{}']],
     ['result', ['webmcp', 'result', '9739C2DF-DBB8636D228B2FB5901BD04B']],
+    ['result --timeout', ['webmcp', 'result', '9739C2DF-DBB8636D228B2FB5901BD04B', '--timeout', '120000']],
     ['snapshot', ['snapshot']],
     ['get url', ['get', 'url']],
   ];
@@ -80,6 +81,11 @@ describe('ab-agent argv policy (accept/reject table)', () => {
     ['result id with dollar', ['webmcp', 'result', '$(id)']],
     ['result no id', ['webmcp', 'result']],
     ['result two ids', ['webmcp', 'result', 'a', 'b']],
+    ['result --timeout no value', ['webmcp', 'result', 'a', '--timeout']],
+    ['result --timeout too small', ['webmcp', 'result', 'a', '--timeout', '500']],
+    ['result --timeout too large', ['webmcp', 'result', 'a', '--timeout', '900000']],
+    ['result --timeout not a number', ['webmcp', 'result', 'a', '--timeout', '1e5']],
+    ['result other flag', ['webmcp', 'result', 'a', '--debug', '1000']],
     ['non-string argv', [42 as unknown as string]],
   ];
   for (const [name, argv] of reject) test(`rejects ${name}`, () => { const r = validateArgv(argv); expect(r.ok).toBe(false); expect(typeof r.reason).toBe('string'); });

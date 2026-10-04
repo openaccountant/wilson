@@ -3,7 +3,8 @@
 //
 //   webmcp list [--json]
 //   webmcp invoke <tool> --params <inline-json> [--detach]      (--params / --detach in either order)
-//   webmcp result <id>
+//   webmcp result <id> [--timeout <ms>]                     (1000-300000 ms; agent-browser's own default wait is ~25 s and
+//                                                            it CANCELS the call when that wait runs out)
 //   snapshot
 //   get url
 //
@@ -40,9 +41,12 @@ export function validateArgv(argv) {
     return bad(`webmcp list accepts only an optional --json, got ${JSON.stringify(rest)}`);
   }
   if (b === 'result') {
-    if (rest.length !== 1) return bad('webmcp result takes exactly one id', 'usage');
+    if (rest.length !== 1 && rest.length !== 3) return bad('webmcp result takes exactly one id, optionally followed by --timeout <ms>', 'usage');
     if (!ID_RE.test(rest[0])) return bad(`id ${JSON.stringify(rest[0].slice(0, 80))} is outside [A-Za-z0-9-]`);
-    return { ok: true, argv: ['webmcp', 'result', rest[0]], kind: 'result', id: rest[0] };
+    if (rest.length === 1) return { ok: true, argv: ['webmcp', 'result', rest[0]], kind: 'result', id: rest[0] };
+    if (rest[1] !== '--timeout') return bad(`flag ${JSON.stringify(rest[1].slice(0, 80))} is not allowed on webmcp result (allowed: --timeout <ms>)`);
+    if (!/^[0-9]{4,6}$/.test(rest[2]) || Number(rest[2]) < 1000 || Number(rest[2]) > 300000) return bad('--timeout must be a whole number of ms from 1000 to 300000', 'usage');
+    return { ok: true, argv: ['webmcp', 'result', rest[0], '--timeout', String(Number(rest[2]))], kind: 'result', id: rest[0] };
   }
   if (b === 'invoke') {
     const [tool, ...flags] = rest;
