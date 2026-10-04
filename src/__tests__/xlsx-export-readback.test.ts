@@ -22,6 +22,20 @@ const mockHasLicense = spyOn(licenseModule, 'hasLicense').mockReturnValue(true);
 beforeEach(() => mockHasLicense.mockReturnValue(true));
 afterAll(() => mockHasLicense.mockRestore());
 
+/** Header cells are bold and every Amount cell carries the currency format (resolved via cellXfs). */
+function expectBoldHeaderAndCurrency(x: XlsxRead, sheet: string, amountCol: string) {
+  const header = x.sheets[sheet][0];
+  expect(header.length).toBeGreaterThan(0);
+  for (const c of header) expect(x.styleOf(c).bold).toBe(true);
+  const col = x.header(sheet).indexOf(amountCol);
+  const amounts = x.sheets[sheet].slice(1).map((r) => r[col]).filter(Boolean);
+  expect(amounts.length).toBeGreaterThan(0);
+  for (const c of amounts) {
+    expect(x.styleOf(c).numFmt).toBe(CURRENCY_FORMAT);
+    expect(x.styleOf(c).bold).toBe(false);
+  }
+}
+
 function seed(db: Database): number[] {
   return insertTransactions(db, [
     { date: '2026-03-01', description: HYPERLINK, amount: -12.34, category: 'Supplies', notes: '+cmd' },
@@ -123,6 +137,8 @@ describe('xlsx read-back', () => {
     expect(detail.map((r) => r.Description)).toContain("'+cmd");
     const summary = rowsOf(x, 'Schedule C 2026');
     expect(summary[summary.length - 1]).toMatchObject({ Line: '28', Category: 'Total expenses', Amount: 17.34 });
+    expectBoldHeaderAndCurrency(x, 'Schedule C 2026', 'Amount');
+    expectBoldHeaderAndCurrency(x, 'Transactions', 'Amount');
   });
 
   test('tax_flag export writes a readable workbook', async () => {
@@ -138,6 +154,8 @@ describe('xlsx read-back', () => {
     expect(columnIsNumeric(x, 'Transactions', 'Amount')).toBe(true);
     expect(rowsOf(x, 'Transactions').map((r) => r.Description)).toContain(`'${HYPERLINK}`);
     expect(rowsOf(x, 'Transactions').map((r) => r.Notes)).toContain("'+cmd");
+    expectBoldHeaderAndCurrency(x, 'Schedule C 2026', 'Amount');
+    expectBoldHeaderAndCurrency(x, 'Transactions', 'Amount');
   });
 
   test('apiExportXlsx', async () => {
@@ -194,6 +212,15 @@ describe('xlsx writer', () => {
         '2025-01-03,"ID",0.3,"x\ny"\n' +
         "d,'=cmd,1234567.891, sp ",
     );
+  });
+
+  test('sheetToCsv quotes a field containing a carriage return as one field', () => {
+    const desc = 'Coffee\r=HYPERLINK("http://x","y")';
+    const csv = sheetToCsv({ header: ['description'], rows: [[desc]] });
+    expect(csv).toBe('\ufeffdescription\n"Coffee\r=HYPERLINK(""http://x"",""y"")"');
+    expect(csv.split('\n')).toHaveLength(2);
+    // CR alone (no comma, quote or LF) must still force quoting.
+    expect(sheetToCsv({ header: ['d'], rows: [['a\r=1+1']] })).toBe('\ufeffd\n"a\r=1+1"');
   });
 
   test('sheetToCsv neutralises formulas', () => {

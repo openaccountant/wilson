@@ -83,7 +83,7 @@ export async function xlsxToBuffer(sheets: XlsxSheet[]): Promise<Buffer> {
 /**
  * CSV for a sheet, byte-compatible with the old SheetJS `bookType: 'csv'`
  * output: UTF-8 BOM, comma separated, `\n` rows with no trailing newline, a
- * field quoted when it contains `,` `"` or `\n` (and a bare `ID`), numbers in
+ * field quoted when it contains `,` `"`, `\n` or `\r` (and a bare `ID`), numbers in
  * Excel "General" form, formula-neutralised strings.
  */
 export function sheetToCsv(sheet: Pick<XlsxSheet, 'header' | 'rows'>): string {
@@ -93,7 +93,7 @@ export function sheetToCsv(sheet: Pick<XlsxSheet, 'header' | 'rows'>): string {
     if (typeof v === 'number') txt = String(Number(v.toPrecision(11)));
     else if (typeof v === 'boolean') txt = v ? 'TRUE' : 'FALSE';
     else txt = neutralizeFormula(v);
-    if (/[,"\n]/.test(txt)) return `"${txt.replace(/"/g, '""')}"`;
+    if (/[,"\n\r]/.test(txt)) return `"${txt.replace(/"/g, '""')}"`;
     return txt === 'ID' ? '"ID"' : txt;
   };
   const lines = [sheet.header, ...sheet.rows].map((r) => r.map(field).join(','));

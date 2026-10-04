@@ -15,6 +15,14 @@ export interface XlsxCellRead {
   value: string | number | boolean;
   /** True when stored as a number (no t="s"/inlineStr/str). */
   numeric: boolean;
+  /** Style index (`s` attribute) into cellXfs, or undefined when unstyled. */
+  s?: number;
+}
+
+export interface XlsxCellStyle {
+  bold: boolean;
+  /** Resolved number format code ('' when General/none). */
+  numFmt: string;
 }
 
 export interface XlsxRead {
@@ -27,6 +35,8 @@ export interface XlsxRead {
   header(sheet: string): string[];
   /** Raw xl/styles.xml, for number-format / bold assertions. */
   stylesXml: string;
+  /** Resolve a cell's s= index through cellXfs -> fonts/numFmts. */
+  styleOf(cell: XlsxCellRead | undefined): XlsxCellStyle;
 }
 
 const unescapeXml = (s: string) =>
@@ -97,17 +107,35 @@ export function readXlsx(input: Uint8Array | Buffer | string): XlsxRead {
         else if (t === 'str') value = unescapeXml(v ?? '');
         else if (t === 'b') value = v === '1';
         else value = Number(v);
-        cells[colIndex(ref)] = { ref, t, value, numeric: t === '' || t === 'n' };
+        const sAttr = attr(` ${open}`, 's');
+        cells[colIndex(ref)] = { ref, t, value, numeric: t === '' || t === 'n', s: sAttr === undefined ? undefined : Number(sAttr) };
       }
       rows.push(cells);
     }
     sheets[name] = rows;
   }
 
+  const stylesXml = text('xl/styles.xml');
+  const numFmts = new Map<number, string>();
+  for (const m of stylesXml.matchAll(/<numFmt\b[^>]*>/g)) numFmts.set(Number(attr(m[0], 'numFmtId')), attr(m[0], 'formatCode') ?? '');
+  const fontsBlock = /<fonts\b[\s\S]*?<\/fonts>/.exec(stylesXml)?.[0] ?? '';
+  const fonts = [...fontsBlock.matchAll(/<font\b[^>]*?(?:\/>|>[\s\S]*?<\/font>)/g)].map((m) => /<b\s*\/>|<b>/.test(m[0]));
+  const xfsBlock = /<cellXfs\b[\s\S]*?<\/cellXfs>/.exec(stylesXml)?.[0] ?? '';
+  const xfs = [...xfsBlock.matchAll(/<xf\b[^>]*>/g)].map((m) => m[0]);
+  const styleOf = (cell: XlsxCellRead | undefined): XlsxCellStyle => {
+    const xf = cell?.s === undefined ? undefined : xfs[cell.s];
+    if (!xf) return { bold: false, numFmt: '' };
+    return {
+      bold: fonts[Number(attr(xf, 'fontId') ?? 0)] ?? false,
+      numFmt: numFmts.get(Number(attr(xf, 'numFmtId') ?? 0)) ?? '',
+    };
+  };
+
   return {
+    styleOf,
     sheetNames,
     sheets,
-    stylesXml: text('xl/styles.xml'),
+    stylesXml,
     cellAt: (sheet, row, col) => sheets[sheet]?.[row]?.[col],
     header: (sheet) => (sheets[sheet]?.[0] ?? []).map((c) => String(c?.value ?? '')),
   };
