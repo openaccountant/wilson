@@ -28,6 +28,14 @@ export interface AgentRunnerOptions {
   approvals?: 'ask' | 'deny';
 }
 
+/** A prompt bound to one approval request (see bindPendingApproval). */
+export interface BoundApproval {
+  request: ToolApprovalRequest;
+  requestId: string;
+  /** Answer the bound request; false (and nothing happens) if it is no longer the pending one. */
+  respond: (decision: ApprovalDecision) => boolean;
+}
+
 export class AgentRunnerController {
   private historyValue: HistoryItem[] = [];
   private workingStateValue: WorkingState = { status: 'idle' };
@@ -126,6 +134,24 @@ export class AgentRunnerController {
     return true;
   }
 
+  /**
+   * Bind a prompt to the request pending right now: its `respond` answers
+   * that exact request (by its pendingApprovalId) and nothing else, so a
+   * prompt still on screen after its request was cancelled or replaced
+   * cannot answer the next one. Null when nothing is pending. Used by the
+   * TUI prompt (src/cli.ts), matching the dashboard card's binding.
+   */
+  bindPendingApproval(): BoundApproval | null {
+    const request = this.pendingApprovalValue;
+    const requestId = this.pendingApprovalIdValue;
+    if (!request || !requestId) return null;
+    return {
+      request,
+      requestId,
+      respond: (decision) => this.respondToApproval(decision, requestId),
+    };
+  }
+
   private clearPendingApproval() {
     this.approvalResolve = null;
     this.pendingApprovalValue = null;
@@ -147,7 +173,13 @@ export class AgentRunnerController {
     this.emitChange();
   }
 
-  async runQuery(query: string): Promise<RunQueryResult | undefined> {
+  /**
+   * Run one query. `options.approvals` overrides the runner's approval policy
+   * for this run only — e.g. 'deny' for a dashboard user whose role cannot
+   * write (#156): every mutating call is denied at once, no card is raised.
+   */
+  async runQuery(query: string, options: { approvals?: 'ask' | 'deny' } = {}): Promise<RunQueryResult | undefined> {
+    const approvals = options.approvals ?? this.approvals;
     const controller = new AbortController();
     this.abortController = controller;
     let finalAnswer: string | undefined;
@@ -175,7 +207,9 @@ export class AgentRunnerController {
         // it makes (an LLM call that was already in flight returning a
         // mutating tool call) is denied instead of raising a new card.
         requestToolApproval: (request) =>
-          controller.signal.aborted ? Promise.resolve<ApprovalDecision>('deny') : this.requestToolApproval(request),
+          controller.signal.aborted || approvals === 'deny'
+            ? Promise.resolve<ApprovalDecision>('deny')
+            : this.requestToolApproval(request),
         sessionApprovedTools: this.sessionApprovedTools,
       });
       const stream = agent.run(query, this.inMemoryChatHistory);

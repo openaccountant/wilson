@@ -10,13 +10,14 @@
  * src/mcp/store.ts for why that's the actual security boundary.
  */
 import type { Database } from '../db/compat-sqlite.js';
-import type { DashboardUser } from './auth.js';
+import { canWrite, isAuthEnabled, type DashboardUser } from './auth.js';
 import { getCurrentProfileName } from './db-manager.js';
 import { getPendingChatOperation, respondToChatOperation } from './chat.js';
 import {
   listCatalog,
   grantLocalAccess,
   listActiveGrants,
+  getLocalGrant,
   revokeLocalGrant,
   revokeAllForSession,
   exposedTools,
@@ -28,7 +29,7 @@ import {
   rejectOperation,
   type RequestScope,
 } from '../mcp/engine.js';
-import type { McpOperation } from '../mcp/store.js';
+import type { McpGrant, McpOperation } from '../mcp/store.js';
 
 export interface McpRouteContext {
   activeDb: Database;
@@ -53,13 +54,30 @@ function json(data: unknown, status: number, headers: Record<string, string>): R
   return Response.json(data, { status, headers });
 }
 
-/** Operations visible to the current dashboard user — never someone else's pending mutation. */
+/**
+ * Operations visible to the current dashboard user — never someone else's
+ * pending mutation. With auth on, an operation with no owner (prepared
+ * under a grant minted while auth was off) belongs to no one in particular,
+ * so only an admin may see or answer it; a viewer gets the same 404 as for
+ * another user's operation.
+ */
 function visibleOperation(op: McpOperation | null, ctx: McpRouteContext): McpOperation | null {
   if (!op) return null;
-  if (ctx.authEnabled && ctx.currentUser && op.user_id !== null && op.user_id !== ctx.currentUser.id) {
-    return null;
+  if (ctx.authEnabled && ctx.currentUser) {
+    if (op.user_id === null) return ctx.currentUser.role === 'admin' ? op : null;
+    if (op.user_id !== ctx.currentUser.id) return null;
   }
   return op;
+}
+
+/**
+ * Whether the caller may see or revoke this grant. With auth on, a non-admin
+ * acts only on grants bound to their own user id; an admin on any grant.
+ * With auth off there is one implicit user, who owns everything.
+ */
+function ownsGrant(grant: Pick<McpGrant, 'user_id'>, ctx: McpRouteContext): boolean {
+  if (!ctx.authEnabled || !ctx.currentUser) return true;
+  return ctx.currentUser.role === 'admin' || grant.user_id === ctx.currentUser.id;
 }
 
 /**
@@ -84,7 +102,8 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
   if (path === '/api/mcp/grants' && req.method === 'GET') {
     const sessionGeneration = url.searchParams.get('sessionGeneration');
     if (!sessionGeneration) return json({ error: 'sessionGeneration is required' }, 400, headers);
-    return json({ grants: listActiveGrants(activeDb, sessionGeneration) }, 200, headers);
+    const grants = listActiveGrants(activeDb, sessionGeneration).filter((g) => ownsGrant(g, ctx));
+    return json({ grants }, 200, headers);
   }
 
   if (path === '/api/mcp/grants' && req.method === 'POST') {
@@ -100,14 +119,22 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
 
   const revokeOneMatch = path.match(/^\/api\/mcp\/grants\/([^/]+)$/);
   if (revokeOneMatch && req.method === 'DELETE') {
-    revokeLocalGrant(activeDb, revokeOneMatch[1]);
+    // Someone else's grant gets the same 404 as one that does not exist.
+    const grant = getLocalGrant(activeDb, revokeOneMatch[1]);
+    if (!grant || !ownsGrant(grant, ctx)) return json({ error: 'Not found' }, 404, headers);
+    revokeLocalGrant(activeDb, grant.id);
     return json({ success: true }, 200, headers);
   }
 
   if (path === '/api/mcp/grants/revoke-session' && req.method === 'POST') {
     const body = (await req.json()) as { sessionGeneration?: string };
     if (!body.sessionGeneration) return json({ error: 'sessionGeneration is required' }, 400, headers);
-    const count = revokeAllForSession(activeDb, body.sessionGeneration);
+    // Auth may have come on while this request awaited its body; it passed
+    // the middleware with no login, so it cannot act as the implicit admin.
+    if (!ctx.authEnabled && isAuthEnabled(activeDb)) return json({ error: 'Unauthorized' }, 401, headers);
+    const onlyUserId =
+      ctx.authEnabled && ctx.currentUser && ctx.currentUser.role !== 'admin' ? ctx.currentUser.id : undefined;
+    const count = revokeAllForSession(activeDb, body.sessionGeneration, onlyUserId);
     return json({ revoked: count }, 200, headers);
   }
 
@@ -159,6 +186,15 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
     const id = approveMatch[1];
     const op = visibleOperation(getOperationById(activeDb, id), ctx);
     if (!op) return json({ error: 'Not found' }, 404, headers);
+    // Approving any operation — a chat card, a WebMCP tab's or an HTTP-MCP
+    // client's — commits a write, so it takes the same canWrite rule as the
+    // direct REST write routes (#156): a viewer gets 403 and the operation
+    // stays pending, unanswered. The grant an operation was prepared under
+    // never stands in for the approver's own role. (Rejecting stays open: a
+    // denial never writes.)
+    if (ctx.authEnabled && ctx.currentUser && !canWrite(ctx.currentUser.role)) {
+      return json({ error: 'Forbidden: your role cannot approve changes' }, 403, headers);
+    }
     if (op.source === 'chat') {
       // A chat card answers only the exact request it was created for; a
       // stale one is refused (409) and changes nothing.

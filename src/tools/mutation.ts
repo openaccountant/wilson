@@ -5,8 +5,9 @@ import type { MutationFlag, ToolDef } from '../model/types.js';
  *
  * A tool that writes — to the database, the filesystem, or an external
  * service — declares `mutates` next to its definition (see defineTool). The
- * agent's tool executor (src/agent/tool-executor.ts) asks for approval before
- * any call for which `isMutatingCall` is true. Read-only tools declare
+ * approval gate (src/agent/approval-gate.ts) — used by the agent's tool
+ * executor and by chain steps / team members alike — asks for approval
+ * before any call for which `isMutatingCall` is true. Read-only tools declare
  * `mutates: false` explicitly: a tool with NO declaration is treated as
  * mutating (fail closed), so a new tool cannot skip the gate by omission.
  * src/__tests__/mutation-audit.ts pins the classification of every tool.
@@ -66,8 +67,9 @@ export interface SessionApprovalScope {
 /**
  * The scope 'allow-session' would grant for this call, or null when the call
  * must be approved every time.
- * - Chain/team tools: null. Their steps call tools directly with no gate of
- *   their own, so each run is approved on its own.
+ * - Chain/team tools: null. What a run does is chosen by its step/member
+ *   models, so each run is approved on its own (each write inside it is also
+ *   gated, see src/orchestration/tool-calls.ts).
  * - Tools whose flag depends on the args (mutatesUnlessAction /
  *   mutatesUnlessDryRun): keyed by tool + action, so approving memory_manage
  *   `add` does not also allow `deactivate`, nor tax_flag `flag` allow `export`.

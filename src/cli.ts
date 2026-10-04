@@ -1360,15 +1360,19 @@ export async function runCli() {
       return;
     }
 
-    if (agentRunner.pendingApproval) {
+    // Bound to the request pending now (its pendingApprovalId), like the
+    // dashboard card: if that request is cancelled or replaced before the
+    // keypress lands, the answer is refused instead of applying to the next one.
+    const approval = agentRunner.bindPendingApproval();
+    if (approval) {
       const prompt = new ApprovalPromptComponent(
-        agentRunner.pendingApproval.tool,
-        agentRunner.pendingApproval.args,
+        approval.request.tool,
+        approval.request.args,
         undefined,
-        agentRunner.pendingApproval.session,
+        approval.request.session,
       );
       prompt.onSelect = (decision: ApprovalDecision) => {
-        agentRunner.respondToApproval(decision);
+        approval.respond(decision);
       };
       renderScreenView('', '', prompt, undefined, prompt.selector);
       return;

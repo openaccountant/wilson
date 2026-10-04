@@ -200,13 +200,23 @@ Add external tool servers in `~/.openaccountant/mcp.json`:
     "my-server": {
       "command": "npx",
       "args": ["-y", "my-mcp-server"],
-      "env": {}
+      "env": {},
+      "readOnlyTools": ["search", "get_record"]
     }
   }
 }
 ```
 
 MCP tools appear automatically in Open Accountant's tool registry.
+
+Every MCP tool is treated as one that can change things, so each call asks for
+your approval. To let a tool run without asking, list it (by the server's own
+tool name) in that server's `readOnlyTools`. Only tools you list there count as
+read-only. A server's own `readOnlyHint` annotation is ignored, because a
+server could mislabel a tool that writes. `readOnlyTools` must be an array of
+strings; if it is not, it is ignored with a warning. Names the server does not
+offer are also ignored with a warning. An MCP tool whose name is already taken
+by a built-in or another tool is not registered.
 
 ### Custom Skills
 

@@ -7,6 +7,7 @@
 import type { Database } from '../db/compat-sqlite.js';
 import {
   createGrants,
+  getGrant,
   listGrantsForSession,
   revokeGrant,
   revokeGrantsForSession,
@@ -18,6 +19,8 @@ import {
   issueApprovalToken,
   consumeApprovalToken,
   expireStaleOperations,
+  isDashboardAuthEnabled,
+  grantOwnerAllowed,
   type McpGrant,
   type McpOperation,
   type Role,
@@ -50,6 +53,18 @@ export interface EngineError {
   error: string;
 }
 
+/**
+ * Ownership is decided when a grant or operation is written, not when the
+ * request started: if auth was turned on while this request was in flight,
+ * a scope derived without a login (user_id null) is refused.
+ */
+function ownerlessWhileAuthOn(db: Database, scope: RequestScope): EngineError | null {
+  if (scope.userId === null && isDashboardAuthEnabled(db)) {
+    return { ok: false, status: 401, error: 'Unauthorized: dashboard auth is on; log in and try again' };
+  }
+  return null;
+}
+
 function grantScopeParams(scope: RequestScope) {
   return {
     userId: scope.userId,
@@ -78,6 +93,8 @@ export function grantLocalAccess(
   scope: RequestScope,
   toolNames: string[]
 ): { ok: true; grants: McpGrant[] } | EngineError {
+  const unauthenticated = ownerlessWhileAuthOn(db, scope);
+  if (unauthenticated) return unauthenticated;
   const unknown = toolNames.filter((name) => !getToolDef(name));
   if (unknown.length > 0) {
     return { ok: false, status: 400, error: `Unknown tool(s): ${unknown.join(', ')}` };
@@ -102,12 +119,17 @@ export function listActiveGrants(db: Database, sessionGeneration: string): McpGr
   return listGrantsForSession(db, sessionGeneration);
 }
 
+export function getLocalGrant(db: Database, grantId: string): McpGrant | null {
+  return getGrant(db, grantId);
+}
+
 export function revokeLocalGrant(db: Database, grantId: string): void {
   revokeGrant(db, grantId);
 }
 
-export function revokeAllForSession(db: Database, sessionGeneration: string): number {
-  return revokeGrantsForSession(db, sessionGeneration);
+/** `onlyUserId` limits the revoke to that user's grants in the session (see revokeGrantsForSession). */
+export function revokeAllForSession(db: Database, sessionGeneration: string, onlyUserId?: number): number {
+  return revokeGrantsForSession(db, sessionGeneration, onlyUserId);
 }
 
 export interface ExposedTool {
@@ -121,7 +143,12 @@ export interface ExposedTool {
 /** What the WebMCP bridge / HTTP-MCP client should actually register — empty until grants exist. */
 export function exposedTools(db: Database, scope: RequestScope): ExposedTool[] {
   const grants = listGrantsForSession(db, scope.sessionGeneration).filter(
-    (g) => g.profile === scope.profile && g.origin === scope.origin && g.role === scope.role && g.user_id === scope.userId
+    (g) =>
+      g.profile === scope.profile &&
+      g.origin === scope.origin &&
+      g.role === scope.role &&
+      g.user_id === scope.userId &&
+      grantOwnerAllowed(db, g)
   );
   const out: ExposedTool[] = [];
   for (const grant of grants) {
@@ -174,6 +201,8 @@ export function prepareOperation(
   toolName: string,
   args: Record<string, unknown>
 ): { ok: true; operation: McpOperation } | EngineError {
+  const unauthenticated = ownerlessWhileAuthOn(db, scope);
+  if (unauthenticated) return unauthenticated;
   const def = getToolDef(toolName);
   if (!def) return { ok: false, status: 404, error: 'Unknown tool' };
   if (!isMutatingCall(toolName, args)) {

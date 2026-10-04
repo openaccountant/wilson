@@ -14,8 +14,8 @@ import type {
 import type { RunContext } from './run-context.js';
 import { logger } from '../utils/logger.js';
 import { interactionStore } from '../utils/interaction-store.js';
-import { isMutatingCall, sessionApprovalScope } from '../tools/mutation.js';
 import { compactToolSchema } from '../model/providers/transformers.js';
+import { gateToolCall } from './approval-gate.js';
 
 type ToolExecutionEvent =
   | ToolStartEvent
@@ -98,24 +98,19 @@ export class AgentToolExecutor {
     // approval before it runs (#152). Which calls write is declared next to
     // each tool definition (`mutates`, see src/tools/mutation.ts). With no
     // approval handler the call is denied — fail closed.
-    if (this.requiresApproval(toolName, toolArgs)) {
-      const session = sessionApprovalScope(toolName, this.toolMap.get(toolName), toolArgs);
-      if (!session || !this.sessionApprovedTools.has(session.key)) {
-        const decision =
-          (await this.requestToolApproval?.({ tool: toolName, args: toolArgs, session })) ?? 'deny';
-        yield { type: 'tool_approval', tool: toolName, args: toolArgs, approved: decision };
-        if (decision === 'deny') {
-          yield { type: 'tool_denied', tool: toolName, args: toolArgs };
-          return;
-        }
-        if (decision === 'allow-session' && session) {
-          // Only this tool (or tool + action): approving bulk categorize for
-          // the session must not also wave through delete_transaction, nor
-          // memory_manage `add` allow `deactivate`. Chain/team calls have no
-          // session scope, so 'allow-session' there counts as once.
-          this.sessionApprovedTools.add(session.key);
-        }
-      }
+    const gate = await gateToolCall(
+      toolName,
+      this.toolMap.get(toolName),
+      toolArgs,
+      this.requestToolApproval,
+      this.sessionApprovedTools,
+    );
+    if (gate.asked && gate.decision) {
+      yield { type: 'tool_approval', tool: toolName, args: toolArgs, approved: gate.decision };
+    }
+    if (!gate.allowed) {
+      yield { type: 'tool_denied', tool: toolName, args: toolArgs };
+      return;
     }
 
     const limitCheck = ctx.scratchpad.canCallTool(toolName, toolQuery);
@@ -152,6 +147,10 @@ export class AgentToolExecutor {
         metadata: { onProgress: channel.emit },
         ...(this.signal ? { signal: this.signal } : {}),
         ...(this.model ? { model: this.model } : {}),
+        // Chains and teams run their own tool calls; they pass every one of
+        // them through this same gate (src/orchestration/tool-calls.ts).
+        ...(this.requestToolApproval ? { requestToolApproval: this.requestToolApproval } : {}),
+        sessionApprovedTools: this.sessionApprovedTools,
       };
 
       // Launch tool invocation -- closes the channel when it settles
@@ -237,9 +236,5 @@ export class AgentToolExecutor {
     }
 
     return undefined;
-  }
-
-  private requiresApproval(toolName: string, toolArgs: Record<string, unknown>): boolean {
-    return isMutatingCall(this.toolMap.get(toolName), toolArgs);
   }
 }

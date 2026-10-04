@@ -2,12 +2,14 @@ import { callLlm } from '../model/llm.js';
 import { getToolsByNames } from '../tools/registry.js';
 import type { ToolDef } from '../model/types.js';
 import type { ChainDef, ChainRunOptions } from './types.js';
+import { orchestrationGate, runOrchestratedToolCall, type OrchestrationGate } from './tool-calls.js';
 
 const DEFAULT_MAX_STEP_ITERATIONS = 5;
 
 /**
  * Run a single step as a mini agent loop.
  * The step agent can call tools up to maxIterations times, then must produce a text answer.
+ * Every tool call passes the parent agent's approval gate (see tool-calls.ts).
  */
 async function runStepAgent(
   stepId: string,
@@ -17,8 +19,9 @@ async function runStepAgent(
   tools: ToolDef[],
   model: string | undefined,
   maxIterations: number,
-  signal?: AbortSignal,
+  gate: OrchestrationGate,
 ): Promise<string> {
+  const signal = gate.signal;
   const stepSystemPrompt =
     systemPrompt ??
     'You are a step in a multi-step financial analysis pipeline. Complete your assigned task concisely.';
@@ -42,22 +45,12 @@ async function runStepAgent(
       return response.content;
     }
 
-    // Execute tool calls and collect results
+    // Execute tool calls (each through the approval gate) and collect results
     const toolResults: string[] = [];
     const toolMap = new Map(tools.map((t) => [t.name, t]));
 
     for (const tc of response.toolCalls) {
-      const tool = toolMap.get(tc.name);
-      if (!tool) {
-        toolResults.push(`[${tc.name}] Error: Tool not found`);
-        continue;
-      }
-      try {
-        const result = await tool.func(tc.args);
-        toolResults.push(`[${tc.name}] ${result}`);
-      } catch (err) {
-        toolResults.push(`[${tc.name}] Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      toolResults.push(await runOrchestratedToolCall(tc, toolMap, gate));
     }
 
     // Feed tool results back for next iteration
@@ -81,6 +74,9 @@ export async function runChain(
   options: ChainRunOptions = {},
 ): Promise<string> {
   let currentInput = input;
+  // One gate for the whole run: approvals are asked one at a time and denied
+  // once the run is cancelled; with no handler, mutating calls are denied.
+  const gate = orchestrationGate(options);
 
   for (const step of chain.steps) {
     const tools = step.tools ? await getToolsByNames(step.tools) : [];
@@ -95,7 +91,7 @@ export async function runChain(
       tools,
       model,
       maxIterations,
-      options.signal,
+      { ...gate, model },
     );
 
     options.onStepComplete?.(step.id, currentInput);

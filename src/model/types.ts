@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ApprovalDecision, ToolApprovalRequest } from '../agent/types.js';
 
 /**
  * Open Accountant's own LLM response type — replaces LangChain's AIMessage.
@@ -56,6 +57,14 @@ export interface ToolInvokeConfig {
   signal?: AbortSignal;
   /** Active model from the parent agent — tools like chains should inherit this. */
   model?: string;
+  /**
+   * The parent agent's approval handler. Chains and teams pass every tool call
+   * their steps/members make through the approval gate with it
+   * (src/agent/approval-gate.ts); absent = mutating inner calls are denied.
+   */
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<ApprovalDecision>;
+  /** The parent agent's session approvals (SessionApprovalScope.key), shared with inner calls. */
+  sessionApprovedTools?: Set<string>;
 }
 
 /**

@@ -20,8 +20,11 @@ export function chainToTool(chain: ChainDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${chain.name}" chain: ${chain.description}`,
-    // Step agents call these tools directly (no per-call approval), so the
-    // registry gates the whole chain when any of them can write (#152).
+    // Every tool call a step makes passes the agent's approval gate on its
+    // own (orchestration/tool-calls.ts), so each write gets its own card.
+    // The chain call itself is ALSO asked, once per run, when any tool it can
+    // call writes: a cheap up-front "run this chain?" that shows the input,
+    // and defence in depth (#152). The registry resolves this from usesTools.
     usesTools: uniqueToolNames(chain.steps.map((s) => s.tools)),
     // Conservative until the tool registry resolves usesTools (it may relax
     // this to false when every tool the chain can call is read-only).
@@ -33,6 +36,10 @@ export function chainToTool(chain: ChainDef): ToolDef {
       const result = await runChain(chain, input, {
         model: config?.model,
         signal: config?.signal,
+        // The caller's approval gate: each step's tool calls are asked through
+        // it; without one (headless), mutating calls are denied.
+        requestToolApproval: config?.requestToolApproval,
+        sessionApprovedTools: config?.sessionApprovedTools,
       });
       return result;
     },
@@ -48,7 +55,7 @@ export function teamToTool(team: TeamDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${team.name}" team: ${team.description}`,
-    // Members call these tools directly — see chainToTool.
+    // Members' tool calls are each gated; the team call is asked too — see chainToTool.
     usesTools: uniqueToolNames(team.members.map((m) => m.tools)),
     mutates: true, // see chainToTool
     schema: z.object({
@@ -58,6 +65,8 @@ export function teamToTool(team: TeamDef): ToolDef {
       const result = await runTeam(team, query, {
         model: config?.model,
         signal: config?.signal,
+        requestToolApproval: config?.requestToolApproval,
+        sessionApprovedTools: config?.sessionApprovedTools,
       });
       return result;
     },

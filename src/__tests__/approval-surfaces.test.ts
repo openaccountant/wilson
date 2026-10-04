@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
+import { describe, expect, test, beforeEach, afterEach, afterAll } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import type { LlmResponse } from '../model/types.js';
 import type { LlmResult } from '../model/llm.js';
@@ -7,6 +7,7 @@ import * as prompts from '../agent/prompts.js';
 import * as skillsIndex from '../skills/index.js';
 import * as orchRegistry from '../orchestration/registry.js';
 import { createTestDb, ensureTestProfile, seedTestData } from './helpers.js';
+import { scopedSpy } from './scoped-spy.js';
 import { AgentRunnerController } from '../controllers/index.js';
 import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { initAgentTools } from '../agent/init-tools.js';
@@ -33,14 +34,14 @@ import { createHeadlessRunner, reportHeadlessResult } from '../headless.js';
  *     (fail closed) and the output names the denied tool
  */
 
-const orchSpy = spyOn(orchRegistry, 'getOrchestrationTools').mockImplementation(async () => []);
-const skillsSpy = spyOn(skillsIndex, 'discoverSkills').mockImplementation(() => [] as never);
-const systemPromptSpy = spyOn(prompts, 'buildSystemPrompt').mockImplementation(async () => 'You are a test agent.');
-const soulSpy = spyOn(prompts, 'loadSoulDocument').mockImplementation(async () => '');
+const orchSpy = scopedSpy(orchRegistry, 'getOrchestrationTools', async () => []);
+const skillsSpy = scopedSpy(skillsIndex, 'discoverSkills', () => [] as never);
+const systemPromptSpy = scopedSpy(prompts, 'buildSystemPrompt', async () => 'You are a test agent.');
+const soulSpy = scopedSpy(prompts, 'loadSoulDocument', async () => '');
 
 let scriptedToolCall: LlmResponse['toolCalls'][number] | null = null;
 let agentCalls = 0;
-const llmSpy = spyOn(llm, 'callLlm').mockImplementation(async (_prompt, options): Promise<LlmResult> => {
+const llmSpy = scopedSpy(llm, 'callLlm', async (_prompt, options): Promise<LlmResult> => {
   if (options?.callType !== 'agent') throw new Error('no background LLM calls in this test');
   agentCalls++;
   const response: LlmResponse =
@@ -51,7 +52,8 @@ const llmSpy = spyOn(llm, 'callLlm').mockImplementation(async (_prompt, options)
 });
 
 afterAll(() => {
-  for (const s of [orchSpy, skillsSpy, systemPromptSpy, soulSpy, llmSpy]) s.mockRestore();
+  // scopedSpy: never wipe another file's mock of the same export (plain `bun test`).
+  for (const s of [orchSpy, skillsSpy, systemPromptSpy, soulSpy, llmSpy]) s.restore();
 });
 
 async function waitFor<T>(probe: () => T | null | undefined, ms = 3000): Promise<T> {

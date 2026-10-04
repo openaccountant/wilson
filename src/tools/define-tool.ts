@@ -20,7 +20,7 @@ function formatZodIssues(error: z.ZodError): string {
  * Every ToolDef in the repo is created here, so this is the single choke point
  * for argument validation: each invocation parses its arguments against the
  * tool's own zod schema before the tool function runs. That covers the agent
- * executor, orchestration chain/team members (which call tools directly), and
+ * executor, orchestration chain/team members (src/orchestration/tool-calls.ts), and
  * programmatic callers — a malformed tool call from the model is rejected with
  * a field-naming error and never reaches the tool function.
  *

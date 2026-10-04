@@ -8,6 +8,18 @@ import {
   issueApprovalToken, consumeApprovalToken,
 } from '../mcp/store.js';
 
+/**
+ * A test DB with the dashboard users the grant fixtures are bound to: a
+ * grant whose user_id has no active dashboard user never validates.
+ */
+function storeDb(): Database {
+  const db = createTestDb();
+  db.prepare(
+    "INSERT INTO dashboard_users (id, username, password_hash, role) VALUES (1, 'user1', 'x', 'admin'), (42, 'user42', 'x', 'admin')"
+  ).run();
+  return db;
+}
+
 function makeGrant(db: Database, overrides: Partial<Parameters<typeof createGrants>[1]> = {}) {
   return createGrants(db, {
     tools: [{ name: 'edit_transaction', schemaDigest: 'digest-1' }],
@@ -22,7 +34,7 @@ function makeGrant(db: Database, overrides: Partial<Parameters<typeof createGran
 
 describe('mcp grants', () => {
   test('a fresh grant validates against its exact scope', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db);
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
       userId: 1, role: 'admin', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -31,7 +43,7 @@ describe('mcp grants', () => {
   });
 
   test('two grants created for the same batch get independent ids', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const [a, b] = createGrants(db, {
       tools: [{ name: 'edit_transaction', schemaDigest: 'd1' }, { name: 'transaction_search', schemaDigest: 'd2' }],
       userId: 1, role: 'admin', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -41,7 +53,7 @@ describe('mcp grants', () => {
   });
 
   test('wrong tool name fails scope_mismatch', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db);
     const result = validateGrant(db, grant.id, 'delete_transaction', 'digest-1', {
       userId: 1, role: 'admin', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -51,7 +63,7 @@ describe('mcp grants', () => {
   });
 
   test('schema digest change invalidates the grant', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db);
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-CHANGED', {
       userId: 1, role: 'admin', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -61,7 +73,7 @@ describe('mcp grants', () => {
   });
 
   test('profile switch invalidates the grant', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db, { profile: 'personal' });
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
       userId: 1, role: 'admin', profile: 'business', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -71,7 +83,7 @@ describe('mcp grants', () => {
   });
 
   test('foreign origin invalidates the grant', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db);
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
       userId: 1, role: 'admin', profile: 'default', origin: 'http://evil.example', sessionGeneration: 'tab-a',
@@ -81,7 +93,7 @@ describe('mcp grants', () => {
   });
 
   test('a different browser tab (session generation) cannot use another tab\'s grant', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db, { sessionGeneration: 'tab-a' });
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
       userId: 1, role: 'admin', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-b',
@@ -91,7 +103,7 @@ describe('mcp grants', () => {
   });
 
   test('viewer role cannot use an admin-scoped grant', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db, { role: 'admin' });
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
       userId: 1, role: 'viewer', profile: 'default', origin: 'http://localhost:3141', sessionGeneration: 'tab-a',
@@ -100,7 +112,7 @@ describe('mcp grants', () => {
   });
 
   test('revokeGrant invalidates immediately', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grant = makeGrant(db);
     revokeGrant(db, grant.id);
     const result = validateGrant(db, grant.id, 'edit_transaction', 'digest-1', {
@@ -111,7 +123,7 @@ describe('mcp grants', () => {
   });
 
   test('revokeGrantsForSession only touches that session\'s grants', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grantA = makeGrant(db, { sessionGeneration: 'tab-a' });
     const grantB = makeGrant(db, { sessionGeneration: 'tab-b' });
     revokeGrantsForSession(db, 'tab-a');
@@ -124,7 +136,7 @@ describe('mcp grants', () => {
   });
 
   test('logout (revokeGrantsForUser) kills every grant for that user regardless of tab', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const grantA = makeGrant(db, { userId: 42, sessionGeneration: 'tab-a' });
     const grantB = makeGrant(db, { userId: 42, sessionGeneration: 'tab-b' });
     revokeGrantsForUser(db, 42);
@@ -147,7 +159,7 @@ describe('mcp expiry honoured to the second (#151)', () => {
   });
 
   test('a grant that expired seconds ago is not listed for its session', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const expired = makeGrant(db, { ttlMs: -5_000 });
     const live = makeGrant(db, { ttlMs: 60_000 });
     expect(listGrantsForSession(db, 'tab-a').map((g) => g.id)).toEqual([live.id]);
@@ -155,14 +167,14 @@ describe('mcp expiry honoured to the second (#151)', () => {
   });
 
   test('cleanExpiredGrants deletes a grant that expired seconds ago', () => {
-    const db = createTestDb();
+    const db = storeDb();
     makeGrant(db, { ttlMs: -5_000 });
     makeGrant(db, { ttlMs: 60_000 });
     expect(cleanExpiredGrants(db)).toBe(1);
   });
 
   test('a pending operation that expired seconds ago leaves the queue and is swept', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const stale = op(db, -5_000);
     const live = op(db, 60_000);
     expect(listPendingOperations(db).map((o) => o.id)).toEqual([live.id]);
@@ -192,14 +204,14 @@ describe('mcp operations + approval tokens', () => {
   }
 
   test('a prepared operation starts pending and appears in the queue', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const op = makeOperation(db);
     expect(op.status).toBe('pending');
     expect(listPendingOperations(db).map((o) => o.id)).toContain(op.id);
   });
 
   test('createOperation persists the server-computed summary (what the confirmation card names the change by)', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const op = createOperation(db, {
       source: 'webmcp',
       grantId: 'grant-1',
@@ -228,7 +240,7 @@ describe('mcp operations + approval tokens', () => {
   });
 
   test('marking an operation resolved removes it from the pending queue', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const op = makeOperation(db);
     markOperationStatus(db, op.id, 'committed', { ok: true });
     expect(listPendingOperations(db).map((o) => o.id)).not.toContain(op.id);
@@ -236,7 +248,7 @@ describe('mcp operations + approval tokens', () => {
   });
 
   test('an approval token can only be consumed once (duplicate commit attempt)', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const op = makeOperation(db);
     const { token } = issueApprovalToken(db, op.id);
 
@@ -249,7 +261,7 @@ describe('mcp operations + approval tokens', () => {
   });
 
   test('an unknown token is rejected', () => {
-    const db = createTestDb();
+    const db = storeDb();
     const result = consumeApprovalToken(db, 'not-a-real-token');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('not_found');

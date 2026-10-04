@@ -75,7 +75,7 @@ export interface GrantScope {
 
 export interface GrantValidationFailure {
   ok: false;
-  reason: 'not_found' | 'revoked' | 'expired' | 'scope_mismatch' | 'schema_changed';
+  reason: 'not_found' | 'revoked' | 'expired' | 'scope_mismatch' | 'schema_changed' | 'unowned' | 'owner_inactive';
 }
 
 export type GrantValidationResult = { ok: true; grant: McpGrant } | GrantValidationFailure;
@@ -101,6 +101,49 @@ function isoIn(ms: number): string {
   return new Date(Date.now() + ms).toISOString();
 }
 
+// ── Dashboard auth state ─────────────────────────────────────────────────────
+
+/**
+ * Whether dashboard auth is on, read from the DB at the moment of the call.
+ * Anything that mints a grant or an operation decides ownership with this,
+ * never with a value read when the request started: a request can sit in
+ * `await req.json()` while another one turns auth on, and a scope derived
+ * before that switch has no owner (user_id null, role admin).
+ */
+export function isDashboardAuthEnabled(db: Database): boolean {
+  const row = db.prepare(
+    "SELECT value FROM dashboard_config WHERE key = 'auth_enabled'"
+  ).get() as { value: string } | undefined;
+  return row?.value === 'true';
+}
+
+/** Thrown when something tries to store a grant or operation with no owner while dashboard auth is on. */
+export class OwnerlessScopeError extends Error {
+  constructor(what: string) {
+    super(`Refusing to store an ownerless ${what} while dashboard auth is on`);
+    this.name = 'OwnerlessScopeError';
+  }
+}
+
+/**
+ * Why a stored grant's owner can no longer use it, or null if it can. With
+ * auth on, a grant with no owner (minted while auth was off) is dead even if
+ * a row survived the switch; a grant whose user has been deactivated (or
+ * deleted) is dead even if the revoke on deactivation was missed. No
+ * transport can act under either.
+ */
+export function grantOwnerProblem(db: Database, grant: Pick<McpGrant, 'user_id'>): 'unowned' | 'owner_inactive' | null {
+  if (grant.user_id === null) return isDashboardAuthEnabled(db) ? 'unowned' : null;
+  const user = db.prepare('SELECT is_active FROM dashboard_users WHERE id = @id').get({ id: grant.user_id }) as
+    | { is_active: number }
+    | undefined;
+  return user && user.is_active ? null : 'owner_inactive';
+}
+
+export function grantOwnerAllowed(db: Database, grant: Pick<McpGrant, 'user_id'>): boolean {
+  return grantOwnerProblem(db, grant) === null;
+}
+
 // ── Grants ───────────────────────────────────────────────────────────────────
 
 /**
@@ -120,6 +163,9 @@ export function createGrants(
     ttlMs?: number;
   }
 ): McpGrant[] {
+  // Defence in depth: whatever route or helper got here, an ownerless grant
+  // is never written while auth is on.
+  if (params.userId === null && isDashboardAuthEnabled(db)) throw new OwnerlessScopeError('grant');
   const batchId = randomId();
   const expiresAt = isoIn(params.ttlMs ?? GRANT_TTL_MS);
   const insert = db.prepare(`
@@ -165,7 +211,18 @@ export function revokeGrant(db: Database, id: string): void {
   db.prepare("UPDATE mcp_grants SET revoked_at = datetime('now') WHERE id = @id").run({ id });
 }
 
-export function revokeGrantsForSession(db: Database, sessionGeneration: string): number {
+/**
+ * Revoke a session's live grants. With `onlyUserId`, only the grants bound to
+ * that user are touched (a non-admin revoking "their" session must not end
+ * someone else's grants that share the session id).
+ */
+export function revokeGrantsForSession(db: Database, sessionGeneration: string, onlyUserId?: number): number {
+  if (onlyUserId !== undefined) {
+    const result = db.prepare(
+      "UPDATE mcp_grants SET revoked_at = datetime('now') WHERE session_generation = @sessionGeneration AND user_id = @userId AND revoked_at IS NULL"
+    ).run({ sessionGeneration, userId: onlyUserId });
+    return (result as { changes: number }).changes;
+  }
   const result = db.prepare(
     "UPDATE mcp_grants SET revoked_at = datetime('now') WHERE session_generation = @sessionGeneration AND revoked_at IS NULL"
   ).run({ sessionGeneration });
@@ -177,6 +234,18 @@ export function revokeGrantsForUser(db: Database, userId: number): number {
   const result = db.prepare(
     "UPDATE mcp_grants SET revoked_at = datetime('now') WHERE user_id = @userId AND revoked_at IS NULL"
   ).run({ userId });
+  return (result as { changes: number }).changes;
+}
+
+/**
+ * Revoke every live grant, whoever it belongs to. Used when dashboard auth is
+ * turned on: grants minted while it was off carry no user (user_id null,
+ * role admin) and must not outlive the switch.
+ */
+export function revokeAllGrants(db: Database): number {
+  const result = db.prepare(
+    "UPDATE mcp_grants SET revoked_at = datetime('now') WHERE revoked_at IS NULL"
+  ).run();
   return (result as { changes: number }).changes;
 }
 
@@ -205,6 +274,8 @@ export function validateGrant(
   if (new Date(grant.expires_at).getTime() <= Date.now()) return { ok: false, reason: 'expired' };
   if (grant.tool_name !== toolName) return { ok: false, reason: 'scope_mismatch' };
   if (grant.schema_digest !== currentSchemaDigest) return { ok: false, reason: 'schema_changed' };
+  const ownerProblem = grantOwnerProblem(db, grant);
+  if (ownerProblem) return { ok: false, reason: ownerProblem };
   if (
     grant.role !== scope.role ||
     grant.profile !== scope.profile ||
@@ -239,6 +310,12 @@ export function createOperation(
     ttlMs?: number;
   }
 ): McpOperation {
+  // A WebMCP / HTTP-MCP operation always runs under a grant, so with auth on it
+  // must have an owner. (Chat cards come from a live chat run and are routed
+  // to admins when unowned; see visibleOperation in dashboard/mcp-routes.ts.)
+  if (params.userId === null && params.source !== 'chat' && isDashboardAuthEnabled(db)) {
+    throw new OwnerlessScopeError('operation');
+  }
   const id = randomId();
   const expiresAt = isoIn(params.ttlMs ?? OPERATION_TTL_MS);
   db.prepare(`
@@ -306,6 +383,21 @@ export function expirePendingOperationsBySource(db: Database, source: OperationS
   const rows = db.prepare(
     "SELECT id FROM mcp_operations WHERE status = 'pending' AND source = @source"
   ).all({ source }) as { id: string }[];
+  for (const row of rows) {
+    markOperationStatus(db, row.id, 'expired', { reason });
+  }
+  return rows.length;
+}
+
+/**
+ * Expire one user's still-pending WebMCP / HTTP-MCP operations — e.g. when
+ * that user is deactivated, so a write prepared under their grant can no
+ * longer be approved by anyone.
+ */
+export function expirePendingOperationsForUser(db: Database, userId: number, reason: string): number {
+  const rows = db.prepare(
+    "SELECT id FROM mcp_operations WHERE status = 'pending' AND user_id = @userId AND source IN ('webmcp', 'http-mcp')"
+  ).all({ userId }) as { id: string }[];
   for (const row of rows) {
     markOperationStatus(db, row.id, 'expired', { reason });
   }

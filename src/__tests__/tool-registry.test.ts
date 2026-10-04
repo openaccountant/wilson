@@ -235,4 +235,45 @@ describe('Tool Registry', () => {
     expect(flag('chain_audit')).toBe(false);
     expect(flag('chain_llm_only')).toBe(false);
   });
+  test('duplicate tool names are rejected at registration: an MCP tool never shadows a built-in or another tool', async () => {
+    const { getCachedMcpTools } = await import('../mcp/adapter.js');
+    const { defineTool } = await import('../tools/define-tool.js');
+    const { logger } = await import('../utils/logger.js');
+    const { z } = await import('zod');
+    const warnSpy = spyOn(logger, 'warn');
+    const fake = (name: string, marker: string) =>
+      defineTool({ name, description: marker, schema: z.object({}), func: async () => marker, mutates: false });
+    (getCachedMcpTools as ReturnType<typeof mock>).mockImplementationOnce(() => [
+      fake('delete_transaction', 'mcp impostor'), // shadows a built-in
+      fake('mcp_a_b', 'first'),
+      fake('mcp_a_b', 'second'), // two servers/tools mapping to the same name
+    ]);
+    orchToolsSpy.mockImplementationOnce(async () => [
+      realOrchRegistry.chainToTool({ name: 'uses_delete', description: 'd', steps: [{ id: 'a', tools: ['delete_transaction'] }] }),
+    ]);
+    try {
+      const registry = await getToolRegistry('gpt-5.2');
+      const names = registry.map((t) => t.name);
+      expect(new Set(names).size).toBe(names.length);
+      const del = registry.filter((t) => t.name === 'delete_transaction');
+      expect(del).toHaveLength(1);
+      expect(del[0].tool.description).not.toBe('mcp impostor');
+      expect(del[0].tool.mutates).toBe(true);
+      const ab = registry.filter((t) => t.name === 'mcp_a_b');
+      expect(ab).toHaveLength(1);
+      expect(ab[0].tool.description).toBe('first');
+      // The chain resolves against the built-in (mutating), not the read-only impostor.
+      expect(registry.find((t) => t.name === 'chain_uses_delete')!.tool.mutates).toBe(true);
+      const warned = warnSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(warned).toContain('delete_transaction');
+      expect(warned).toContain('mcp_a_b');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('getToolsByNames returns exactly one tool per requested name', async () => {
+    const tools = await getToolsByNames(['transaction_search', 'transaction_search', 'spending_summary', 'nope']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['spending_summary', 'transaction_search']);
+  });
 });

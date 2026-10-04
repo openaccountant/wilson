@@ -17,7 +17,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { MCP_TOOL_CATALOG, isMutatingCall, toolAnnotations } from './tool-catalog.js';
-import { listGrantsForSession } from './store.js';
+import { listGrantsForSession, grantOwnerAllowed } from './store.js';
 import { waitForOperationResolution } from './store.js';
 import { callReadTool, prepareOperation, type RequestScope } from './engine.js';
 
@@ -48,7 +48,9 @@ function toolTextResult(data: unknown) {
  */
 function resolveScope(db: Database, token: string | null): { scope: RequestScope; grantByTool: Map<string, string> } | null {
   if (!token) return null;
-  const grants = listGrantsForSession(db, token);
+  // A grant whose owner is no longer allowed (no owner while auth is on) is
+  // not part of the bearer's tool surface at all.
+  const grants = listGrantsForSession(db, token).filter((g) => grantOwnerAllowed(db, g));
   if (grants.length === 0) return null;
   const first = grants[0];
   const grantByTool = new Map<string, string>();

@@ -4,6 +4,7 @@ import { LlmValidationError } from '../model/structured-output.js';
 import { getToolsByNames } from '../tools/registry.js';
 import type { ToolDef, LlmResponse } from '../model/types.js';
 import type { TeamDef, TeamRunOptions } from './types.js';
+import { orchestrationGate, runOrchestratedToolCall, type OrchestrationGate } from './tool-calls.js';
 
 const DEFAULT_MAX_MEMBER_ITERATIONS = 5;
 
@@ -21,6 +22,7 @@ const dispatchSchema = z.object({
 
 /**
  * Run a single team member as a mini agent loop (same pattern as chain steps).
+ * Every tool call passes the parent agent's approval gate (see tool-calls.ts).
  */
 async function runMember(
   memberId: string,
@@ -30,8 +32,9 @@ async function runMember(
   systemPrompt: string | undefined,
   model: string | undefined,
   maxIterations: number,
-  signal?: AbortSignal,
+  gate: OrchestrationGate,
 ): Promise<string> {
+  const signal = gate.signal;
   const memberSystemPrompt =
     systemPrompt ??
     'You are a specialist on a financial analysis team. Complete your assigned subtask thoroughly and concisely.';
@@ -53,22 +56,12 @@ async function runMember(
       return response.content;
     }
 
-    // Execute tool calls
+    // Execute tool calls (each through the approval gate)
     const toolResults: string[] = [];
     const toolMap = new Map(tools.map((t) => [t.name, t]));
 
     for (const tc of response.toolCalls) {
-      const tool = toolMap.get(tc.name);
-      if (!tool) {
-        toolResults.push(`[${tc.name}] Error: Tool not found`);
-        continue;
-      }
-      try {
-        const result = await tool.func(tc.args);
-        toolResults.push(`[${tc.name}] ${result}`);
-      } catch (err) {
-        toolResults.push(`[${tc.name}] Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      toolResults.push(await runOrchestratedToolCall(tc, toolMap, gate));
     }
 
     iterationPrompt = `${prompt}\n\nTool results:\n${toolResults.join('\n\n')}\n\nBased on these results, continue or provide your final findings.`;
@@ -132,6 +125,9 @@ Assign a specific subtask to each relevant member. Not all members need to be us
 
   // 2. Run assigned members in parallel
   const memberMap = new Map(team.members.map((m) => [m.id, m]));
+  // Members run in parallel but share one gate, so their approval requests
+  // are asked one at a time (the runner holds a single approval slot).
+  const gate = orchestrationGate(options);
 
   const memberPromises = assignments
     .filter((a) => memberMap.has(a.memberId))
@@ -149,7 +145,7 @@ Assign a specific subtask to each relevant member. Not all members need to be us
         member.systemPrompt,
         model,
         maxIterations,
-        options.signal,
+        { ...gate, model },
       );
 
       options.onMemberComplete?.(member.id, result);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { initAgentTools } from '../agent/init-tools.js';
 import type { Database } from '../db/compat-sqlite.js';
 
@@ -8,6 +8,18 @@ import type { Database } from '../db/compat-sqlite.js';
 // running the agent. initChatSession still wires the agent's tools to the DB,
 // because the server re-executes handoff steps through the same tool
 // singletons the agent uses (DECISIONS Q11).
+//
+// Bun shares one module registry across every file in a plain `bun test` run
+// and mock.module patches the module in place, so without the afterAll below
+// this stub would replace the real dashboard chat for every later file
+// (chat-viewer-approval, approval-surfaces, dashboard-chat-* ...). Snapshot
+// the real exports first and put them back when this file is done. (Static
+// imports are hoisted, so chat.js is already loaded at this point.)
+const realChat = { ...(await import('../dashboard/chat.js')) };
+afterAll(() => {
+  mock.module('../dashboard/chat.js', () => realChat);
+});
+
 const captured: Array<{ query: string; sessionId: string | undefined; contextBlock: string | undefined; argc: number }> = [];
 mock.module('../dashboard/chat.js', () => ({
   initChatSession: (db: Database) => initAgentTools(db),

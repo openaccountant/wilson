@@ -35,8 +35,8 @@ import { getCheckoutUrl } from '../licensing/upsell.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
   isAuthEnabled, enableAuth, disableAuth,
-  createUser, listUsers, getUserCount, deactivateUser,
-  verifyLogin, validateToken, revokeToken, cleanExpiredSessions,
+  listUsers, getUserCount, deactivateUser, hashPassword, insertUser, createFirstAdmin,
+  verifyLogin, validateToken, revokeToken, cleanExpiredSessions, canWrite,
   type DashboardUser,
 } from './auth.js';
 import {
@@ -150,10 +150,6 @@ const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
 type Role = 'admin' | 'viewer';
-
-function canWrite(role: Role): boolean {
-  return role === 'admin';
-}
 
 function canManageUsers(role: Role): boolean {
   return role === 'admin';
@@ -278,6 +274,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           }
         }
 
+        // `authEnabled` is what the middleware saw when this request arrived.
+        // A route that awaits its body (or a password hash) before writing
+        // can find auth turned on by another request in between; one that
+        // got past the middleware with no login must then be refused.
+        const authTurnedOnMidRequest = () => !authEnabled && isAuthEnabled(activeDb);
+        const unauthorized = () => Response.json({ error: 'Unauthorized' }, { status: 401, headers });
+
         // ── WebMCP bridge (Streamable-HTTP fallback + browser-facing API) ──
 
         if (path === MCP_HTTP_PATH) {
@@ -332,8 +335,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
-          const user = await createUser(activeDb, body.username, body.password, 'admin');
-          enableAuth(activeDb);
+          // Decide at write time: another setup may have created the admin
+          // while this one awaited its body or the hash.
+          const user = createFirstAdmin(activeDb, body.username, await hashPassword(body.password));
+          if (!user) {
+            return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
+          }
           const login = await verifyLogin(activeDb, body.username, body.password);
           return Response.json({ user, token: login?.token }, { headers });
         }
@@ -378,7 +385,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
-          const user = await createUser(activeDb, body.username, body.password, body.role ?? 'viewer');
+          const passwordHash = await hashPassword(body.password);
+          if (authTurnedOnMidRequest()) return unauthorized();
+          const user = insertUser(activeDb, body.username, passwordHash, body.role ?? 'viewer');
           return Response.json(user, { headers });
         }
 
@@ -397,6 +406,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const body = await req.json() as { auth_enabled?: boolean };
+          if (authTurnedOnMidRequest()) return unauthorized();
           if (body.auth_enabled === true) enableAuth(activeDb);
           else if (body.auth_enabled === false) disableAuth(activeDb);
           return Response.json({ auth_enabled: isAuthEnabled(activeDb) }, { headers });
@@ -809,7 +819,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const handoffBlock = apiLocalChatConfig().subagent.enabled
             ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
             : '';
-          const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined);
+          // The run belongs to this user: its approval cards are theirs alone,
+          // and a user who cannot write gets every write denied (#156).
+          const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined, {
+            user: authEnabled && currentUser ? { id: currentUser.id, role: currentUser.role } : null,
+          });
           // One chat run at a time (chat.ts activeChatRun): a concurrent
           // message is refused, never queued behind another run's approval.
           if (result.busy) {

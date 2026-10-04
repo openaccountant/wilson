@@ -18,6 +18,10 @@ import { categorizeTool } from '../tools/categorize/categorize.js';
 import { getTaskModel } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
+import { canWrite, type DashboardUser } from './auth.js';
+
+/** The dashboard user a chat run belongs to (auth on); null when auth is off. */
+export type ChatUser = Pick<DashboardUser, 'id' | 'role'>;
 
 let chatHistory: InMemoryChatHistory | null = null;
 let agentRunner: AgentRunnerController | null = null;
@@ -73,7 +77,8 @@ export function refreshChatModel(): void {
  * per-browser-tab, because the agent runner itself is a single server-side
  * singleton shared across the dashboard, not a per-tab WebMCP grant. The
  * approve/reject endpoint is still gated by the normal dashboard auth
- * middleware; this only feeds the shared confirmation queue/UI.
+ * middleware, and approving needs canWrite (#156); each card is stamped with
+ * the user whose run raised it. This only feeds the shared confirmation queue/UI.
  */
 const CHAT_ORIGIN = 'dashboard-chat';
 const CHAT_SESSION_GENERATION = 'dashboard-chat';
@@ -115,6 +120,14 @@ interface ChatApprovalBinding {
 }
 
 let binding: ChatApprovalBinding | null = null;
+
+/**
+ * The user whose run is in flight (#156), or null when unknown (auth off, or
+ * an in-process caller that named nobody). Its approval cards are stamped
+ * with this user, so only they can see, approve or reject them — not whoever
+ * happens to poll /api/mcp/operations first.
+ */
+let chatRunOwner: ChatUser | null = null;
 
 /** Deterministic JSON (object keys sorted at every level). */
 function canonicalJson(value: unknown): string {
@@ -195,8 +208,8 @@ export function getPendingChatOperation(
       profile: scope.profile,
       origin: CHAT_ORIGIN,
       sessionGeneration: CHAT_SESSION_GENERATION,
-      userId: scope.userId,
-      role: scope.role,
+      userId: chatRunOwner?.id ?? scope.userId,
+      role: chatRunOwner?.role ?? scope.role,
       // The request can wait as long as the chat deadline allows; the card
       // must not expire before the request it stands for.
       ttlMs: chatDeadlineMs,
@@ -341,6 +354,7 @@ export function initChatSession(db: Database): void {
   binding = null;
   agentRunner = null;
   activeChatRun = null;
+  chatRunOwner = null;
   previous?.cancelExecution();
   try {
     expirePendingOperationsBySource(db, 'chat', 'chat session replaced');
@@ -385,11 +399,19 @@ export function initChatSession(db: Database): void {
  * query — runQuery only takes a string, and this keeps the ids in history.
  */
 export async function handleChatMessage(
-  query: string, sessionId?: string, contextBlock?: string
+  query: string, sessionId?: string, contextBlock?: string, options: { user?: ChatUser | null } = {}
 ): Promise<{ answer: string; sessionId: string | null; busy?: true }> {
+  const user = options.user ?? null;
+  // A user whose role cannot write (viewer, with auth on) gets the same rule
+  // in chat as on the REST write routes (#156): no write runs, and no card is
+  // raised for one — every mutating tool call is denied at once.
+  const readOnlyUser = user !== null && !canWrite(user.role);
   const expansion = expandSlashCommand(query);
   if ('direct' in expansion) {
     return { answer: expansion.direct, sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
+  }
+  if ('action' in expansion && readOnlyUser) {
+    return { answer: viewerCannotWrite(user!, '/categorize'), sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
   }
   if ('action' in expansion) {
     return { answer: await runCategorizeCommand(expansion.limit), sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
@@ -424,13 +446,15 @@ export async function handleChatMessage(
 
   const runner = agentRunner;
   let deadline: ReturnType<typeof setTimeout> | undefined;
-  const run = runner.runQuery(query);
+  chatRunOwner = user;
+  const run = runner.runQuery(query, readOnlyUser ? { approvals: 'deny' } : {});
   const settled: Promise<void> = run.then(
     () => {},
     () => {},
   ).finally(() => {
     if (activeChatRun !== settled) return; // the session was replaced meanwhile
     activeChatRun = null;
+    chatRunOwner = null;
     // The run is over: no card of it may stay approvable.
     if (runner === agentRunner) retireBinding(chatDb, 'run ended');
   });
@@ -463,7 +487,9 @@ export async function handleChatMessage(
       (runner.error
         ? `Error: ${runner.error}`
         : denied
-          ? `Cancelled — you denied ${denied}.`
+          ? readOnlyUser
+            ? viewerCannotWrite(user!, denied)
+            : `Cancelled — you denied ${denied}.`
           : 'No response generated.');
     logger.info(`Dashboard chat response`, { durationMs, answerChars: answer.length });
     return { answer, sessionId: chatHistory.getSessionId() ?? null };
@@ -475,6 +501,12 @@ export async function handleChatMessage(
   } finally {
     clearTimeout(deadline);
   }
+}
+
+/** Answer for a write a read-only dashboard user asked for (#156). */
+function viewerCannotWrite(user: ChatUser, what: string): string {
+  return `Not allowed — your dashboard role (${user.role}) cannot make changes, so ${what} was not run. ` +
+    'Nothing was changed. Ask an admin to do this.';
 }
 
 /**

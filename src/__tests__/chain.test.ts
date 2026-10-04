@@ -113,6 +113,7 @@ describe('runChain', () => {
       description: 'Spending summary',
       schema: {} as any,
       func: async () => { toolCalled = true; return '{"total": 500}'; },
+      mutates: false, // read-only: runs without an approval request
     }];
 
     const chain: ChainDef = {
@@ -137,6 +138,7 @@ describe('runChain', () => {
       description: 'Test',
       schema: {} as any,
       func: async () => 'test result',
+      mutates: false,
     }];
 
     const chain: ChainDef = {
@@ -212,7 +214,9 @@ describe('runChain', () => {
       makeResponse('Could not edit: invalid arguments.'),
     ];
 
-    const result = await runChain(chain, 'Edit transaction abc');
+    // edit_transaction writes, so the step asks for approval; approve it so
+    // the call reaches the schema guard.
+    const result = await runChain(chain, 'Edit transaction abc', { requestToolApproval: async () => 'allow-once' });
     expect(funcCalls).toBe(0); // record never touched by garbage args
     expect(result).toBe('Could not edit: invalid arguments.');
 
