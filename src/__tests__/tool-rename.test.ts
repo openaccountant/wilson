@@ -7,7 +7,6 @@ import { createTestDb, seedTestData } from './helpers.js';
 import { count, firstTxnId, grantTools, makeUser, mintTestToken, testScope } from './mcp-helpers.js';
 import { Database } from '../db/compat-sqlite.js';
 import { runMigrations, MIGRATIONS } from '../db/migrations.js';
-import { initDatabase } from '../db/database.js';
 import * as toolRename from '../mcp/tool-rename.js';
 import { applyToolRenames } from '../mcp/tool-rename.js';
 import { RETIRED_TOOL_NAMES } from '../mcp/tool-names.js';
@@ -382,7 +381,13 @@ describe('I8 idempotent, always on', () => {
     expect(applyToolRenames(db, { quiet: true })).toEqual({ policies: 0, grants: 0, revoked: 0, operations: 0 });
   });
 
-  test('initDatabase runs it for every DB, right after the migrations', () => {
+  test('initDatabase runs it for every DB, right after the migrations', async () => {
+    // sync.test.ts mock.module()s '../db/database.js' with a stub initDatabase, and bun shares one module registry
+    // across a plain `bun test` run, so a plain import here would get that stub. A query-suffixed specifier is a
+    // distinct registry entry that resolves to the real file (and still binds the shared tool-rename module).
+    // The specifier is a variable so TypeScript does not try to resolve the suffix; the type comes from the cast.
+    const realDatabaseSpecifier: string = '../db/database.js?real-init';
+    const { initDatabase } = (await import(realDatabaseSpecifier)) as typeof import('../db/database.js');
     const spy = spyOn(toolRename, 'applyToolRenames');
     try {
       const db = initDatabase(':memory:', 'probe');
