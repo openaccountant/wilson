@@ -72,6 +72,26 @@ describe('agent/prompts', () => {
       expect(prompt).not.toContain('Tool Usage');
     });
 
+    test('cloud closing instruction is unchanged', () => {
+      const prompt = buildIterationPrompt('q', '### t()\n{}', null);
+      expect(prompt.endsWith('\n\nContinue working toward answering the query. When you have gathered sufficient data to answer, write your complete answer directly and do not call more tools.')).toBe(true);
+      expect(buildIterationPrompt('q', 'r', null, {})).toBe(prompt.replace('### t()\n{}', 'r'));
+    });
+
+    test('local models are told to answer in plain language, not repeat the results', () => {
+      const prompt = buildIterationPrompt('q', '### t()\n{}', null, { local: true });
+      expect(prompt).toContain('answer the query in plain language');
+      expect(prompt).toContain('Do not copy the tool results');
+      expect(prompt).not.toContain('Continue working toward answering');
+      expect(prompt).not.toContain('previous reply');
+    });
+
+    test('a local retry says the previous reply repeated the results', () => {
+      const prompt = buildIterationPrompt('q', '### t()\n{}', null, { local: true, retry: true });
+      expect(prompt).toContain('Your previous reply repeated the raw tool results');
+      expect(prompt).toContain('answer the query in plain language');
+    });
+
     test('ends with continue instruction', () => {
       const prompt = buildIterationPrompt('query', '');
       expect(prompt).toContain('Continue working toward answering');
