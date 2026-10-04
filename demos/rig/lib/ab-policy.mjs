@@ -12,7 +12,7 @@
 // outside the dashboard's catalog charset, ids outside [A-Za-z0-9-].
 
 export const TOOL_RE = /^[a-z][a-z0-9_]{0,63}$/;       // every tool in the dashboard catalog is lower snake_case
-export const ID_RE = /^[A-Za-z0-9-]{1,64}$/;
+export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/; // no leading '-': it would be parsed as a global agent-browser flag
 export const MAX_PARAMS_BYTES = 16 * 1024;
 const OVERRIDES = new Set(['--cdp', '--session', '--executable-path', '--config', '--profile', '--state', '--session-name', '--provider', '--proxy', '--args', '--engine', '--headed', '--auto-connect', '--allowed-domains', '--action-policy', '--init-script', '--extension', '--user-agent', '--download-path', '--screenshot-dir', '-p']);
 

@@ -37,6 +37,7 @@ const READ_TOOLS = new Set(['transaction_search', 'spending_summary']);
 const DEFAULT_TARGET = 'SQ *KILN & CO STUDIO';
 const AMOUNT = '-$240.00';
 let TARGET = null;
+let TARGET_TX = null; // data-tx-id of the target row, read from the ledger; a card is the target only if its #txId equals this
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const norm = (x) => x.replace(/\s+/g, ' ').trim().toUpperCase();
 function targetFrom(opts) {
@@ -125,12 +126,17 @@ export function toolFromHeading(heading) {
  * the tool must be categorize_transaction, the card must name the target description and show -$240.00, and Category
  * must move from Uncategorized to some real category (the agent's own choice).
  */
-export async function checkChangeCard(card) {
+export async function checkChangeCard(card, targetTx = TARGET_TX) {
   const text = await readCard(card);
   const heading = headingOf(text);
   const tool = toolFromHeading(heading);
   const problems = [];
   if (tool !== 'categorize_transaction') problems.push(`card is for tool ${JSON.stringify(tool)} (heading ${JSON.stringify(heading)}), expected categorize_transaction`);
+  // Identity, not text: the transaction id on the card must be the ledger row we looked at. Description/amount text can be
+  // forged by bank text or by the agent's category string, so it is only a sanity check on top of this.
+  const ids = [...text.matchAll(/#(\d+)/g)].map((m) => m[1]);
+  if (!targetTx) problems.push('no target transaction id recorded from the ledger');
+  else if (ids.length === 0 || ids.some((x) => x !== targetTx)) problems.push(`card transaction id(s) ${JSON.stringify(ids)} are not the target row #${targetTx}`);
   if (!norm(text).includes(norm(TARGET.description))) problems.push(`card text does not contain ${TARGET.description}`);
   if (!text.includes(TARGET.amount)) problems.push(`card text does not contain ${TARGET.amount}`);
   const rows = await card.locator('table tr').evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim())));
@@ -161,6 +167,8 @@ export async function humanScript(page, ctx) {
   }
   await row.waitFor({ timeout: 20000 });
   const rowBefore = (await row.innerText()).replace(/\s+/g, ' ');
+  TARGET_TX = await row.getAttribute('data-tx-id');
+  if (!TARGET_TX) throw new Error('target row has no data-tx-id');
   if (!/Uncategorized/.test(rowBefore) || !rowBefore.includes('240.00')) throw new Error(`beat precondition failed: ${TARGET.description} (240.00) is not uncategorized: ${rowBefore}`);
   await h.moveTo(row, { dx: 60 });
   await h.pause(900);
@@ -190,11 +198,16 @@ export async function humanScript(page, ctx) {
   //    until the actor process has exited (run-beat.sh posts `actor-exited`), then sweeps up any last card. No card may be
   //    left pending at beat end.
   const actorExited = async () => !!(await ctx.waitEvent('actor-exited', 1));
+  const OUTCOME_RE = /Done\. The change was applied\.|Rejected\. Nothing was changed\./;
+  const decidedIds = new Set();
+  /** Snapshot of the cards in the DOM as {id, text}; a card that already shows its outcome (the bridge keeps it ~2.5 s) is not pending. */
+  const pendingCards = async () => (await page.locator('[data-card-id]').evaluateAll((ns) => ns.map((n) => ({ id: n.getAttribute('data-card-id'), text: (n.textContent || '').replace(/\s+/g, ' ').trim() })))).filter((c) => c.id && !decidedIds.has(c.id) && !OUTCOME_RE.test(c.text));
+  /** Oldest pending card's op id (the DOM lists newest first), or null once the actor has exited and nothing is pending. */
   const nextCard = async () => {
     const t0 = Date.now(); let exitedAt = null;
     for (;;) {
-      const loc = page.locator(CARD).first();
-      if ((await loc.count()) > 0) return loc;
+      const p = await pendingCards();
+      if (p.length > 0) return p[p.length - 1].id;
       if (await actorExited()) { exitedAt ??= Date.now(); if (Date.now() - exitedAt > 4000) return null; }
       else if (Date.now() - t0 > 12 * 60_000) throw new Error(`no confirmation card for 12 minutes while the agent is still running (${decided.length} decided so far)`);
       await h.pause(400);
@@ -215,10 +228,11 @@ export async function humanScript(page, ctx) {
   const decided = []; // every card handled: {index, opId, txId, tool, kind, decision, target, before, after, outcome}
   let target = null;  // the decided target change card
   for (let i = 0; i < 24; i++) {
-    const card = await nextCard();
-    if (!card) break;
+    const opId = await nextCard();
+    if (!opId) break;
+    decidedIds.add(opId); // read once; every later action is pinned to THIS card, never to "whichever card is first"
+    const card = page.locator(`[data-card-id="${opId}"]`);
     await h.pause(1800); // the card arms after 800 ms; give a viewer time to read it
-    const opId = await card.getAttribute('data-card-id').catch(() => null);
     const text = await readCard(card);
     const heading = headingOf(text);
     const isRead = (await card.getByRole('button', { name: /Hold to allow/ }).count()) > 0;
@@ -257,7 +271,7 @@ export async function humanScript(page, ctx) {
     const check = await checkChangeCard(card);
     const cat = check.rows.find((r) => /^categor/i.test(r[0] ?? ''));
     const before = cat?.[1] ?? null; const after = cat?.[2] ?? null;
-    const isTarget = check.problems.length === 0 && !target;
+    const isTarget = check.problems.length === 0 && !target && txId === TARGET_TX;
     log('card-checked', { index: i, opId, txId, tool: check.tool, kind: 'change', rows: check.rows, problems: check.problems, target: isTarget });
     if (!isTarget) {
       const reason = check.problems.length ? check.problems.join('; ') : `the target ${TARGET.description} was already decided; not deciding it twice`;
@@ -286,7 +300,7 @@ export async function humanScript(page, ctx) {
   }
   if (!target) throw new Error(`the target ${TARGET.description} was never proposed and decided (${decided.length} card(s) decided: ${decided.map((d) => `${d.tool}/${d.decision}`).join(', ') || 'none'})`);
   await h.pause(1500);
-  const pendingLeft = await page.locator(CARD).count();
+  const pendingLeft = (await pendingCards()).length;
   if (pendingLeft > 0) throw new Error(`${pendingLeft} confirmation card(s) still pending at beat end; every card must be decided on camera`);
   const chosenCategory = target.after;
 
