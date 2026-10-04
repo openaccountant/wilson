@@ -3,6 +3,7 @@ import {
   Composition, AbsoluteFill, Sequence, OffthreadVideo, staticFile,
   useCurrentFrame, useVideoConfig, interpolate, spring,
 } from 'remotion';
+import { B5, TOTAL } from './B5';
 import { getVideoMetadata } from '@remotion/media-utils';
 
 const FPS = 30;
@@ -61,6 +62,8 @@ const calc = async ({ props }: { props: ClipProps }) => {
 };
 
 export const RemotionRoot: React.FC = () => (
+  <>
+  <Composition id="B5" component={B5} durationInFrames={TOTAL} fps={30} width={1920} height={1080} />
   <Composition
     id="Clip"
     component={Clip as React.FC}
@@ -71,4 +74,5 @@ export const RemotionRoot: React.FC = () => (
     defaultProps={{ src: 'input.mp4', title: 'CASE FILE: AUGUST 2026', subtitle: 'Follow the money.', speed: 3 } as ClipProps}
     calculateMetadata={calc as any}
   />
+  </>
 );
