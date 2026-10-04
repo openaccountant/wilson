@@ -904,10 +904,10 @@ describe('apiRunInteractions', () => {
 });
 
 describe('apiExportXlsx', () => {
-  test('returns buffer with data', () => {
+  test('returns buffer with data', async () => {
     const db = createTestDb();
     seedTestData(db);
-    const buf = apiExportXlsx(db, new URLSearchParams());
+    const buf = await apiExportXlsx(db, new URLSearchParams());
     expect(buf).toBeDefined();
     expect(buf.length).toBeGreaterThan(0);
   });

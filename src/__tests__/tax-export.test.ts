@@ -1,10 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
 import { existsSync, readFileSync, unlinkSync } from 'fs';
-import * as XLSX from 'xlsx';
+import { readXlsx, rowsOf, columnIsNumeric } from './helpers/xlsx-read.js';
 import type { Database } from '../db/compat-sqlite.js';
 import * as licenseModule from '../licensing/license.js';
 import { flagTaxDeduction, insertTransactions } from '../db/queries.js';
-import { buildScheduleC, scheduleCToCsv, scheduleCToWorkbook, SCHEDULE_C_LINES } from '../tools/tax/schedule-c.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer, SCHEDULE_C_LINES } from '../tools/tax/schedule-c.js';
 import { IRS_CATEGORIES } from '../tools/tax/irs-categories.js';
 import { initTaxFlagTool, taxFlagTool } from '../tools/tax/tax-flag.js';
 import { parseTaxExportArgs } from '../dashboard/ui/src/lib/taxExport.js';
@@ -78,10 +78,14 @@ describe('buildScheduleC', () => {
     ]);
   });
 
-  test('workbook has a summary sheet and a transactions sheet with every flagged row', () => {
-    const wb = scheduleCToWorkbook(buildScheduleC(db, 2025));
-    expect(wb.SheetNames).toEqual(['Schedule C 2025', 'Transactions']);
-    const detail = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Transactions']);
+  test('workbook has a summary sheet and a transactions sheet with every flagged row', async () => {
+    const wb = readXlsx(await scheduleCToXlsxBuffer(buildScheduleC(db, 2025)));
+    expect(wb.sheetNames).toEqual(['Schedule C 2025', 'Transactions']);
+    expect(wb.header('Schedule C 2025')).toEqual(['Line', 'Category', 'Amount', 'Transactions']);
+    expect(wb.header('Transactions')).toEqual(['Line', 'Category', 'Date', 'Description', 'Amount', 'Notes', 'Transaction ID']);
+    expect(columnIsNumeric(wb, 'Transactions', 'Amount')).toBe(true);
+    expect(columnIsNumeric(wb, 'Schedule C 2025', 'Amount')).toBe(true);
+    const detail = rowsOf(wb, 'Transactions');
     expect(detail).toHaveLength(4);
     expect(detail.find((d) => d.Description === 'Loan interest, "biz"')).toMatchObject({ Line: '16b', Amount: 12.5 });
     expect(detail.find((d) => d.Category === 'Advertising')).toMatchObject({ Notes: 'Q1 campaign' });
@@ -117,7 +121,7 @@ describe('tax_flag export action', () => {
     tmpFiles.push(filePath);
     const data = await run({ action: 'export', taxYear: 2025, filePath });
     expect(data).toMatchObject({ success: true, format: 'xlsx', deductionsExported: 4, total: 242.55 });
-    expect(XLSX.readFile(filePath).SheetNames).toEqual(['Schedule C 2025', 'Transactions']);
+    expect(readXlsx(filePath).sheetNames).toEqual(['Schedule C 2025', 'Transactions']);
   });
 
   test('writes the line summary as csv', async () => {
@@ -186,8 +190,8 @@ describe('GET /api/export/tax', () => {
     const res = await fetch(`${base}/api/export/tax?year=2025`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-disposition')).toContain('schedule-c-2025.xlsx');
-    const wb = XLSX.read(new Uint8Array(await res.arrayBuffer()), { type: 'array' });
-    expect(wb.SheetNames).toEqual(['Schedule C 2025', 'Transactions']);
+    const wb = readXlsx(new Uint8Array(await res.arrayBuffer()));
+    expect(wb.sheetNames).toEqual(['Schedule C 2025', 'Transactions']);
   });
 
   test('returns csv on request', async () => {

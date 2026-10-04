@@ -7,9 +7,9 @@ import { formatToolResult } from '../types.js';
 import { IRS_CATEGORIES } from './irs-categories.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
-import { buildScheduleC, scheduleCToCsv, scheduleCToWorkbook } from './schedule-c.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToSheets } from './schedule-c.js';
 import { writeFileSync } from 'fs';
-import * as XLSX from 'xlsx';
+import { writeXlsxFile } from '../../utils/xlsx-writer.js';
 
 let db: Database | null = null;
 
@@ -115,7 +115,7 @@ export const taxFlagTool = defineTool({
         const resolvedPath = filePath.startsWith('~') ? filePath.replace('~', process.env.HOME ?? '') : filePath;
         try {
           if (fmt === 'csv') writeFileSync(resolvedPath, scheduleCToCsv(report));
-          else XLSX.writeFile(scheduleCToWorkbook(report), resolvedPath, { bookType: 'xlsx' });
+          else await writeXlsxFile(scheduleCToSheets(report), resolvedPath);
         } catch (err) {
           return formatToolResult({ error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}` });
         }

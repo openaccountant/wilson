@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
 import { readFileSync, unlinkSync } from 'fs';
-import * as XLSX from 'xlsx';
+import { readXlsx, rowsOf, columnIsNumeric } from './helpers/xlsx-read.js';
 import type { Database } from '../db/compat-sqlite.js';
 import * as licenseModule from '../licensing/license.js';
 import { flagTaxDeduction, insertTransactions } from '../db/queries.js';
@@ -8,7 +8,7 @@ import { insertAccount } from '../db/net-worth-queries.js';
 import { runExport } from '../reports.js';
 import { initExportTool, exportTransactionsTool } from '../tools/export/export-transactions.js';
 import { initTaxFlagTool, taxFlagTool } from '../tools/tax/tax-flag.js';
-import { buildScheduleC, scheduleCToCsv, scheduleCToWorkbook } from '../tools/tax/schedule-c.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
 import { apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv } from '../dashboard/api.js';
 import { createTestDb, makeTmpPath } from './helpers.js';
 
@@ -31,8 +31,8 @@ function seed(db: Database): number[] {
 }
 
 function sheetRows(path: string, sheet?: string): Record<string, unknown>[] {
-  const wb = XLSX.readFile(path);
-  return XLSX.utils.sheet_to_json(wb.Sheets[sheet ?? wb.SheetNames[0]]);
+  const x = readXlsx(path);
+  return rowsOf(x, sheet ?? x.sheetNames[0]);
 }
 
 describe('export formula injection', () => {
@@ -69,6 +69,10 @@ describe('export formula injection', () => {
     seed(db);
     const p = tmpPath('.xlsx');
     await runExport(['--export', p, '--format', 'xlsx'], db);
+    const x = readXlsx(p);
+    expect(x.sheetNames).toEqual(['Transactions']);
+    expect(x.header('Transactions')).toEqual(['date', 'description', 'amount', 'category']);
+    expect(columnIsNumeric(x, 'Transactions', 'amount')).toBe(true);
     const rows = sheetRows(p);
     expect(rows.map((r) => r.description)).toContain(`'${EVIL}`);
     expect(rows.map((r) => r.amount)).toEqual(expect.arrayContaining([-85.5, -10, 1200]));
@@ -107,14 +111,15 @@ describe('export formula injection', () => {
       expect(csv).toContain('Total expenses');
     });
 
-    test('workbook neutralises description, notes, category; amounts numeric', () => {
-      const wb = scheduleCToWorkbook(seedTax());
-      const detail = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Transactions']);
+    test('workbook neutralises description, notes, category; amounts numeric', async () => {
+      const wb = readXlsx(await scheduleCToXlsxBuffer(seedTax()));
+      expect(wb.sheetNames).toEqual(['Schedule C 2026', 'Transactions']);
+      const detail = rowsOf(wb, 'Transactions');
       expect(detail.map((r) => r.Description)).toContain(`'${EVIL}`);
       expect(detail.map((r) => r.Notes)).toContain("'=1+1");
       expect(detail.map((r) => r.Category)).toContain("'@weird");
       expect(detail.map((r) => r.Amount)).toContain(85.5);
-      const summary = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Schedule C 2026']);
+      const summary = rowsOf(wb, 'Schedule C 2026');
       expect(summary.map((r) => r.Category)).toContain("'@weird");
       expect(summary.every((r) => typeof r.Amount === 'number')).toBe(true);
     });
@@ -140,11 +145,14 @@ describe('export formula injection', () => {
       expect(csv).toContain('Grocery Store,1200,Income');
     });
 
-    test('apiExportXlsx', () => {
+    test('apiExportXlsx', async () => {
       seed(db);
       db.prepare("UPDATE transactions SET bank = '=bank' WHERE description = 'Grocery Store'").run();
-      const wb = XLSX.read(apiExportXlsx(db, new URLSearchParams()), { type: 'buffer' });
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['Transactions']);
+      const wb = readXlsx(await apiExportXlsx(db, new URLSearchParams()));
+      expect(wb.sheetNames).toEqual(['Transactions']);
+      expect(wb.header('Transactions')).toEqual(['Date', 'Description', 'Amount', 'Category', 'Bank', 'Account Last4']);
+      expect(columnIsNumeric(wb, 'Transactions', 'Amount')).toBe(true);
+      const rows = rowsOf(wb, 'Transactions');
       expect(rows.map((r) => r.Description)).toContain(`'${EVIL}`);
       expect(rows.map((r) => r.Category)).toContain("'+cmd|calc");
       expect(rows.map((r) => r.Bank)).toContain("'=bank");

@@ -118,7 +118,8 @@ import {
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
 import { discoverSkills } from '../skills/registry.js';
-import { csvText, sanitizeRow } from '../utils/spreadsheet-safe.js';
+import { csvText } from '../utils/spreadsheet-safe.js';
+import { xlsxToBuffer } from '../utils/xlsx-writer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -463,9 +464,7 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
   return [header, ...rows].join('\n');
 }
 
-export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
-  // Dynamic import since xlsx is optional
-  const XLSX = require('xlsx');
+export async function apiExportXlsx(db: Database, params: URLSearchParams): Promise<Buffer> {
   const filters: TransactionFilters = {};
   const start = params.get('start');
   const end = params.get('end');
@@ -481,19 +480,16 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
   // export contains exactly the rows the Transactions tab shows.
   const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
-  const data = txns.map((t) => sanitizeRow({
-    Date: t.date,
-    Description: t.description,
-    Amount: t.amount,
-    Category: t.category ?? '',
-    Bank: t.bank ?? '',
-    'Account Last4': t.account_last4 ?? '',
-  }));
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  // String cells are formula-neutralised inside the writer.
+  return xlsxToBuffer([
+    {
+      name: 'Transactions',
+      header: ['Date', 'Description', 'Amount', 'Category', 'Bank', 'Account Last4'],
+      rows: txns.map((t) => [t.date, t.description, t.amount, t.category ?? '', t.bank ?? '', t.account_last4 ?? '']),
+      widths: [12, 48, 14, 22, 18, 14],
+      currencyColumns: ['Amount'],
+    },
+  ]);
 }
 
 export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {

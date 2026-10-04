@@ -1,7 +1,7 @@
-import * as XLSX from 'xlsx';
 import type { Database } from '../../db/compat-sqlite.js';
 import type { IrsCategory } from './irs-categories.js';
-import { csvText, sanitizeRow } from '../../utils/spreadsheet-safe.js';
+import { csvText } from '../../utils/spreadsheet-safe.js';
+import { xlsxToBuffer, type XlsxSheet } from '../../utils/xlsx-writer.js';
 
 /**
  * Schedule C (Form 1040) Part II line for each IRS category. Line 12
@@ -127,38 +127,43 @@ export function scheduleCToCsv(report: ScheduleCReport): string {
   return out.join('\n');
 }
 
-/** Workbook with a Summary sheet (per line) and a Transactions sheet (every flagged row). */
-export function scheduleCToWorkbook(report: ScheduleCReport): XLSX.WorkBook {
-  const summary = report.lines.map((l) => sanitizeRow({
-    Line: l.line,
-    Category: l.category,
-    Amount: l.total,
-    Transactions: l.count,
-  }));
-  summary.push({ Line: '28', Category: 'Total expenses', Amount: report.total, Transactions: report.details.length });
+/**
+ * Sheets for the Schedule C workbook: a summary sheet (per line) and a
+ * Transactions sheet (every flagged row). String cells are formula-neutralised
+ * by the xlsx writer.
+ */
+export function scheduleCToSheets(report: ScheduleCReport): XlsxSheet[] {
+  const summaryRows: XlsxSheet['rows'] = report.lines.map((l) => [l.line, l.category, l.total, l.count]);
+  summaryRows.push(['28', 'Total expenses', report.total, report.details.length]);
 
-  const detail = report.details.map((d) => sanitizeRow({
-    Line: d.line,
-    Category: d.category,
-    Date: d.date,
-    Description: d.description,
-    Amount: d.amount,
-    Notes: d.notes,
-    'Transaction ID': d.transactionId,
-  }));
+  const detailRows: XlsxSheet['rows'] = report.details.map((d) => [
+    d.line,
+    d.category,
+    d.date,
+    d.description,
+    d.amount,
+    d.notes,
+    d.transactionId,
+  ]);
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), `Schedule C ${report.taxYear}`);
-  XLSX.utils.book_append_sheet(
-    wb,
-    XLSX.utils.json_to_sheet(detail, {
+  return [
+    {
+      name: `Schedule C ${report.taxYear}`,
+      header: ['Line', 'Category', 'Amount', 'Transactions'],
+      rows: summaryRows,
+      widths: [8, 36, 14, 14],
+      currencyColumns: ['Amount'],
+    },
+    {
+      name: 'Transactions',
       header: ['Line', 'Category', 'Date', 'Description', 'Amount', 'Notes', 'Transaction ID'],
-    }),
-    'Transactions',
-  );
-  return wb;
+      rows: detailRows,
+      widths: [8, 30, 12, 48, 14, 30, 16],
+      currencyColumns: ['Amount'],
+    },
+  ];
 }
 
-export function scheduleCToXlsxBuffer(report: ScheduleCReport): Buffer {
-  return XLSX.write(scheduleCToWorkbook(report), { type: 'buffer', bookType: 'xlsx' });
+export async function scheduleCToXlsxBuffer(report: ScheduleCReport): Promise<Buffer> {
+  return xlsxToBuffer(scheduleCToSheets(report));
 }

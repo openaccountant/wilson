@@ -704,7 +704,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
         if (path === '/api/export/xlsx') {
           try {
-            const buf = apiExportXlsx(activeDb, url.searchParams);
+            const buf = await apiExportXlsx(activeDb, url.searchParams);
             return new Response(new Uint8Array(buf), {
               headers: {
                 ...headers,
@@ -714,7 +714,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             });
           } catch {
             return Response.json(
-              { error: 'XLSX export requires the xlsx package. Install with: bun add xlsx' },
+              { error: 'XLSX export failed.' },
               { status: 500, headers }
             );
           }
@@ -764,7 +764,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
               },
             });
           }
-          return new Response(new Uint8Array(scheduleCToXlsxBuffer(report)), {
+          return new Response(new Uint8Array(await scheduleCToXlsxBuffer(report)), {
             headers: {
               ...headers,
               'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
