@@ -1,3 +1,4 @@
+import { ensureHandoffSecret } from '../training/handoff-tag.js';
 import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname } from 'path';
@@ -57,6 +58,14 @@ export function initDatabase(dbPath?: string, profileName?: string): Database {
     applyToolRenames(db, { profile: profileName ?? 'default' });
   } catch (err) {
     console.error('[mcp] tool name fix-up error:', err);
+  }
+  // Create the handoff-tag secret as soon as the profile DB exists, so every writer of llm_interactions (CLI,
+  // headless, dashboard) records rows in the tagged era. Not a migration: it writes two dashboard_config rows.
+  // Rows recorded before `handoff_tag_since` in an EXISTING profile stay legacy by design (fail-safe).
+  try {
+    ensureHandoffSecret(db);
+  } catch (err) {
+    console.error('[handoff] secret setup error:', err);
   }
   return db;
 }

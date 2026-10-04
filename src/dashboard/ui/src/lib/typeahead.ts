@@ -4,7 +4,7 @@
  * (src/__tests__/dashboard-typeahead.test.ts), same pattern as demo/core.ts.
  */
 
-import { MENTION_BLOCK_PREFIX, splitInjectedContext } from '../../../local-handoff-format.js';
+import { HANDOFF_DETECT_STRUCTURAL, MENTION_BLOCK_PREFIX, splitInjectedContext } from '../../../local-handoff-format.js';
 
 // ── Trigger detection ──────────────────────────────────────────────────────
 
@@ -685,7 +685,7 @@ export const CONTEXT_BLOCK_HEADER = MENTION_BLOCK_PREFIX;
  * `block` stays the mention block only so its lines can't leak into the labels.
  */
 export function splitContextBlock(text: string): { block: string; body: string } {
-  const parts = splitInjectedContext(text);
+  const parts = splitInjectedContext(text, HANDOFF_DETECT_STRUCTURAL);
   if (!parts.mention && !parts.handoff) return { block: '', body: text };
   const block = parts.mention.endsWith('\n\n') ? parts.mention.slice(0, -2) : parts.mention;
   return { block, body: parts.body };

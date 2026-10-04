@@ -22,6 +22,7 @@ import { getTaskModel } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
 import { canWrite, type DashboardUser } from './auth.js';
+import { ensureHandoffSecret, setHandoffReplayDb } from '../training/handoff-tag.js';
 
 /** The dashboard user a chat run belongs to (auth on); null when auth is off. */
 export type ChatUser = Pick<DashboardUser, 'id' | 'role'>;
@@ -406,6 +407,13 @@ export function initChatSession(db: Database): void {
     });
   }
   chatDb = db;
+  setHandoffReplayDb(db);
+  // Create the handoff tag secret now (idempotent), so only rows recorded before this code ran are "legacy".
+  try {
+    ensureHandoffSecret(db);
+  } catch (err) {
+    logger.warn('Dashboard chat: could not create the handoff tag secret', { error: err instanceof Error ? err.message : String(err) });
+  }
 
   // Wire every tool to the DB — without this the agent's tool calls fail and
   // the model answers from thin air instead of the user's real transactions.

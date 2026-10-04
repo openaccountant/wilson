@@ -24,17 +24,21 @@
  *
  * The rendered block rides the existing `contextBlock` seam of
  * handleChatMessage (after the mention block), so chat.ts is unchanged. History
- * replay strips it again (stripHandoffBlock in in-memory-chat-history.ts).
+ * replay strips it again (stripHandoffBlock in in-memory-chat-history.ts). The block is built HERE and only here, and tagged
+ * with an HMAC of its body (training/handoff-tag.ts): the client sends data, never text, so there is no client-side
+ * builder whose tag could be trusted.
  */
 import { z } from 'zod';
 import type { Database } from '../db/compat-sqlite.js';
 import { executeRead, getToolDef } from '../mcp/tool-catalog.js';
 import { getProviderById, resolveProvider } from '../providers.js';
 import { getConfiguredModel } from '../utils/config.js';
+import { ensureHandoffSecret, handoffTag } from '../training/handoff-tag.js';
 import {
-  HANDOFF_BLOCK_END,
-  HANDOFF_BLOCK_HEADER,
   HANDOFF_CAPS,
+  SCAN_MAX_BODY_CHARS,
+  handoffEnd,
+  handoffHeader,
   HANDOFF_TO_CATALOG,
   type HandoffReadToolName,
   type LocalHandoffV1,
@@ -413,8 +417,8 @@ export async function reexecuteSteps(value: LocalHandoffV1, exec: ReadExecutor):
  * server re-run); the client's step summaries are never rendered. Ends with the
  * end marker and one blank line, and contains no blank line before that.
  */
-export function renderHandoffBlock(value: LocalHandoffV1, verified: VerifiedStep[]): string {
-  const lines: string[] = [HANDOFF_BLOCK_HEADER];
+export function renderHandoffBlock(value: LocalHandoffV1, verified: VerifiedStep[], secret: Buffer): string {
+  const lines: string[] = [];
   lines.push(`Handoff reason: ${value.reason}. Mirror synced ${value.mirror.syncedAt ? sanitizeInline(value.mirror.syncedAt) : 'unknown'}.`);
 
   if (verified.length > 0) {
@@ -442,14 +446,25 @@ export function renderHandoffBlock(value: LocalHandoffV1, verified: VerifiedStep
       lines.push(...indented(`A: ${t.a}`));
     }
   }
-  lines.push(HANDOFF_BLOCK_END);
-  return `${lines.join('\n')}\n\n`;
+  // The tag binds the exact body (every line between the header and the end marker) to the server's secret, so only
+  // a block the server rendered verifies; see src/training/handoff-tag.ts.
+  let body = lines.join('\n');
+  if (body.length > SCAN_MAX_BODY_CHARS) {
+    // Indentation and labels can push a maximal payload past the scan bound; a block the scan cannot reach would not
+    // verify. Cut to the bound (no trailing newline, so no blank line) and say so, then tag what is left.
+    const note = `\n(handoff truncated at ${SCAN_MAX_BODY_CHARS} characters)`;
+    body = body.slice(0, SCAN_MAX_BODY_CHARS - note.length).replace(/\n+$/, '') + note;
+  }
+  const tag = handoffTag(secret, body);
+  return `${handoffHeader(tag)}\n${body}\n${handoffEnd(tag)}\n\n`;
 }
 
 // ── Route helper ─────────────────────────────────────────────────────────────
 
 export interface BuildHandoffContextDeps {
   exec: ReadExecutor;
+  /** The profile DB: holds the tag secret (created on first use). A block is always built, and so tagged, here. */
+  db: Database;
   /** Defaults to the configured chat model (Q10). */
   providerIsLocal?: boolean;
 }
@@ -464,7 +479,7 @@ export async function buildHandoffContext(raw: unknown, deps: BuildHandoffContex
     const parsed = parseLocalHandoff(raw, { providerIsLocal: deps.providerIsLocal });
     if (!parsed.ok) return '';
     const verified = await reexecuteSteps(parsed.value, deps.exec);
-    return renderHandoffBlock(parsed.value, verified);
+    return renderHandoffBlock(parsed.value, verified, ensureHandoffSecret(deps.db).secret);
   } catch {
     return '';
   }

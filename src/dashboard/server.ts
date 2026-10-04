@@ -67,6 +67,8 @@ const maintenanceTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
  * external MCP client like Hronaut has no dashboard login of its own.
  */
 const MCP_HTTP_PATH = '/mcp';
+/** Longest chat query the API accepts (a few thousand words is normal; the scan cap for stored prompts is 2M). */
+const MAX_CHAT_QUERY_CHARS = 100_000;
 
 /**
  * Bun's idle timeout is per connection and its maximum is 255 s. A `/mcp` tool
@@ -1007,6 +1009,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
+          // Recorded verbatim in the interaction store and later normalised by training/judge reads: bound it here.
+          if (typeof body.query !== 'string' || body.query.length > MAX_CHAT_QUERY_CHARS) {
+            return Response.json({ error: `query must be a string of at most ${MAX_CHAT_QUERY_CHARS} characters` }, { status: 400, headers });
+          }
           // "@" mentions: shape-checked here, then every entity is re-read from
           // the DB (client labels are never trusted) into a context block.
           const mentions = validateMentions(body.mentions);
@@ -1021,7 +1027,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           // is not even parsed, so a forged handoff cannot inject a block or make the
           // server run tools on a path the feature does not expose.
           const handoffBlock = apiLocalChatConfig().subagent.enabled
-            ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
+            ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb), db: activeDb })
             : '';
           if (authTurnedOnMidRequest()) return unauthorized();
           // The run belongs to this user: its approval cards are theirs alone,

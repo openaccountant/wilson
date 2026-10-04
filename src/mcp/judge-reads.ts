@@ -16,14 +16,16 @@
  *  - every text is `{untrusted_text}`: hidden characters stripped, PII masked (digit runs, emails, phone numbers)
  *    over the WHOLE text before it is cut into pages, so a card number split across a page boundary stays masked;
  *  - a browser-subagent handoff block inside a prompt is shown as a marked, truncated excerpt (see
- *    src/training/handoff-block.ts), never in full.
+ *    src/training/handoff-block.ts), never in full. Only a block whose HMAC tag verifies counts; every other character
+ *    of the prompt is shown in full, brackets neutralised, so typed text can neither pass as a block nor hide behind one.
  *
  * Section pages go through the engine's read path, so each one spends from the daily read budget.
  */
 import type { Database } from '../db/compat-sqlite.js';
 import { CursorError, DEFAULT_OUTPUT_CAP, UNTRUSTED_NOTE, argsHash, capOutput, decodeCursor, encodeCursor, sanitizeUntrustedText } from './output.js';
 import { NotFoundError, PrepareError } from './errors.js';
-import { excerptHandoffBlocks, hasHandoffBlock, HANDOFF_BLOCK_HEADER_PREFIX } from '../training/handoff-block.js';
+import { analyzeHandoff, excerptHandoffBlocks, HANDOFF_BLOCK_HEADER_PREFIX } from '../training/handoff-block.js';
+import { detectorFromDb } from '../training/handoff-tag.js';
 import { KNOWN_PROMPT_CALL_TYPES, omitIterationToolResults } from '../agent/iteration-prompt-format.js';
 import { JUDGE_RUBRIC, JUDGE_RUBRIC_VERSION, JUDGE_TAGS } from '../training/judge-rubric.js';
 
@@ -57,6 +59,18 @@ interface ListRow {
   created_at: string;
   open_proposal: number;
   handoff: number;
+}
+
+/**
+ * The SQL prefix test only finds candidates: the flag is true for a real block (or, in a tagged row, marker-like text).
+ * Known limit, accepted: a tagged-era row whose marker-like text uses only look-alike characters (no literal prefix)
+ * gets no `handoffNotes` hint in the list. The judge view and the export still treat it as plain text / suspect.
+ * Judge-visible untrusted text holds no '[' except the server-made PII tokens '[email]' and '[phone]' (maskPii),
+ * which cannot form a marker.
+ */
+function listedHandoffFlag(db: Database, id: number): boolean {
+  const row = db.prepare('SELECT user_prompt, created_at FROM llm_interactions WHERE id = @id').get({ id }) as { user_prompt: string; created_at: string } | undefined;
+  return !!row && analyzeHandoff(row.user_prompt, detectorFromDb(db, row.created_at)).kind !== 'none';
 }
 
 export function listInteractionsRead(db: Database, args: Record<string, unknown>, ctx: ReadContext, cap: number): unknown {
@@ -93,7 +107,7 @@ export function listInteractionsRead(db: Database, args: Record<string, unknown>
       status: sanitizeUntrustedText(r.status, 20),
       created_at: r.created_at,
       openProposal: r.open_proposal === 1,
-      ...(r.handoff === 1 ? { handoffNotes: true } : {}),
+      ...(r.handoff === 1 && listedHandoffFlag(db, r.id) ? { handoffNotes: true } : {}),
     }),
   }).body;
 }
@@ -106,6 +120,7 @@ interface InteractionRow {
   call_type: string;
   status: string;
   error: string | null;
+  created_at: string;
   user_prompt: string;
   response_content: string | null;
   tool_calls_json: string | null;
@@ -127,15 +142,16 @@ function parseToolCalls(json: string | null): Array<{ name: string; args: unknow
 }
 
 /** One text per section, plain text before sanitizing. The user prompt has its handoff blocks reduced to excerpts first. */
-function sectionTexts(row: InteractionRow): { user_prompt: string; response: string; tool_calls: string; handoff: boolean } {
+function sectionTexts(row: InteractionRow, db: Database): { user_prompt: string; response: string; tool_calls: string; handoff: boolean } {
   // From the second agent iteration the prompt embeds every full tool result: cut that block first (preview-only rule).
-  const prompt = excerptHandoffBlocks(omitIterationToolResults(row.user_prompt).text);
+  const detector = detectorFromDb(db, row.created_at);
+  const prompt = excerptHandoffBlocks(omitIterationToolResults(row.user_prompt).text, detector);
   const calls = parseToolCalls(row.tool_calls_json);
   return {
     user_prompt: prompt.text,
     response: row.response_content ?? '',
     tool_calls: calls.map((c) => `${c.name} ${JSON.stringify(c.args)}`).join('\n'),
-    handoff: prompt.blocks > 0 || hasHandoffBlock(row.user_prompt),
+    handoff: prompt.blocks > 0 || prompt.exhausted || analyzeHandoff(row.user_prompt, detector).kind !== 'none',
   };
 }
 
@@ -169,7 +185,7 @@ function toolResultPreviews(db: Database, id: number, count: number): Array<{ to
 function loadInteraction(db: Database, id: number): InteractionRow {
   // Explicit columns: never `system_prompt`, never `tool_defs_json`.
   const row = db
-    .prepare('SELECT id, model, call_type, status, error, user_prompt, response_content, tool_calls_json FROM llm_interactions WHERE id = @id')
+    .prepare('SELECT id, model, call_type, status, error, created_at, user_prompt, response_content, tool_calls_json FROM llm_interactions WHERE id = @id')
     .get({ id }) as InteractionRow | undefined;
   if (!row) throw new NotFoundError(`Interaction #${id} not found — use list_interactions.`);
   return row;
@@ -179,7 +195,7 @@ export function getInteractionRead(db: Database, args: Record<string, unknown>, 
   const id = args.id as number;
   const section = (args.section as 'overview' | 'user_prompt' | 'response' | 'tool_calls' | undefined) ?? 'overview';
   const row = loadInteraction(db, id);
-  const texts = sectionTexts(row);
+  const texts = sectionTexts(row, db);
   // Defence in depth: the cut above knows three prompt formats. Another call type may embed raw tool results in a
   // shape it does not know, so its prompt is not paged (the other sections are unaffected).
   const knownFormat = KNOWN_PROMPT_CALL_TYPES.includes(row.call_type);

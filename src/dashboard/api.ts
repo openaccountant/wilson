@@ -89,7 +89,8 @@ import {
   writeHumanVersion,
   type AnnotationRow,
 } from '../training/annotations.js';
-import { hasHandoffBlock } from '../training/handoff-block.js';
+import { analyzeHandoff } from '../training/handoff-block.js';
+import { detectorFromDb } from '../training/handoff-tag.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
 import {
@@ -1110,7 +1111,7 @@ export function apiInteractionDetail(db: Database, id: number) {
       annotation,
       history,
       judgements,
-      handoff: hasHandoffBlock(interaction.user_prompt as string | null),
+      handoff: analyzeHandoff(interaction.user_prompt as string | null, detectorFromDb(db, interaction.created_at as string | null)).kind !== 'none',
     };
   } catch {
     return null;

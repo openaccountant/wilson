@@ -33,7 +33,7 @@ import {
 } from '../dashboard/ui/src/lib/chatCommands.js';
 import { expandSlashCommand } from '../dashboard/chat-commands.js';
 import { CONTEXT_BLOCK_HEADER } from '../dashboard/mentions.js';
-import { HANDOFF_BLOCK_HEADER, MENTION_BLOCK_PREFIX } from '../dashboard/local-handoff-format.js';
+import { HANDOFF_BLOCK_HEADER_PREFIX, MENTION_BLOCK_PREFIX } from '../dashboard/local-handoff-format.js';
 import { renderHandoffBlock } from '../dashboard/local-handoff.js';
 
 test('the shared mention-block prefix matches the server header', () => {
@@ -404,10 +404,11 @@ describe('stripContextBlock', () => {
       localNote: 'You spent "$12" at "Amazon".',
     },
     [{ tool: 'transaction_search', args: { query: 'Amazon in June' }, ok: true, summary: 'Found 1 transaction.\n#1 2026-06-02 -$12.00 Shopping "AMZN"' }],
+    Buffer.alloc(32, 7),
   );
 
   test('a leading handoff block is peeled (handoff only)', () => {
-    expect(handoff.startsWith(HANDOFF_BLOCK_HEADER)).toBe(true);
+    expect(handoff.startsWith(HANDOFF_BLOCK_HEADER_PREFIX)).toBe(true);
     expect(stripContextBlock(`${handoff}how much at Amazon?`)).toBe('how much at Amazon?');
     expect(splitContextBlock(`${handoff}how much at Amazon?`).block).toBe('');
   });
@@ -415,7 +416,7 @@ describe('stripContextBlock', () => {
   test('mention block then handoff block: body is the words, block is the mention block only', () => {
     const split = splitContextBlock(`${block}${handoff}how much at @Amazon?`);
     expect(split.body).toBe('how much at @Amazon?');
-    expect(split.block).not.toContain(HANDOFF_BLOCK_HEADER);
+    expect(split.block).not.toContain(HANDOFF_BLOCK_HEADER_PREFIX);
     expect(contextBlockLabels(split.block)).toEqual(['Visa', 'Amazon']);
   });
 

@@ -1,0 +1,953 @@
+{
+ "generated_with": "python3 unicodedata (Unicode 14.0.0): every code point whose name contains BRACKET, plus the listed look-alikes (corners, vertical box lines, quill bar, quilt ornament)",
+ "entries": [
+  {
+   "cp": "U+005B",
+   "name": "LEFT SQUARE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+005D",
+   "name": "RIGHT SQUARE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+007B",
+   "name": "LEFT CURLY BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+007D",
+   "name": "RIGHT CURLY BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+1AC5",
+   "name": "COMBINING SQUARE BRACKETS ABOVE",
+   "category": "Mn",
+   "why": "name"
+  },
+  {
+   "cp": "U+2045",
+   "name": "LEFT SQUARE BRACKET WITH QUILL",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2046",
+   "name": "RIGHT SQUARE BRACKET WITH QUILL",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+231C",
+   "name": "TOP LEFT CORNER",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+231D",
+   "name": "TOP RIGHT CORNER",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+231E",
+   "name": "BOTTOM LEFT CORNER",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+231F",
+   "name": "BOTTOM RIGHT CORNER",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+2329",
+   "name": "LEFT-POINTING ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+232A",
+   "name": "RIGHT-POINTING ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A1",
+   "name": "LEFT SQUARE BRACKET UPPER CORNER",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A2",
+   "name": "LEFT SQUARE BRACKET EXTENSION",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A3",
+   "name": "LEFT SQUARE BRACKET LOWER CORNER",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A4",
+   "name": "RIGHT SQUARE BRACKET UPPER CORNER",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A5",
+   "name": "RIGHT SQUARE BRACKET EXTENSION",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A6",
+   "name": "RIGHT SQUARE BRACKET LOWER CORNER",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A7",
+   "name": "LEFT CURLY BRACKET UPPER HOOK",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A8",
+   "name": "LEFT CURLY BRACKET MIDDLE PIECE",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23A9",
+   "name": "LEFT CURLY BRACKET LOWER HOOK",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23AA",
+   "name": "CURLY BRACKET EXTENSION",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23AB",
+   "name": "RIGHT CURLY BRACKET UPPER HOOK",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23AC",
+   "name": "RIGHT CURLY BRACKET MIDDLE PIECE",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23AD",
+   "name": "RIGHT CURLY BRACKET LOWER HOOK",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B0",
+   "name": "UPPER LEFT OR LOWER RIGHT CURLY BRACKET SECTION",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B1",
+   "name": "UPPER RIGHT OR LOWER LEFT CURLY BRACKET SECTION",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B4",
+   "name": "TOP SQUARE BRACKET",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B5",
+   "name": "BOTTOM SQUARE BRACKET",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B6",
+   "name": "BOTTOM SQUARE BRACKET OVER TOP SQUARE BRACKET",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+23B8",
+   "name": "LEFT VERTICAL BOX LINE",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+23B9",
+   "name": "RIGHT VERTICAL BOX LINE",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+23DE",
+   "name": "TOP CURLY BRACKET",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23DF",
+   "name": "BOTTOM CURLY BRACKET",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23E0",
+   "name": "TOP TORTOISE SHELL BRACKET",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+23E1",
+   "name": "BOTTOM TORTOISE SHELL BRACKET",
+   "category": "Sm",
+   "why": "name"
+  },
+  {
+   "cp": "U+276C",
+   "name": "MEDIUM LEFT-POINTING ANGLE BRACKET ORNAMENT",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+276D",
+   "name": "MEDIUM RIGHT-POINTING ANGLE BRACKET ORNAMENT",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2770",
+   "name": "HEAVY LEFT-POINTING ANGLE BRACKET ORNAMENT",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2771",
+   "name": "HEAVY RIGHT-POINTING ANGLE BRACKET ORNAMENT",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2772",
+   "name": "LIGHT LEFT TORTOISE SHELL BRACKET ORNAMENT",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2773",
+   "name": "LIGHT RIGHT TORTOISE SHELL BRACKET ORNAMENT",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2774",
+   "name": "MEDIUM LEFT CURLY BRACKET ORNAMENT",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2775",
+   "name": "MEDIUM RIGHT CURLY BRACKET ORNAMENT",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+27E6",
+   "name": "MATHEMATICAL LEFT WHITE SQUARE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+27E7",
+   "name": "MATHEMATICAL RIGHT WHITE SQUARE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+27E8",
+   "name": "MATHEMATICAL LEFT ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+27E9",
+   "name": "MATHEMATICAL RIGHT ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+27EA",
+   "name": "MATHEMATICAL LEFT DOUBLE ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+27EB",
+   "name": "MATHEMATICAL RIGHT DOUBLE ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+27EC",
+   "name": "MATHEMATICAL LEFT WHITE TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+27ED",
+   "name": "MATHEMATICAL RIGHT WHITE TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2983",
+   "name": "LEFT WHITE CURLY BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2984",
+   "name": "RIGHT WHITE CURLY BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2987",
+   "name": "Z NOTATION LEFT IMAGE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2988",
+   "name": "Z NOTATION RIGHT IMAGE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2989",
+   "name": "Z NOTATION LEFT BINDING BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+298A",
+   "name": "Z NOTATION RIGHT BINDING BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+298B",
+   "name": "LEFT SQUARE BRACKET WITH UNDERBAR",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+298C",
+   "name": "RIGHT SQUARE BRACKET WITH UNDERBAR",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+298D",
+   "name": "LEFT SQUARE BRACKET WITH TICK IN TOP CORNER",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+298E",
+   "name": "RIGHT SQUARE BRACKET WITH TICK IN BOTTOM CORNER",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+298F",
+   "name": "LEFT SQUARE BRACKET WITH TICK IN BOTTOM CORNER",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2990",
+   "name": "RIGHT SQUARE BRACKET WITH TICK IN TOP CORNER",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2991",
+   "name": "LEFT ANGLE BRACKET WITH DOT",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2992",
+   "name": "RIGHT ANGLE BRACKET WITH DOT",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2993",
+   "name": "LEFT ARC LESS-THAN BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2994",
+   "name": "RIGHT ARC GREATER-THAN BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2995",
+   "name": "DOUBLE LEFT ARC GREATER-THAN BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2996",
+   "name": "DOUBLE RIGHT ARC LESS-THAN BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2997",
+   "name": "LEFT BLACK TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2998",
+   "name": "RIGHT BLACK TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+29FC",
+   "name": "LEFT-POINTING CURVED ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+29FD",
+   "name": "RIGHT-POINTING CURVED ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E02",
+   "name": "LEFT SUBSTITUTION BRACKET",
+   "category": "Pi",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E03",
+   "name": "RIGHT SUBSTITUTION BRACKET",
+   "category": "Pf",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E04",
+   "name": "LEFT DOTTED SUBSTITUTION BRACKET",
+   "category": "Pi",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E05",
+   "name": "RIGHT DOTTED SUBSTITUTION BRACKET",
+   "category": "Pf",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E09",
+   "name": "LEFT TRANSPOSITION BRACKET",
+   "category": "Pi",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E0A",
+   "name": "RIGHT TRANSPOSITION BRACKET",
+   "category": "Pf",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E0C",
+   "name": "LEFT RAISED OMISSION BRACKET",
+   "category": "Pi",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E0D",
+   "name": "RIGHT RAISED OMISSION BRACKET",
+   "category": "Pf",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E1C",
+   "name": "LEFT LOW PARAPHRASE BRACKET",
+   "category": "Pi",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E1D",
+   "name": "RIGHT LOW PARAPHRASE BRACKET",
+   "category": "Pf",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E20",
+   "name": "LEFT VERTICAL BAR WITH QUILL",
+   "category": "Pi",
+   "why": "listed"
+  },
+  {
+   "cp": "U+2E21",
+   "name": "RIGHT VERTICAL BAR WITH QUILL",
+   "category": "Pf",
+   "why": "listed"
+  },
+  {
+   "cp": "U+2E22",
+   "name": "TOP LEFT HALF BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E23",
+   "name": "TOP RIGHT HALF BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E24",
+   "name": "BOTTOM LEFT HALF BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E25",
+   "name": "BOTTOM RIGHT HALF BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E26",
+   "name": "LEFT SIDEWAYS U BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E27",
+   "name": "RIGHT SIDEWAYS U BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E55",
+   "name": "LEFT SQUARE BRACKET WITH STROKE",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E56",
+   "name": "RIGHT SQUARE BRACKET WITH STROKE",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E57",
+   "name": "LEFT SQUARE BRACKET WITH DOUBLE STROKE",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+2E58",
+   "name": "RIGHT SQUARE BRACKET WITH DOUBLE STROKE",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+3008",
+   "name": "LEFT ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+3009",
+   "name": "RIGHT ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+300A",
+   "name": "LEFT DOUBLE ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+300B",
+   "name": "RIGHT DOUBLE ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+300C",
+   "name": "LEFT CORNER BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+300D",
+   "name": "RIGHT CORNER BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+300E",
+   "name": "LEFT WHITE CORNER BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+300F",
+   "name": "RIGHT WHITE CORNER BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+3010",
+   "name": "LEFT BLACK LENTICULAR BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+3011",
+   "name": "RIGHT BLACK LENTICULAR BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+3014",
+   "name": "LEFT TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+3015",
+   "name": "RIGHT TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+3016",
+   "name": "LEFT WHITE LENTICULAR BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+3017",
+   "name": "RIGHT WHITE LENTICULAR BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+3018",
+   "name": "LEFT WHITE TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+3019",
+   "name": "RIGHT WHITE TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+301A",
+   "name": "LEFT WHITE SQUARE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+301B",
+   "name": "RIGHT WHITE SQUARE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE17",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT WHITE LENTICULAR BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE37",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT CURLY BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE38",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT CURLY BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE39",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3A",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3B",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT BLACK LENTICULAR BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3C",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT BLACK LENTICULAR BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3D",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT DOUBLE ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3E",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT DOUBLE ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE3F",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT ANGLE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE40",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT ANGLE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE41",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT CORNER BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE42",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT CORNER BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE43",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT WHITE CORNER BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE44",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT WHITE CORNER BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE47",
+   "name": "PRESENTATION FORM FOR VERTICAL LEFT SQUARE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE48",
+   "name": "PRESENTATION FORM FOR VERTICAL RIGHT SQUARE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE5B",
+   "name": "SMALL LEFT CURLY BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE5C",
+   "name": "SMALL RIGHT CURLY BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE5D",
+   "name": "SMALL LEFT TORTOISE SHELL BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FE5E",
+   "name": "SMALL RIGHT TORTOISE SHELL BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF3B",
+   "name": "FULLWIDTH LEFT SQUARE BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF3D",
+   "name": "FULLWIDTH RIGHT SQUARE BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF5B",
+   "name": "FULLWIDTH LEFT CURLY BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF5D",
+   "name": "FULLWIDTH RIGHT CURLY BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF62",
+   "name": "HALFWIDTH LEFT CORNER BRACKET",
+   "category": "Ps",
+   "why": "name"
+  },
+  {
+   "cp": "U+FF63",
+   "name": "HALFWIDTH RIGHT CORNER BRACKET",
+   "category": "Pe",
+   "why": "name"
+  },
+  {
+   "cp": "U+1D115",
+   "name": "MUSICAL SYMBOL BRACKET",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F12A",
+   "name": "TORTOISE SHELL BRACKETED LATIN CAPITAL LETTER S",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F240",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-672C",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F241",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-4E09",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F242",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-4E8C",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F243",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-5B89",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F244",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-70B9",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F245",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-6253",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F246",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-76D7",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F247",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-52DD",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F248",
+   "name": "TORTOISE SHELL BRACKETED CJK UNIFIED IDEOGRAPH-6557",
+   "category": "So",
+   "why": "name"
+  },
+  {
+   "cp": "U+1F668",
+   "name": "HOLLOW QUILT SQUARE ORNAMENT",
+   "category": "So",
+   "why": "listed"
+  },
+  {
+   "cp": "U+E005B",
+   "name": "TAG LEFT SQUARE BRACKET",
+   "category": "Cf",
+   "why": "name"
+  },
+  {
+   "cp": "U+E005D",
+   "name": "TAG RIGHT SQUARE BRACKET",
+   "category": "Cf",
+   "why": "name"
+  },
+  {
+   "cp": "U+E007B",
+   "name": "TAG LEFT CURLY BRACKET",
+   "category": "Cf",
+   "why": "name"
+  },
+  {
+   "cp": "U+E007D",
+   "name": "TAG RIGHT CURLY BRACKET",
+   "category": "Cf",
+   "why": "name"
+  }
+ ]
+}

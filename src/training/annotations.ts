@@ -18,7 +18,8 @@
 import { retiredNamesFor } from '../mcp/tool-names.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { previewArgs } from '../mcp/audit.js';
-import { HANDOFF_BLOCK_HEADER_PREFIX } from './handoff-block.js';
+import { isHandoffFlagged, SCAN_MAX_PROMPT_CHARS } from './handoff-block.js';
+import { readHandoffTagState, detectorFor } from './handoff-tag.js';
 
 export type AnnotationSource = 'human' | 'judge';
 export type AnnotationStatus = 'proposed' | 'accepted' | 'rejected' | 'superseded';
@@ -389,11 +390,33 @@ export interface SftSelection {
   model?: string;
 }
 
-function handoffRunIds(db: Database): Set<string> {
-  const rows = db
-    .prepare('SELECT DISTINCT run_id FROM llm_interactions WHERE instr(user_prompt, @prefix) > 0')
-    .all({ prefix: HANDOFF_BLOCK_HEADER_PREFIX }) as Array<{ run_id: string }>;
-  return new Set(rows.map((r) => r.run_id));
+/**
+ * Run ids (among `runIds`) with at least one interaction that must stay out of a default export: a real handoff block,
+ * or marker-like text that is not one ("suspect", fail-safe). Rows are checked one by one against the detector for
+ * their own era (src/training/handoff-tag.ts); only the candidate runs are read, never the whole table.
+ */
+/** Runs / interactions per query in the handoff export check (was 400 with every prompt read at once). */
+const HANDOFF_CHECK_CHUNK = 50;
+
+function handoffRunIds(db: Database, runIds: string[]): Set<string> {
+  const state = readHandoffTagState(db);
+  const flagged = new Set<string>();
+  // Small chunks, rows streamed one at a time, and an oversize prompt is flagged from its length alone (never read).
+  for (let i = 0; i < runIds.length; i += HANDOFF_CHECK_CHUNK) {
+    const chunk = runIds.slice(i, i + HANDOFF_CHECK_CHUNK);
+    const params: Record<string, unknown> = { cap: SCAN_MAX_PROMPT_CHARS };
+    chunk.forEach((r, k) => { params[`r${k}`] = r; });
+    const rows = db
+      .prepare(`SELECT run_id, created_at, length(user_prompt) > @cap AS oversize,
+          CASE WHEN length(user_prompt) > @cap THEN NULL ELSE user_prompt END AS user_prompt
+        FROM llm_interactions WHERE run_id IN (${chunk.map((_, k) => `@r${k}`).join(',')})`)
+      .iterate(params) as IterableIterator<{ run_id: string; user_prompt: string | null; created_at: string; oversize: number }>;
+    for (const r of rows) {
+      if (flagged.has(r.run_id)) continue; // already out: no need to analyze its other rows
+      if (r.oversize || isHandoffFlagged(r.user_prompt, detectorFor(state, r.created_at))) flagged.add(r.run_id);
+    }
+  }
+  return flagged;
 }
 
 /**
@@ -447,7 +470,7 @@ export function qualifyingSftRuns(db: Database, opts: QualifyOptions & SftSelect
     selected = runs.filter((r) => humanQualified.has(r) || !negative.has(r));
   }
   if (opts.includeHandoff || selected.length === 0) return { runIds: selected, handoffExcluded: 0 };
-  const flagged = handoffRunIds(db);
+  const flagged = handoffRunIds(db, selected);
   const kept = selected.filter((r) => !flagged.has(r));
   return { runIds: kept, handoffExcluded: selected.length - kept.length };
 }
@@ -478,9 +501,20 @@ export function qualifyingDpoPairs(db: Database, opts: QualifyOptions = {}): { p
     }
   }
   if (opts.includeHandoff || pairs.length === 0) return { pairs, handoffExcluded: 0 };
-  const flagged = new Set(
-    (db.prepare('SELECT id FROM llm_interactions WHERE instr(user_prompt, @prefix) > 0').all({ prefix: HANDOFF_BLOCK_HEADER_PREFIX }) as Array<{ id: number }>).map((r) => r.id)
-  );
+  const state = readHandoffTagState(db);
+  const flagged = new Set<number>();
+  const ids = [...new Set(pairs.flatMap((p) => [p.chosenInteractionId, p.rejectedInteractionId]))];
+  for (let i = 0; i < ids.length; i += HANDOFF_CHECK_CHUNK) {
+    const chunk = ids.slice(i, i + HANDOFF_CHECK_CHUNK);
+    const params: Record<string, unknown> = { cap: SCAN_MAX_PROMPT_CHARS };
+    chunk.forEach((id, k) => { params[`i${k}`] = id; });
+    const rows = db
+      .prepare(`SELECT id, created_at, length(user_prompt) > @cap AS oversize,
+          CASE WHEN length(user_prompt) > @cap THEN NULL ELSE user_prompt END AS user_prompt
+        FROM llm_interactions WHERE id IN (${chunk.map((_, k) => `@i${k}`).join(',')})`)
+      .iterate(params) as IterableIterator<{ id: number; user_prompt: string | null; created_at: string; oversize: number }>;
+    for (const r of rows) if (r.oversize || isHandoffFlagged(r.user_prompt, detectorFor(state, r.created_at))) flagged.add(r.id);
+  }
   const before = pairs.length;
   pairs = pairs.filter((p) => !flagged.has(p.chosenInteractionId) && !flagged.has(p.rejectedInteractionId));
   return { pairs, handoffExcluded: before - pairs.length };

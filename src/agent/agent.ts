@@ -17,6 +17,7 @@ import { resolveProvider } from '../providers.js';
 import { getSetting } from '../utils/config.js';
 import { discoverSkills } from '../skills/index.js';
 import { stripInjectedContext } from '../dashboard/local-handoff-format.js';
+import { replayDetector } from '../training/handoff-tag.js';
 import { getLocalTokenCounter, localPromptBudget } from '../model/providers/transformers.js';
 import {
   CORE_TOOLS,
@@ -296,7 +297,7 @@ export class Agent {
       // which the model calls for the current month (and tidy
       // transaction_search's month + year, see local-date-args.ts).
       if (local) {
-        const userQuery = stripInjectedContext(query);
+        const userQuery = stripInjectedContext(query, replayDetector());
         for (const call of response.toolCalls) call.args = resolveLocalDateArgs(userQuery, call.name, call.args);
       }
 
@@ -405,8 +406,8 @@ export class Agent {
     const prevQuery = [...turns].reverse().find((t) => t.role === 'user')?.content ?? null;
 
     const selection = await selectTools({
-      query: stripInjectedContext(query),
-      prevQuery: prevQuery ? stripInjectedContext(prevQuery) : null,
+      query: stripInjectedContext(query, replayDetector()),
+      prevQuery: prevQuery ? stripInjectedContext(prevQuery, replayDetector()) : null,
       tools: candidates,
       skills,
       stickyTools: history?.getRecentToolsUsed(2) ?? [],

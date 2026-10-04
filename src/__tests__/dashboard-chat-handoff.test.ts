@@ -1,3 +1,4 @@
+import { detectorFromDb } from '../training/handoff-tag.js';
 import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { initAgentTools } from '../agent/init-tools.js';
 import type { Database } from '../db/compat-sqlite.js';
@@ -33,7 +34,7 @@ import { createTestDb, seedTestData } from './helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { CONTEXT_BLOCK_HEADER } from '../dashboard/mentions.js';
-import { HANDOFF_BLOCK_END, HANDOFF_BLOCK_HEADER, type LocalHandoffV1 } from '../dashboard/local-handoff-format.js';
+import { HANDOFF_BLOCK_HEADER_PREFIX as HANDOFF_BLOCK_HEADER, scanHandoffBlocks, type LocalHandoffV1 } from '../dashboard/local-handoff-format.js';
 import { getSetting, setSetting } from '../utils/config.js';
 
 /**
@@ -126,7 +127,9 @@ describe('POST /api/chat localHandoff', () => {
     expect(((await res.json()) as { answer: string }).answer).toBe('stub answer');
     const block = captured[0].contextBlock!;
     expect(block.startsWith(HANDOFF_BLOCK_HEADER)).toBe(true);
-    expect(block.endsWith(`${HANDOFF_BLOCK_END}\n\n`)).toBe(true);
+    // Built and tagged on the server under the profile's secret: it verifies there, and only there.
+    expect(scanHandoffBlocks(block, detectorFromDb(db).verify)).toHaveLength(1);
+    expect(/\[End of on-device assistant notes k=[0-9a-f]{16}\]\n\n$/.test(block)).toBe(true);
     // Re-run against the seeded DB: the Grocery Store rows are -85.50 and -92.00 (the catalog's compact,
     // sanitized transaction_search rows).
     expect(block).toContain('Grocery Store');
@@ -145,7 +148,7 @@ describe('POST /api/chat localHandoff', () => {
     const block = captured[0].contextBlock!;
     expect(block.startsWith(CONTEXT_BLOCK_HEADER)).toBe(true);
     expect(block.indexOf(HANDOFF_BLOCK_HEADER)).toBeGreaterThan(0);
-    expect(block.endsWith(`${HANDOFF_BLOCK_END}\n\n`)).toBe(true);
+    expect(/\[End of on-device assistant notes k=[0-9a-f]{16}\]\n\n$/.test(block)).toBe(true);
   });
 
   test('an invalid handoff is dropped silently: no block, still 200', async () => {
