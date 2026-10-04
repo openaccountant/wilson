@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Database } from '../../db/compat-sqlite.js';
 import type { IrsCategory } from './irs-categories.js';
+import { csvText, sanitizeRow } from '../../utils/spreadsheet-safe.js';
 
 /**
  * Schedule C (Form 1040) Part II line for each IRS category. Line 12
@@ -116,15 +117,11 @@ export function buildScheduleC(db: Database, taxYear: number): ScheduleCReport {
   return { taxYear, lines, details, total: cents(lines.reduce((s, l) => s + l.total, 0)) };
 }
 
-function escapeCsv(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 /** Line-level summary — the numbers that go on the form. */
 export function scheduleCToCsv(report: ScheduleCReport): string {
   const out = ['Line,Category,Amount,Transactions'];
   for (const l of report.lines) {
-    out.push([l.line, escapeCsv(l.category), l.total.toFixed(2), String(l.count)].join(','));
+    out.push([l.line, csvText(l.category), l.total.toFixed(2), String(l.count)].join(','));
   }
   out.push(['28', 'Total expenses', report.total.toFixed(2), String(report.details.length)].join(','));
   return out.join('\n');
@@ -132,7 +129,7 @@ export function scheduleCToCsv(report: ScheduleCReport): string {
 
 /** Workbook with a Summary sheet (per line) and a Transactions sheet (every flagged row). */
 export function scheduleCToWorkbook(report: ScheduleCReport): XLSX.WorkBook {
-  const summary = report.lines.map((l) => ({
+  const summary = report.lines.map((l) => sanitizeRow({
     Line: l.line,
     Category: l.category,
     Amount: l.total,
@@ -140,7 +137,7 @@ export function scheduleCToWorkbook(report: ScheduleCReport): XLSX.WorkBook {
   }));
   summary.push({ Line: '28', Category: 'Total expenses', Amount: report.total, Transactions: report.details.length });
 
-  const detail = report.details.map((d) => ({
+  const detail = report.details.map((d) => sanitizeRow({
     Line: d.line,
     Category: d.category,
     Date: d.date,

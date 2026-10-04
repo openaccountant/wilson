@@ -4,6 +4,7 @@ import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { getTransactions, type TransactionFilters } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
+import { sanitizeRow } from '../../utils/spreadsheet-safe.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -67,7 +68,7 @@ export const exportTransactionsTool = defineTool({
     }
 
     // Select useful columns for export
-    const rows = transactions.map((t) => ({
+    const rows = transactions.map((t) => sanitizeRow({
       date: t.date,
       description: t.description,
       amount: t.amount,

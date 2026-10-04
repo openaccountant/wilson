@@ -118,18 +118,12 @@ import {
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
 import { discoverSkills } from '../skills/registry.js';
+import { csvText, sanitizeRow } from '../utils/spreadsheet-safe.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 // The overview param parsers moved to overview-params.ts (shared with the
 // offline dashboard mirror); imported above so both sides parse identically.
-
-function escapeCsv(v: string): string {
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-    return '"' + v.replace(/"/g, '""') + '"';
-  }
-  return v;
-}
 
 // ── Overview APIs ───────────────────────────────────────────────────────────
 //
@@ -464,7 +458,7 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
 
   const header = 'Date,Description,Amount,Category';
   const rows = txns.map((t) =>
-    [t.date, escapeCsv(t.description), String(t.amount), escapeCsv(t.category ?? '')].join(',')
+    [t.date, csvText(t.description), String(t.amount), csvText(t.category ?? '')].join(',')
   );
   return [header, ...rows].join('\n');
 }
@@ -487,7 +481,7 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
   // export contains exactly the rows the Transactions tab shows.
   const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
-  const data = txns.map((t) => ({
+  const data = txns.map((t) => sanitizeRow({
     Date: t.date,
     Description: t.description,
     Amount: t.amount,
@@ -511,10 +505,10 @@ export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {
 
   const lines = ['Type,Category,Amount,Count'];
   for (const r of pnl.incomeByCategory) {
-    lines.push(['Income', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+    lines.push(['Income', csvText(r.category), String(r.total), String(r.count)].join(','));
   }
   for (const r of pnl.expensesByCategory) {
-    lines.push(['Expense', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+    lines.push(['Expense', csvText(r.category), String(r.total), String(r.count)].join(','));
   }
   lines.push(['','Total Income', String(pnl.totalIncome), ''].join(','));
   lines.push(['','Total Expenses', String(pnl.totalExpenses), ''].join(','));
@@ -527,10 +521,10 @@ export function apiExportNetWorthCsv(db: Database): string {
   const lines = ['Name,Type,Subtype,Institution,Balance'];
   for (const a of nw.accounts) {
     lines.push([
-      escapeCsv(a.name),
-      a.account_type,
-      a.account_subtype,
-      escapeCsv(a.institution ?? ''),
+      csvText(a.name),
+      csvText(a.account_type),
+      csvText(a.account_subtype),
+      csvText(a.institution ?? ''),
       String(a.current_balance),
     ].join(','));
   }

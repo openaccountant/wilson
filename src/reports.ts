@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { sanitizeRow } from './utils/spreadsheet-safe.js';
 import { writeFileSync } from 'fs';
 import { initDatabase } from './db/database.js';
 import type { Database } from './db/compat-sqlite.js';
@@ -377,7 +378,7 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
       return;
     }
 
-    const rows = transactions.map((t) => ({
+    const rows = transactions.map((t) => sanitizeRow({
       date: t.date,
       description: t.description,
       amount: t.amount,
