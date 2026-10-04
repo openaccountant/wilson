@@ -55,7 +55,7 @@ describe('POST /api/chat: auth turned on while the body is in flight', () => {
     });
     // Headers only: the middleware runs with auth disabled and no user.
     sock.write(
-      `POST /api/chat HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: ${payload.length}\r\nConnection: close\r\n\r\n`,
+      `POST /api/chat HTTP/1.1\r\nHost: localhost:${server.port}\r\nOrigin: http://localhost:${server.port}\r\nSec-Fetch-Site: same-origin\r\nContent-Type: application/json\r\nContent-Length: ${payload.length}\r\nConnection: close\r\n\r\n`,
     );
     await new Promise((r) => setTimeout(r, 150));
 
