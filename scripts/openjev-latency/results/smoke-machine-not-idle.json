@@ -1,0 +1,953 @@
+{
+ "harness": "openjev-latency/v1",
+ "issue": 155,
+ "label": "smoke-machine-not-idle",
+ "note": "",
+ "date": "2026-10-04T12:16:07.093Z",
+ "config": {
+  "runs": 2,
+  "rows": 12,
+  "warmup": 2,
+  "modes": [
+   "worker",
+   "main"
+  ],
+  "recreate": false,
+  "reuse_browser": false,
+  "headed": false,
+  "unsafe_webgpu": false,
+  "no_prime": false
+ },
+ "pins": {
+  "repo": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "revision": "7c79f25b5ac496089f448a969c801872ad59d31c",
+  "dtype": "q4f16",
+  "device": "webgpu",
+  "temperature": 1.05,
+  "n_labels": 18
+ },
+ "machine": {
+  "platform": "darwin",
+  "release": "24.5.0",
+  "arch": "arm64",
+  "cpu": "Apple M4 Pro",
+  "cores": 14,
+  "mem_gb": 48,
+  "sw_vers": "15.5",
+  "power_source": "battery",
+  "low_power_mode": false,
+  "thermal": "Note: No thermal warning level has been recorded | Note: No performance warning level has been recorded | Note: No CPU power status has been recorded"
+ },
+ "idle_before": {
+  "when": "before",
+  "at": "2026-10-04T12:16:07.173Z",
+  "loadavg": [
+   3.32958984375,
+   3.52734375,
+   3.45947265625
+  ],
+  "top_cpu_processes": [
+   {
+    "pid": 504,
+    "pcpu": 13.9,
+    "command": "syspolicyd"
+   },
+   {
+    "pid": 16900,
+    "pcpu": 13.5,
+    "command": "bun"
+   },
+   {
+    "pid": 387,
+    "pcpu": 9.5,
+    "command": "WindowServer"
+   },
+   {
+    "pid": 595,
+    "pcpu": 6.3,
+    "command": "iTerm2"
+   },
+   {
+    "pid": 2773,
+    "pcpu": 5.1,
+    "command": "Creative Cloud UI Helper (Renderer)"
+   },
+   {
+    "pid": 320,
+    "pcpu": 4.5,
+    "command": "fseventsd"
+   },
+   {
+    "pid": 390,
+    "pcpu": 4.5,
+    "command": "loginwindow"
+   },
+   {
+    "pid": 405,
+    "pcpu": 4.3,
+    "command": "trustd"
+   }
+  ],
+  "verdict": "busy",
+  "reasons": [
+   "syspolicyd at 13.9% CPU",
+   "bun at 13.5% CPU",
+   "sum of CPU 69% > 25%"
+  ],
+  "gpuSuspects": [
+   "WindowServer",
+   "Creative Cloud UI Helper (Renderer)",
+   "Google Chrome Helper (Renderer)"
+  ],
+  "sumCpu": 68.69999999999999
+ },
+ "browser": "153.0.8010.12",
+ "prime": {
+  "status": "measured",
+  "adapter": {
+   "webgpu": true,
+   "vendor": "apple",
+   "architecture": "metal-3",
+   "device": "",
+   "description": "",
+   "isFallbackAdapter": false,
+   "shaderF16": true,
+   "crossOriginIsolated": false,
+   "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+   "hardwareConcurrency": 14
+  },
+  "load": {
+   "wall_ms": 116326.39999999106,
+   "load_ms": 116325.79999999702,
+   "first_decision_ms": 157.19999998807907,
+   "from_cache": false,
+   "runtime": {
+    "transformers": "4.3.0",
+    "ort": "1.31.0-dev.20260914-8d85527a0",
+    "openJev": "0.1.2",
+    "device": "webgpu",
+    "dtype": "q4f16"
+   }
+  }
+ },
+ "status": "measured",
+ "idle_after": {
+  "when": "after",
+  "at": "2026-10-04T12:18:15.944Z",
+  "loadavg": [
+   3.392578125,
+   3.29296875,
+   3.35986328125
+  ],
+  "top_cpu_processes": [
+   {
+    "pid": 1,
+    "pcpu": 16.3,
+    "command": "launchd"
+   },
+   {
+    "pid": 387,
+    "pcpu": 13,
+    "command": "WindowServer"
+   },
+   {
+    "pid": 2773,
+    "pcpu": 7.1,
+    "command": "Creative Cloud UI Helper (Renderer)"
+   },
+   {
+    "pid": 577,
+    "pcpu": 5.5,
+    "command": "tccd"
+   },
+   {
+    "pid": 36674,
+    "pcpu": 5.4,
+    "command": "claude"
+   },
+   {
+    "pid": 571,
+    "pcpu": 3.9,
+    "command": "WindowManager"
+   },
+   {
+    "pid": 706,
+    "pcpu": 1.9,
+    "command": "com.apple.DriverKit-AppleBCMWLAN"
+   },
+   {
+    "pid": 588,
+    "pcpu": 1.9,
+    "command": "trustd"
+   }
+  ],
+  "verdict": "busy",
+  "reasons": [
+   "launchd at 16.3% CPU",
+   "WindowServer at 13.0% CPU",
+   "sum of CPU 64% > 25%"
+  ],
+  "gpuSuspects": [
+   "WindowServer",
+   "Creative Cloud UI Helper (Renderer)",
+   "Google Chrome Helper (Renderer)"
+  ],
+  "sumCpu": 63.800000000000004
+ },
+ "adapter": {
+  "webgpu": true,
+  "vendor": "apple",
+  "architecture": "metal-3",
+  "device": "",
+  "description": "",
+  "isFallbackAdapter": false,
+  "shaderF16": true,
+  "crossOriginIsolated": false,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+  "hardwareConcurrency": 14
+ },
+ "runs": [
+  {
+   "mode": "worker",
+   "run": 0,
+   "recreate": false,
+   "warmup": 2,
+   "adapter": {
+    "webgpu": true,
+    "vendor": "apple",
+    "architecture": "metal-3",
+    "device": "",
+    "description": "",
+    "isFallbackAdapter": false,
+    "shaderF16": true,
+    "crossOriginIsolated": false,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 14
+   },
+   "versions": {
+    "transformers": "4.3.0",
+    "ort": "1.31.0-dev.20260914-8d85527a0"
+   },
+   "capability": {
+    "v": 1,
+    "type": "capability",
+    "verdict": "ready",
+    "reason": null,
+    "adapter": {
+     "vendor": "apple",
+     "architecture": "metal-3",
+     "shaderF16": true,
+     "isFallback": false
+    }
+   },
+   "load": {
+    "wall_ms": 1409.2000000029802,
+    "load_ms": 1409.0999999940395,
+    "first_decision_ms": 149.79999999701977,
+    "from_cache": false,
+    "runtime": {
+     "transformers": "4.3.0",
+     "ort": "1.31.0-dev.20260914-8d85527a0",
+     "openJev": "0.1.2",
+     "device": "webgpu",
+     "dtype": "q4f16"
+    }
+   },
+   "warmup_rows_ms": [
+    55.70000000298023,
+    56
+   ],
+   "run_wall_ms": 675.1000000089407,
+   "engine_done": {
+    "n": 12,
+    "skipped": 0,
+    "p50Ms": 55.70000000298023,
+    "p95Ms": 57.599999994039536,
+    "wallMs": 674.5
+   },
+   "rows": [
+    {
+     "txnId": 0,
+     "ms": 57.599999994039536,
+     "stateTokens": 24,
+     "choice": "Transfer",
+     "margin": 0.03230149826236893
+    },
+    {
+     "txnId": 1,
+     "ms": 55.29999999701977,
+     "stateTokens": 19,
+     "choice": "Home",
+     "margin": 0.04527302236488906
+    },
+    {
+     "txnId": 2,
+     "ms": 55.70000000298023,
+     "stateTokens": 21,
+     "choice": "Groceries",
+     "margin": 0.1619335062952233
+    },
+    {
+     "txnId": 3,
+     "ms": 56.1000000089407,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.34691816343932513
+    },
+    {
+     "txnId": 4,
+     "ms": 55.6000000089407,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 5,
+     "ms": 55.79999999701977,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 6,
+     "ms": 55.5,
+     "stateTokens": 24,
+     "choice": "Income",
+     "margin": 0.31138953109062534
+    },
+    {
+     "txnId": 7,
+     "ms": 55.29999999701977,
+     "stateTokens": 21,
+     "choice": "Utilities",
+     "margin": 0.5673247928351032
+    },
+    {
+     "txnId": 8,
+     "ms": 56.70000000298023,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.12745150707041586
+    },
+    {
+     "txnId": 9,
+     "ms": 56.3999999910593,
+     "stateTokens": 19,
+     "choice": "Subscriptions",
+     "margin": 0.19177188932197678
+    },
+    {
+     "txnId": 10,
+     "ms": 55.400000005960464,
+     "stateTokens": 24,
+     "choice": "Shopping",
+     "margin": 0.0493912946758273
+    },
+    {
+     "txnId": 11,
+     "ms": 56,
+     "stateTokens": 22,
+     "choice": "Groceries",
+     "margin": 0.5285295804582337
+    }
+   ],
+   "status": "measured",
+   "console_tail": [
+    "error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "mode": "main",
+   "run": 0,
+   "recreate": false,
+   "warmup": 2,
+   "adapter": {
+    "webgpu": true,
+    "vendor": "apple",
+    "architecture": "metal-3",
+    "device": "",
+    "description": "",
+    "isFallbackAdapter": false,
+    "shaderF16": true,
+    "crossOriginIsolated": false,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 14
+   },
+   "versions": {
+    "transformers": "4.3.0",
+    "ort": "1.31.0-dev.20260914-8d85527a0"
+   },
+   "capability": {
+    "v": 1,
+    "type": "capability",
+    "verdict": "ready",
+    "reason": null,
+    "adapter": {
+     "vendor": "apple",
+     "architecture": "metal-3",
+     "shaderF16": true,
+     "isFallback": false
+    }
+   },
+   "load": {
+    "wall_ms": 1220.4000000059605,
+    "load_ms": 1220.2999999970198,
+    "first_decision_ms": 118.20000000298023,
+    "from_cache": false,
+    "runtime": {
+     "transformers": "4.3.0",
+     "ort": "1.31.0-dev.20260914-8d85527a0",
+     "openJev": "0.1.2",
+     "device": "webgpu",
+     "dtype": "q4f16"
+    }
+   },
+   "warmup_rows_ms": [
+    55.6000000089407,
+    56.20000000298023
+   ],
+   "run_wall_ms": 672,
+   "engine_done": {
+    "n": 12,
+    "skipped": 0,
+    "p50Ms": 55.70000000298023,
+    "p95Ms": 56.29999999701977,
+    "wallMs": 671.2999999970198
+   },
+   "rows": [
+    {
+     "txnId": 0,
+     "ms": 55.20000000298023,
+     "stateTokens": 24,
+     "choice": "Transfer",
+     "margin": 0.03230149826236893
+    },
+    {
+     "txnId": 1,
+     "ms": 55.70000000298023,
+     "stateTokens": 19,
+     "choice": "Home",
+     "margin": 0.04527302236488906
+    },
+    {
+     "txnId": 2,
+     "ms": 55.70000000298023,
+     "stateTokens": 21,
+     "choice": "Groceries",
+     "margin": 0.1619335062952233
+    },
+    {
+     "txnId": 3,
+     "ms": 55.900000005960464,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.34691816343932513
+    },
+    {
+     "txnId": 4,
+     "ms": 55.400000005960464,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 5,
+     "ms": 56.29999999701977,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 6,
+     "ms": 55.599999994039536,
+     "stateTokens": 24,
+     "choice": "Income",
+     "margin": 0.31138953109062534
+    },
+    {
+     "txnId": 7,
+     "ms": 55.79999999701977,
+     "stateTokens": 21,
+     "choice": "Utilities",
+     "margin": 0.5673247928351032
+    },
+    {
+     "txnId": 8,
+     "ms": 55.8999999910593,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.12745150707041586
+    },
+    {
+     "txnId": 9,
+     "ms": 55.69999998807907,
+     "stateTokens": 19,
+     "choice": "Subscriptions",
+     "margin": 0.19177188932197678
+    },
+    {
+     "txnId": 10,
+     "ms": 55.099999994039536,
+     "stateTokens": 24,
+     "choice": "Shopping",
+     "margin": 0.0493912946758273
+    },
+    {
+     "txnId": 11,
+     "ms": 55.79999999701977,
+     "stateTokens": 22,
+     "choice": "Groceries",
+     "margin": 0.5285295804582337
+    }
+   ],
+   "status": "measured",
+   "console_tail": [
+    "error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "mode": "main",
+   "run": 1,
+   "recreate": false,
+   "warmup": 2,
+   "adapter": {
+    "webgpu": true,
+    "vendor": "apple",
+    "architecture": "metal-3",
+    "device": "",
+    "description": "",
+    "isFallbackAdapter": false,
+    "shaderF16": true,
+    "crossOriginIsolated": false,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 14
+   },
+   "versions": {
+    "transformers": "4.3.0",
+    "ort": "1.31.0-dev.20260914-8d85527a0"
+   },
+   "capability": {
+    "v": 1,
+    "type": "capability",
+    "verdict": "ready",
+    "reason": null,
+    "adapter": {
+     "vendor": "apple",
+     "architecture": "metal-3",
+     "shaderF16": true,
+     "isFallback": false
+    }
+   },
+   "load": {
+    "wall_ms": 1229.199999988079,
+    "load_ms": 1229.199999988079,
+    "first_decision_ms": 112.79999999701977,
+    "from_cache": false,
+    "runtime": {
+     "transformers": "4.3.0",
+     "ort": "1.31.0-dev.20260914-8d85527a0",
+     "openJev": "0.1.2",
+     "device": "webgpu",
+     "dtype": "q4f16"
+    }
+   },
+   "warmup_rows_ms": [
+    55.70000000298023,
+    55.8999999910593
+   ],
+   "run_wall_ms": 671.2999999970198,
+   "engine_done": {
+    "n": 12,
+    "skipped": 0,
+    "p50Ms": 55.599999994039536,
+    "p95Ms": 56.8999999910593,
+    "wallMs": 670.6000000089407
+   },
+   "rows": [
+    {
+     "txnId": 0,
+     "ms": 55.20000000298023,
+     "stateTokens": 24,
+     "choice": "Transfer",
+     "margin": 0.03230149826236893
+    },
+    {
+     "txnId": 1,
+     "ms": 55.8999999910593,
+     "stateTokens": 19,
+     "choice": "Home",
+     "margin": 0.04527302236488906
+    },
+    {
+     "txnId": 2,
+     "ms": 55.6000000089407,
+     "stateTokens": 21,
+     "choice": "Groceries",
+     "margin": 0.1619335062952233
+    },
+    {
+     "txnId": 3,
+     "ms": 55.900000005960464,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.34691816343932513
+    },
+    {
+     "txnId": 4,
+     "ms": 55,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 5,
+     "ms": 55.5,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 6,
+     "ms": 55.29999999701977,
+     "stateTokens": 24,
+     "choice": "Income",
+     "margin": 0.31138953109062534
+    },
+    {
+     "txnId": 7,
+     "ms": 55.599999994039536,
+     "stateTokens": 21,
+     "choice": "Utilities",
+     "margin": 0.5673247928351032
+    },
+    {
+     "txnId": 8,
+     "ms": 56,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.12745150707041586
+    },
+    {
+     "txnId": 9,
+     "ms": 56.8999999910593,
+     "stateTokens": 19,
+     "choice": "Subscriptions",
+     "margin": 0.19177188932197678
+    },
+    {
+     "txnId": 10,
+     "ms": 54.79999999701977,
+     "stateTokens": 24,
+     "choice": "Shopping",
+     "margin": 0.0493912946758273
+    },
+    {
+     "txnId": 11,
+     "ms": 55.69999998807907,
+     "stateTokens": 22,
+     "choice": "Groceries",
+     "margin": 0.5285295804582337
+    }
+   ],
+   "status": "measured",
+   "console_tail": [
+    "error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  },
+  {
+   "mode": "worker",
+   "run": 1,
+   "recreate": false,
+   "warmup": 2,
+   "adapter": {
+    "webgpu": true,
+    "vendor": "apple",
+    "architecture": "metal-3",
+    "device": "",
+    "description": "",
+    "isFallbackAdapter": false,
+    "shaderF16": true,
+    "crossOriginIsolated": false,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 14
+   },
+   "versions": {
+    "transformers": "4.3.0",
+    "ort": "1.31.0-dev.20260914-8d85527a0"
+   },
+   "capability": {
+    "v": 1,
+    "type": "capability",
+    "verdict": "ready",
+    "reason": null,
+    "adapter": {
+     "vendor": "apple",
+     "architecture": "metal-3",
+     "shaderF16": true,
+     "isFallback": false
+    }
+   },
+   "load": {
+    "wall_ms": 1241.5,
+    "load_ms": 1241.4000000059605,
+    "first_decision_ms": 115,
+    "from_cache": false,
+    "runtime": {
+     "transformers": "4.3.0",
+     "ort": "1.31.0-dev.20260914-8d85527a0",
+     "openJev": "0.1.2",
+     "device": "webgpu",
+     "dtype": "q4f16"
+    }
+   },
+   "warmup_rows_ms": [
+    55.80000001192093,
+    56.5
+   ],
+   "run_wall_ms": 672.7000000029802,
+   "engine_done": {
+    "n": 12,
+    "skipped": 0,
+    "p50Ms": 55.70000000298023,
+    "p95Ms": 56.599999994039536,
+    "wallMs": 671.7999999970198
+   },
+   "rows": [
+    {
+     "txnId": 0,
+     "ms": 55.30000001192093,
+     "stateTokens": 24,
+     "choice": "Transfer",
+     "margin": 0.03230149826236893
+    },
+    {
+     "txnId": 1,
+     "ms": 55.70000000298023,
+     "stateTokens": 19,
+     "choice": "Home",
+     "margin": 0.04527302236488906
+    },
+    {
+     "txnId": 2,
+     "ms": 55.80000001192093,
+     "stateTokens": 21,
+     "choice": "Groceries",
+     "margin": 0.1619335062952233
+    },
+    {
+     "txnId": 3,
+     "ms": 56.20000000298023,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.34691816343932513
+    },
+    {
+     "txnId": 4,
+     "ms": 55.900000005960464,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 5,
+     "ms": 55.79999999701977,
+     "stateTokens": 21,
+     "choice": "Subscriptions",
+     "margin": 0.022812434378366553
+    },
+    {
+     "txnId": 6,
+     "ms": 55.29999999701977,
+     "stateTokens": 24,
+     "choice": "Income",
+     "margin": 0.31138953109062534
+    },
+    {
+     "txnId": 7,
+     "ms": 55.20000000298023,
+     "stateTokens": 21,
+     "choice": "Utilities",
+     "margin": 0.5673247928351032
+    },
+    {
+     "txnId": 8,
+     "ms": 55.79999999701977,
+     "stateTokens": 25,
+     "choice": "Transfer",
+     "margin": 0.12745150707041586
+    },
+    {
+     "txnId": 9,
+     "ms": 55.400000005960464,
+     "stateTokens": 19,
+     "choice": "Subscriptions",
+     "margin": 0.19177188932197678
+    },
+    {
+     "txnId": 10,
+     "ms": 54.79999999701977,
+     "stateTokens": 24,
+     "choice": "Shopping",
+     "margin": 0.0493912946758273
+    },
+    {
+     "txnId": 11,
+     "ms": 56.599999994039536,
+     "stateTokens": 22,
+     "choice": "Groceries",
+     "margin": 0.5285295804582337
+    }
+   ],
+   "status": "measured",
+   "console_tail": [
+    "error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+   ]
+  }
+ ],
+ "summary": {
+  "worker": {
+   "runs_measured": 2,
+   "runs_total": 2,
+   "steady_state_per_row_decide_ms": {
+    "n": 24,
+    "p50": 55.70000000298023,
+    "p90": 56.599999994039536,
+    "min": 54.79999999701977,
+    "max": 57.599999994039536,
+    "mean": 55.80000000136594
+   },
+   "first_measured_row_ms": {
+    "n": 2,
+    "p50": 55.30000001192093,
+    "p90": 57.599999994039536,
+    "min": 55.30000001192093,
+    "max": 57.599999994039536,
+    "mean": 56.45000000298023
+   },
+   "per_run_p50_ms": [
+    55.70000000298023,
+    55.70000000298023
+   ],
+   "per_run_p50_spread": {
+    "runs": 2,
+    "min": 55.70000000298023,
+    "max": 55.70000000298023,
+    "ratio": 1
+   },
+   "per_row_wall_ms": {
+    "n": 2,
+    "p50": 56.058333333581686,
+    "p90": 56.258333334078394,
+    "min": 56.058333333581686,
+    "max": 56.258333334078394,
+    "mean": 56.15833333383004
+   },
+   "cold_load_wall_ms": {
+    "n": 2,
+    "p50": 1241.5,
+    "p90": 1409.2000000029802,
+    "min": 1241.5,
+    "max": 1409.2000000029802,
+    "mean": 1325.3500000014901
+   },
+   "cold_load_engine_ms": {
+    "n": 2,
+    "p50": 1241.4000000059605,
+    "p90": 1409.0999999940395,
+    "min": 1241.4000000059605,
+    "max": 1409.0999999940395,
+    "mean": 1325.25
+   },
+   "first_decision_ms": {
+    "n": 2,
+    "p50": 115,
+    "p90": 149.79999999701977,
+    "min": 115,
+    "max": 149.79999999701977,
+    "mean": 132.39999999850988
+   },
+   "recreate_iter_wall_ms": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "min": null,
+    "max": null,
+    "mean": null
+   },
+   "ms_vs_state_tokens_pearson": 0.18917590548469443
+  },
+  "main": {
+   "runs_measured": 2,
+   "runs_total": 2,
+   "steady_state_per_row_decide_ms": {
+    "n": 24,
+    "p50": 55.69999998807907,
+    "p90": 56,
+    "min": 54.79999999701977,
+    "max": 56.8999999910593,
+    "mean": 55.64583333147069
+   },
+   "first_measured_row_ms": {
+    "n": 2,
+    "p50": 55.20000000298023,
+    "p90": 55.20000000298023,
+    "min": 55.20000000298023,
+    "max": 55.20000000298023,
+    "mean": 55.20000000298023
+   },
+   "per_run_p50_ms": [
+    55.70000000298023,
+    55.599999994039536
+   ],
+   "per_run_p50_spread": {
+    "runs": 2,
+    "min": 55.599999994039536,
+    "max": 55.70000000298023,
+    "ratio": 1.001798561312076
+   },
+   "per_row_wall_ms": {
+    "n": 2,
+    "p50": 55.941666666418314,
+    "p90": 56,
+    "min": 55.941666666418314,
+    "max": 56,
+    "mean": 55.97083333320916
+   },
+   "cold_load_wall_ms": {
+    "n": 2,
+    "p50": 1220.4000000059605,
+    "p90": 1229.199999988079,
+    "min": 1220.4000000059605,
+    "max": 1229.199999988079,
+    "mean": 1224.7999999970198
+   },
+   "cold_load_engine_ms": {
+    "n": 2,
+    "p50": 1220.2999999970198,
+    "p90": 1229.199999988079,
+    "min": 1220.2999999970198,
+    "max": 1229.199999988079,
+    "mean": 1224.7499999925494
+   },
+   "first_decision_ms": {
+    "n": 2,
+    "p50": 112.79999999701977,
+    "p90": 118.20000000298023,
+    "min": 112.79999999701977,
+    "max": 118.20000000298023,
+    "mean": 115.5
+   },
+   "recreate_iter_wall_ms": {
+    "n": 0,
+    "p50": null,
+    "p90": null,
+    "min": null,
+    "max": null,
+    "mean": null
+   },
+   "ms_vs_state_tokens_pearson": -0.30598970330742165
+  }
+ },
+ "worker_vs_main_p50_ratio": 1.0000000002675253,
+ "verdict_hint": "NOT OF RECORD: machine was not idle"
+}
