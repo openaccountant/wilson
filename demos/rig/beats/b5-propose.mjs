@@ -146,6 +146,10 @@ export async function checkChangeCard(card, targetTx = TARGET_TX) {
     if (!/^uncategorized$/i.test(cat[1] ?? '')) problems.push(`Category "before" is ${JSON.stringify(cat[1])}, expected Uncategorized`);
     if (!cat[2] || /^(uncategorized|—)$/i.test(cat[2])) problems.push(`Category "after" is ${JSON.stringify(cat[2])}, expected a real category`);
   }
+  // Only a category change is vetted. Any other delta row (e.g. entity_id when the agent passes entityId) means the card
+  // changes something this human has not checked, so it is rejected rather than approved on a partial read.
+  const extra = rows.filter((r) => r.length > 0 && !/^categor/i.test(r[0] ?? ''));
+  if (extra.length) problems.push(`card changes more than the category: ${JSON.stringify(extra)}`);
   return { tool, heading, text, rows, problems };
 }
 
@@ -172,7 +176,7 @@ export async function humanScript(page, ctx) {
   if (!/Uncategorized/.test(rowBefore) || !rowBefore.includes('240.00')) throw new Error(`beat precondition failed: ${TARGET.description} (240.00) is not uncategorized: ${rowBefore}`);
   await h.moveTo(row, { dx: 60 });
   await h.pause(900);
-  log('ledger-before', { row: rowBefore }, { keyframe: true });
+  log('ledger-before', { row: rowBefore, txId: TARGET_TX }, { keyframe: true });
   await h.pause(1500);
 
   // 2. Grant three tools to this tab through the real Agent access panel.

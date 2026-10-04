@@ -81,7 +81,10 @@ export function perCardItems(cfg, cards, base = {}) {
       caps.push({ start: c.pressed, end: c.released ?? c.resolved, t: f(cfg.hold), card: c.index });
       caps.push({ start: c.released ?? c.resolved, end: tail, t: f(cfg.resolved.approve), card: c.index });
     } else {
-      caps.push({ start: c.rejectClicked, end: tail, t: f(c.target ? cfg.resolved.reject : cfg.resolved.rejectOther), card: c.index });
+      // "Not the target" copy only when this card is provably a different transaction; otherwise (a duplicate or
+      // failed-check proposal for the target, or an unknown target id) use the neutral reject caption.
+      const otherTx = base.targetTxId != null && c.txId != null && String(c.txId) !== String(base.targetTxId);
+      caps.push({ start: c.rejectClicked, end: tail, t: f(otherTx ? cfg.resolved.rejectOther : cfg.resolved.reject), card: c.index });
     }
     const co = cfg.coShown; const cd = cfg.coDecide[approve ? 'approve' : 'reject'];
     cos.push({ id: `co_c${c.index}_a`, start: c.shown + 0.2, end: decideAt - 0.1, x: co.x, y: co.y, txt: f(co.txt), sub: f(co.sub), card: c.index });

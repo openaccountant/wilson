@@ -65,7 +65,15 @@ describe('cut plan: cards bound to their own operation', () => {
     expect(() => bindProposals(joinCards(EVENTS), wrongCat)).toThrow(/shows category Dining but the bound proposal asked for Travel/);
   });
 
-  const items = () => perCardItems(CFG.perCard, bindProposals(joinCards(EVENTS), entries()), { target: CFG.target });
+  const items = () => perCardItems(CFG.perCard, bindProposals(joinCards(EVENTS), entries()), { target: CFG.target, targetTxId: '279' });
+
+  test('"not the target" copy only for a provably different transaction; a rejected target card gets the neutral caption', () => {
+    const mk = (txId: string) => ({ index: 0, kind: 'change', tool: 'categorize_transaction', txId, opId: 'op-x', shown: 10, rejectClicked: 12, resolved: 13, decision: 'reject', target: false, after: 'Shopping', before: 'Uncategorized' });
+    const cap = (txId: string, targetTxId: string | null) => perCardItems(CFG.perCard, [mk(txId)], { target: CFG.target, targetTxId }).caps.at(-1).t;
+    expect(cap('298', '279')).toBe(CFG.perCard.resolved.rejectOther.replace('{target}', CFG.target).replace('{txId}', '298'));
+    expect(cap('279', '279')).toBe(CFG.perCard.resolved.reject.replace('{txId}', '279'));
+    expect(cap('298', null)).toBe(CFG.perCard.resolved.reject.replace('{txId}', '298'));
+  });
 
   test('every caption and callout names only its own card (tx id + category), and carries the card index', () => {
     const { caps, cos } = items();

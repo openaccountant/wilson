@@ -109,7 +109,8 @@ const rowTimes = rows.map((r) => {
 });
 
 // ---- annotations: global config copy + per-card items, then clipped so none overlap ----
-const pc = perCardItems(cfg.perCard, cards, { target: cfg.target });
+const targetTxId = ev.events.find((e) => e.name === 'ledger-before')?.txId ?? null;
+const pc = perCardItems(cfg.perCard, cards, { target: cfg.target, targetTxId });
 const mapT = (src) => toCompOrCut(src);
 const capItems = [
   ...cfg.captions.map((c) => ({ start: mapT(at(c.at, segs)), end: mapT(at(c.end, segs)), t: fill(c.t), optional: !!c.optional })),
