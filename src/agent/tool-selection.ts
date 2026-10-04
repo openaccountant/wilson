@@ -36,7 +36,7 @@ export const CORE_TOOLS: readonly string[] = ['transaction_search', 'spending_su
  * Defaults frozen on the dev set (never the held-out set). `kMin` ranked picks
  * are made regardless of the floor; `kMax` caps them; `toolBudget` caps the
  * schema tokens of the whole selected set (core, named and sticky tools are
- * always in, even past it). `skillCut` separated workflow requests (≥ 0.39)
+ * always in, even past it; the keyword fallback is not packed). `skillCut` separated workflow requests (≥ 0.39)
  * from plain spending questions (≤ 0.28) in the doc's sample.
  */
 export const SELECTION_DEFAULTS = {
@@ -247,9 +247,9 @@ export async function selectTools(input: SelectToolsInput): Promise<ToolSelectio
   if (pickedSkills.length > 0) add('skill', 'skill selected');
 
   if (!toolScores) {
-    for (const t of tools) {
-      if (boosted.has(t.name) && used + t.schemaTokens <= opts.toolBudget) add(t.name, 'keyword');
-    }
+    // Every matched group, unpacked: the rules are the only signal left, and
+    // the prompt planner still trims unused tools if the call runs over budget.
+    for (const t of tools) if (boosted.has(t.name)) add(t.name, 'keyword');
     return finish(selected, reasons, pickedSkills, tools, true);
   }
 
