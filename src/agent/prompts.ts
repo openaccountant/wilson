@@ -58,7 +58,7 @@ export async function loadSoulDocument(): Promise<string | null> {
  * Build the skills section for the system prompt.
  * Only includes skill metadata if skills are available.
  */
-function buildSkillsSection(local = false): string {
+function buildSkillsSection(local = false, skillSelection: readonly string[] = []): string {
   const skills = discoverSkills();
 
   if (skills.length === 0) {
@@ -67,10 +67,14 @@ function buildSkillsSection(local = false): string {
 
   // Local models get names only: the 50+ descriptions were ~2.5k of a ~7.7k
   // prompt that WebGPU models can barely prefill. The skill tool returns the
-  // full instructions once the model picks a name.
-  const skillList = local
-    ? `Call the skill tool with one of these exact names:\n${skills.map((s) => s.name).join(', ')}`
-    : buildSkillMetadataSection();
+  // full instructions once the model picks a name. Skills the local tool
+  // selector picked for this request (≤ 3) keep their description.
+  const selected = skills.filter((s) => skillSelection.includes(s.name));
+  const skillList = !local
+    ? buildSkillMetadataSection()
+    : selected.length > 0
+      ? `Call the skill tool with one of these exact names:\n${selected.map((s) => `- **${s.name}**: ${s.description}`).join('\n')}\nOther skills: ${skills.filter((s) => !selected.includes(s)).map((s) => s.name).join(', ')}`
+      : `Call the skill tool with one of these exact names:\n${skills.map((s) => s.name).join(', ')}`;
 
   return `## Available Skills
 
@@ -136,8 +140,14 @@ Keep tables compact:
 /**
  * Build the system prompt for the agent.
  * @param model - The model name (used to get appropriate tool descriptions)
+ * @param options.skillSelection - Local models only: skills shown with their
+ *   description (local tool selection); cloud models ignore it.
  */
-export async function buildSystemPrompt(model: string, soulContent?: string | null): Promise<string> {
+export async function buildSystemPrompt(
+  model: string,
+  soulContent?: string | null,
+  options: { skillSelection?: readonly string[] } = {},
+): Promise<string> {
   // Local Transformers.js models get every tool's schema injected by their
   // adapter (prompt-based tool calling); listing the rich descriptions here as
   // well doubled the prompt (~17k tokens) past what WebGPU models can prefill.
@@ -174,7 +184,7 @@ ${toolSection}## Tool Usage Policy
 - Users can manage multiple profiles with /profile (list) and /profile switch <name>. Each profile has its own database.
 - Only respond directly for: conceptual definitions, general financial advice, or conversational queries
 
-${buildSkillsSection(local)}
+${buildSkillsSection(local, options.skillSelection)}
 
 ## Behavior
 

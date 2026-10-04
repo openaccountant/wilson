@@ -14,6 +14,21 @@
 
 import type { EmbedFn } from './tool-cards.js';
 
+/**
+ * Settings key: 'auto' (default) selects tools for Transformers.js models,
+ * 'off' never does. 'always' is accepted and is 'auto' for now — only the
+ * Transformers adapter renders the names-only index that keeps unselected
+ * tools reachable, so other providers keep every tool.
+ */
+export const LOCAL_TOOL_SELECTION_KEY = 'localToolSelection';
+export type LocalToolSelectionSetting = 'auto' | 'off' | 'always';
+
+/** Whether a run on `providerId` gets per-request tool selection. */
+export function shouldSelectTools(providerId: string, setting: unknown): boolean {
+  if (setting === 'off') return false;
+  return providerId === 'transformers';
+}
+
 /** Always sent with full schema: together they cover the plurality of questions (167 tokens). */
 export const CORE_TOOLS: readonly string[] = ['transaction_search', 'spending_summary'];
 

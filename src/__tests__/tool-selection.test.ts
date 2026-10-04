@@ -6,6 +6,7 @@ import {
   growSelection,
   selectTools,
   selectionTexts,
+  shouldSelectTools,
   toolsNamedIn,
   type SkillCandidate,
   type ToolCandidate,
@@ -76,6 +77,22 @@ describe('tool cards', () => {
     expect(fake.calls).toEqual(['one', 'two', 'three']);
     expect(b[0]).toBe(a[1]);
     expect(b[2]).toBe(a[0]);
+  });
+});
+
+describe('shouldSelectTools', () => {
+  test('on for transformers by default, off for every other provider', () => {
+    expect(shouldSelectTools('transformers', undefined)).toBe(true);
+    expect(shouldSelectTools('transformers', 'auto')).toBe(true);
+    expect(shouldSelectTools('transformers', 'always')).toBe(true);
+    for (const p of ['anthropic', 'openai', 'ollama', 'openrouter']) {
+      expect(shouldSelectTools(p, undefined)).toBe(false);
+      expect(shouldSelectTools(p, 'always')).toBe(false);
+    }
+  });
+
+  test("'off' turns it off for transformers too", () => {
+    expect(shouldSelectTools('transformers', 'off')).toBe(false);
   });
 });
 

@@ -77,6 +77,29 @@ mock.module('../skills/index.js', () => ({
 }));
 
 const { Agent } = await import('../agent/agent.js');
+const { getTools } = await import('../tools/registry.js');
+const transformersModule = await import('../model/providers/transformers.js');
+const toolCards = await import('../agent/tool-cards.js');
+const { setSetting } = await import('../utils/config.js');
+const { InMemoryChatHistory } = await import('../utils/in-memory-chat-history.js');
+const { createFakeEmbedder } = await import('./fake-embedder.js');
+
+const LOCAL_MODEL = 'transformers:onnx-community/granite-4.0-micro-ONNX-web';
+
+/** Local runs never load a real model here: a chars/4 tokenizer and word-overlap embeddings. */
+function stubLocalModel() {
+  const counter = spyOn(transformersModule, 'getLocalTokenCounter').mockResolvedValue((t: string) => Math.ceil(t.length / 4));
+  const embedder = spyOn(toolCards, 'getCardEmbedder').mockReturnValue(createFakeEmbedder().embed);
+  return () => {
+    counter.mockRestore();
+    embedder.mockRestore();
+  };
+}
+
+/** The options each adapter call received. */
+function adapterCalls(): Array<Record<string, any>> {
+  return (mockAdapterCall.mock.calls as unknown[][]).map((c) => c[0] as Record<string, any>);
+}
 
 afterAll(() => {
   // Undo the orchestration spy so later-loading test files
@@ -195,5 +218,109 @@ describe('Agent', () => {
     const doneEvent = events.find((e) => e.type === 'done')!;
     expect(doneEvent).toBeTruthy();
     expect((doneEvent as any).answer).toContain('Error');
+  });
+});
+
+describe('Agent tool selection (design 2026-10-03)', () => {
+  beforeEach(() => {
+    ensureTestProfile();
+    setSetting('localToolSelection', 'auto');
+    adapterResponses = [makeResponse('ok')];
+    adapterCallCount = 0;
+    mockAdapterCall.mockReset();
+    mockAdapterCall.mockImplementation(async () => {
+      const response = adapterResponses[Math.min(adapterCallCount, adapterResponses.length - 1)];
+      adapterCallCount++;
+      return response;
+    });
+  });
+  afterAll(() => setSetting('localToolSelection', 'auto'));
+
+  // R1: cloud and non-budgeted providers get exactly today's tools and prompt.
+  for (const model of ['claude-sonnet-4-5', 'gpt-5.2', 'ollama:qwen3:8b', 'openrouter:openai/gpt-4o-mini']) {
+    test(`${model}: every registered tool and the unchanged system prompt`, async () => {
+      setSetting('localToolSelection', 'always');
+      const agent = await Agent.create({ model, maxIterations: 2 });
+      const events = await collectEvents(agent.run('how much did I spend on dining?'));
+      const [call] = adapterCalls();
+      expect(call.tools.map((t: { name: string }) => t.name)).toEqual((await getTools(model)).map((t) => t.name));
+      expect(call.systemPrompt).toBe('You are a financial assistant.');
+      expect(call.userPrompt).toBe('how much did I spend on dining?');
+      expect('toolIndex' in call).toBe(false);
+      expect(events.some((e) => e.type === ('tool_selection' as string))).toBe(false);
+    });
+  }
+
+  test('local model: a subset with full schemas, the rest by name, all still registered', async () => {
+    const restore = stubLocalModel();
+    try {
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 2 });
+      await collectEvents(agent.run('import my bank statement from statement.csv'));
+      const [call] = adapterCalls();
+      const sent: string[] = call.tools.map((t: { name: string }) => t.name);
+      const all = (await getTools(LOCAL_MODEL)).map((t) => t.name);
+      expect(sent).toEqual(expect.arrayContaining(['transaction_search', 'spending_summary', 'csv_import']));
+      expect(sent.length).toBeLessThan(all.length);
+      expect(new Set([...sent, ...call.toolIndex])).toEqual(new Set(all));
+      expect(call.userPrompt).toBe('import my bank statement from statement.csv');
+    } finally {
+      restore();
+    }
+  });
+
+  test("local model with the setting 'off': every tool, no index", async () => {
+    const restore = stubLocalModel();
+    try {
+      setSetting('localToolSelection', 'off');
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 2 });
+      await collectEvents(agent.run('import my bank statement'));
+      const [call] = adapterCalls();
+      expect(call.tools.map((t: { name: string }) => t.name)).toEqual((await getTools(LOCAL_MODEL)).map((t) => t.name));
+      expect('toolIndex' in call).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  test('local model: an embedder failure falls back to keyword groups and the run continues', async () => {
+    const restore = stubLocalModel();
+    const broken = spyOn(toolCards, 'getCardEmbedder').mockReturnValue(async () => {
+      throw new Error('no MiniLM offline');
+    });
+    try {
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 2 });
+      const events = await collectEvents(agent.run('set a grocery budget'));
+      const [call] = adapterCalls();
+      expect(call.tools.map((t: { name: string }) => t.name)).toEqual(
+        expect.arrayContaining(['transaction_search', 'spending_summary', 'budget_set']),
+      );
+      expect((events.find((e) => e.type === 'done') as any).answer).toBe('ok');
+    } finally {
+      broken.mockRestore();
+      restore();
+    }
+  });
+
+  test('local model: long chat history is trimmed to the budget instead of failing', async () => {
+    const restore = stubLocalModel();
+    try {
+      const history = new InMemoryChatHistory(LOCAL_MODEL);
+      for (let i = 0; i < 10; i++) {
+        history.saveUserQuery(`question ${i}`);
+        await history.saveAnswer(`answer ${i} ${'x'.repeat(8000)}`);
+      }
+      history.saveUserQuery('and now?');
+      mockAdapterCall.mockClear(); // drop the summary calls saveAnswer made
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 2 });
+      const events = await collectEvents(agent.run('and now?', history));
+      const [call] = adapterCalls();
+      const tokens = Math.ceil(call.userPrompt.length / 4) + Math.ceil(call.systemPrompt.length / 4);
+      expect(tokens).toBeLessThan(8192);
+      expect(call.userPrompt).toContain('answer 9');
+      expect(call.userPrompt).not.toContain('answer 0 ');
+      expect((events.find((e) => e.type === 'done') as any).answer).toBe('ok');
+    } finally {
+      restore();
+    }
   });
 });

@@ -262,6 +262,26 @@ describe('agent/prompts', () => {
         expect(metadataSpy).not.toHaveBeenCalled();
       });
 
+      test('selected skills get their description; the rest stay names only (tool selection, Phase 1)', async () => {
+        discoverSpy.mockReturnValue(skills);
+        const prompt = await buildSystemPrompt(LOCAL, null, { skillSelection: ['tax-prep'] });
+        expect(prompt).toContain('- **tax-prep**: Prepare tax documents.');
+        expect(prompt).toContain('Other skills: month-end-close');
+        expect(prompt).not.toContain('Walk through closing the books');
+        expect(prompt).toContain('Skill Usage Policy');
+
+        // No skill selected: the Phase 0 names-only list, byte for byte.
+        expect(await buildSystemPrompt(LOCAL, null, { skillSelection: [] })).toBe(await buildSystemPrompt(LOCAL, null));
+      });
+
+      test('cloud models ignore a skill selection', async () => {
+        discoverSpy.mockReturnValue(skills);
+        metadataSpy.mockReturnValue('- **month-end-close**: Walk through closing the books for the month.');
+        expect(await buildSystemPrompt('claude-sonnet-4-5', null, { skillSelection: ['tax-prep'] })).toBe(
+          await buildSystemPrompt('claude-sonnet-4-5', null),
+        );
+      });
+
       test('the numeric table example does not leak figures; the format example stays', async () => {
         const prompt = await buildSystemPrompt(LOCAL);
         expect(prompt).not.toContain('842.50');
