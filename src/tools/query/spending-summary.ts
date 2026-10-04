@@ -70,6 +70,20 @@ export function getPeriodDates(
 }
 
 /**
+ * Months from the current month to `month` ("YYYY-MM"); 0 when absent or
+ * malformed. `month` is deliberately not in the schema, so cloud tool
+ * definitions stay unchanged: only the local agent sets it, when the user
+ * named a month (src/agent/local-date-args.ts). defineTool passes the
+ * original arguments through, extra keys included.
+ */
+function monthOffset(month: unknown): number {
+  const m = typeof month === 'string' ? /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month) : null;
+  if (!m) return 0;
+  const now = new Date();
+  return (Number(m[1]) - now.getFullYear()) * 12 + (Number(m[2]) - 1 - now.getMonth());
+}
+
+/**
  * Format a spending summary for display.
  */
 function formatSummary(
@@ -162,18 +176,20 @@ export const spendingSummaryTool = defineTool({
       .default(true)
       .describe('Compare with the previous period'),
   }),
-  func: async ({ period, compareWithPrevious }) => {
+  func: async (args) => {
+    const { period, compareWithPrevious } = args;
     const database = getDb();
 
-    // Current period
-    const current = getPeriodDates(period, 0);
+    // Current period, or the month the local agent filled in
+    const offset = period === 'month' ? monthOffset((args as { month?: unknown }).month) : 0;
+    const current = getPeriodDates(period, offset);
     const currentRows = getSpendingSummary(database, current.start, current.end);
 
     // Previous period (if requested)
     let prevRows: SpendingSummaryRow[] | undefined;
     let prevLabel: string | undefined;
     if (compareWithPrevious) {
-      const prev = getPeriodDates(period, -1);
+      const prev = getPeriodDates(period, offset - 1);
       prevRows = getSpendingSummary(database, prev.start, prev.end);
       prevLabel = prev.label;
     }
