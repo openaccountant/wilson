@@ -32,7 +32,7 @@ import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/ex
 import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
 import { hasLicense } from '../licensing/license.js';
 import { getCheckoutUrl } from '../licensing/upsell.js';
-import { initChatSession, handleChatMessage } from './chat.js';
+import { initChatSession, handleChatMessage, getCategorizeProgress } from './chat.js';
 import {
   isAuthEnabled, enableAuth, disableAuth,
   listUsers, getUserCount, deactivateUser, hashPassword, insertUser, createFirstAdmin,
@@ -789,6 +789,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         if (path === '/api/chat/history') {
           return Response.json(apiChatHistory(activeDb), { headers });
+        }
+        if (path === '/api/chat/progress') {
+          return Response.json({ progress: getCategorizeProgress() }, { headers });
         }
         if (path === '/api/chat/sessions') {
           return Response.json(apiChatSessions(activeDb), { headers });

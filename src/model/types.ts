@@ -52,9 +52,19 @@ export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
 
 export type MutationFlag = boolean | ((args: Record<string, unknown>) => boolean);
 
+/** Batch progress of a long-running tool (categorize): rows handled and batches finished. */
+export interface ToolProgress {
+  done: number;
+  total: number;
+  batch: number;
+  batches: number;
+}
+
 export interface ToolInvokeConfig {
   metadata?: Record<string, unknown>;
   signal?: AbortSignal;
+  /** Optional progress sink for tools that work in batches; callers that don't render progress omit it. */
+  onProgress?: (progress: ToolProgress) => void;
   /** Active model from the parent agent — tools like chains should inherit this. */
   model?: string;
   /**

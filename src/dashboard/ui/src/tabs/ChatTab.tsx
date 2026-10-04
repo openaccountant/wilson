@@ -27,6 +27,8 @@ import { ComposerBackdrop, MentionIcon } from '@/components/ComposerBackdrop';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
 import { ChatApprovalCard } from '@/components/ChatApprovalCard';
 import { usePendingChatApproval } from '@/hooks/usePendingChatApproval';
+import { useCategorizeProgress } from '@/hooks/useCategorizeProgress';
+import { categorizeProgressLabel, isCategorizeQuery } from '@/lib/categorizeProgress';
 import { navigateToTab, navigateUrl, readUrlState, reloadForProfileSwitch, useUrlState } from '@/hooks/useUrlState';
 import { withSession } from '@/lib/urlState';
 import {
@@ -167,6 +169,8 @@ export function ChatTab() {
   const [sending, setSending] = useState(false);
   /** True only while POST /api/chat is in flight (not the on-device path). */
   const [serverInFlight, setServerInFlight] = useState(false);
+  /** True while the in-flight server request is a /categorize command. */
+  const [categorizing, setCategorizing] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
@@ -187,6 +191,8 @@ export function ChatTab() {
   // The server agent blocks POST /api/chat on approval-gated tools (e.g.
   // categorize); surface that pending approval inline so the request can finish.
   const approval = usePendingChatApproval(sending && serverInFlight);
+  // /categorize runs for minutes on a local model; show the server's batch progress meanwhile.
+  const categorizeProgress = useCategorizeProgress(sending && serverInFlight && categorizing);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -737,6 +743,7 @@ export function ChatTab() {
         refetchSessions();
       } else {
         setServerInFlight(true);
+        setCategorizing(isCategorizeQuery(query));
         const res = await api<ChatResponse>('/api/chat', {
           method: 'POST',
           body: JSON.stringify(request),
@@ -764,6 +771,7 @@ export function ChatTab() {
       ]);
     } finally {
       setServerInFlight(false);
+      setCategorizing(false);
       setSending(false);
     }
   }
@@ -957,6 +965,8 @@ export function ChatTab() {
                 {progressLabel ? (
                   /* First-run model download / warmup progress (Track D). */
                   <span>{progressLabel}</span>
+                ) : categorizing ? (
+                  <span>{categorizeProgressLabel(categorizeProgress)}</span>
                 ) : (
                   <span className="inline-flex gap-1">
                     <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>

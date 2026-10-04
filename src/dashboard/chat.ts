@@ -15,6 +15,7 @@ import {
 } from '../mcp/store.js';
 import { expandSlashCommand } from './chat-commands.js';
 import { categorizeTool } from '../tools/categorize/categorize.js';
+import type { ToolProgress } from '../model/types.js';
 import { getTaskModel } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
@@ -517,6 +518,19 @@ function viewerCannotWrite(user: ChatUser, what: string): string {
 const LOCAL_CATEGORIZE_CHUNK = 50;
 
 /**
+ * Progress of the /categorize run in flight (null when none). Module-level
+ * like the rest of the chat state: the dashboard runs one chat request at a
+ * time, and GET /api/chat/progress lets the UI show it while POST /api/chat
+ * is still pending.
+ */
+let categorizeProgress: ToolProgress | null = null;
+
+/** Live batch progress of the running /categorize, or null (route + test accessor). */
+export function getCategorizeProgress(): ToolProgress | null {
+  return categorizeProgress;
+}
+
+/**
  * "/categorize [n]": the categorize tool, called directly — the same path as
  * the terminal's /categorize (src/cli.ts). Typing the command is the consent,
  * so there is no approval round-trip, and the categorizer's own small batch
@@ -527,8 +541,12 @@ async function runCategorizeCommand(limit?: number): Promise<string> {
   const startTime = Date.now();
   const local = resolveProvider(getTaskModel('categorization')).id === 'transformers';
   const effectiveLimit = limit ?? (local ? LOCAL_CATEGORIZE_CHUNK : undefined);
+  categorizeProgress = null;
   try {
-    const resultJson = await categorizeTool.func({ ...(effectiveLimit !== undefined ? { limit: effectiveLimit } : {}), skipPendingReview: true });
+    const resultJson = await categorizeTool.func(
+      { ...(effectiveLimit !== undefined ? { limit: effectiveLimit } : {}), skipPendingReview: true },
+      { onProgress: (p) => { categorizeProgress = p; } },
+    );
     const data = parseCategorizeResult(resultJson);
     let answer = formatCategorizeSummary(data, { errorDetail: true });
     const remaining = data.stillUncategorized ?? 0;
@@ -549,5 +567,7 @@ async function runCategorizeCommand(limit?: number): Promise<string> {
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard /categorize error`, { durationMs: Date.now() - startTime, error: errorMsg });
     return `**Categorization failed:** ${errorMsg}`;
+  } finally {
+    categorizeProgress = null;
   }
 }

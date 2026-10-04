@@ -89,7 +89,7 @@ export const categorizeTool = defineTool({
       .optional()
       .describe('Skip transactions already waiting in the review queue (default: false)'),
   }),
-  func: async ({ limit, entityId, skipPendingReview }) => {
+  func: async ({ limit, entityId, skipPendingReview }, config) => {
     const database = getDb();
     const threshold = getCategorizationConfidenceThreshold();
 
@@ -152,6 +152,10 @@ export const categorizeTool = defineTool({
 
     // 2. Process remaining in batches via LLM
     const batchSize = resolveProvider(getTaskModel('categorization')).id === 'transformers' ? LOCAL_BATCH_SIZE : BATCH_SIZE;
+    const batches = Math.ceil(needsLlm.length / batchSize);
+    const reportProgress = (batch: number, llmRowsHandled: number) =>
+      config?.onProgress?.({ done: ruleMatchCount + llmRowsHandled, total: uncategorized.length, batch, batches });
+    if (batches > 0) reportProgress(0, 0);
     let consecutiveFailures = 0;
     let notAttempted = 0;
     for (let i = 0; i < needsLlm.length; i += batchSize) {
@@ -225,6 +229,7 @@ export const categorizeTool = defineTool({
           `Batch ${Math.floor(i / batchSize) + 1}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
+      reportProgress(Math.floor(i / batchSize) + 1, i + batch.length);
     }
 
     return formatToolResult({
