@@ -304,6 +304,15 @@ export class Scratchpad {
    * Does NOT modify the JSONL file - clearing is in-memory only.
    */
   getToolResults(): string {
+    return this.getToolResultBlocks().join('\n\n');
+  }
+
+  /**
+   * The formatted tool results, one block per result (cleared ones as their
+   * placeholder), oldest first — for the local prompt planner, which clears
+   * the oldest blocks to fit a token budget.
+   */
+  getToolResultBlocks(): string[] {
     const entries = this.readEntries();
     let toolResultIndex = 0;
 
@@ -326,7 +335,7 @@ export class Scratchpad {
       toolResultIndex++;
     }
 
-    return formattedResults.join('\n\n');
+    return formattedResults;
   }
 
   /**

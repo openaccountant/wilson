@@ -115,6 +115,18 @@ describe('Scratchpad', () => {
     expect(output).toContain('cleared from context');
   });
 
+  test('getToolResultBlocks returns one block per result (joined = getToolResults)', () => {
+    const sp = new Scratchpad('blocks test');
+    sp.addToolResult('tool_a', {}, '"result_a"');
+    sp.addToolResult('tool_b', { q: 'x' }, '"result_b"');
+    sp.clearOldestToolResults(1);
+    const blocks = sp.getToolResultBlocks();
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toContain('cleared from context');
+    expect(blocks[1]).toContain('tool_b(q=x)');
+    expect(blocks.join('\n\n')).toBe(sp.getToolResults());
+  });
+
   test('clearOldestToolResults returns 0 when nothing to clear', () => {
     const sp = new Scratchpad('nothing to clear');
     sp.addToolResult('only_one', {}, '"data"');
