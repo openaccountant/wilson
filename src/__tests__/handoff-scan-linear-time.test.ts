@@ -27,20 +27,25 @@ import {
 import { analyzeHandoff, excerptHandoffBlocks, isHandoffFlagged, looksLikeHandoffMarker, neutralizeBrackets } from '../training/handoff-block.js';
 import { detectorFor, ensureHandoffSecret } from '../training/handoff-tag.js';
 import { foldCompat, maskPii, sanitizeUntrustedText, stripMarks } from '../mcp/text-hygiene.js';
-import { FOLD_CLOSE_BRACKET_CPS, FOLD_OPEN_BRACKET_CPS } from '../mcp/unicode-fold-table.js';
+import { FOLD_CLOSE_BRACKET_CPS, FOLD_OPEN_BRACKET_CPS, UNICODE_FOLD_VERSION } from '../mcp/unicode-fold-table.js';
 import { getInteractionRead } from '../mcp/judge-reads.js';
 import { MAX_CHAT_QUERY_CHARS } from '../dashboard/api.js';
 import { CURRENT_MESSAGE_MARKER } from '../utils/history-context.js';
 
 const SCALE = Number(process.env.HANDOFF_TIMING_SCALE ?? '1') || 1;
 const PRINT = process.env.HANDOFF_TIMING_TABLE === '1';
-/** Absolute bound at 2M chars; smaller sizes get a proportional share with a floor. */
-const BOUND_AT_MAX_MS = 250;
+/**
+ * Absolute bound at 2M chars; smaller sizes get a proportional share with a floor. Shared CI runners are slower and
+ * noisier than a dev machine, so CI gets more headroom; the quadratic cases this guards against took seconds to hours.
+ */
+const ON_CI = !!process.env.CI;
+const BOUND_AT_MAX_MS = ON_CI ? 1500 : 250;
 /** HANDOFF_TIMING_SHAPES=<regexp> runs only the matching shapes (to measure one without the slow ones). */
 const ONLY = process.env.HANDOFF_TIMING_SHAPES ? new RegExp(process.env.HANDOFF_TIMING_SHAPES, 'i') : null;
-const RATIO_LIMIT = 3;
+/** time(2N) / time(N): linear is ~2, quadratic ~4. */
+const RATIO_LIMIT = ON_CI ? 3.6 : 3;
 /** Below this, timer noise dominates a ratio: compare against the floor instead. */
-const RATIO_FLOOR_MS = 25;
+const RATIO_FLOOR_MS = ON_CI ? 60 : 25;
 
 const TAG = '0123456789abcdef';
 const CM = CURRENT_MESSAGE_MARKER;
@@ -195,12 +200,31 @@ describe('foldCompat: per-code-point compatibility fold (replaces the built-in n
     expect(foldCompat('１２３４．５６７８')).toBe('1234.5678');
   });
 
-  test('every code point folds exactly as its own NFKC (the whole table, once)', () => {
+  // The table is generated from one runtime's ICU data. Unicode's normalization stability policy means existing
+  // NFKC mappings never change, but newer versions add mappings for new code points (CI's ICU had Unicode 17's
+  // U+A7F1 -> 'S'). So: every code point the TABLE maps must match the runtime everywhere; "nothing else maps" is
+  // only checked against the Unicode version the table was built from.
+  const mismatchesWhere = (want: (cp: number) => boolean): string[] => {
+    const out: string[] = [];
     for (let cp = 0; cp <= 0x10ffff; cp += cp < 0x30000 ? 1 : 7) {
       if (cp >= 0xd800 && cp <= 0xdfff) continue;
       const ch = String.fromCodePoint(cp);
-      expect(foldCompat(ch)).toBe(ch.normalize('NFKC'));
+      const folded = foldCompat(ch);
+      if (want(cp) && folded !== ch && folded !== ch.normalize('NFKC') && out.length < 20) out.push(cp.toString(16));
     }
+    return out;
+  };
+  test('every code point the table folds folds exactly as its own NFKC (stable across Unicode versions)', () => {
+    expect(mismatchesWhere(() => true)).toEqual([]);
+  }, 60_000);
+  test.skipIf(process.versions.unicode !== UNICODE_FOLD_VERSION)('no code point outside the table has an NFKC mapping (same Unicode version only)', () => {
+    const missing: string[] = [];
+    for (let cp = 0; cp <= 0x10ffff; cp += cp < 0x30000 ? 1 : 7) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue;
+      const ch = String.fromCodePoint(cp);
+      if (foldCompat(ch) === ch && ch.normalize('NFKC') !== ch && missing.length < 20) missing.push(cp.toString(16));
+    }
+    expect(missing).toEqual([]);
   }, 60_000);
 
   test('ASCII and ordinary text are returned as the same string; the fold is idempotent', () => {

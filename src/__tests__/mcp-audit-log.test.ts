@@ -277,7 +277,7 @@ describe('sweepAudit', () => {
     expect(noise[0].count).toBe(200_000);
     sweepAudit(db);
     expect(rows(db, "decision = 'allowed'")).toHaveLength(1);
-  });
+  }, 30_000); // 200k inserts: ~3 s locally, more on shared CI runners
 
   test('a flood of noise from many rotating principals is trimmed first; signal rows survive the soft cap', () => {
     const db = createTestDb();
