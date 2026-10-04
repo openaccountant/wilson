@@ -1,0 +1,212 @@
+{
+ "_FIXTURE": "HAND-MADE unit-test fixture for config parsing. NOT a recording. Never render this as a deliverable.",
+ "beat": "b10-judge",
+ "recordingStartedAt": "2026-10-04T12:00:00.000Z",
+ "events": [
+  {
+   "name": "recording-started",
+   "t_ms": 0,
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   }
+  },
+  {
+   "name": "training-before",
+   "t_ms": 8000,
+   "interactions": 42,
+   "tiles": {
+    "proposed": 0,
+    "accepted": 0
+   }
+  },
+  {
+   "name": "grants-applied",
+   "t_ms": 20000,
+   "tools": [
+    "get_judge_rubric",
+    "list_interactions",
+    "get_interaction",
+    "open_interaction",
+    "propose_judgements",
+    "judge_interaction"
+   ]
+  },
+  {
+   "name": "panel-opened-by-agent",
+   "t_ms": 31000,
+   "interactionId": 7
+  },
+  {
+   "name": "card-shown",
+   "t_ms": 40000,
+   "index": 0,
+   "opId": "op-j-0001",
+   "tool": "propose_judgements",
+   "change": true,
+   "text": "Confirm: Propose judgements x 4"
+  },
+  {
+   "name": "card-checked",
+   "t_ms": 42000,
+   "index": 0,
+   "opId": "op-j-0001",
+   "tool": "propose_judgements",
+   "kind": "change",
+   "rows": [
+    [
+     "proposals",
+     "0",
+     "4"
+    ]
+   ],
+   "problems": []
+  },
+  {
+   "name": "card-resolved",
+   "t_ms": 46000,
+   "index": 0,
+   "opId": "op-j-0001",
+   "tool": "propose_judgements",
+   "decision": "approve",
+   "outcome": "Done. The change was applied."
+  },
+  {
+   "name": "card-shown",
+   "t_ms": 50000,
+   "index": 1,
+   "opId": "op-j-0002",
+   "tool": "judge_interaction",
+   "change": false,
+   "text": "Confirm: Judge interaction #7"
+  },
+  {
+   "name": "card-behind-dialog",
+   "t_ms": 52000,
+   "opId": "op-j-0002"
+  },
+  {
+   "name": "card-resolved",
+   "t_ms": 56000,
+   "index": 1,
+   "opId": "op-j-0002",
+   "tool": "judge_interaction",
+   "decision": "allow",
+   "outcome": "Allowed."
+  },
+  {
+   "name": "last-card-resolved",
+   "t_ms": 56000
+  },
+  {
+   "name": "tiles",
+   "t_ms": 60000,
+   "phase": "after-agent",
+   "proposed": 4,
+   "accepted": 0
+  },
+  {
+   "name": "queue-shown",
+   "t_ms": 62000,
+   "proposals": [
+    {
+     "proposalId": 1,
+     "interactionId": 7,
+     "rating": 5,
+     "rationale": "x",
+     "groundTruth": "wrong",
+     "verdictCorrect": false
+    },
+    {
+     "proposalId": 2,
+     "interactionId": 8,
+     "rating": 1,
+     "rationale": "y",
+     "groundTruth": "wrong",
+     "verdictCorrect": true
+    }
+   ]
+  },
+  {
+   "name": "verdict-accepted",
+   "t_ms": 68000,
+   "proposalId": 2,
+   "interactionId": 8,
+   "rating": 1,
+   "reason": "matches my read"
+  },
+  {
+   "name": "verdict-rejected",
+   "t_ms": 72000,
+   "proposalId": 1,
+   "interactionId": 7,
+   "rating": 5,
+   "reason": "that answer is wrong"
+  },
+  {
+   "name": "catch-score",
+   "t_ms": 75000,
+   "wrongIds": [
+    7,
+    8,
+    9,
+    10
+   ],
+   "caught": [
+    8
+   ],
+   "missed": [
+    7,
+    9,
+    10
+   ],
+   "falseAlarms": []
+  },
+  {
+   "name": "tiles",
+   "t_ms": 78000,
+   "phase": "after-review",
+   "proposed": 0,
+   "accepted": 1
+  },
+  {
+   "name": "human-annotation-saved",
+   "t_ms": 90000,
+   "interactionId": 9,
+   "rating": 2,
+   "note": "n",
+   "agentPresent": true
+  },
+  {
+   "name": "export-done",
+   "t_ms": 100000,
+   "variant": "default",
+   "kind": "sft",
+   "includeJudge": false,
+   "includeAgentPresent": false,
+   "rows": 0,
+   "provenance": "counted from the downloaded file"
+  },
+  {
+   "name": "export-done",
+   "t_ms": 108000,
+   "variant": "with-judge",
+   "kind": "sft",
+   "includeJudge": true,
+   "includeAgentPresent": true,
+   "rows": 3,
+   "provenance": "counted from the downloaded file",
+   "interactionIdsInFile": [
+    7,
+    8,
+    9
+   ],
+   "judgeRows": null,
+   "humanRows": 1
+  },
+  {
+   "name": "beat-end",
+   "t_ms": 114000
+  }
+ ]
+}

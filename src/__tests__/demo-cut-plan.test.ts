@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 // @ts-expect-error plain .mjs compose helper
-import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping } from '../../demos/compose/hyperframes-b5/plan.mjs';
+import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping } from '../../demos/compose/hyperframes/plan.mjs';
 // @ts-expect-error plain .mjs rig helper
 import { transcriptFromAudit } from '../../demos/rig/lib/ab-audit.mjs';
 
@@ -98,7 +98,7 @@ describe('cut plan: cards bound to their own operation', () => {
     expect(c1.find((c: { t: string }) => /rejects #298/.test(c.t))).toBeTruthy();
     expect(c1.find((c: { t: string }) => /Not the SQ \*KILN & CO STUDIO charge/.test(c.t))).toBeTruthy(); // non-target rejection names why
     expect(c1.find((c: { start: number }) => c.start === 56)).toBeTruthy();
-    expect(cos.filter((c: { card: number }) => c.card === 1).map((c: { txt: string }) => c.txt)).toEqual(['Exact row + before/after, shown on the card', 'Reject leaves the books untouched']);
+    expect(cos.filter((c: { card: number }) => c.card === 1).map((c: { txt: string }) => c.txt)).toEqual(['Before → after computed by the server', 'Reject leaves the books untouched']);
     for (const c of cos.filter((x: { card: number }) => x.card === 0)) { expect(c.start).toBeGreaterThanOrEqual(41.3); expect(c.end).toBeLessThanOrEqual(47.7 + CFG.perCard.resolvedHold + 1e-9); }
   });
 
@@ -140,7 +140,12 @@ describe('build.mjs end to end on a synthetic two-card take (no browser, no vide
     fs.writeFileSync(path.join(take, 'actor.jsonl'), stream.map((x) => JSON.stringify(x)).join('\n') + '\n');
     return { take, cwd };
   };
-  const build = (take: string, cwd: string) => spawnSync('node', [path.join(import.meta.dir, '../../demos/compose/hyperframes-b5/build.mjs'), '--take', take, '--config', path.join(import.meta.dir, '../../demos/compose/beats/b5-propose.json')], { cwd, encoding: 'utf8' });
+  // the synthetic take has no real video, so use the host's card events (cardStart 'event'); the footage detector is tested in demo-cut-b10.test.ts
+  const build = (take: string, cwd: string) => {
+    const cfg = path.join(cwd, 'cfg.json');
+    fs.writeFileSync(cfg, JSON.stringify({ ...CFG, cardStart: 'event' }));
+    return spawnSync('node', [path.join(import.meta.dir, '../../demos/compose/hyperframes/build.mjs'), '--take', take, '--config', cfg, '--out', cwd], { encoding: 'utf8' });
+  };
 
   test('builds; captions and callouts are bound to their cards, ledger hold >= 2.5 s, no overlapping lower-thirds', () => {
     const { take, cwd } = make();

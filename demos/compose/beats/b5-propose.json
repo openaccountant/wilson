@@ -8,7 +8,42 @@
   "terminalTitle": "Agent (Claude Code, headless) — via WebMCP",
   "target": "SQ *KILN & CO STUDIO",
   "titleSeconds": 4,
-  "minLedgerHoldSeconds": 2.5,
+  "requiredEvents": [
+    "ledger-before",
+    "grants-applied",
+    "ledger-after",
+    "beat-end"
+  ],
+  "requireTargetCard": true,
+  "binding": {
+    "strategy": "categorize-by-id",
+    "requireBinding": true
+  },
+  "cards": {
+    "rowMatch": "^categor"
+  },
+  "endHold": {
+    "event": "ledger-after",
+    "minSeconds": 2.5
+  },
+  "noCardAfter": "ledger-after",
+  "zoom": {
+    "ease": 0.6,
+    "card": {
+      "kinds": [
+        "change"
+      ],
+      "rect": {
+        "x": 0.75,
+        "y": 0.72,
+        "w": 0.245,
+        "h": 0.27
+      },
+      "pad": 0.03,
+      "maxScale": 2.6,
+      "holdAfter": 0.6
+    }
+  },
   "segments": [
     {
       "from": {
@@ -54,7 +89,7 @@
       "x": 400,
       "y": 300,
       "txt": "Agent sees only the tools you granted",
-      "sub": "{tools}"
+      "sub": "{@grants-applied.tools}"
     }
   ],
   "captions": [
@@ -78,7 +113,7 @@
         "seg": 0,
         "edge": "e"
       },
-      "t": "Access grants applied in the dashboard: {tools}."
+      "t": "Access grants applied in the dashboard: {@grants-applied.tools}."
     },
     {
       "at": {
@@ -100,7 +135,7 @@
         "seg": 2,
         "edge": "e"
       },
-      "t": "Ledger afterwards, search cleared: {ledgerLine}"
+      "t": "Ledger afterwards, search cleared: {nApproved} approved, {nRejected} rejected. {target} {targetIs}"
     }
   ],
   "perCard": {
@@ -114,20 +149,32 @@
       "rejectOther": "Not the {target} charge, so the human rejects #{txId}. Nothing was changed."
     },
     "coShown": {
-      "x": 80,
-      "y": 520,
-      "txt": "Exact row + before/after, shown on the card",
-      "sub": "#{txId} · {before} → {category}"
+      "x": 30,
+      "y": 20,
+      "txt": "Before → after computed by the server",
+      "sub": "#{txId} · {before} → {category}",
+      "src": "src/dashboard/webmcp-bridge.ts:214 · the card shows the before/after “the server computed in prepare”"
     },
     "coDecide": {
       "approve": {
         "txt": "Nothing changes until you hold Approve",
-        "sub": "#{txId} · Hold to approve / Reject"
+        "sub": "#{txId} · Hold to approve / Reject",
+        "x": 30,
+        "y": 20
       },
       "reject": {
         "txt": "Reject leaves the books untouched",
-        "sub": "#{txId} stays {before}"
+        "sub": "#{txId} stays {before}",
+        "x": 30,
+        "y": 20
       }
     }
+  },
+  "cardStart": "footage",
+  "cardDetect": {
+    "fps": 10,
+    "lead": 4,
+    "fraction": 0.5,
+    "minMax": 5
   }
 }

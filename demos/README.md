@@ -185,7 +185,7 @@ trying something outside the set). Exit 6: the daemon could not be verified as t
 Transcript integrity: the harness (not the model) writes `actor.jsonl`, `ab-audit.jsonl` and `actor.log` (commands
 collapsed to one line, every output line indented, so model- or page-controlled text cannot forge a command or `[SUMMARY]`
 line). `build.mjs` renders structured audit entries, never parsed `actor.log` text. Compose copy lives in
-`compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all timing from `events.json` and the
+`compose/beats/<beat>.json`; `compose/hyperframes/build.mjs --take <dir> --config compose/beats/<beat>.json` derives all timing from `events.json` and the
 audit timestamps. The brief is `rig/beats/<beat>.brief.md`.
 
 The human decides every card. The on-camera human script reads each card the agent raises and decides it: it approves

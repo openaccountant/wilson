@@ -1,0 +1,562 @@
+{
+  "id": "b10-judge",
+  "kicker": "OPEN ACCOUNTANT / BEAT 10",
+  "titleLead": "The agent grades",
+  "titleAccent": "the agent.",
+  "subtitle": "A real recording: an AI agent reads logged interactions and proposes grades into the Judge queue. A human decides which ones count, and what leaves in an export.",
+  "headerTitle": "The agent grades the agent.",
+  "terminalTitle": "Agent (Claude Code, headless) — via WebMCP",
+  "titleSeconds": 4,
+  "requiredEvents": [
+    "training-before",
+    "grants-applied",
+    "card-shown",
+    "card-resolved",
+    "last-card-resolved",
+    {
+      "event": "tiles",
+      "where": {
+        "phase": "after-agent"
+      }
+    },
+    "queue-shown",
+    "catch-score",
+    "beat-end",
+    {
+      "event": "export-done",
+      "where": {
+        "variant": "default"
+      }
+    },
+    {
+      "event": "export-done",
+      "where": {
+        "variant": "with-judge"
+      }
+    }
+  ],
+  "binding": {
+    "strategy": "tool-match",
+    "requireBinding": false
+  },
+  "zoom": {
+    "ease": 0.6,
+    "card": {
+      "kinds": [
+        "change",
+        "read"
+      ],
+      "rect": {
+        "x": 0.75,
+        "y": 0.72,
+        "w": 0.245,
+        "h": 0.27
+      },
+      "pad": 0.03,
+      "maxScale": 2.6,
+      "holdAfter": 0.6
+    }
+  },
+  "segments": [
+    {
+      "id": "grant",
+      "from": {
+        "event": "training-before",
+        "offset": -2
+      },
+      "to": {
+        "event": "grants-applied",
+        "offset": 5
+      }
+    },
+    {
+      "id": "agent-working",
+      "from": {
+        "cmd": "firstAgentCommand",
+        "offset": -1
+      },
+      "to": {
+        "event": "last-card-resolved",
+        "offset": 3
+      }
+    },
+    {
+      "id": "judge-queue",
+      "from": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-agent"
+        },
+        "offset": -1.5
+      },
+      "to": {
+        "max": [
+          {
+            "event": "catch-score",
+            "offset": 5
+          },
+          {
+            "event": "verdict-accepted",
+            "nth": "last",
+            "offset": 3
+          },
+          {
+            "event": "verdict-rejected",
+            "nth": "last",
+            "offset": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "human-annotation",
+      "optional": true,
+      "from": {
+        "event": "human-annotation-saved",
+        "offset": -8
+      },
+      "to": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      }
+    },
+    {
+      "id": "export-default",
+      "from": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": -7
+      },
+      "to": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": 3.5
+      }
+    },
+    {
+      "id": "export-with-judge",
+      "from": {
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": -6
+      },
+      "to": {
+        "event": "beat-end"
+      }
+    }
+  ],
+  "callouts": [
+    {
+      "id": "co_grant",
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "event": "grants-applied",
+        "offset": 4.6
+      },
+      "x": 400,
+      "y": 300,
+      "txt": "Agent sees only the tools you granted",
+      "sub": "{@grants-applied.tools}"
+    },
+    {
+      "id": "co_panel",
+      "optional": true,
+      "if": "panel-opened-by-agent",
+      "at": {
+        "event": "panel-opened-by-agent",
+        "offset": 0.2
+      },
+      "end": {
+        "event": "panel-opened-by-agent",
+        "offset": 4
+      },
+      "x": 560,
+      "y": 560,
+      "txt": "This detail panel was opened by the agent",
+      "sub": "interaction #{@panel-opened-by-agent.interactionId}, via open_interaction"
+    },
+    {
+      "id": "co_queue",
+      "at": {
+        "event": "queue-shown",
+        "offset": 0.2
+      },
+      "end": {
+        "event": "queue-shown",
+        "offset": 4.5
+      },
+      "x": 560,
+      "y": 560,
+      "txt": "Proposals wait here for a person",
+      "sub": "{@queue-shown.proposals.length} proposed by the agent",
+      "src": "src/training/annotations.ts:348 · proposed and rejected rows never qualify for an export"
+    },
+    {
+      "id": "co_window",
+      "optional": true,
+      "if": "human-annotation-saved",
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": 0.2
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "x": 560,
+      "y": 560,
+      "txt": "Agent-present window: 2 hours",
+      "sub": "A rating saved while an agent had access, or within 2 hours of it, is flagged",
+      "src": "src/dashboard/judgement-routes.ts:42 · REVIEW_AGENT_WINDOW_MS = 2 * 60 * 60 * 1000"
+    }
+  ],
+  "captions": [
+    {
+      "at": {
+        "event": "training-before",
+        "offset": -2
+      },
+      "end": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "t": "Real recording. Before anything runs: Judge: proposed {@training-before.tiles.proposed} / accepted {@training-before.tiles.accepted}, across {@training-before.interactions} logged interactions."
+    },
+    {
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "seg": 0,
+        "edge": "e"
+      },
+      "t": "Access grants applied in the dashboard: {@grants-applied.tools}."
+    },
+    {
+      "optional": true,
+      "at": {
+        "seg": 1,
+        "edge": "s"
+      },
+      "end": {
+        "event": "first-card-shown",
+        "offset": -0.3
+      },
+      "t": "The agent calls: {agentTools}."
+    },
+    {
+      "optional": true,
+      "if": "panel-opened-by-agent",
+      "at": {
+        "event": "panel-opened-by-agent",
+        "offset": -0.3
+      },
+      "end": {
+        "event": "panel-opened-by-agent",
+        "offset": 4
+      },
+      "t": "The agent opens interaction #{@panel-opened-by-agent.interactionId} in the Training detail panel (open_interaction)."
+    },
+    {
+      "at": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-agent"
+        },
+        "offset": -0.2
+      },
+      "end": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-agent"
+        },
+        "offset": 3.5
+      },
+      "t": "After the agent: Judge: proposed {@tiles[phase=after-agent].proposed} / accepted {@tiles[phase=after-agent].accepted}."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "queue-shown",
+        "offset": -0.2
+      },
+      "end": {
+        "event": "queue-shown",
+        "offset": 4.5
+      },
+      "t": "The Judge queue: {@queue-shown.proposals.length} proposals from the agent, each with a rating and a rationale."
+    },
+    {
+      "each": "verdict-accepted",
+      "atOffset": -0.3,
+      "endOffset": 3,
+      "t": "The human accepts the proposal for interaction #{@this.interactionId}: rating {@this.rating}. {@this.reason|}"
+    },
+    {
+      "each": "verdict-rejected",
+      "atOffset": -0.3,
+      "endOffset": 3,
+      "t": "The human rejects the proposal for interaction #{@this.interactionId} (proposed rating {@this.rating}). {@this.reason|}"
+    },
+    {
+      "at": {
+        "event": "catch-score",
+        "offset": -0.2
+      },
+      "end": {
+        "event": "catch-score",
+        "offset": 5
+      },
+      "t": "The Judge caught {@catch-score.caught.length} of {@catch-score.wrongIds.length} deliberately wrong answers. Missed {@catch-score.missed.length}. False alarms {@catch-score.falseAlarms.length}."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-review"
+        },
+        "offset": -0.2
+      },
+      "end": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-review"
+        },
+        "offset": 3.5
+      },
+      "t": "After the human's review: Judge: proposed {@tiles[phase=after-review].proposed} / accepted {@tiles[phase=after-review].accepted}."
+    },
+    {
+      "optional": true,
+      "if": {
+        "event": "human-annotation-saved",
+        "where": {
+          "agentPresent": false
+        }
+      },
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}. It is saved with agentPresent: false."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "if": [
+        {
+          "event": "human-annotation-saved",
+          "where": {
+            "agentPresent": true,
+            "rating": {
+              "lt": 4
+            }
+          }
+        },
+        {
+          "event": "export-done",
+          "where": {
+            "kind": "sft"
+          }
+        }
+      ],
+      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out for two reasons: it is flagged agent-present, and an SFT export keeps only runs rated 4 or higher (src/training/annotations.ts:405)."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "if": [
+        {
+          "event": "human-annotation-saved",
+          "where": {
+            "agentPresent": true,
+            "rating": {
+              "lt": 4
+            }
+          }
+        }
+      ],
+      "ifNot": [
+        {
+          "event": "export-done",
+          "where": {
+            "kind": "sft"
+          }
+        }
+      ],
+      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out because it is flagged agent-present."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "if": [
+        {
+          "event": "human-annotation-saved",
+          "where": {
+            "agentPresent": true
+          }
+        }
+      ],
+      "ifNot": [
+        {
+          "event": "human-annotation-saved",
+          "where": {
+            "agentPresent": true,
+            "rating": {
+              "lt": 4
+            }
+          }
+        }
+      ],
+      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out because it is flagged agent-present."
+    },
+    {
+      "optional": true,
+      "at": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      },
+      "end": {
+        "event": "human-annotation-saved",
+        "offset": 3
+      },
+      "if": {
+        "event": "human-annotation-saved",
+        "where": {
+          "agentPresent": false
+        }
+      },
+      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: false."
+    },
+    {
+      "at": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": -7
+      },
+      "end": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": -0.3
+      },
+      "t": "Ratings and accepts made while an agent had access, or within 2 hours of it, are flagged and left out of the default export unless “Include ratings made while an agent had access” is ticked."
+    },
+    {
+      "at": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": -0.3
+      },
+      "end": {
+        "event": "export-done",
+        "where": {
+          "variant": "default"
+        },
+        "offset": 3.4
+      },
+      "t": "Default export ({@export-done[variant=default].kind}), includeJudge {@export-done[variant=default].includeJudge}, includeAgentPresent {@export-done[variant=default].includeAgentPresent}: {@export-done[variant=default].rows} rows. {@export-done[variant=default].provenance|}"
+    },
+    {
+      "at": {
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": -0.3
+      },
+      "end": {
+        "event": "beat-end",
+        "offset": -0.2
+      },
+      "t": "With both options ticked (includeJudge {@export-done[variant=with-judge].includeJudge}, includeAgentPresent {@export-done[variant=with-judge].includeAgentPresent}): {@export-done[variant=with-judge].rows} rows. Judge rows: {@export-done[variant=with-judge].judgeRows|not recorded in the file}. Human rows: {@export-done[variant=with-judge].humanRows|not recorded in the file}. Interactions in the file: {@export-done[variant=with-judge].interactionIdsInFile.length|not recorded in the file}. {@export-done[variant=with-judge].provenance|}"
+    }
+  ],
+  "perCard": {
+    "kinds": [
+      "change",
+      "read"
+    ],
+    "requireDecisionEvents": false,
+    "resolvedHold": 1.5,
+    "behindDialog": "A detail panel was in the way of the card for {tool}; the human closes it to reach the card.",
+    "propose": "The agent invokes {tool}; the dashboard raises a confirmation card.",
+    "shown": "Confirmation card for {tool}. Nothing has changed yet.",
+    "resolved": {
+      "approve": "The human approves {tool}. Outcome: {outcome}",
+      "reject": "The human rejects {tool}. Outcome: {outcome}",
+      "allow": "The human allows {tool}. Outcome: {outcome}"
+    },
+    "coShown": {
+      "x": 30,
+      "y": 20,
+      "txt": "The card is the server's text, not the agent's",
+      "sub": "{cardText}",
+      "src": "src/dashboard/webmcp-bridge.ts:214-215 · “the server computed in prepare … Never the agent's own prose”"
+    }
+  },
+  "holds": [
+    {
+      "event": "export-done",
+      "where": {
+        "variant": "default"
+      },
+      "minSeconds": 3
+    },
+    {
+      "event": "export-done",
+      "where": {
+        "variant": "with-judge"
+      },
+      "minSeconds": 3
+    }
+  ],
+  "cardStart": "footage",
+  "cardDetect": {
+    "fps": 10,
+    "lead": 4,
+    "fraction": 0.5,
+    "minMax": 5
+  }
+}
