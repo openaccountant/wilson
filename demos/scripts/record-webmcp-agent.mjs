@@ -11,6 +11,10 @@
 // → a human approves → the ledger updates → Revoke all → the same agent now
 // sees zero tools.
 //
+// NOTE: a client token carries write tools only while dashboard auth is on (P0b). With auth off the token is
+// read-only, so categorize_transaction cannot be granted to it: enable auth on the demo profile first (TODO: seed
+// an admin for the demo profile and log the page in as that user).
+//
 // Prereqs (same as record-talk-demos.mjs):
 //   bun run src/index.tsx --profile demo --dashboard      # :3141
 //   (cd src/dashboard/ui && bun run dev)                   # :5173
@@ -176,8 +180,11 @@ try {
 
   // 4. The human approves.
   await card.hover();
-  await sleep(600);
-  await card.click();
+  await sleep(900); // Approve enables after 0.8 s, and the server refuses an approval younger than 1 s
+  // Approve is hold-to-approve (0.6 s press-and-hold, real pointer events only): a plain click no longer approves.
+  await page.mouse.down();
+  await sleep(800);
+  await page.mouse.up();
   const code = await agent.done;
   if (code !== 0) throw new Error(`agent exited ${code}`);
   await sleep(1200);

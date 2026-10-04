@@ -136,7 +136,7 @@ describe('parseLocalHandoff: reject (dropped silently, never throws)', () => {
     ['mutating MCP tool', validHandoff({ steps: [{ tool: 'categorize_transaction' as never, args: { id: 1, category: 'x' }, ok: true, summary: '' }] })],
     ['bad arg type', validHandoff({ steps: [{ tool: 'transaction_search', args: { query: 42 }, ok: true, summary: '' }] })],
     ['bad enum arg', validHandoff({ steps: [{ tool: 'spending_summary', args: { period: 'week' }, ok: true, summary: '' }] })],
-    ['unknown arg key', validHandoff({ steps: [{ tool: 'transaction_search', args: { query: 'x', limit: 5 }, ok: true, summary: '' }] })],
+    ['unknown arg key', validHandoff({ steps: [{ tool: 'transaction_search', args: { query: 'x', bogus: 5 }, ok: true, summary: '' }] })],
     ['missing required arg', validHandoff({ steps: [{ tool: 'net_worth', args: {}, ok: true, summary: '' }] })],
     ['args not an object', validHandoff({ steps: [{ tool: 'transaction_search', args: ['x'] as never, ok: true, summary: '' }] })],
     [
@@ -420,8 +420,10 @@ describe('injection: untrusted handoff content cannot forge prompt structure', (
       reason: 'ungrounded',
       mirror: { syncedAt: '2026-07-15T12:00:00.000Z' },
       steps: [
-        { tool: 'transaction_search', args: { query: evil.slice(0, 900) }, ok: true, summary: evil.slice(0, 1200) },
-        { tool: 'forecast', args: { whatIf: [{ type: 'drop_recurring', description: evil.slice(0, 500) }] }, ok: true, summary: '' },
+        // Args stay within the catalog's string limits (query 200, what-if description 60), or the step is dropped as
+        // invalid before anything renders; the summary, notes, turns and server re-run carry the full payload.
+        { tool: 'transaction_search', args: { query: evil.slice(0, 200) }, ok: true, summary: evil.slice(0, 1200) },
+        { tool: 'forecast', args: { whatIf: [{ type: 'drop_recurring', description: evil.slice(0, 60) }] }, ok: true, summary: '' },
       ],
       proposal: { tool: 'other', userWords: evil.slice(0, 300) },
       localNote: evil.slice(0, 400),

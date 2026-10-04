@@ -10,6 +10,8 @@ import {
   createOperation,
   expirePendingOperationsBySource,
   getOperation,
+  isDashboardAuthEnabled,
+  isOperationExpired,
   markOperationStatus,
   type McpOperation,
 } from '../mcp/store.js';
@@ -187,6 +189,16 @@ export function getPendingChatOperation(
   db: Database,
   scope: { profile: string; userId: number | null; role: 'admin' | 'viewer' }
 ): McpOperation | null {
+  // `scope` names the profile the card belongs to. It is NOT an identity fallback: see below.
+  // A chat operation whose confirmation window closed can never be approved,
+  // so it must not stay in the queue (or leave the agent waiting) forever.
+  if (binding) {
+    const tracked = getOperation(db, binding.operationId);
+    if (tracked && (tracked.status === 'expired' || (tracked.status === 'pending' && isOperationExpired(tracked)))) {
+      expireChatOperation(db, tracked.id);
+    }
+  }
+
   const runner = agentRunner;
   const current = runner?.pendingApproval ?? null;
   const requestId = runner?.pendingApprovalId ?? null;
@@ -197,6 +209,16 @@ export function getPendingChatOperation(
   if (!runner || !current || !requestId) return null;
 
   if (!binding) {
+    // A chat mutation belongs to the user whose run asked for it. With auth on
+    // and no run owner there is nobody to attribute it to, and falling back to
+    // whoever is polling the queue would hand the card to the wrong account (an
+    // ownerless row is visible to nobody). Refuse to create it and tell the
+    // agent "no", so it does not wait for a card that will never appear. With
+    // auth off there is one implicit user, so the card is theirs.
+    if (!chatRunOwner && isDashboardAuthEnabled(db)) {
+      runner.respondToApproval('deny', requestId);
+      return null;
+    }
     const operation = createOperation(db, {
       source: 'chat',
       grantId: null,
@@ -209,8 +231,8 @@ export function getPendingChatOperation(
       profile: scope.profile,
       origin: CHAT_ORIGIN,
       sessionGeneration: CHAT_SESSION_GENERATION,
-      userId: chatRunOwner?.id ?? scope.userId,
-      role: chatRunOwner?.role ?? scope.role,
+      userId: chatRunOwner?.id ?? null,
+      role: chatRunOwner?.role ?? 'admin',
       // The request can wait as long as the chat deadline allows; the card
       // must not expire before the request it stands for.
       ttlMs: chatDeadlineMs,
@@ -339,6 +361,23 @@ const CHAT_BUSY_MESSAGE =
   'Another chat message is still running. Wait for it to finish (or answer its approval) and try again.';
 
 /**
+ * A chat operation's confirmation window closed unanswered: record it as
+ * expired, deny the agent's in-flight approval (it is told "no", exactly as if
+ * the user had rejected) and forget the request, so the card does not come
+ * back and the agent is not left blocked. Safe to call on an already-resolved id.
+ */
+export function expireChatOperation(db: Database, operationId: string): boolean {
+  const op = getOperation(db, operationId);
+  if (!op || op.source !== 'chat') return false;
+  if (op.status === 'pending') markOperationStatus(db, operationId, 'expired', { reason: 'card expired' });
+  const b = binding;
+  if (!b || b.operationId !== operationId) return false;
+  binding = null;
+  agentRunner?.respondToApproval('deny', b.requestId);
+  return true;
+}
+
+/**
  * Initialize a chat session for the dashboard.
  * Reuses the same agent runner as headless mode.
  */
@@ -455,6 +494,8 @@ export async function handleChatMessage(
   ).finally(() => {
     if (activeChatRun !== settled) return; // the session was replaced meanwhile
     activeChatRun = null;
+    // The owner applies only to the run it started (held until the run settles, which can outlast the
+    // request after the deadline); never leave it behind for the next caller.
     chatRunOwner = null;
     // The run is over: no card of it may stay approvable.
     if (runner === agentRunner) retireBinding(chatDb, 'run ended');

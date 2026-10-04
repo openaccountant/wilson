@@ -325,16 +325,71 @@ export interface InteractionRow {
   duration_ms: number;
   status: string;
   created_at: string;
+  /** The current human rating (one row per interaction; older versions are history). */
   rating: number | null;
   preference: string | null;
+  /** `dashboard_agent_present` when the current human label was made while an agent had live access. */
+  annotation_via?: string | null;
+  /** The newest judge row still in play, or null. */
+  judge_status?: 'proposed' | 'accepted' | 'rejected' | null;
+}
+
+/** A judge's proposal as `GET /api/judgements` and the interaction detail return it. */
+export interface JudgementRow {
+  id: number;
+  interaction_id: number;
+  rating: number | null;
+  preference: string | null;
+  tags: string[];
+  /** Agent-written. Render as plain text with links removed. */
+  rationale: string | null;
+  criteria: Record<string, number> | null;
+  /** Declared by the agent: cannot be verified. */
+  judge_model: string | null;
+  rubric_version: string | null;
+  created_via: string;
+  version: number;
+  status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+  annotated_at: string;
+  reviewed_at: string | null;
+  /** A person reviewed it while an agent had live access. */
+  review_agent_present?: boolean;
+  /** Present in the queue only: the current human rating for the same interaction. */
+  human_rating?: number | null;
+}
+
+export interface JudgementList {
+  judgements: JudgementRow[];
+  total: number;
+  nextCursor?: string;
+  agreement: { n: number; within1Pct: number | null };
+}
+
+/** One version of a human annotation, from the interaction detail's `history`. */
+export interface AnnotationVersion {
+  id: number;
+  rating: number | null;
+  preference: string | null;
+  pair_id: string | null;
+  notes: string | null;
+  version: number;
+  status: string;
+  created_via: string;
+  annotated_at: string;
 }
 
 export interface AnnotationStats {
   total: number;
   annotated: number;
   ratingCounts: { rating: number; count: number }[];
+  /** Complete DPO pairs (both sides qualify), as the export counts them. */
   dpoPairs: number;
+  /** Runs, i.e. SFT lines the default export emits. */
   sftReady: number;
+  judge?: { proposed: number; accepted: number; rejected: number };
+  agreement?: { n: number; within1Pct: number | null };
+  /** Runs and pairs the default export leaves out because their prompt carries an on-device handoff block. */
+  handoffExcluded?: { sft: number; dpo: number };
 }
 
 // Matches GET /api/net-worth/trend response (NetWorthTrendPoint in src/db/net-worth-queries.ts)
@@ -343,6 +398,21 @@ export interface NetWorthTrendPoint {
   totalAssets: number;
   totalLiabilities: number;
   netWorth: number;
+}
+
+/** A row of `GET /api/categories` (the categories table, raw). */
+export interface CategoryRow {
+  id: number;
+  name: string;
+  is_system: number;
+  sort_order: number;
+}
+
+/** A row of `GET /api/budgets/limits` (the budgets table, raw). */
+export interface BudgetLimitRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
 }
 
 export interface DateRange {

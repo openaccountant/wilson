@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { Header } from '@/components/Header';
-import { TabBar, type TabId } from '@/components/TabBar';
+import { TabBar } from '@/components/TabBar';
+import { TAB_IDS, type TabId } from '@webmcp-session';
 import { AppContext, type AppState } from '@/state';
 import { useDateRange } from '@/hooks/useDateRange';
 import { dropUnknownProfileIds, navigateToTab, useUrlState } from '@/hooks/useUrlState';
@@ -9,6 +10,7 @@ import type { UrlTab } from '@/lib/urlState';
 import { useApi } from '@/hooks/useApi';
 import { useMirrorSync } from '@/hooks/useMirrorSync';
 import { primeCategoryPalette } from '@/charts/palette';
+import { WebMcpProvider } from '@/agent/WebMcpProvider';
 import type { Account, SpendingSummaryItem, Entity } from '@/types';
 import { OverviewTab } from '@/tabs/OverviewTab';
 import { TransactionsTab } from '@/tabs/TransactionsTab';
@@ -21,9 +23,9 @@ import { GoalsTab } from '@/tabs/GoalsTab';
 import { ForecastTab } from '@/tabs/ForecastTab';
 import { SettingsTab } from '@/tabs/SettingsTab';
 
-// lib/urlState.ts keeps its own tab list (it must stay import-free for bun
-// tests); fail the build if it drifts from the TabBar.
-type SameTabs = [TabId] extends [UrlTab] ? ([UrlTab] extends [TabId] ? true : false) : false;
+// lib/urlState.ts parses the tab out of the URL hash from the same TAB_IDS;
+// fail the build if its tab type ever drifts from the TabBar's.
+type SameTabs = [(typeof TAB_IDS)[number]] extends [UrlTab] ? ([UrlTab] extends [TabId] ? true : false) : false;
 const TABS_IN_SYNC: SameTabs = true;
 void TABS_IN_SYNC;
 
@@ -121,9 +123,11 @@ export function App() {
         onSelectPreset={selectPreset}
       />
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
-      <main className="flex-1 overflow-hidden min-h-0 flex flex-col">
-        <ActiveTabComponent />
-      </main>
+      <WebMcpProvider activeTab={activeTab} onNavigate={handleTabChange}>
+        <main className="flex-1 overflow-hidden min-h-0 flex flex-col">
+          <ActiveTabComponent />
+        </main>
+      </WebMcpProvider>
       </div>
     </AppContext.Provider>
   );

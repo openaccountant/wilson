@@ -1,5 +1,6 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { createTestDb } from './helpers.js';
+import { bfetch } from './mcp-helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth } from '../dashboard/auth.js';
@@ -63,11 +64,12 @@ describe('dashboard server', () => {
       expect(res.status).toBe(404);
     });
 
-    test('OPTIONS returns 204 with CORS headers', async () => {
+    test('OPTIONS returns 204 with CORS headers, reflecting the dashboard\'s own origin (never a wildcard)', async () => {
       const { base } = await start();
-      const res = await fetch(base + '/api/summary', { method: 'OPTIONS' });
+      const origin = new URL(base).origin;
+      const res = await fetch(base + '/api/summary', { method: 'OPTIONS', headers: { Origin: origin } });
       expect(res.status).toBe(204);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(origin);
       expect(res.headers.get('Access-Control-Allow-Methods')).toContain('GET');
     });
   });
@@ -421,10 +423,12 @@ describe('dashboard server', () => {
       expect(res.status).toBe(403);
     });
 
-    test('token via query param works', async () => {
+    test('token via query param works for export downloads only', async () => {
       const { base, viewerToken } = await setupRbac();
+      const download = await fetch(base + `/api/export/csv?token=${viewerToken}`);
+      expect(download.status).toBe(200);
       const res = await fetch(base + `/api/summary?token=${viewerToken}`);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
     });
 
     test('public auth routes accessible without token when auth enabled', async () => {
@@ -1086,13 +1090,28 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/interactions/:id/annotate creates annotation', async () => {
-      const { base } = await start();
-      const res = await fetch(base + '/api/interactions/1/annotate', {
+      const { base, db } = await start();
+      const id = (db.prepare(`
+        INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+        VALUES ('r1', 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
+      `).run() as { lastInsertRowid: number }).lastInsertRowid;
+      const res = await bfetch(base + `/api/interactions/${id}/annotate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating: 5, notes: 'Great' }),
       });
       expect(res.status).toBe(200);
+      expect((await res.json()).annotation.rating).toBe(5);
+    });
+
+    test('POST /api/interactions/:id/annotate is a 404 for a missing interaction, not a 200 {success:false}', async () => {
+      const { base } = await start();
+      const res = await bfetch(base + '/api/interactions/99999/annotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 5 }),
+      });
+      expect(res.status).toBe(404);
     });
 
     test('GET /api/runs/:id returns data', async () => {

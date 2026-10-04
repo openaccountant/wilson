@@ -127,9 +127,10 @@ describe('POST /api/chat localHandoff', () => {
     const block = captured[0].contextBlock!;
     expect(block.startsWith(HANDOFF_BLOCK_HEADER)).toBe(true);
     expect(block.endsWith(`${HANDOFF_BLOCK_END}\n\n`)).toBe(true);
-    // Re-run against the seeded DB: the Grocery Store rows are -85.50 and -92.00.
+    // Re-run against the seeded DB: the Grocery Store rows are -85.50 and -92.00 (the catalog's compact,
+    // sanitized transaction_search rows).
     expect(block).toContain('Grocery Store');
-    expect(block).toContain('-$85.50');
+    expect(block).toContain('amount=-85.5');
     expect(block).not.toContain(FORGED);
     expect(captured[0].query).toBe('groceries this month?');
   });

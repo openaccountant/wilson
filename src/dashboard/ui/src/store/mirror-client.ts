@@ -10,6 +10,7 @@
 
 import MirrorWorkerCtor from './mirror-worker.ts?worker&inline';
 import { SYNC_PULL_LIMIT, collectSyncPayload, subagentEnabledFrom, type SyncApplier } from './sync-engine.js';
+import { isMirrorExcluded } from './mirror-reads.js';
 import type {
   MirrorState,
   MirrorStatus,
@@ -178,7 +179,8 @@ async function ensureReady(): Promise<MirrorState> {
 // ../api.ts: a sync pull that fell back to mirror data would re-apply the
 // mirror to itself and could report "online" while the server is down.
 async function fetchJson<T>(path: string): Promise<T> {
-  const baseUrl = import.meta.env.DEV ? 'http://localhost:3141' : window.location.origin;
+  // Relative in dev, through vite's proxy, so the request is same-origin (see src/api.ts getBaseUrl).
+  const baseUrl = import.meta.env.DEV ? '' : window.location.origin;
   const headers: Record<string, string> = {};
   const token = localStorage.getItem('wilson_auth_token');
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -296,6 +298,7 @@ export function syncMirror(): Promise<void> {
  * when the mirror is unavailable / never seeded / does not handle the path.
  */
 export async function tryMirror(path: string): Promise<unknown | null> {
+  if (isMirrorExcluded(path)) return null; // live agent-access state is never served stale
   const current = await ensureReady();
   if (!current.available || !current.seeded) return null;
   try {

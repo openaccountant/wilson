@@ -1,5 +1,6 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { createHash } from 'crypto';
+import { z } from 'zod';
 import {
   importStep,
   embeddingStep,
@@ -35,6 +36,7 @@ import {
   checkExternalId,
   recordImport,
   resolveCategory,
+  setBudget,
   type TransactionFilters,
   type TransactionUpdate,
   type TransactionInsert,
@@ -66,7 +68,7 @@ import {
   getBudgetCountdown,
 } from '../db/daily-queries.js';
 import { checkAlerts, groupedAlertMoney } from '../alerts/engine.js';
-import { getAllGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
+import { getActiveGoals, getAllGoals, getGoalById, getGoalSnapshots, resolveGoalTarget, updateGoalStatus, upsertGoal, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import {
   countMissingTransactionTargets,
@@ -78,6 +80,16 @@ import { getLocalChatModelConfig } from '../model/local-chat.js';
 import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
+import {
+  agreement as judgeAgreement,
+  annotationHistory,
+  currentHuman,
+  listJudgements,
+  trainingReadiness,
+  writeHumanVersion,
+  type AnnotationRow,
+} from '../training/annotations.js';
+import { hasHandoffBlock } from '../training/handoff-block.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
 import {
@@ -341,6 +353,75 @@ export function apiCorrectReview(db: Database, reviewId: number, body: { categor
   return { success: true, transactionId: result.transactionId, category: result.category };
 }
 
+// ── Budget and goal edits (the declarative forms' human path) ───────────────
+
+export type WriteResult<T extends object> = ({ success: true } & T) | { success: false; error: string; status: number };
+
+function zodMessage(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 3)
+    .map((issue) => (issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message))
+    .join('; ');
+}
+
+function isRealCalendarDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+const BudgetBody = z.object({ monthlyLimit: z.number().min(0).max(10_000_000) }).strict();
+
+/**
+ * PUT /api/budgets/:category {monthlyLimit} (admin-only route). The category is a name in the URL, resolved
+ * the way the other category-taking routes do (the categories table, then the static list).
+ */
+export function apiSetBudget(db: Database, categoryParam: string, body: unknown): WriteResult<{ category: string; monthlyLimit: number }> {
+  const parsed = BudgetBody.safeParse(body);
+  if (!parsed.success) return { success: false, error: zodMessage(parsed.error), status: 400 };
+  const raw = categoryParam.trim();
+  const category = resolveCategory(db, raw) ?? CATEGORIES.find((c) => c.toLowerCase() === raw.toLowerCase()) ?? null;
+  if (!category) return { success: false, error: `unknown category "${raw.slice(0, 40)}"`, status: 404 };
+  // Keep an existing row's spelling: budgets.category is unique case-sensitively, but lookups elsewhere are not.
+  const existing = db.prepare('SELECT category FROM budgets WHERE LOWER(category) = LOWER(@category)').get({ category }) as { category: string } | undefined;
+  setBudget(db, existing?.category ?? category, parsed.data.monthlyLimit);
+  return { success: true, category: existing?.category ?? category, monthlyLimit: parsed.data.monthlyLimit };
+}
+
+const GoalPatchBody = z
+  .object({
+    targetAmount: z.number().min(0).max(1e9).optional(),
+    targetDate: z.string().refine(isRealCalendarDate, 'must be a real date in YYYY-MM-DD format').optional(),
+    status: z.enum(['active', 'paused', 'completed', 'abandoned']).optional(),
+  })
+  .strict()
+  .refine((b) => b.targetAmount !== undefined || b.targetDate !== undefined || b.status !== undefined, {
+    message: 'give at least one of targetAmount, targetDate or status',
+  });
+
+/** PATCH /api/goals/:id {targetAmount?, targetDate?, status?} (admin-only route). */
+export function apiUpdateGoal(db: Database, id: number, body: unknown): WriteResult<{ id: number }> {
+  const parsed = GoalPatchBody.safeParse(body);
+  if (!parsed.success) return { success: false, error: zodMessage(parsed.error), status: 400 };
+  const goal = getGoalById(db, id);
+  if (!goal) return { success: false, error: `goal #${id} not found`, status: 404 };
+  const { targetAmount, targetDate, status } = parsed.data;
+  if (targetAmount !== undefined && goal.goal_type !== 'financial') {
+    return { success: false, error: `goal #${id} is a behavioral goal and has no target amount`, status: 400 };
+  }
+  db.transaction(() => {
+    if (targetAmount !== undefined || targetDate !== undefined) {
+      upsertGoal(db, {
+        id,
+        ...(targetAmount !== undefined ? { targetAmount } : {}),
+        ...(targetDate !== undefined ? { targetDate } : {}),
+      } as unknown as Parameters<typeof upsertGoal>[1]);
+    }
+    if (status !== undefined) updateGoalStatus(db, id, status);
+  })();
+  return { success: true, id };
+}
+
 // ── Semantic search ─────────────────────────────────────────────────────────
 
 /** Injectable embed seam: same shape as embedTexts (tests pass a fake; production uses the local engine). */
@@ -566,9 +647,16 @@ export function apiSpendingByInstitution(db: Database, params: URLSearchParams) 
 
 // ── Goals ────────────────────────────────────────────────────────────────────
 
-export function apiGoals(db: Database) {
+/**
+ * GET /api/goals: goals of every status (the Goals tab counts completed ones, and its edit form needs paused,
+ * completed and abandoned ones too, so a goal that was paused can be picked again). `?status=active` lists
+ * active goals only; `?status=all` is the explicit form of the default.
+ */
+export function apiGoals(db: Database, params?: URLSearchParams) {
   try {
-    return getAllGoals(db).map((g: GoalRow) => {
+    // Every status by default (the Goals tab counts completed goals); `?status=active` narrows to active ones.
+    const goals = params?.get('status') === 'active' ? getActiveGoals(db) : getAllGoals(db);
+    return goals.map((g: GoalRow) => {
       if (g.target_percent != null) {
         const resolved = resolveGoalTarget(db, g);
         return {
@@ -924,14 +1012,20 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   const model = params.get('model');
   const rating = params.get('rating');
   const annotated = params.get('annotated');
+  const judged = params.get('judged');
 
+  // `a` is the CURRENT human row (one per interaction), so versioned annotations never multiply the list.
+  // `judge_status` is the newest judge row that is still in play (superseded ones are history).
   let sql = `
     SELECT i.id, i.run_id, i.sequence_num, i.call_type, i.model, i.provider,
       i.input_tokens, i.output_tokens, i.total_tokens, i.duration_ms,
       i.status, i.created_at,
-      a.rating, a.preference
+      a.rating, a.preference, a.created_via AS annotation_via,
+      (SELECT j.status FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status != 'superseded'
+         ORDER BY j.id DESC LIMIT 1) AS judge_status
     FROM llm_interactions i
-    LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+    LEFT JOIN v_current_human_annotations a ON a.interaction_id = i.id
   `;
   const conditions: string[] = [];
   const sqlParams: Record<string, unknown> = {};
@@ -941,6 +1035,17 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   if (rating) { conditions.push('a.rating = @rating'); sqlParams.rating = parseInt(rating, 10); }
   if (annotated === 'true') { conditions.push('a.id IS NOT NULL'); }
   if (annotated === 'false') { conditions.push('a.id IS NULL'); }
+  if (judged === 'proposed') {
+    conditions.push(`(SELECT j.status FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status != 'superseded'
+         ORDER BY j.id DESC LIMIT 1) = 'proposed'`);
+  }
+  // "accepted" is ANY accepted judge row, not just the newest one in play: an accepted row can sit behind a newer
+  // proposal, and it stays exportable (with the opt-in) and revocable, so it must stay findable.
+  if (judged === 'accepted') {
+    conditions.push(`EXISTS (SELECT 1 FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status = 'accepted')`);
+  }
 
   if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY i.id DESC LIMIT @limit OFFSET @offset';
@@ -954,6 +1059,33 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   }
 }
 
+/** A judge row as the human's dashboard shows it: JSON columns parsed, nothing else changed. */
+export function apiJudgementView(row: AnnotationRow & { human_rating?: number | null }) {
+  const parse = (json: string | null): unknown => {
+    if (json === null) return null;
+    try { return JSON.parse(json); } catch { return null; }
+  };
+  return {
+    id: row.id,
+    interaction_id: row.interaction_id,
+    rating: row.rating,
+    preference: row.preference,
+    tags: parse(row.tags) ?? [],
+    rationale: row.rationale,
+    criteria: parse(row.criteria_json),
+    judge_model: row.judge_model,
+    rubric_version: row.rubric_version,
+    created_via: row.created_via,
+    version: row.version,
+    status: row.status,
+    annotated_at: row.annotated_at,
+    reviewed_at: row.reviewed_at,
+    // True when a person reviewed it while an agent had live access: the opt-in export treats it like an agent-present rating.
+    review_agent_present: row.review_agent_present === 1,
+    ...(row.human_rating !== undefined ? { human_rating: row.human_rating } : {}),
+  };
+}
+
 export function apiInteractionDetail(db: Database, id: number) {
   try {
     const interaction = db.prepare(`
@@ -965,11 +1097,21 @@ export function apiInteractionDetail(db: Database, id: number) {
       SELECT * FROM llm_tool_results WHERE interaction_id = @id ORDER BY id
     `).all({ id });
 
-    const annotations = db.prepare(`
-      SELECT * FROM interaction_annotations WHERE interaction_id = @id ORDER BY id DESC LIMIT 1
-    `).all({ id });
+    const annotation = currentHuman(db, id);
+    const all = annotationHistory(db, id);
+    const history = all.filter((r) => r.source === 'human');
+    const judgements = all.filter((r) => r.source === 'judge').map(apiJudgementView);
 
-    return { ...interaction, toolResults, annotations };
+    return {
+      ...interaction,
+      toolResults,
+      // `annotations` keeps the shape the legacy dashboard page reads: the current human row, in an array.
+      annotations: annotation ? [annotation] : [],
+      annotation,
+      history,
+      judgements,
+      handoff: hasHandoffBlock(interaction.user_prompt as string | null),
+    };
   } catch {
     return null;
   }
@@ -980,7 +1122,7 @@ export function apiRunInteractions(db: Database, runId: string) {
     return db.prepare(`
       SELECT i.*, a.rating, a.preference, a.pair_id
       FROM llm_interactions i
-      LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+      LEFT JOIN v_current_human_annotations a ON a.interaction_id = i.id
       WHERE i.run_id = @runId
       ORDER BY i.sequence_num
     `).all({ runId });
@@ -989,31 +1131,65 @@ export function apiRunInteractions(db: Database, runId: string) {
   }
 }
 
-export function apiAnnotateInteraction(db: Database, id: number, annotation: {
-  rating?: number;
-  preference?: 'chosen' | 'rejected' | 'neutral';
-  pairId?: string;
-  tags?: string[];
-  notes?: string;
-}) {
-  try {
-    // Upsert: delete existing annotation for this interaction, then insert
-    db.prepare('DELETE FROM interaction_annotations WHERE interaction_id = @id').run({ id });
-    db.prepare(`
-      INSERT INTO interaction_annotations (interaction_id, rating, preference, pair_id, tags, notes)
-      VALUES (@interaction_id, @rating, @preference, @pair_id, @tags, @notes)
-    `).run({
-      interaction_id: id,
-      rating: annotation.rating ?? null,
-      preference: annotation.preference ?? null,
-      pair_id: annotation.pairId ?? null,
-      tags: annotation.tags ? JSON.stringify(annotation.tags) : null,
-      notes: annotation.notes ?? null,
-    });
-    return { success: true, id };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+const AnnotateBody = z
+  .object({
+    rating: z.number().int().min(1).max(5).nullable().optional(),
+    preference: z.enum(['chosen', 'rejected', 'neutral']).nullable().optional(),
+    // Kept for the existing free-text pair input; a later phase replaces it with server-generated pairs.
+    pairId: z.string().max(64).nullable().optional(),
+    tags: z.array(z.string().min(1).max(32)).max(10).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, 'Provide at least one of rating, preference, pairId, tags, notes');
+
+export type AnnotateResult =
+  | { ok: true; annotation: AnnotationRow }
+  | { ok: false; status: 400 | 404 | 500; error: { code: 'invalid_args' | 'not_found' | 'internal'; message: string } };
+
+/**
+ * Write a human annotation as a new version (the previous current row is superseded, never deleted or edited;
+ * fields you do not send are kept, `null` clears one). A bad body is a 400 and an unknown interaction a 404:
+ * nothing answers `200 {success:false}` any more. `agentPresent` is computed by the route on the server (a live
+ * agent grant or pending operation for this user); the label then stays out of the default training export.
+ */
+export function apiAnnotateInteraction(db: Database, id: number, body: unknown, ctx: { agentPresent?: boolean } = {}): AnnotateResult {
+  const parsed = AnnotateBody.safeParse(body);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .slice(0, 3)
+      .map((i) => (i.code === 'unrecognized_keys' ? `unknown field ${(i as { keys: string[] }).keys.map((k) => `"${k.slice(0, 30)}"`).join(', ')}` : `${i.path.join('.') || 'body'}: ${i.message}`))
+      .join('; ');
+    return { ok: false, status: 400, error: { code: 'invalid_args', message } };
   }
+  const exists = db.prepare('SELECT 1 AS ok FROM llm_interactions WHERE id = @id').get({ id });
+  if (!exists) return { ok: false, status: 404, error: { code: 'not_found', message: `Interaction #${id} not found.` } };
+  try {
+    const annotation = writeHumanVersion(db, id, parsed.data, { createdVia: ctx.agentPresent ? 'dashboard_agent_present' : 'dashboard' });
+    return { ok: true, annotation };
+  } catch (err) {
+    console.error('[annotate] failed to write a human annotation:', err);
+    return { ok: false, status: 500, error: { code: 'internal', message: 'Could not save the annotation.' } };
+  }
+}
+
+/** `GET /api/judgements?status=proposed&cursor&limit`: the human's queue. A cursor is just the next offset. */
+export function apiJudgements(db: Database, params: URLSearchParams) {
+  const status = params.get('status') ?? 'proposed';
+  if (status !== 'proposed' && status !== 'accepted' && status !== 'rejected') {
+    return { error: 'status must be proposed, accepted or rejected' } as const;
+  }
+  const limit = Math.max(1, Math.min(50, parseInt(params.get('limit') ?? '50', 10) || 50));
+  const cursor = parseInt(params.get('cursor') ?? '0', 10);
+  const offset = Number.isInteger(cursor) && cursor > 0 ? cursor : 0;
+  const { rows, total } = listJudgements(db, { status, offset, limit });
+  const next = offset + rows.length;
+  return {
+    judgements: rows.map(apiJudgementView),
+    total,
+    ...(next < total ? { nextCursor: String(next) } : {}),
+    agreement: judgeAgreement(db),
+  };
 }
 
 // ── Daily / Gamification ─────────────────────────────────────────────────────
@@ -1121,22 +1297,32 @@ export function apiDeleteEntity(db: Database, id: number) {
 
 export function apiAnnotationStats(db: Database) {
   try {
-    const total = (db.prepare('SELECT COUNT(*) AS c FROM llm_interactions').get() as { c: number })?.c ?? 0;
-    const annotated = (db.prepare('SELECT COUNT(DISTINCT interaction_id) AS c FROM interaction_annotations').get() as { c: number })?.c ?? 0;
+    const readiness = trainingReadiness(db);
     const ratingCounts = db.prepare(`
-      SELECT rating, COUNT(*) AS count FROM interaction_annotations
+      SELECT rating, COUNT(*) AS count FROM v_current_human_annotations
       WHERE rating IS NOT NULL GROUP BY rating ORDER BY rating
     `).all() as { rating: number; count: number }[];
-    const dpoPairs = (db.prepare(`
-      SELECT COUNT(DISTINCT pair_id) AS c FROM interaction_annotations WHERE pair_id IS NOT NULL
-    `).get() as { c: number })?.c ?? 0;
-    const sftReady = (db.prepare(`
-      SELECT COUNT(*) AS c FROM interaction_annotations WHERE rating >= 4
-    `).get() as { c: number })?.c ?? 0;
-
-    return { total, annotated, ratingCounts, dpoPairs, sftReady };
+    return {
+      total: readiness.totalInteractions,
+      annotated: readiness.annotated,
+      ratingCounts,
+      dpoPairs: readiness.dpoPairs,
+      sftReady: readiness.sftReady,
+      judge: readiness.judge,
+      agreement: readiness.agreement,
+      handoffExcluded: readiness.handoffExcluded,
+    };
   } catch {
-    return { total: 0, annotated: 0, ratingCounts: [], dpoPairs: 0, sftReady: 0 };
+    return {
+      total: 0,
+      annotated: 0,
+      ratingCounts: [],
+      dpoPairs: 0,
+      sftReady: 0,
+      judge: { proposed: 0, accepted: 0, rejected: 0 },
+      agreement: { n: 0, within1Pct: null },
+      handoffExcluded: { sft: 0, dpo: 0 },
+    };
   }
 }
 

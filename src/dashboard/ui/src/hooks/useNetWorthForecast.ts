@@ -10,6 +10,8 @@ const SETTLE_MS = 250;
 
 export interface UseNetWorthForecast {
   forecast: NetWorthForecast | null; // last completed result of EITHER quality
+  /** The input the run behind `forecast` was posted with, so a caller can tell a result for the current input from a stale one. */
+  forecastInput: NetWorthSimInput | null;
   quality: ForecastQuality | null; // quality of `forecast`
   refining: boolean; // a 'final' run is in flight over a shown 'draft'
   progress: number; // 0..1 of the in-flight run
@@ -18,6 +20,13 @@ export interface UseNetWorthForecast {
   onInputChange(input: NetWorthSimInput): void;
   /** Call on pointerup / keyup / blur — escalates to 20,000 paths. */
   onInputSettled(input: NetWorthSimInput): void;
+}
+
+const REMEMBERED_RUNS = 8;
+
+function rememberRun(map: Map<number, NetWorthSimInput>, runId: number, input: NetWorthSimInput): void {
+  map.set(runId, input);
+  while (map.size > REMEMBERED_RUNS) map.delete(map.keys().next().value as number);
 }
 
 /**
@@ -45,8 +54,11 @@ export function useNetWorthForecast(): UseNetWorthForecast {
   const latestInputRef = useRef<NetWorthSimInput | null>(null);
   const newestRunIdRef = useRef(0);
   const finalRunIdRef = useRef<number | null>(null);
+  // runId -> the input it was posted with (a few recent runs), so each result can be matched to its input.
+  const inputsByRunRef = useRef(new Map<number, NetWorthSimInput>());
 
   const [forecast, setForecast] = useState<NetWorthForecast | null>(null);
+  const [forecastInput, setForecastInput] = useState<NetWorthSimInput | null>(null);
   const [quality, setQuality] = useState<ForecastQuality | null>(null);
   const [refining, setRefining] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -69,6 +81,7 @@ export function useNetWorthForecast(): UseNetWorthForecast {
           break;
         case 'result':
           setForecast(response.forecast);
+          setForecastInput(inputsByRunRef.current.get(response.runId) ?? null);
           setQuality(response.quality);
           setProgress(1);
           setError(null);
@@ -110,6 +123,7 @@ export function useNetWorthForecast(): UseNetWorthForecast {
     setRefining(false);
     setProgress(0);
     newestRunIdRef.current = client.request(input, 'draft');
+    rememberRun(inputsByRunRef.current, newestRunIdRef.current, input);
   }, []);
 
   const onInputSettled = useCallback((input: NetWorthSimInput) => {
@@ -130,6 +144,7 @@ export function useNetWorthForecast(): UseNetWorthForecast {
     const client = clientRef.current;
     if (!client) return;
     const id = client.request(input, 'final');
+    rememberRun(inputsByRunRef.current, id, input);
     newestRunIdRef.current = id;
     finalRunIdRef.current = id;
     setProgress(0);
@@ -157,5 +172,5 @@ export function useNetWorthForecast(): UseNetWorthForecast {
     [postDraft, onInputSettled],
   );
 
-  return { forecast, quality, refining, progress, error, onInputChange, onInputSettled };
+  return { forecast, forecastInput, quality, refining, progress, error, onInputChange, onInputSettled };
 }

@@ -6,13 +6,14 @@ import { createMirrorDb } from './mirror-helpers.js';
 import { mirrorExecuteRead } from '../dashboard/ui/src/store/mirror-tools.js';
 
 /**
- * Documented, intentional divergences between the server tools and the mirror
- * (spec §1.3 / Q7). The server `defineTool` validates args against the zod
- * schema but passes the ORIGINAL args through, so zod `.default()` values are
- * never applied and `spending_summary({})` reaches `getPeriodDates(undefined)`,
- * which throws. The mirror applies the schema defaults explicitly instead.
- * The server bug is out of scope for this branch (DECISIONS Q7); this test
- * pins it so a future fix shows up as a deliberate parity change.
+ * Documented divergences between the server tools and the mirror (spec §1.3 /
+ * Q7). The server `defineTool` validates args against the zod schema but passes
+ * the ORIGINAL args through, so zod `.default()` values are never applied. That
+ * used to make `spending_summary({})` and `profit_loss({})` throw; the WebMCP
+ * work moved both into shared compute helpers (computeSpendingSummary,
+ * computeProfitLoss) that default the period, so they now answer for the current
+ * period. What still differs: the server leaves `compareWithPrevious` off when it
+ * is omitted, while the mirror applies the schema default (on).
  */
 
 let fx: ParityFixture;
@@ -28,13 +29,18 @@ afterAll(() => {
   setSystemTime();
 });
 
-describe('known divergence: server defaults are not applied', () => {
-  test('server spending_summary({}) throws', async () => {
-    await expect((spendingSummaryTool.func as (a: unknown) => Promise<string>)({})).rejects.toThrow();
+describe('known divergence: server schema defaults are not applied', () => {
+  test('server spending_summary({}) answers for the current month, without the previous period', async () => {
+    const empty = JSON.parse(await (spendingSummaryTool.func as (a: unknown) => Promise<string>)({})).data;
+    const month = JSON.parse(await spendingSummaryTool.func({ period: 'month', compareWithPrevious: false })).data;
+    expect(empty).toEqual(month);
+    expect(empty.previousPeriod).toBeUndefined();
   });
 
-  test('server profit_loss({}) throws', async () => {
-    await expect((profitLossTool.func as (a: unknown) => Promise<string>)({})).rejects.toThrow();
+  test('server profit_loss({}) answers for the current month', async () => {
+    const empty = JSON.parse(await (profitLossTool.func as (a: unknown) => Promise<string>)({})).data;
+    const month = JSON.parse(await profitLossTool.func({ period: 'month', offset: 0 })).data;
+    expect(empty).toEqual(month);
   });
 
   test('mirror spending_summary({}) gets explicit defaults (month, compare on)', async () => {

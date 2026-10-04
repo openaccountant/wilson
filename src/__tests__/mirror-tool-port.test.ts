@@ -188,7 +188,7 @@ describe('capability boundary', () => {
     ['unknown tool', { tool: 'tax_flag', args: { action: 'summary' } }],
     ['mutating tool', { tool: 'categorize_transaction', args: { id: 1, category: 'Dining' } }],
     ['prototype name', { tool: '__proto__', args: {} }],
-    ['unknown arg key', { tool: 'transaction_search', args: { query: 'x', limit: 5 } }],
+    ['unknown arg key', { tool: 'transaction_search', args: { query: 'x', bogus: 5 } }],
     ['wrong arg type', { tool: 'transaction_search', args: { query: 5 } }],
     ['bad enum', { tool: 'spending_summary', args: { period: 'week' } }],
     ['bad number', { tool: 'profit_loss', args: { offset: '1' } }],

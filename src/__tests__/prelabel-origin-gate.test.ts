@@ -73,9 +73,9 @@ describe('prelabel origin gate (HTTP)', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  test('other (non-prelabel) routes keep their existing wildcard CORS', async () => {
+  test('other (non-prelabel) routes never grant a foreign origin either (no wildcard CORS anywhere)', async () => {
     const res = await fetch(`${base}/api/summary`, { headers: { Origin: 'http://evil.example' } });
-    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
   // ── Read gate (/gold) ───────────────────────────────────────────────────
@@ -420,17 +420,27 @@ describe.skipIf(lanIp === null)('prelabel over a real socket from a non-loopback
   test('connecting via the machine LAN address, forging Host/Origin/Sec-Fetch-Site, is refused; loopback still works', async () => {
     const port = server.port;
     const forged = { Host: `localhost:${port}`, Origin: `http://localhost:${port}`, 'Sec-Fetch-Site': 'same-origin' };
+    // The dashboard binds to loopback by default, so a LAN peer usually cannot even connect; that is a refusal too.
+    // When it can connect (a LAN bind), each prelabel route still answers 403 loopback_required.
+    const viaLan = async (path: string, init: RequestInit = {}): Promise<Response | null> => {
+      try {
+        return await fetch(`http://${lanIp}:${port}${path}`, init);
+      } catch {
+        return null;
+      }
+    };
     for (const path of ['/api/prelabel/config', '/api/prelabel/gold']) {
-      const res = await fetch(`http://${lanIp}:${port}${path}`, { headers: forged });
+      const res = await viaLan(path, { headers: forged });
+      if (res === null) continue;
       expect(res.status).toBe(403);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe('loopback_required');
     }
-    const put = await fetch(`http://${lanIp}:${port}/api/prelabel/settings`, {
+    const put = await viaLan('/api/prelabel/settings', {
       method: 'PUT',
       headers: { ...forged, 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: true }),
     });
-    expect(put.status).toBe(403);
+    if (put !== null) expect(put.status).toBe(403);
     expect(existsSync(join(dir, 'settings.json'))).toBe(false);
 
     const ok = await fetch(`http://localhost:${port}/api/prelabel/gold`, { headers: { 'Sec-Fetch-Site': 'same-origin' } });

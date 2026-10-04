@@ -13,7 +13,8 @@ describe('read-tool-schemas snapshot', () => {
   test.each(['transaction_search', 'spending_summary', 'profit_loss', 'net_worth', 'forecast'] as const)(
     '%s equals jsonSchemaFor',
     (name) => {
-      expect(READ_TOOL_SCHEMAS[name] as unknown).toEqual(jsonSchemaFor(name));
+      // As plain JSON: zod attaches a non-JSON `~standard` member to the schema object it returns.
+      expect(READ_TOOL_SCHEMAS[name] as unknown).toEqual(JSON.parse(JSON.stringify(jsonSchemaFor(name))));
     }
   );
 
@@ -57,7 +58,7 @@ describe('validateReadToolArgs', () => {
   });
 
   test('rejects unknown keys', () => {
-    bad('transaction_search', { query: 'x', limit: 5 });
+    bad('transaction_search', { query: 'x', bogus: 5 });
     bad('spending_summary', { period: 'month', extra: 1 });
     bad('forecast', { whatIf: [{ type: 'drop_recurring', bogus: 1 }] });
   });

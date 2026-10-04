@@ -74,6 +74,9 @@ describe('#156: a viewer cannot approve chat operations', () => {
       method,
       headers: {
         'Content-Type': 'application/json',
+        // What the dashboard page sends: approving needs this browser proof (origin-gate.ts requireBrowserProof).
+        Origin: base,
+        'Sec-Fetch-Site': 'same-origin',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -116,24 +119,20 @@ describe('#156: a viewer cannot approve chat operations', () => {
     closeAll();
   });
 
-  test('issue repro: a viewer cannot approve a chat card (403) and nothing is written', async () => {
-    // A chat card whose run has no known owner (an in-process caller) is
-    // stamped with whoever polls first — here the viewer, so it is visible to them.
+  test('issue repro: an unowned chat card is never handed to the viewer who polls first; the write is denied', async () => {
+    // A run with no known owner (an in-process caller) while auth is on: its card would belong to nobody, and
+    // stamping it with whoever polls first would hand it to the viewer. Instead no card is raised and the agent is
+    // told "no" at once (the WebMCP rule; with auth off the single implicit user owns it).
     script = [{ id: 'tc1', name: 'delete_transaction', args: { id: restaurantId } }];
     const run = handleChatMessage('delete the restaurant charge');
-    const card = await waitForAsync(async () => (await chatOps(viewerToken))[0]);
-    expect(card.tool_name).toBe('delete_transaction');
-
-    const res = await call(`/api/mcp/operations/${card.id}/approve`, viewerToken, 'POST');
-    expect(res.status).toBe(403);
+    for (let i = 0; i < 20 && isChatRunActive(); i++) {
+      expect(await chatOps(viewerToken)).toEqual([]);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const { answer } = await run;
+    expect(answer).toContain('delete_transaction');
     expect(exists(restaurantId)).toBe(true);
-    // The request is still waiting — the refused approve did not answer it.
-    expect(getPendingChatApproval()?.tool).toBe('delete_transaction');
-
-    // Rejecting is always safe; it ends the run with nothing written.
-    expect((await call(`/api/mcp/operations/${card.id}/reject`, viewerToken, 'POST')).status).toBe(200);
-    await run;
-    expect(exists(restaurantId)).toBe(true);
+    expect((db.prepare("SELECT COUNT(*) AS n FROM mcp_operations WHERE source = 'chat'").get() as { n: number }).n).toBe(0);
   });
 
   test('a viewer\'s chat denies mutating tools at once — no card, a clear answer, nothing written', async () => {

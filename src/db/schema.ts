@@ -554,6 +554,190 @@ export const MCP_OPERATION_SUMMARY_COLUMN = `
 ALTER TABLE mcp_operations ADD COLUMN summary TEXT;
 `;
 
+// ── MCP Audit Log (migration v28) ───────────────────────────────────────────
+// One row per agent tool call (see src/mcp/audit.ts), so a user can find out
+// what an agent read or changed. Reads are audited, not just mutations.
+// "Noise" decisions (rate_limited, invalid_args, denied_*) are folded into one
+// row per principal, tool, decision and minute (the partial unique index below
+// is the upsert target), so cheap failures cannot flush the rows that record an
+// earlier exfiltration. principal_id is a hash or an id, never a raw
+// sessionGeneration. Never exported.
+
+export const MCP_AUDIT_LOG_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  tier TEXT NOT NULL DEFAULT 'signal',   -- signal | noise | summary | sentinel
+  transport TEXT NOT NULL,       -- client-reported: imperative | declarative | page; server-derived: http-mcp | chat | rest
+  principal_kind TEXT NOT NULL,  -- tab | client_token | chat | user
+  principal_id TEXT NOT NULL,    -- sha256(sessionGeneration)[:16] | token id | 'chat' | 'user:<id|anon>'
+  user_id INTEGER,
+  role TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  tool_name TEXT NOT NULL,       -- or REST route for transport='rest'
+  classification TEXT NOT NULL,
+  decision TEXT NOT NULL,        -- signal: allowed | operation_created | approved | rejected | committed | stale | expired
+                                 --   | cancelled | error | rest_export
+                                 -- noise: denied_policy | denied_kill_switch | denied_grant | denied_role | invalid_args | rate_limited
+                                 -- sentinel: audit_compacted | audit_evicted | deep_paging
+  operation_id TEXT,
+  grant_id TEXT,
+  args_preview TEXT,             -- canonical JSON, sanitized + PII-masked, <=512 chars
+  result_chars INTEGER,
+  page_index INTEGER,
+  duration_ms INTEGER,
+  error_code TEXT,
+  count INTEGER NOT NULL DEFAULT 1,   -- >1 for noise aggregates and summaries
+  bucket TEXT                          -- 'YYYY-MM-DDTHH:MM' for noise, 'YYYY-MM-DDTHH' for summary
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_ts ON mcp_audit_log(ts);
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_tool ON mcp_audit_log(tool_name);
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_decision ON mcp_audit_log(decision);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_audit_noise_bucket
+  ON mcp_audit_log(principal_id, tool_name, decision, bucket) WHERE tier = 'noise';
+`;
+
+// ── MCP Client Tokens (migration v29) ───────────────────────────────────────
+// Dedicated bearer tokens for external MCP clients on `/mcp` (see
+// src/mcp/client-tokens.ts). The plaintext (`wmcp_` + 32 random bytes) is shown
+// once at mint and never stored: only its sha256 and a display prefix are. A
+// token's tools are the `mcp_grants` rows with session_generation = 'tok:<id>'.
+// The role is re-checked live against dashboard_users on every use.
+
+export const MCP_CLIENT_TOKENS_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_client_tokens (
+  id TEXT PRIMARY KEY,                 -- uuid
+  name TEXT NOT NULL,                  -- <=40, user label ("Hronaut laptop")
+  token_hash TEXT NOT NULL UNIQUE,     -- sha256 hex of the full plaintext
+  token_prefix TEXT NOT NULL,          -- first 12 chars, display only ("wmcp_Ab3xQ9")
+  user_id INTEGER,                     -- NULL when auth is disabled
+  role TEXT NOT NULL,                  -- role at mint; re-checked live against dashboard_users
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT,
+  rotated_from TEXT                    -- previous token id
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_client_tokens_user ON mcp_client_tokens(user_id);
+`;
+
+// ── MCP Tool Policies (migration v30) ───────────────────────────────────────
+// Per user, per profile: Off / Ask every time / Allow for each agent tool
+// (src/mcp/policies.ts). `user_key` is the dashboard user id, or 0 while auth is
+// disabled. A row is only a choice: grants are still required, and a mutating
+// tool can never be Allow (the engine clamps it to Ask even if a row says allow).
+
+export const MCP_TOOL_POLICIES_TABLE = `
+CREATE TABLE IF NOT EXISTS mcp_tool_policies (
+  user_key INTEGER NOT NULL,           -- dashboard user id; 0 when auth disabled
+  tool_name TEXT NOT NULL,
+  policy TEXT NOT NULL CHECK(policy IN ('off','ask','allow')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (user_key, tool_name)
+);
+`;
+
+// ── MCP Operation Kind (migration v31) ──────────────────────────────────────
+// `kind` says what an operation is: a change to confirm (`mutation`, every row
+// before v31), a read the user must allow (`read`, policy Ask), or later a batch
+// of proposals. `bank_data` is the quoted transaction description a card shows
+// on its own row, kept out of `summary` so server wording and bank text are never
+// one string (threat T10). Same ALTER-only convention as TRANSACTION_REVISION_COLUMN
+// above: never add these to MCP_OPERATIONS_TABLE.
+
+export const MCP_OPERATION_KIND_COLUMNS = `
+ALTER TABLE mcp_operations ADD COLUMN kind TEXT NOT NULL DEFAULT 'mutation';
+ALTER TABLE mcp_operations ADD COLUMN bank_data TEXT;
+`;
+
+// ── Annotation provenance (migration v32) ───────────────────────────────────
+// A label is now a VERSIONED row with a source (a human, or a judge agent) and a status. Rows are never edited:
+// a human re-rating inserts a new version and supersedes the old one; a judge only ever inserts `proposed` rows
+// that a human accepts, rejects or later revokes. ALTER-only, like every change to an existing table: never add
+// these columns to INTERACTION_ANNOTATIONS_TABLE. Existing rows become `human` / `accepted` / version 1 by default.
+//
+// `review_agent_present` is 1/0 on a judge row once reviewed (was an agent live when the person clicked?), NULL before.
+// `created_via`: dashboard | dashboard_agent_present | webmcp | declarative | http-mcp.
+// `principal_id` is the audit principal of the agent that proposed the row (a hash, never a credential).
+// `judge_model` is whatever the agent declared and cannot be verified.
+
+export const ANNOTATION_PROVENANCE_COLUMNS = `
+ALTER TABLE interaction_annotations ADD COLUMN source TEXT NOT NULL DEFAULT 'human' CHECK(source IN ('human','judge'));
+ALTER TABLE interaction_annotations ADD COLUMN status TEXT NOT NULL DEFAULT 'accepted'
+  CHECK(status IN ('proposed','accepted','rejected','superseded'));
+ALTER TABLE interaction_annotations ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE interaction_annotations ADD COLUMN supersedes_id INTEGER REFERENCES interaction_annotations(id);
+ALTER TABLE interaction_annotations ADD COLUMN judge_model TEXT;
+ALTER TABLE interaction_annotations ADD COLUMN rationale TEXT;
+ALTER TABLE interaction_annotations ADD COLUMN criteria_json TEXT;
+ALTER TABLE interaction_annotations ADD COLUMN rubric_version TEXT;
+ALTER TABLE interaction_annotations ADD COLUMN created_via TEXT NOT NULL DEFAULT 'dashboard';
+ALTER TABLE interaction_annotations ADD COLUMN principal_id TEXT;
+ALTER TABLE interaction_annotations ADD COLUMN reviewed_by INTEGER;
+ALTER TABLE interaction_annotations ADD COLUMN reviewed_at TEXT;
+-- Set when a human accepted or rejected a judge row while an agent had live access (computed on the server).
+ALTER TABLE interaction_annotations ADD COLUMN review_agent_present INTEGER;
+`;
+
+// ── Annotation integrity (migration v33) ────────────────────────────────────
+// The triggers are ALLOW-LISTS: only `status`, `reviewed_by`, `reviewed_at` and `review_agent_present` can ever change
+// on a row, and only along the listed transitions (the last three only together with a status change). An INSERT
+// guard covers the other side: a judge row can only be born `proposed` and unreviewed, a human row only `accepted`
+// and via the dashboard. SQLite cannot iterate columns inside a trigger, so trigger 1 names them all;
+// annotations-versioning.test.ts reads PRAGMA table_info and fails if a column is missing from it, so a future
+// column added without updating the trigger breaks the build.
+//
+// Legacy data first: the old delete-and-replace route should have left at most one row per interaction. Be
+// defensive and keep only the newest as the current human row.
+
+export const ANNOTATION_INTEGRITY = `
+UPDATE interaction_annotations SET status = 'superseded'
+ WHERE source = 'human' AND id NOT IN (SELECT MAX(id) FROM interaction_annotations GROUP BY interaction_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_annotations_one_current_human
+  ON interaction_annotations(interaction_id) WHERE source = 'human' AND status = 'accepted';
+CREATE INDEX IF NOT EXISTS idx_annotations_status ON interaction_annotations(source, status);
+
+CREATE TRIGGER IF NOT EXISTS trg_annotations_immutable_columns
+BEFORE UPDATE ON interaction_annotations
+WHEN NEW.id IS NOT OLD.id OR NEW.interaction_id IS NOT OLD.interaction_id
+  OR NEW.rating IS NOT OLD.rating OR NEW.preference IS NOT OLD.preference OR NEW.pair_id IS NOT OLD.pair_id
+  OR NEW.tags IS NOT OLD.tags OR NEW.notes IS NOT OLD.notes OR NEW.annotated_at IS NOT OLD.annotated_at
+  OR NEW.source IS NOT OLD.source OR NEW.version IS NOT OLD.version OR NEW.supersedes_id IS NOT OLD.supersedes_id
+  OR NEW.judge_model IS NOT OLD.judge_model OR NEW.rationale IS NOT OLD.rationale
+  OR NEW.criteria_json IS NOT OLD.criteria_json OR NEW.rubric_version IS NOT OLD.rubric_version
+  OR NEW.created_via IS NOT OLD.created_via OR NEW.principal_id IS NOT OLD.principal_id
+BEGIN SELECT RAISE(ABORT, 'annotation rows are immutable except status/reviewed_by/reviewed_at; insert a new version'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_annotations_status_transitions
+BEFORE UPDATE ON interaction_annotations
+WHEN (NEW.status IS NOT OLD.status AND NOT (
+        (OLD.source = 'human' AND OLD.status = 'accepted' AND NEW.status = 'superseded')
+     OR (OLD.source = 'judge' AND OLD.status = 'proposed' AND NEW.status IN ('accepted','rejected','superseded'))
+     OR (OLD.source = 'judge' AND OLD.status = 'accepted' AND NEW.status = 'rejected'
+         AND NEW.reviewed_at IS NOT OLD.reviewed_at)))
+  OR (NEW.status IS OLD.status AND (NEW.reviewed_by IS NOT OLD.reviewed_by OR NEW.reviewed_at IS NOT OLD.reviewed_at
+        OR NEW.review_agent_present IS NOT OLD.review_agent_present))
+BEGIN SELECT RAISE(ABORT, 'annotation status transition not allowed'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_annotations_insert_guard
+BEFORE INSERT ON interaction_annotations
+WHEN NEW.review_agent_present IS NOT NULL
+  OR (NEW.source = 'judge' AND (NEW.status IS NOT 'proposed' OR NEW.reviewed_by IS NOT NULL OR NEW.reviewed_at IS NOT NULL))
+  OR (NEW.source = 'human' AND (NEW.status IS NOT 'accepted' OR NEW.created_via NOT IN ('dashboard','dashboard_agent_present')))
+BEGIN SELECT RAISE(ABORT, 'annotation insert not allowed: judge rows start proposed and unreviewed, human rows are accepted dashboard rows'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_annotations_no_orphan_delete
+BEFORE DELETE ON interaction_annotations
+WHEN EXISTS (SELECT 1 FROM llm_interactions WHERE id = OLD.interaction_id)
+BEGIN SELECT RAISE(ABORT, 'annotations are never deleted; supersede or reject instead'); END;
+
+CREATE VIEW IF NOT EXISTS v_current_human_annotations AS
+  SELECT * FROM interaction_annotations WHERE source = 'human' AND status = 'accepted';
+CREATE VIEW IF NOT EXISTS v_accepted_judge_annotations AS
+  SELECT * FROM interaction_annotations WHERE source = 'judge' AND status = 'accepted';
+`;
+
 // ── Indexes ──────────────────────────────────────────────────────────────────
 
 export const ALL_INDEXES = `

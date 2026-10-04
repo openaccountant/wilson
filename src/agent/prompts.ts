@@ -235,53 +235,8 @@ Keep tables compact:
 // User Prompts
 // ============================================================================
 
-/**
- * Build user prompt for agent iteration with full tool results.
- * Anthropic-style: full results in context for accurate decision-making.
- * Context clearing happens at threshold, not inline summarization.
- *
- * @param originalQuery - The user's original query
- * @param fullToolResults - Formatted full tool results (or placeholder for cleared)
- * @param toolUsageStatus - Optional tool usage status for graceful exit mechanism
- * @param options.local - Local (Transformers.js) models: a closing that asks
- *   for a plain-language answer — granite copied the "### tool(...)" blocks
- *   verbatim otherwise. Cloud models keep the original closing.
- * @param options.retry - Local only: the last reply was such a copy.
- */
-export function buildIterationPrompt(
-  originalQuery: string,
-  fullToolResults: string,
-  toolUsageStatus?: string | null,
-  options: { local?: boolean; retry?: boolean } = {},
-): string {
-  let prompt = `Query: ${originalQuery}`;
-
-  if (fullToolResults.trim()) {
-    prompt += `
-
-Data retrieved from tool calls:
-${fullToolResults}`;
-  }
-
-  // Add tool usage status if available (graceful exit mechanism)
-  if (toolUsageStatus) {
-    prompt += `\n\n${toolUsageStatus}`;
-  }
-
-  if (options.local) {
-    const retry = options.retry ? 'Your previous reply repeated the raw tool results instead of answering. ' : '';
-    prompt += `
-
-${retry}If you need more data, call a tool. Otherwise, using the data above, answer the query in plain language: lead with the key numbers. Do not copy the tool results, their ### headings or JSON into your answer.`;
-    return prompt;
-  }
-
-  prompt += `
-
-Continue working toward answering the query. When you have gathered sufficient data to answer, write your complete answer directly and do not call more tools.`;
-
-  return prompt;
-}
+// `buildIterationPrompt` lives in iteration-prompt-format.ts (import-free, so the judge read tools can share its wording).
+export { buildIterationPrompt } from './iteration-prompt-format.js';
 
 // ============================================================================
 // Data Context

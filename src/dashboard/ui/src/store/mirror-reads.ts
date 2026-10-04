@@ -85,6 +85,18 @@ export async function mirrorGetEntities(db: SqliteBinding): Promise<MirrorEntity
 }
 
 /**
+ * Paths that must never come from the mirror. `/api/mcp/*` is live security
+ * state (is agent access on, which tools are granted, what is awaiting
+ * approval): a stale copy from before the user turned it off would be worse than
+ * showing nothing. Offline, these fail with the "requires a connection" state.
+ */
+export function isMirrorExcluded(path: string): boolean {
+  const queryIndex = path.indexOf('?');
+  const pathname = queryIndex === -1 ? path : path.slice(0, queryIndex);
+  return pathname.startsWith('/api/mcp/');
+}
+
+/**
  * Serve a dashboard API path from the mirror.
  *
  * Routes exactly the paths mirrored so far — the transactions tab's two reads,
@@ -97,6 +109,7 @@ export async function mirrorGetEntities(db: SqliteBinding): Promise<MirrorEntity
  * "requires connection" state instead of inventing a response.
  */
 export async function serveApiPath(db: SqliteBinding, path: string): Promise<unknown | null> {
+  if (isMirrorExcluded(path)) return null;
   const queryIndex = path.indexOf('?');
   const pathname = queryIndex === -1 ? path : path.slice(0, queryIndex);
   const search = queryIndex === -1 ? '' : path.slice(queryIndex + 1);

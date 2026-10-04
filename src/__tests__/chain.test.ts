@@ -1,9 +1,11 @@
-import { describe, expect, test, beforeEach, afterAll, mock } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
 import { z } from 'zod';
 import { ensureTestProfile } from './helpers.js';
 import { defineTool } from '../tools/define-tool.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
 import type { ChainDef } from '../orchestration/types.js';
+import { interactionStore } from '../utils/interaction-store.js';
+import { omitIterationToolResults } from '../agent/iteration-prompt-format.js';
 
 // --- Mocks: control the adapter, not callLlm ---
 
@@ -224,5 +226,31 @@ describe('runChain', () => {
     expect(receivedPrompts.length).toBe(2);
     expect(receivedPrompts[1]).toContain("Invalid arguments for tool 'edit_transaction'");
     expect(receivedPrompts[1]).toContain('id'); // offending field named
+  });
+
+  test('calls are recorded as chain calls under one run id; the recorded feedback prompt is cut by the judge\'s omit rule', async () => {
+    const record = spyOn(interactionStore, 'recordInteraction');
+    try {
+      const secret = 'MERCHANT_SECRET_TAIL '.repeat(60);
+      mockToolsByNames = [{ name: 'spending_summary', description: 'x', schema: {} as any, func: async () => secret, mutates: false }];
+      const chain: ChainDef = { name: 'rec-chain', description: 'x', steps: [{ id: 'a', tools: ['spending_summary'] }] };
+      adapterResponses = [
+        makeResponse('', [{ id: 'tc1', name: 'spending_summary', args: {} }]),
+        makeResponse('done'),
+      ];
+      await runChain(chain, 'How much?');
+      const records = record.mock.calls.map((c) => c[0]);
+      expect(records.length).toBe(2);
+      expect(records.every((r) => r.callType === 'chain')).toBe(true);
+      expect(new Set(records.map((r) => r.runId)).size).toBe(1);
+      expect(records[0].runId.startsWith('chain-')).toBe(true);
+      expect(records.map((r) => r.sequenceNum)).toEqual([1, 2]);
+      expect(records[1].userPrompt).toContain('MERCHANT_SECRET_TAIL'); // the store keeps the full prompt
+      const cut = omitIterationToolResults(records[1].userPrompt).text;
+      expect(cut).not.toContain('MERCHANT_SECRET_TAIL');
+      expect(cut).toContain('tool results omitted');
+    } finally {
+      record.mockRestore();
+    }
   });
 });

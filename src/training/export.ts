@@ -4,6 +4,12 @@
  */
 
 import type { Database } from '../db/compat-sqlite.js';
+import {
+  qualifyingDpoPairs,
+  qualifyingSftRuns,
+  trainingReadiness,
+  type QualifyOptions,
+} from './annotations.js';
 
 interface InteractionRow {
   id: number;
@@ -25,13 +31,6 @@ interface ToolResultRow {
   tool_result: string | null;
 }
 
-interface AnnotationRow {
-  interaction_id: number;
-  rating: number | null;
-  preference: string | null;
-  pair_id: string | null;
-}
-
 interface SftMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
@@ -39,11 +38,26 @@ interface SftMessage {
   tool_call_id?: string;
 }
 
-export interface SftExportOptions {
+/**
+ * Which labels an export may use. The default is HUMAN labels only; each flag is a separate, explicit per-export
+ * opt-in (see src/training/annotations.ts for the rules and why).
+ */
+export type ExportQualifyOptions = QualifyOptions;
+
+export interface SftExportOptions extends ExportQualifyOptions {
   minRating?: number;
   callTypes?: string[];
   includeToolCalls?: boolean;
   model?: string;
+}
+
+/** The `X-Wilson-Export-Provenance` value for an export: what kinds of rows it may contain. */
+export function exportProvenance(opts: ExportQualifyOptions = {}): string {
+  const parts = ['human'];
+  if (opts.includeJudge) parts.push('judge');
+  if (opts.includeAgentPresent) parts.push('agent-present');
+  if (opts.includeHandoff) parts.push('handoff');
+  return parts.join('+');
 }
 
 /**
@@ -51,27 +65,11 @@ export interface SftExportOptions {
  * Format: {"messages": [{"role": "system", ...}, {"role": "user", ...}, ...]}
  */
 export function exportSftJsonl(db: Database, options: SftExportOptions = {}): string {
-  const { minRating = 4, callTypes = ['agent'], includeToolCalls = true, model } = options;
+  const { includeToolCalls = true } = options;
 
-  // Get qualifying interactions (rated >= minRating)
-  let sql = `
-    SELECT DISTINCT i.run_id
-    FROM llm_interactions i
-    JOIN interaction_annotations a ON a.interaction_id = i.id
-    WHERE a.rating >= @minRating
-  `;
-  const params: Record<string, unknown> = { minRating };
-
-  if (callTypes.length > 0) {
-    sql += ` AND i.call_type IN (${callTypes.map((_, idx) => `@ct${idx}`).join(',')})`;
-    callTypes.forEach((ct, idx) => { params[`ct${idx}`] = ct; });
-  }
-  if (model) {
-    sql += ' AND i.model = @model';
-    params.model = model;
-  }
-
-  const runIds = db.prepare(sql).all(params) as { run_id: string }[];
+  // The same selection the readiness count uses, so "SFT ready" is exactly the number of lines below.
+  const { runIds: selected } = qualifyingSftRuns(db, options);
+  const runIds = selected.map((run_id) => ({ run_id }));
   const lines: string[] = [];
 
   for (const { run_id } of runIds) {
@@ -144,28 +142,16 @@ export function exportSftJsonl(db: Database, options: SftExportOptions = {}): st
  * Export preference pairs as DPO JSONL.
  * Format: {"prompt": "...", "chosen": [messages...], "rejected": [messages...]}
  */
-export function exportDpoJsonl(db: Database): string {
-  // Find all unique pair_ids that have both chosen and rejected
-  const pairs = db.prepare(`
-    SELECT DISTINCT a1.pair_id
-    FROM interaction_annotations a1
-    JOIN interaction_annotations a2 ON a1.pair_id = a2.pair_id
-    WHERE a1.preference = 'chosen' AND a2.preference = 'rejected'
-      AND a1.pair_id IS NOT NULL
-  `).all() as { pair_id: string }[];
+export function exportDpoJsonl(db: Database, options: ExportQualifyOptions = {}): string {
+  // Complete pairs only: both the chosen and the rejected side must qualify.
+  const { pairs } = qualifyingDpoPairs(db, options);
 
   const lines: string[] = [];
 
-  for (const { pair_id } of pairs) {
-    const annotations = db.prepare(`
-      SELECT a.preference, i.*
-      FROM interaction_annotations a
-      JOIN llm_interactions i ON i.id = a.interaction_id
-      WHERE a.pair_id = @pair_id AND a.preference IN ('chosen', 'rejected')
-    `).all({ pair_id }) as (InteractionRow & { preference: string })[];
-
-    const chosen = annotations.find(a => a.preference === 'chosen');
-    const rejected = annotations.find(a => a.preference === 'rejected');
+  for (const pair of pairs) {
+    const load = (id: number) => db.prepare('SELECT * FROM llm_interactions WHERE id = @id').get({ id }) as InteractionRow | undefined;
+    const chosen = load(pair.chosenInteractionId);
+    const rejected = load(pair.rejectedInteractionId);
 
     if (!chosen || !rejected) continue;
 
@@ -202,19 +188,9 @@ export function exportDpoJsonl(db: Database): string {
 }
 
 /**
- * Get training data statistics.
+ * Get training data statistics, counted with the export's own qualifying rules: `sftReady` is the number of
+ * runs (SFT lines) an export emits and `dpoPairs` the number of complete pairs, not annotation rows.
  */
-export function getTrainingStats(db: Database) {
-  try {
-    const total = (db.prepare('SELECT COUNT(*) AS c FROM llm_interactions').get() as { c: number })?.c ?? 0;
-    const annotated = (db.prepare('SELECT COUNT(DISTINCT interaction_id) AS c FROM interaction_annotations').get() as { c: number })?.c ?? 0;
-    const sftReady = (db.prepare('SELECT COUNT(*) AS c FROM interaction_annotations WHERE rating >= 4').get() as { c: number })?.c ?? 0;
-    const dpoPairs = (db.prepare(`
-      SELECT COUNT(DISTINCT pair_id) AS c FROM interaction_annotations WHERE pair_id IS NOT NULL
-    `).get() as { c: number })?.c ?? 0;
-
-    return { totalInteractions: total, annotated, sftReady, dpoPairs };
-  } catch {
-    return { totalInteractions: 0, annotated: 0, sftReady: 0, dpoPairs: 0 };
-  }
+export function getTrainingStats(db: Database, options: ExportQualifyOptions = {}) {
+  return trainingReadiness(db, options);
 }
