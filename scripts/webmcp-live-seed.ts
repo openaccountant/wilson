@@ -13,7 +13,8 @@
  * (setActiveProfile + initDatabase, so migrations run), then inserts obviously
  * fake data. Refuses to run unless HOME is a scratch dir under /private/tmp/.
  */
-import { homedir } from 'os';
+// Must stay the first import: it refuses a non-scratch HOME before any app module loads.
+import { home } from './webmcp-live-seed-guard.js';
 import { mkdirSync, writeFileSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { setActiveProfile, DEFAULT_PROFILE } from '../src/profile/index.js';
@@ -25,17 +26,6 @@ import {
   buildOrchestrationIterationPrompt,
 } from '../src/agent/iteration-prompt-format.js';
 
-const REAL_HOME = '/Users/jdfiscus';
-const home = homedir();
-const envHome = process.env.HOME ?? '';
-
-if (home === REAL_HOME || envHome === REAL_HOME || !home.includes('/private/tmp/') || !envHome.includes('/private/tmp/')) {
-  console.error(
-    `Refusing to seed: homedir() is "${home}" (HOME="${envHome}"). ` +
-      `HOME must be a scratch directory containing "/private/tmp/" and must not be ${REAL_HOME}.`,
-  );
-  process.exit(1);
-}
 
 // Keychain guard. On macOS with SQLCipher installed, initDatabase() reads/writes the REAL login keychain
 // entry "openaccountant / db-encryption-default" (keychain is not scoped by HOME) and can block on a

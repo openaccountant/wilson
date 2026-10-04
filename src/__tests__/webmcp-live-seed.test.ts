@@ -38,11 +38,14 @@ async function runSeed(home: string, homeEnv = home) {
 
 describe('the live-check seed script', () => {
   const source = readFileSync(SCRIPT, 'utf8');
+  const guardSource = readFileSync(join(import.meta.dir, '../../scripts/webmcp-live-seed-guard.ts'), 'utf8');
 
   test('keeps the real-HOME guard and the scratch-dir requirement (source guard)', () => {
-    expect(source).toContain("const REAL_HOME = '/Users/jdfiscus';");
-    expect(source).toMatch(/home === REAL_HOME \|\| envHome === REAL_HOME \|\| !home\.includes\('\/private\/tmp\/'\)/);
-    expect(source).toContain('process.exit(1)');
+    expect(guardSource).toContain("export const REAL_HOME = '/Users/jdfiscus';");
+    expect(guardSource).toMatch(/home === REAL_HOME \|\| envHome === REAL_HOME \|\| !home\.includes\('\/private\/tmp\/'\)/);
+    expect(guardSource).toContain('process.exit(1)');
+    // The guard must be the first import, so it runs before any app module loads.
+    expect(source.match(/^import .*$/m)?.[0]).toContain("from './webmcp-live-seed-guard.js'");
     expect(source).toContain('already has transactions; delete the scratch HOME and rerun.');
   });
 
@@ -103,10 +106,17 @@ describe('the live-check seed script', () => {
     expect(second.stderr).toContain('already has transactions');
 
     // A HOME outside /private/tmp is refused before anything is opened.
-    const notScratch = await runSeed(home!, '/tmp/not-a-scratch-home');
-    expect(notScratch.code).toBe(1);
-    expect(notScratch.stderr).toContain('Refusing to seed');
-    expect(existsSync('/tmp/not-a-scratch-home/.openaccountant')).toBe(false);
+    // A fresh dir per run, so a leftover from an earlier run can't fail the check. The literal
+    // "/tmp/..." path (not "/private/tmp/...") is what the guard refuses.
+    const notScratchHome = mkdtempSync('/tmp/oa-not-scratch-home-');
+    try {
+      const notScratch = await runSeed(home!, notScratchHome);
+      expect(notScratch.code).toBe(1);
+      expect(notScratch.stderr).toContain('Refusing to seed');
+      expect(existsSync(join(notScratchHome, '.openaccountant'))).toBe(false);
+    } finally {
+      rmSync(notScratchHome, { recursive: true, force: true });
+    }
   }, 60_000);
 
   test.skipIf(!home)('cleanup', () => {
