@@ -123,7 +123,7 @@ fi
 node "$RIG/actor.mjs" --beat "$BEAT" --take-dir "$TAKE_DIR" --cdp-port $CDP_PORT --session "$SESSION" --timeout-s "$ACTOR_TIMEOUT_S"
 ACTOR_RC=$?
 # Tell the human script the agent is done, so it sweeps any last card and then shows the ledger.
-"${CTL[@]}" event actor-exited "{\"rc\":$ACTOR_RC}" >/dev/null 2>&1 || true
+"${CTL[@]}" event actor-exited "{\"rc\":$ACTOR_RC,\"takeDir\":\"$TAKE_DIR\"}" >/dev/null 2>&1 || true
 if [[ $ACTOR_RC -ne 0 ]]; then
   case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; 5) W="actor ran a command outside the allowed set, or its stream did not match ab-audit.jsonl (policy violation)";; 6) W="agent-browser daemon could not be verified as the take's own";; *) W="claude failed or reported an error";; esac
   die "$W (exit $ACTOR_RC). See $TAKE_DIR/actor.log, ab-audit.jsonl and actor.jsonl"

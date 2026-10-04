@@ -34,6 +34,9 @@ for (const [k, v] of Object.entries(flags)) {
 console.log(`[reset] seeding ${ws.home}`);
 const seed = spawnSync('bun', ['run', 'demos/seed/seed-founder.ts', '--home', ws.home, '--out', ws.out, ...passthrough], { cwd: REPO, stdio: 'inherit' });
 if (seed.status !== 0) fail('seed failed');
+// The kill switch is process-global (~/.openaccountant/agent-access.json, outside every profile), so reseeding the
+// profile leaves a previous take's OFF in place. Absent means on, the state a fresh install starts in.
+fs.rmSync(assertScratch(path.join(ws.home, '.openaccountant', 'agent-access.json')), { force: true });
 
 // 2. Profile model -> local Ollama.
 const profilesDir = path.join(ws.home, '.openaccountant', 'profiles');

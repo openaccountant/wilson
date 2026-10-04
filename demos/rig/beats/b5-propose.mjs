@@ -49,7 +49,7 @@ function targetFrom(opts) {
 const rowRe = () => new RegExp(esc(TARGET.description).replace(/\s+/g, '\\s+'), 'i');
 const CARD = '[data-card-id], [data-testid="agent-approval-card"]';
 
-async function importStatement(page, file, label, log) {
+export async function importStatement(page, file, label, log) {
   await page.getByRole('button', { name: 'Import statement' }).click();
   const dialog = page.locator('dialog[open]');
   await dialog.waitFor({ timeout: 10000 });

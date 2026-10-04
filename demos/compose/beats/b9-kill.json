@@ -1,0 +1,203 @@
+{
+  "id": "b9-kill",
+  "kicker": "OPEN ACCOUNTANT / BEAT 9",
+  "titleLead": "And you can",
+  "titleAccent": "take it back.",
+  "subtitle": "A real recording: an AI agent reads the books over WebMCP. One switch in Settings, and its next call fails.",
+  "headerTitle": "And you can take it back.",
+  "terminalTitle": "Agent (Claude Code, headless) — via WebMCP",
+  "titleSeconds": 4,
+  "requiredEvents": [
+    "settings-before",
+    "grants-applied",
+    "agent-call-seen",
+    "kill-clicked",
+    "kill-switch-off",
+    "activity-after",
+    "agent-after-kill",
+    "beat-end"
+  ],
+  "binding": {
+    "strategy": "none"
+  },
+  "endHold": {
+    "event": "activity-after",
+    "minSeconds": 2.5
+  },
+  "segments": [
+    {
+      "id": "grant",
+      "from": {
+        "event": "settings-before",
+        "offset": -1.5
+      },
+      "to": {
+        "event": "grants-applied",
+        "offset": 2
+      }
+    },
+    {
+      "id": "agent-and-kill",
+      "from": {
+        "cmd": "firstAgentCommand",
+        "offset": -0.5
+      },
+      "to": {
+        "max": [
+          {
+            "event": "kill-switch-off",
+            "offset": 4
+          },
+          {
+            "tool": "transaction_search",
+            "which": "last",
+            "edge": "end",
+            "offset": 4
+          },
+          {
+            "tool": "spending_summary",
+            "which": "last",
+            "edge": "end",
+            "offset": 4
+          }
+        ]
+      }
+    },
+    {
+      "id": "activity",
+      "from": {
+        "event": "activity-after",
+        "offset": -1.5
+      },
+      "to": {
+        "event": "beat-end"
+      }
+    }
+  ],
+  "callouts": [
+    {
+      "id": "co_grant",
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "seg": 0,
+        "edge": "e"
+      },
+      "x": 400,
+      "y": 300,
+      "txt": "Agent sees only the tools you granted",
+      "sub": "{@grants-applied.tools}"
+    },
+    {
+      "id": "co_kill",
+      "at": {
+        "event": "kill-switch-off",
+        "offset": 0.1
+      },
+      "end": {
+        "event": "kill-switch-off",
+        "offset": 5
+      },
+      "x": 640,
+      "y": 470,
+      "w": 560,
+      "txt": "One switch. Every grant revoked.",
+      "sub": "Agent access: {@kill-switch-off.switch} · {@kill-switch-off.granted} tools granted",
+      "src": "src/mcp/engine.ts:1184 · setKillSwitch revokes every grant and client token and rejects pending approvals"
+    }
+  ],
+  "captions": [
+    {
+      "at": {
+        "event": "settings-before",
+        "offset": -1.5
+      },
+      "end": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "t": "Real recording. Settings → Agent access: the switch is ON and no tool is granted."
+    },
+    {
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "seg": 0,
+        "edge": "e"
+      },
+      "t": "The founder grants two read tools to this tab: {@grants-applied.tools}."
+    },
+    {
+      "at": {
+        "seg": 1,
+        "edge": "s"
+      },
+      "end": {
+        "event": "agent-call-seen"
+      },
+      "t": "A real agent (Claude Code, headless) starts reading September over WebMCP."
+    },
+    {
+      "at": {
+        "event": "agent-call-seen"
+      },
+      "end": {
+        "event": "kill-clicked",
+        "offset": 0.3
+      },
+      "t": "The server logs the agent's call: {@agent-call-seen.tool}, {@agent-call-seen.decision}. The founder reaches for the switch."
+    },
+    {
+      "at": {
+        "event": "kill-clicked",
+        "offset": 0.3
+      },
+      "end": {
+        "event": "kill-switch-off",
+        "offset": 3
+      },
+      "t": "Agent access is OFF: “No tools are exposed to any agent or MCP client.” Every grant in this tab is gone."
+    },
+    {
+      "optional": true,
+      "at": {
+        "max": [
+          {
+            "tool": "transaction_search",
+            "which": "last",
+            "offset": -0.2
+          },
+          {
+            "tool": "spending_summary",
+            "which": "last",
+            "offset": -0.2
+          },
+          {
+            "event": "kill-switch-off",
+            "offset": 1.5
+          }
+        ]
+      },
+      "end": {
+        "seg": 1,
+        "edge": "e"
+      },
+      "t": "The agent's next call: {@agent-after-kill.firstInvoke.tool}, exit {@agent-after-kill.firstInvoke.exitCode}. “{@agent-after-kill.firstInvoke.error}”"
+    },
+    {
+      "at": {
+        "seg": 2,
+        "edge": "s"
+      },
+      "end": {
+        "seg": 2,
+        "edge": "e"
+      },
+      "t": "Activity, as the server recorded it: {@activity-after.beforeKill} agent calls before the switch, {@activity-after.afterKill} after."
+    }
+  ]
+}
