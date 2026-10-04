@@ -845,6 +845,11 @@ export function apiSetTaskModel(body: SetTaskModelBody): SetTaskModelResult {
   return { error: `Unknown task: ${task || '(missing)'}` };
 }
 
+/** Longest chat query the API accepts (a few thousand words is normal; the scan cap for stored prompts is 2M). */
+export const MAX_CHAT_QUERY_CHARS = 100_000;
+/** Longest locally-generated answer recorded: a small on-device model emits a few hundred tokens, so this is generous. */
+export const MAX_LOCAL_ANSWER_CHARS = 20_000;
+
 export interface LocalChatRecordBody {
   query?: string;
   answer?: string;
@@ -868,6 +873,13 @@ export function apiRecordLocalChatMessage(
   const answer = typeof body?.answer === 'string' ? body.answer.trim() : '';
   if (!query || !answer) {
     return { error: 'query and answer are required' };
+  }
+  // Recorded verbatim in chat history (and later replayed into prompts): same bound as POST /api/chat.
+  if (query.length > MAX_CHAT_QUERY_CHARS) {
+    return { error: `query must be a string of at most ${MAX_CHAT_QUERY_CHARS} characters` };
+  }
+  if (answer.length > MAX_LOCAL_ANSWER_CHARS) {
+    return { error: `answer must be a string of at most ${MAX_LOCAL_ANSWER_CHARS} characters` };
   }
 
   const supplied = typeof body?.sessionId === 'string' && body.sessionId ? body.sessionId : null;

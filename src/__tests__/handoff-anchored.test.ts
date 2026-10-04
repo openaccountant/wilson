@@ -12,6 +12,7 @@ import {
   removeVerifiedHandoffBlocks,
   SCAN_MAX_BODY_CHARS,
   SCAN_MAX_CANDIDATES,
+  SCAN_MAX_PROMPT_CHARS,
   SCAN_MAX_VERIFY_CHARS,
   scanHandoffBlocks,
   scanHandoffBlocksBudgeted,
@@ -23,7 +24,7 @@ import { analyzeHandoff, excerptHandoffBlocks, hasHandoffBlock, looksLikeHandoff
 import { detectorFor, detectorFromDb, ensureHandoffSecret, handoffTag } from '../training/handoff-tag.js';
 import { omitIterationToolResults } from '../agent/iteration-prompt-format.js';
 import { initChatSession } from '../dashboard/chat.js';
-import { buildHistoryContext } from '../utils/history-context.js';
+import { buildHistoryContext, CURRENT_MESSAGE_MARKER } from '../utils/history-context.js';
 import { getInteractionRead, listInteractionsRead } from '../mcp/judge-reads.js';
 import { exportDpoJsonl, exportSftJsonl, getTrainingStats } from '../training/export.js';
 import { apiInteractionDetail, apiRunInteractions } from '../dashboard/api.js';
@@ -389,7 +390,7 @@ describe('the secret', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
+  }, 30_000); // two real-file initDatabase calls (migrations + fsync) can pass the 5 s default on a loaded machine
 
   test('is created lazily, once, 32 random bytes, with a since timestamp; reads never create it', () => {
     const db = createTestDb();
@@ -733,6 +734,34 @@ describe('scan work budget', () => {
     expect(analyzeHandoff(text, TAGGED).kind).toBe('suspect');
   });
 
+  test('anchored recovery stays linear: 20,000 marker lines each followed by a malformed header (sticky onlyAt match)', () => {
+    // Exhaust the full scan first (more fake pairs than candidates), then hand anchoredBlocks 20,000 anchors whose
+    // header is malformed (no tag). A global regex searches forward from every anchor: quadratic.
+    const exhaust = `${fakeHeader}${fakeEnd}\n`.repeat(SCAN_MAX_CANDIDATES + 20);
+    const malformed = `${CURRENT_MESSAGE_MARKER}\n[On-device assistant notes\n`.repeat(20_000);
+    const text = `${exhaust}${malformed}${WORDS}`;
+    expect(text.length).toBeLessThan(SCAN_MAX_PROMPT_CHARS);
+    const t0 = performance.now();
+    const view = excerptHandoffBlocks(text, TAGGED);
+    const ms = performance.now() - t0;
+    expect(view.exhausted).toBe(true);
+    expect(view.blocks).toBe(0);
+    expect(ms).toBeLessThan(WALL_MS);
+  });
+
+  test('exhausted: every unverified piece is cut at its first raw header, not only the last', () => {
+    const real2 = realBlock({ ...baseHandoff, localNote: `${'x'.repeat(300)}LATEBODY` });
+    const junk = `${fakeHeader}${fakeEnd}\n`.repeat(SCAN_MAX_CANDIDATES + 20);
+    // Two real blocks past the exhaustion point, each at an anchor, with an unverified piece between them that holds a raw header.
+    const text = `${junk}${CURRENT_MESSAGE_MARKER}\n${real2}mid words ${fakeHeader}MIDBODY\n${CURRENT_MESSAGE_MARKER}\n${real2}${WORDS}`;
+    const view = excerptHandoffBlocks(text, TAGGED);
+    expect(view.exhausted).toBe(true);
+    expect(view.blocks).toBeGreaterThanOrEqual(1);
+    expect(view.text).not.toContain('LATEBODY');
+    expect(view.text).not.toContain('MIDBODY');
+    expect(view.text).toContain('more unverified characters not shown');
+  });
+
   test('bare fake headers (no end marker) cost nothing and never exhaust', () => {
     const text = fakeHeader.repeat(20_000);
     const c = counting();
@@ -836,6 +865,45 @@ describe('review round 2: bounded work and the judge view after exhaustion', () 
     expect(view.text).toContain('more unverified characters not shown');
   });
 
+  /**
+   * Two fake headers at the very start whose (fake) bodies each reach three far-away fake end markers burn the shared
+   * verify budget before the real block is reached, and 9 typed marker lines used to use up the 8 anchors tried.
+   */
+  function budgetBurner(markerLines: number): { prompt: string; real: string } {
+    const real2 = realBlock({ ...baseHandoff, localNote: `${'x'.repeat(300)}LATEBODY` });
+    const pad = (n: number) => 'z'.repeat(n);
+    const reach = SCAN_MAX_BODY_CHARS - 5_000; // from the start of the fake bodies: still inside the body cap
+    const typed = `${CURRENT_MESSAGE_MARKER_LINE}typed filler\n`.repeat(markerLines);
+    const head = `${fakeHeader}${fakeHeader}${typed}${CURRENT_MESSAGE_MARKER_LINE}${real2}${WORDS}`;
+    const ends = [reach, 100, 100].map((n) => `${pad(n)}${fakeEnd}`).join('');
+    return { prompt: head + ends, real: real2 };
+  }
+  const CURRENT_MESSAGE_MARKER_LINE = `${CURRENT_MESSAGE_MARKER}\n`;
+
+  test('[2] 8+ typed marker lines plus fake same-tag pairs cannot use up the anchors: the real block is found, its body never shown', () => {
+    const { prompt } = budgetBurner(12);
+    expect(scanHandoffBlocksBudgeted(prompt, TAGGED.verify).exhausted).toBe(true);
+    const view = excerptHandoffBlocks(prompt, TAGGED);
+    expect(view.exhausted).toBe(true);
+    expect(view.blocks).toBe(1);
+    expect(view.text).not.toContain('LATEBODY');
+    expect(view.text).toContain('TAILWORDS');
+  });
+
+  test('[2] when nothing anchors, the unverified remainder is cut at the first raw block header so no body is shown', () => {
+    // No marker line before the real block at all: nothing can anchor it.
+    const real2 = realBlock({ ...baseHandoff, localNote: `${'x'.repeat(300)}LATEBODY` });
+    const reach = Math.floor(SCAN_MAX_BODY_CHARS * 0.9);
+    const ends = [reach, 100, 100].map((n) => `${'z'.repeat(n)}${fakeEnd}`).join('');
+    const prompt = `typed words first ${fakeHeader}${fakeHeader}${real2}${WORDS}${ends}`;
+    const view = excerptHandoffBlocks(prompt, TAGGED);
+    expect(view.exhausted).toBe(true);
+    expect(view.blocks).toBe(0);
+    expect(view.text).toContain('typed words first');
+    expect(view.text).not.toContain('LATEBODY');
+    expect(view.text).toContain('more unverified characters not shown');
+  });
+
   test('[3] replay: an echoed real block after exhausting fake pairs does not survive to a later prompt', () => {
     const answer = `${junk}echo: ${real}${WORDS}`;
     const out = removeVerifiedHandoffBlocks(answer, TAGGED);
@@ -859,6 +927,77 @@ describe('review round 2: bounded work and the judge view after exhaustion', () 
     expect(out).toHaveLength(1);
     expect(out[0]).toContain('coffee');
     expect(getTrainingStats(db).handoffExcluded.sft).toBe(1);
+  });
+
+  test('[4] export SQL path: an over-cap prompt is never selected (user_prompt comes back NULL), tagged or legacy era', () => {
+    const { db } = dbWithEra('2026-10-01 00:00:00');
+    const tagged = '2026-10-02 10:00:00';
+    const legacyEra = '2026-09-01 10:00:00'; // before handoff_tag_since: the untagged detector applies
+    const bigTagged = insertInteraction(db, { run_id: 'big-tagged', prompt: 'q '.repeat(1_100_000), created_at: tagged });
+    const bigLegacy = insertInteraction(db, { run_id: 'big-legacy', prompt: 'q '.repeat(1_100_000), created_at: legacyEra });
+    const plain = insertInteraction(db, { run_id: 'plain', prompt: 'how much on coffee?', created_at: tagged });
+    for (const id of [bigTagged, bigLegacy, plain]) rate(db, id);
+
+    // Record every row the handoff check pulls out of llm_interactions, on both the SFT and the DPO path.
+    const seen: { user_prompt: string | null; oversize: number }[] = [];
+    const realPrepare = db.prepare.bind(db);
+    (db as any).prepare = (sql: string) => {
+      const stmt = realPrepare(sql) as any;
+      if (!/length\(user_prompt\) > @cap/.test(sql)) return stmt;
+      const iterate = stmt.iterate.bind(stmt);
+      stmt.iterate = (...args: unknown[]) => {
+        const it = iterate(...args) as IterableIterator<any>;
+        return (function* () { for (const r of it) { seen.push({ user_prompt: r.user_prompt, oversize: r.oversize }); yield r; } })();
+      };
+      return stmt;
+    };
+    const out = lines(exportSftJsonl(db));
+    (db as any).prepare = realPrepare;
+
+    // Intended policy, pinned: an over-cap prompt is excluded in BOTH eras, never analysed, never read into memory.
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain('coffee');
+    expect(seen).toHaveLength(3);
+    const oversized = seen.filter((r) => r.oversize);
+    expect(oversized).toHaveLength(2);
+    for (const r of oversized) expect(r.user_prompt).toBeNull();
+    for (const r of seen) expect(r.user_prompt === null || r.user_prompt.length < 100).toBe(true);
+    expect(getTrainingStats(db).handoffExcluded.sft).toBe(2);
+  });
+
+  test('[4] export SQL path, DPO: an over-cap prompt in a rated pair is never selected (user_prompt NULL) and the pair is left out', () => {
+    const { db } = dbWithEra('2026-10-01 00:00:00');
+    const at = '2026-10-02 10:00:00';
+    const pair = (id: string, a: number, b: number) => db.prepare("INSERT INTO interaction_annotations (interaction_id, rating, preference, pair_id) VALUES (@a, 5, 'chosen', @p), (@b, 5, 'rejected', @p)").run({ a, b, p: id });
+    const big = insertInteraction(db, { run_id: 'dpo-big', prompt: 'q '.repeat(1_100_000), created_at: at });
+    const okA = insertInteraction(db, { run_id: 'dpo-a', prompt: 'how much on coffee?', created_at: at });
+    const okB = insertInteraction(db, { run_id: 'dpo-b', prompt: 'how much on coffee?', created_at: at });
+    const okC = insertInteraction(db, { run_id: 'dpo-c', prompt: 'how much on tea?', created_at: at });
+    pair('p-over', okA, big);
+    pair('p-ok', okB, okC);
+
+    const seen: { user_prompt: string | null; oversize: number }[] = [];
+    const realPrepare = db.prepare.bind(db);
+    (db as any).prepare = (sql: string) => {
+      const stmt = realPrepare(sql) as any;
+      if (!/length\(user_prompt\) > @cap/.test(sql)) return stmt;
+      const iterate = stmt.iterate.bind(stmt);
+      stmt.iterate = (...args: unknown[]) => {
+        const it = iterate(...args) as IterableIterator<any>;
+        return (function* () { for (const r of it) { seen.push({ user_prompt: r.user_prompt, oversize: r.oversize }); yield r; } })();
+      };
+      return stmt;
+    };
+    const out = lines(exportDpoJsonl(db));
+    (db as any).prepare = realPrepare;
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain('coffee');
+    expect(out[0]).not.toContain('q q q');
+    const oversized = seen.filter((r) => r.oversize);
+    expect(oversized.length).toBeGreaterThan(0);
+    for (const r of oversized) expect(r.user_prompt).toBeNull();
+    for (const r of seen) expect(r.user_prompt === null || r.user_prompt.length < 100).toBe(true);
   });
 
   test('[5] legacy excerpt: guard that a huge unterminated block and many header/end pairs stay fast (bounded lastIndexOf window and sanitise slice; no shape was found that is slow before the change)', () => {

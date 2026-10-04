@@ -19,7 +19,7 @@
  *  - SFT and DPO exports leave out every run/pair that contains a real block, and also every run with marker-like
  *    text that is NOT a real block ("suspect"), unless the export opts in explicitly.
  */
-import { sanitizeUntrustedText, stripHiddenChars } from '../mcp/text-hygiene.js';
+import { foldCompat, sanitizeUntrustedText, stripHiddenChars, stripMarks } from '../mcp/text-hygiene.js';
 import {
   HANDOFF_BLOCK_END_MARKER,
   HANDOFF_BLOCK_HEADER_PREFIX,
@@ -28,6 +28,7 @@ import {
   SCAN_MAX_PROMPT_CHARS,
   scanHandoffBlocksBudgeted,
   type HandoffDetector,
+  type ScanShared,
   type VerifiedHandoffBlock,
 } from '../dashboard/local-handoff-format.js';
 import { CURRENT_MESSAGE_MARKER } from '../utils/history-context.js';
@@ -36,8 +37,8 @@ export { HANDOFF_BLOCK_END_MARKER, HANDOFF_BLOCK_HEADER_PREFIX, SCAN_MAX_PROMPT_
 
 /** How much of an unverified remainder the judge still sees once a scan was exhausted and nothing could be anchored. */
 export const UNVERIFIED_TAIL_SHOWN_CHARS = 4_000;
-/** Anchor positions tried per kind in the anchored rescan. */
-const MAX_ANCHORS = 8;
+/** Upper bound on anchor positions collected (cheap string finds; the verify work is bounded by one shared budget). */
+const MAX_ANCHORS = 20_000;
 
 // ── Neutralising everything that is not a real block ─────────────────────────
 
@@ -54,7 +55,7 @@ const CLOSE_BRACKETS = new RegExp(`[\\p{Pe}⎤⎥⎦⎵⁆⟧】〕〛❳⦌⦎�
 
 /**
  * The form a judge-visible, untrusted piece of prompt text is shown in: hidden characters removed (as the later
- * sanitising does), NFKC, repeated until stable (so a bracket assembled by removal or folding cannot appear
+ * sanitising does), compat fold (an approximation of NFKC, one code point at a time), repeated until stable (so a bracket assembled by removal or folding cannot appear
  * afterwards), then `[` `]` and the bracket look-alikes that survive NFKC (the ones listed above) become `(` `)`.
  * The stored text is never changed.
  */
@@ -68,7 +69,7 @@ export function neutralizeBrackets(text: string): string {
 }
 
 /**
- * Hidden characters removed and NFKC, repeated until stable, with a bound on work: the text may not grow past
+ * Hidden characters removed and compat-folded (per code point, `foldCompat`), repeated until stable, with a bound on work: the text may not grow past
  * NFKC_MAX_GROWTH x its length (U+FDFA alone expands 18x, so an unbounded loop is a memory and time sink).
  * `overgrown` says the bound was hit; the returned text is then only the last in-bound form and must not be trusted.
  */
@@ -76,7 +77,8 @@ function normalizeStable(text: string): { text: string; overgrown: boolean } {
   const limit = text.length * NFKC_MAX_GROWTH + 64;
   let cur = text;
   for (let i = 0; i < 8; i++) {
-    const folded = cur.normalize('NFKC');
+    // Per-code-point fold (linear, see foldCompat), never the built-in normalisation method: no input can make it quadratic.
+    const folded = foldCompat(cur);
     if (folded.length > limit) return { text: cur, overgrown: true };
     const next = stripHiddenChars(folded, { allowNewlines: true });
     if (next === cur) break;
@@ -95,7 +97,7 @@ export function looksLikeHandoffMarker(text: string): boolean {
   if (text.length > SCAN_MAX_PROMPT_CHARS) return true;
   const { text: cur, overgrown } = normalizeStable(text);
   if (overgrown) return true;
-  const letters = cur.normalize('NFD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+  const letters = stripMarks(cur).replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
   return letters.includes('ondeviceassistantnotes');
 }
 
@@ -126,17 +128,33 @@ function anchoredBlocks(text: string, detector: HandoffDetector, after: number):
   for (let at = text.indexOf('Query: ', after), n = 0; at !== -1 && n < MAX_ANCHORS; at = text.indexOf('Query: ', at + 1)) {
     if (at === 0 || text[at - 1] === '\n') { positions.push(at + 'Query: '.length); n++; }
   }
+  // Ascending, so the blank-line search below can move forward only (a monotone cursor): total work is linear in the
+  // text however many anchors precede a mention block with no blank line after it.
+  positions.sort((a, b) => a - b);
+  let blankFrom = -1;
+  let blankAt = -1;
+  const nextBlankLine = (pos: number): number => {
+    if (blankFrom !== -1 && blankFrom <= pos && (blankAt === -1 || blankAt >= pos)) return blankAt;
+    blankFrom = pos;
+    blankAt = text.indexOf('\n\n', pos);
+    return blankAt;
+  };
   const found = new Map<number, VerifiedHandoffBlock>();
-  for (const pos of positions) {
+  // One end-marker map and one verify budget for every anchor tried, however many typed anchors precede the real one.
+  const shared: ScanShared = { spent: 0 };
+  outer: for (const pos of positions) {
     let candidates = [pos];
     if (text.startsWith(MENTION_BLOCK_PREFIX, pos)) {
-      const blank = text.indexOf('\n\n', pos);
+      const blank = nextBlankLine(pos);
       if (blank !== -1) candidates = [pos, blank + 2];
     }
     for (const from of candidates) {
       if (from < after) continue;
-      const [b] = scanHandoffBlocksBudgeted(text, detector.verify, from, true).blocks;
-      if (b) { found.set(b.start, b); break; }
+      // Only a header right here can be a block: skip the rest without any scan work.
+      if (!text.startsWith(HANDOFF_BLOCK_HEADER_PREFIX, from)) continue;
+      const scan = scanHandoffBlocksBudgeted(text, detector.verify, from, true, shared);
+      if (scan.blocks[0]) { found.set(scan.blocks[0].start, scan.blocks[0]); break; }
+      if (scan.exhausted) break outer;
     }
   }
   const out: VerifiedHandoffBlock[] = [];
@@ -151,7 +169,7 @@ function anchoredBlocks(text: string, detector: HandoffDetector, after: number):
  * Split raw text into the real blocks and the text between them. With `recover`, a scan that ran out of budget gets
  * an anchored second look (see anchoredBlocks); `recovered` says that found something past the exhaustion point.
  */
-function partition(text: string, detector: HandoffDetector, recover = false): { blocks: VerifiedHandoffBlock[]; between: string[]; exhausted: boolean; recovered: boolean } {
+function partition(text: string, detector: HandoffDetector, recover = false): { blocks: VerifiedHandoffBlock[]; between: string[]; exhausted: boolean; recovered: boolean; scanned: number } {
   const scan = scanHandoffBlocksBudgeted(text, detector.verify);
   let blocks = scan.blocks;
   let recovered = false;
@@ -166,7 +184,7 @@ function partition(text: string, detector: HandoffDetector, recover = false): { 
     pos = b.end;
   }
   between.push(text.slice(pos));
-  return { blocks, between, exhausted: scan.exhausted, recovered };
+  return { blocks, between, exhausted: scan.exhausted, recovered, scanned: scan.blocks.length };
 }
 
 /** What a prompt holds, for the export and the dashboard flags. */
@@ -224,15 +242,28 @@ export function excerptHandoffBlocks(text: string, detector: HandoffDetector, ex
   // Past the cap only the prefix is looked at; the rest is cut and said so.
   const tooLong = text.length > SCAN_MAX_PROMPT_CHARS;
   const head = tooLong ? text.slice(0, SCAN_MAX_PROMPT_CHARS) : text;
-  const { blocks, between, exhausted, recovered } = partition(head, detector, true);
+  const { blocks, between, exhausted, recovered, scanned } = partition(head, detector, true);
+  // between[scanned] is the first stretch past the last block the full scan verified: from there on nothing is verified.
+  const firstUnverified = scanned;
   let out = '';
   for (let i = 0; i < between.length; i++) {
     const piece = between[i];
-    // Exhausted and nothing could be anchored: the last stretch is unverified and may hide a real block's body, so
-    // it is cut rather than shown in full.
-    if (i === between.length - 1 && exhausted && !recovered && piece.length > UNVERIFIED_TAIL_SHOWN_CHARS) {
-      out += `${neutralizeBrackets(piece.slice(0, UNVERIFIED_TAIL_SHOWN_CHARS))} (... ${piece.length - UNVERIFIED_TAIL_SHOWN_CHARS} more unverified characters not shown)`;
-      continue;
+    // Exhausted: every stretch from the exhaustion point on is unverified and may hold a real block's body, which must
+    // never be shown. Each such stretch is cut at the first raw block header in it (a real block can only start at
+    // one), so a second real block past the point is never shown in full either. The last one is also cut at the
+    // character cap when nothing at all could be anchored. Trade-off, deliberate: a header typed by the user before a
+    // real block that was recovered by anchoring cuts the view there too, so typed text can shrink what the judge
+    // sees. That fails safe and the judge is told (the "more unverified characters not shown" notice).
+    if (exhausted && i >= firstUnverified) {
+      const isLast = i === between.length - 1;
+      const header = piece.indexOf(HANDOFF_BLOCK_HEADER_PREFIX);
+      const cap = isLast && !recovered ? UNVERIFIED_TAIL_SHOWN_CHARS : piece.length;
+      const cut = Math.min(header === -1 ? piece.length : header, cap);
+      if (cut < piece.length) {
+        out += `${neutralizeBrackets(piece.slice(0, cut))} (... ${piece.length - cut} more unverified characters not shown)`;
+        if (i < blocks.length) { const b = blocks[i]; out += excerptMarker(b.end - b.start, b.body, excerptChars); }
+        continue;
+      }
     }
     out += neutralizeBrackets(piece);
     if (i < blocks.length) {

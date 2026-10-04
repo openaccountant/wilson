@@ -148,7 +148,14 @@ export const HANDOFF_DETECT_LEGACY: HandoffDetector = { acceptLegacy: true, veri
 export const HANDOFF_DETECT_STRUCTURAL: HandoffDetector = { acceptLegacy: true, verify: () => true };
 
 /** A header line: the fixed prefix, anything without a bracket or newline, then ` k=<tag>]` and a newline. */
-const TAGGED_HEADER_RE = new RegExp(`${escapeRe(HANDOFF_BLOCK_HEADER_PREFIX)}[^\\[\\]\\n]*? k=([0-9a-f]{${HANDOFF_TAG_CHARS}})\\]\\n`, 'g');
+const TAGGED_HEADER_SOURCE = `${escapeRe(HANDOFF_BLOCK_HEADER_PREFIX)}[^\\[\\]\\n]*? k=([0-9a-f]{${HANDOFF_TAG_CHARS}})\\]\\n`;
+const TAGGED_HEADER_RE = new RegExp(TAGGED_HEADER_SOURCE, 'g');
+/**
+ * The same header, STICKY: it matches only AT lastIndex. An `onlyAt` scan must use this one: with the global regex a
+ * malformed header at `from` makes exec search forward through every later prefix before it is rejected by the
+ * index check, which is quadratic over many anchors. Sticky costs O(header) per anchor.
+ */
+const TAGGED_HEADER_STICKY_RE = new RegExp(TAGGED_HEADER_SOURCE, 'y');
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -222,24 +229,21 @@ function lowerBound(a: number[], x: number): number {
  * resumes just after its first character), so a forged block can neither hide nor swallow a real one. When the
  * budget or the candidate cap is used up the scan stops and says so (`exhausted`).
  */
-export function scanHandoffBlocksBudgeted(text: string, verify: HandoffVerify, from = 0, onlyAt = false): HandoffScan {
+export function scanHandoffBlocksBudgeted(text: string, verify: HandoffVerify, from = 0, onlyAt = false, shared?: ScanShared): HandoffScan {
   const out: VerifiedHandoffBlock[] = [];
   let exhausted = false;
-  TAGGED_HEADER_RE.lastIndex = from;
+  const headerRe = onlyAt ? TAGGED_HEADER_STICKY_RE : TAGGED_HEADER_RE;
+  headerRe.lastIndex = from;
   // One linear pass finds every tagged end marker and where it is. A header whose tag has no end marker after it can
   // never be a block and costs nothing; the per-candidate search below is a binary search in these lists, never a
   // scan of the rest of the prompt.
-  const ends = new Map<string, number[]>();
-  const endRe = new RegExp(`\\n${escapeRe(HANDOFF_BLOCK_END_PREFIX)} k=([0-9a-f]{${HANDOFF_TAG_CHARS}})\\]`, 'g');
-  for (let e = endRe.exec(text); e; e = endRe.exec(text)) {
-    const list = ends.get(e[1]);
-    if (list) list.push(e.index); else ends.set(e[1], [e.index]);
-  }
+  const ends = shared?.ends ?? buildEndMap(text);
+  if (shared) shared.ends = ends;
   const memo = new Map<string, boolean>();
-  let spent = 0;
+  let spent = shared?.spent ?? 0;
   let candidates = 0;
   outer: for (;;) {
-    const m = TAGGED_HEADER_RE.exec(text);
+    const m = headerRe.exec(text);
     if (!m) break;
     if (onlyAt && m.index !== from) break;
     const tag = m[1];
@@ -249,7 +253,7 @@ export function scanHandoffBlocksBudgeted(text: string, verify: HandoffVerify, f
     let idx = positions ? lowerBound(positions, bodyStart - 1) : 0;
     if (!positions || idx >= positions.length) {
       if (onlyAt) break;
-      TAGGED_HEADER_RE.lastIndex = m.index + 1;
+      headerRe.lastIndex = m.index + 1;
       continue;
     }
     if (++candidates > SCAN_MAX_CANDIDATES) { exhausted = true; break; }
@@ -274,13 +278,31 @@ export function scanHandoffBlocksBudgeted(text: string, verify: HandoffVerify, f
     }
     if (found) {
       out.push(found);
-      TAGGED_HEADER_RE.lastIndex = found.end;
+      headerRe.lastIndex = found.end;
     } else {
-      TAGGED_HEADER_RE.lastIndex = m.index + 1;
+      headerRe.lastIndex = m.index + 1;
       if (onlyAt) break;
     }
   }
+  if (shared) shared.spent = spent;
   return { blocks: out, exhausted };
+}
+
+/** Work state shared by several `onlyAt` scans of one text: the end-marker map is built once, the verify budget is one. */
+export interface ScanShared {
+  ends?: Map<string, number[]>;
+  spent: number;
+}
+
+/** Every tagged end marker of `text` by tag, as the newline positions that start it. One linear pass. */
+function buildEndMap(text: string): Map<string, number[]> {
+  const ends = new Map<string, number[]>();
+  const endRe = new RegExp(`\\n${escapeRe(HANDOFF_BLOCK_END_PREFIX)} k=([0-9a-f]{${HANDOFF_TAG_CHARS}})\\]`, 'g');
+  for (let e = endRe.exec(text); e; e = endRe.exec(text)) {
+    const list = ends.get(e[1]);
+    if (list) list.push(e.index); else ends.set(e[1], [e.index]);
+  }
+  return ends;
 }
 
 /** The blocks of `scanHandoffBlocksBudgeted`, for callers where an unfinished scan simply leaves text as text. */

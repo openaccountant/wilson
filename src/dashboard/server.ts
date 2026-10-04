@@ -5,7 +5,7 @@ import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
-  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
+  apiLocalChatConfig, apiRecordLocalChatMessage, MAX_CHAT_QUERY_CHARS, apiModels, apiSetTaskModel,
   type SetTaskModelBody,
   apiDemoShowdownSamples, apiDemoShowdownCloud, apiDemoShowdownLocal, apiDemoShowdownBrowserTrace,
   apiUpdateTransaction, apiDeleteTransaction,
@@ -67,8 +67,6 @@ const maintenanceTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
  * external MCP client like Hronaut has no dashboard login of its own.
  */
 const MCP_HTTP_PATH = '/mcp';
-/** Longest chat query the API accepts (a few thousand words is normal; the scan cap for stored prompts is 2M). */
-const MAX_CHAT_QUERY_CHARS = 100_000;
 
 /**
  * Bun's idle timeout is per connection and its maximum is 255 s. A `/mcp` tool
