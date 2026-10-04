@@ -1,8 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, Fragment } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
-import type { ReviewQueueItem, SpendingSummaryItem } from '@/types';
+import type { ReviewQueueItem } from '@/types';
+import { CATEGORIES } from '../../../../tools/categorize/categories.js';
+import { orderByLane, type LaneRoute } from '@/prelabel/core';
+import type { PrelabelResult } from '@/prelabel/protocol';
+import { PrelabelPanel } from '@/components/prelabel/PrelabelPanel';
+import { PrelabelChip } from '@/components/prelabel/PrelabelChip';
+import { LaneHeaderRow } from '@/components/prelabel/LaneHeaderRow';
+import { QuickConfirmButton } from '@/components/prelabel/QuickConfirmButton';
 
 /** Confidence at or below which a suggestion landed in the review queue (src/tools/categorize). */
 const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -36,12 +43,16 @@ function ReviewRow({
   review,
   categories,
   canAct,
+  route,
   onResolved,
   onError,
 }: {
   review: ReviewQueueItem;
   categories: string[];
   canAct: boolean;
+  /** open-jev second opinion for this row; absent when the feature is off. */
+  route?: LaneRoute;
+
   onResolved: (category: string) => void;
   onError: (message: string) => void;
 }) {
@@ -90,6 +101,7 @@ function ReviewRow({
         <span className="inline-flex items-center gap-1.5">
           {review.suggested_category}
           <ConfidenceBadge confidence={review.confidence} />
+          {route && <PrelabelChip route={route} />}
         </span>
       </td>
       <td className="px-4 py-3 text-text-muted text-xs">
@@ -98,14 +110,18 @@ function ReviewRow({
       {canAct && (
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => resolve('confirm')}
-              disabled={busy}
-              className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors cursor-pointer border-none whitespace-nowrap"
-              title="Apply the suggested category"
-            >
-              Confirm
-            </button>
+            {route?.kind === 'agrees' ? (
+              <QuickConfirmButton busy={busy} onConfirm={() => resolve('confirm')} />
+            ) : (
+              <button
+                onClick={() => resolve('confirm')}
+                disabled={busy}
+                className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors cursor-pointer border-none whitespace-nowrap"
+                title="Apply the suggested category"
+              >
+                Confirm
+              </button>
+            )}
             <select
               value={pick}
               onChange={(e) => setPick(e.target.value)}
@@ -137,19 +153,26 @@ function ReviewRow({
 export function ReviewTab() {
   const [banner, setBanner] = useState('');
   const [errorBanner, setErrorBanner] = useState('');
+  const [prelabel, setPrelabel] = useState<{ results: Map<number, PrelabelResult>; marginCut: number; active: boolean }>({
+    results: new Map(),
+    marginCut: 0.3,
+    active: false,
+  });
+  const handlePrelabelResults = useCallback(
+    (results: Map<number, PrelabelResult>, marginCut: number, active: boolean) => setPrelabel({ results, marginCut, active }),
+    [],
+  );
 
   const { data: reviews, loading, error, refetch } = useApi<ReviewQueueItem[]>('/api/reviews');
   const { data: authStatus } = useApi<AuthStatus>('/api/auth/status');
-  // Same category derivation as App.tsx: sorted unique from the all-time summary.
-  const { data: allSummary } = useApi<SpendingSummaryItem[]>('/api/summary?startDate=2000-01-01&endDate=2099-12-31');
+  // Offer exactly what apiCorrectReview accepts: names in the categories table,
+  // falling back to the static CATEGORIES list it also validates against.
+  const { data: categoryRows } = useApi<{ name: string }[]>('/api/categories');
 
   const categories = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of allSummary ?? []) {
-      if (s.category) set.add(s.category);
-    }
-    return [...set].sort();
-  }, [allSummary]);
+    const names = (categoryRows ?? []).map((r) => r.name).filter(Boolean);
+    return [...new Set(names.length > 0 ? names : CATEGORIES)].sort();
+  }, [categoryRows]);
 
   // Server stays the authority — the UI only hides the controls when the
   // viewer can't act (auth enabled and not admin).
@@ -166,7 +189,15 @@ export function ReviewTab() {
     setErrorBanner(message);
   }
 
-  const pending = reviews ?? [];
+  const pending = useMemo(() => reviews ?? [], [reviews]);
+  // Identity order (the server's) until open-jev has scored something.
+  const lanes = useMemo(
+    () => orderByLane(pending, prelabel.results, prelabel.marginCut),
+    [pending, prelabel.results, prelabel.marginCut],
+  );
+  const showLanes = prelabel.active && prelabel.results.size > 0;
+  const laneCounts = { ATTENTION: 0, QUICK: 0 };
+  for (const e of lanes) laneCounts[e.route.lane]++;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -214,6 +245,8 @@ export function ReviewTab() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+        {!error && <div className="mb-3"><PrelabelPanel reviews={pending} canAct={canAct} onResults={handlePrelabelResults} /></div>}
+
         {loading && (
           <div className="bg-surface-raised border border-border rounded-lg p-4">
             <div className="h-[200px] animate-pulse bg-border-muted rounded" />
@@ -248,15 +281,20 @@ export function ReviewTab() {
                 </tr>
               </thead>
               <tbody>
-                {pending.map((r) => (
-                  <ReviewRow
-                    key={r.review_id}
-                    review={r}
-                    categories={categories}
-                    canAct={canAct}
-                    onResolved={handleResolved}
-                    onError={handleError}
-                  />
+                {lanes.map(({ item: r, route }, i) => (
+                  <Fragment key={r.review_id}>
+                    {showLanes && (i === 0 || lanes[i - 1].route.lane !== route.lane) && (
+                      <LaneHeaderRow lane={route.lane} count={laneCounts[route.lane]} colSpan={canAct ? 6 : 5} />
+                    )}
+                    <ReviewRow
+                      review={r}
+                      categories={categories}
+                      canAct={canAct}
+                      route={prelabel.active ? route : undefined}
+                      onResolved={handleResolved}
+                      onError={handleError}
+                    />
+                  </Fragment>
                 ))}
               </tbody>
             </table>

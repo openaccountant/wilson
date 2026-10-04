@@ -1,0 +1,62 @@
+{
+ "v": 1,
+ "spec": "specs/browser-subagent-round4-openjev-router.md §5",
+ "frozenOn": "2026-10-03",
+ "cut": null,
+ "optionMode": null,
+ "question": "Which tool should answer this user question?",
+ "options": {
+  "transaction_search": "Search transactions using a natural language query.",
+  "spending_summary": "Spending breakdown by category for the current month, quarter, or year.",
+  "profit_loss": "Profit & loss report: income vs. expenses by category for a given period.",
+  "net_worth": "Net worth summary, trend over time, or full balance sheet.",
+  "forecast": "Trailing-rate projection of end-of-period cash/savings, with optional what-if adjustments (adjust a category's monthly spend, or drop a recurring expense)."
+ },
+ "consistencyRule": "multi-hit: top1 must be one of the keyword hits (DECISIONS Round 4)",
+ "chatTimeoutMs": 400,
+ "pins": {
+  "repo": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "revision": "7c79f25b5ac496089f448a969c801872ad59d31c",
+  "configSha": "2ec35432332ee6b5880509eefe44e6279fd9d3543f6ba96098119ffe0b0c2d5e",
+  "temperature": 1.05,
+  "dtype": "q4f16",
+  "device": "webgpu"
+ },
+ "devFiles": [
+  {
+   "name": "v1-burned",
+   "path": "specs/eval/heldout-router.v1-burned.jsonl",
+   "sha256": "26afe0ffe2b1a161a90f86c3b763eefe704c6241870f5fe7cf8aa2a5b63af313"
+  },
+  {
+   "name": "v2",
+   "path": "specs/eval/heldout-router.v2.jsonl",
+   "sha256": "7a84883173fe03813e624ccb1a04b6a0a31a71253c7fbf634148d06b6b9b62d5"
+  },
+  {
+   "name": "v3",
+   "path": "specs/eval/heldout-router.v3.jsonl",
+   "sha256": "6049cd50a856ab3813b8bc725f0b7926e88f8b34ec6a2c71df93e626142688ad"
+  },
+  {
+   "name": "spike-route",
+   "path": "src/__tests__/fixtures/subagent-route-gold.json",
+   "sha256": "027facc290323490637bfe0ce934940d67037f84fca4a5139b1219513320f4d6"
+  }
+ ],
+ "devRun": {
+  "adapter": {
+   "vendor": "apple",
+   "architecture": "metal-3",
+   "description": "",
+   "isFallbackAdapter": false,
+   "shaderF16": true,
+   "crossOriginIsolated": false
+  },
+  "browserVersion": "153.0.8010.12",
+  "startedAt": "2026-10-03T14:52:45.418Z",
+  "A": 228,
+  "chosen": null
+ },
+ "report": "specs/eval/2026-10-03-round4-dev-cut.md"
+}

@@ -19,6 +19,7 @@ function getDb(): Database {
 
 export const generateReportTool = defineTool({
   name: 'generate_report',
+  mutates: true,
   description:
     'Generate a Markdown financial report and save it to a file. ' +
     'Includes summary, spending, budget, anomalies, savings, and transaction sections.',

@@ -41,6 +41,7 @@
     "js-yaml": "^4.1.0",
     "monarch-money-api": "^0.0.8",
     "plaid": "^47.0.0",
+    "playwright": "^1.60.0",
     "winston": "^3.19.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.13"
@@ -48,6 +49,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
+    "open-jev": "0.1.2",
     "typescript": "^7.0.2"
   },
   "trustedDependencies": [

@@ -47,6 +47,7 @@ interface MonarchTransaction {
  */
 export const monarchImportTool = defineTool({
   name: 'monarch_import',
+  mutates: true,
   description:
     'Import transactions from Monarch Money. Requires MONARCH_TOKEN env var (or MONARCH_EMAIL + MONARCH_PASSWORD). ' +
     'Fetches transactions via Monarch API and imports them into the local database.',

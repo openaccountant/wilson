@@ -11,3 +11,5 @@ export const WILSON_MCP_SESSION_KEY = 'wilson_mcp_session_generation';
 
 /** CustomEvent the React UI dispatches to ask the bridge to open its Agent access (grant) panel. */
 export const WILSON_OPEN_AGENT_PANEL_EVENT = 'wilson:open-agent-panel';
+/** Window event either grant surface (bridge panel, Settings → Agent access) fires after changing this tab's grants, so the other resyncs immediately. */
+export const WILSON_GRANTS_CHANGED_EVENT = 'wilson:agent-grants-changed';

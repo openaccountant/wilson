@@ -313,7 +313,7 @@ describe('chat-originated approvals (fixes the dashboard chat hang)', () => {
   test('respondToChatOperation rejects an operation id it never created', async () => {
     const { db: testDb } = await start();
     const { respondToChatOperation } = await import('../dashboard/chat.js');
-    expect(respondToChatOperation(testDb, 'not-a-real-operation', 'allow-once')).toBe(false);
+    expect(respondToChatOperation(testDb, 'not-a-real-operation', 'allow-once')).toMatchObject({ ok: false });
   });
 
   test('a chat-sourced pending operation renders through the same /api/mcp/operations queue as WebMCP', async () => {

@@ -18,6 +18,7 @@ import type {
 } from './agent/index.js';
 import { getModelDisplayName } from './utils/model.js';
 import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js';
+import { parseFilePathArg } from './utils/path-arg.js';
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
 import { traceStore } from './utils/trace-store.js';
@@ -45,6 +46,7 @@ import { editorTheme, theme } from './theme.js';
 import { initDatabase } from './db/database.js';
 import { initImportTool, csvImportTool } from './tools/import/csv-import.js';
 import { initCategorizeTool, categorizeTool } from './tools/categorize/categorize.js';
+import { formatCategorizeSummary, parseCategorizeResult } from './tools/categorize/summary.js';
 import { initTransactionSearchTool } from './tools/query/transaction-search.js';
 import { initEditTransactionTool } from './tools/query/edit-transaction.js';
 import { initDeleteTransactionTool } from './tools/query/delete-transaction.js';
@@ -505,8 +507,9 @@ export async function runCli() {
         return;
       }
 
-      // Strip surrounding quotes and leading @ (from file autocomplete)
-      const filePath = rawPath.replace(/^["']|["']$/g, '').replace(/^@/, '');
+      // Undo shell-style quoting/escaping (the TUI editor isn't a shell, so it
+      // never gets tokenized) and strip a leading @ from file autocomplete.
+      const filePath = parseFilePathArg(rawPath);
 
       chatLog.finalizeAnswer(`Importing **${filePath}**...`);
       tui.requestRender();
@@ -553,34 +556,7 @@ export async function runCli() {
         const resultJson = await categorizeTool.func({
           limit: limit && !isNaN(limit) ? limit : undefined,
         });
-        const result = JSON.parse(resultJson);
-        const data = result.data ?? result;
-
-        if (data.categorized === 0 && !data.error) {
-          chatLog.finalizeAnswer(data.message ?? 'All transactions are already categorized.');
-        } else if (data.error) {
-          chatLog.finalizeAnswer(`**Categorization failed:** ${data.error}`);
-        } else {
-          let msg = `Categorized **${data.categorized}** of ${data.totalUncategorized} transactions`;
-          if (data.ruleMatched > 0) {
-            msg += ` (${data.ruleMatched} by rules, ${data.llmCategorized} by AI)`;
-          }
-          if (data.routedForReview > 0) {
-            msg += `\n${data.routedForReview} routed for human review (held in review queue).`;
-          }
-          if (data.categoriesApplied && Object.keys(data.categoriesApplied).length > 0) {
-            msg += '\n\n**Categories:**\n';
-            const sorted = Object.entries(data.categoriesApplied as Record<string, number>)
-              .sort(([, a], [, b]) => b - a);
-            for (const [cat, count] of sorted) {
-              msg += `  ${cat}: ${count}\n`;
-            }
-          }
-          if (data.errors && data.errors.length > 0) {
-            msg += `\n${data.errors.length} batch errors occurred.`;
-          }
-          chatLog.finalizeAnswer(msg);
-        }
+        chatLog.finalizeAnswer(formatCategorizeSummary(parseCategorizeResult(resultJson)));
       } catch (err) {
         chatLog.finalizeAnswer(`**Categorization failed:** ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -988,7 +964,8 @@ export async function runCli() {
         }
       } else {
         // Show current month budget vs actual
-        const currentMonth = new Date().toISOString().slice(0, 7);
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const results = getBudgetVsActual(db, currentMonth);
         if (results.length === 0) {
           chatLog.finalizeAnswer('No budgets set. Use `/budget set <category> <amount>` to create one.');
@@ -1240,6 +1217,13 @@ export async function runCli() {
           })];
           const { execFileSync } = await import('child_process');
           tui.stop();
+          // Release the dashboard's port before the child tries to bind it —
+          // otherwise the respawned process crashes with EADDRINUSE.
+          if ((globalThis as any).__oaDashboard) {
+            const { stopDashboardServer } = await import('./dashboard/server.js');
+            stopDashboardServer((globalThis as any).__oaDashboard);
+            (globalThis as any).__oaDashboard = null;
+          }
           try {
             execFileSync(process.argv[0], [oaPath, ...newArgs], { stdio: 'inherit' });
           } catch {
@@ -1380,6 +1364,8 @@ export async function runCli() {
       const prompt = new ApprovalPromptComponent(
         agentRunner.pendingApproval.tool,
         agentRunner.pendingApproval.args,
+        undefined,
+        agentRunner.pendingApproval.session,
       );
       prompt.onSelect = (decision: ApprovalDecision) => {
         agentRunner.respondToApproval(decision);

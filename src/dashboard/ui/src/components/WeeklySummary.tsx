@@ -1,10 +1,18 @@
 import { useApi } from '@/hooks/useApi';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { money } from '@/format';
+import { useAppState } from '@/state';
+import { entityScopedPath } from '@/lib/overviewQueries';
 import type { WeeklySummaryData, StreakData } from '@/types';
 
 export function WeeklySummary() {
-  const { data: weekData, loading: loadingWeek, offline: offlineWeek } = useApi<WeeklySummaryData>('/api/weekly-summary');
-  const { data: streakData, loading: loadingStreak, offline: offlineStreak } = useApi<StreakData>('/api/streak');
+  const { entityId } = useAppState();
+  const { data: weekData, loading: loadingWeek, offline: offlineWeek } = useApi<WeeklySummaryData>(
+    entityScopedPath('/api/weekly-summary', entityId),
+  );
+  const { data: streakData, loading: loadingStreak, offline: offlineStreak } = useApi<StreakData>(
+    entityScopedPath('/api/streak', entityId),
+  );
 
   if (loadingWeek || loadingStreak) {
     return (
@@ -44,8 +52,8 @@ export function WeeklySummary() {
     <div className="bg-surface-raised border border-border rounded-lg p-4">
       <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-2">This Week</h3>
       <p className="text-sm text-text leading-relaxed">
-        <span className="font-mono font-semibold text-text">
-          ${Math.abs(thisWeek.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+        <span className="font-mono font-semibold tabular-nums text-text">
+          {money(Math.abs(thisWeek.total))}
         </span>{' '}
         spent{' '}
         <span className={`font-semibold ${changeColor}`}>
@@ -55,8 +63,8 @@ export function WeeklySummary() {
           <>
             . Top category:{' '}
             <span className="text-text">{topCat.category}</span>{' '}
-            <span className="font-mono text-text-muted">
-              (${Math.abs(topCat.total).toLocaleString('en-US', { minimumFractionDigits: 2 })})
+            <span className="font-mono tabular-nums text-text-muted">
+              ({money(Math.abs(topCat.total))})
             </span>
           </>
         )}

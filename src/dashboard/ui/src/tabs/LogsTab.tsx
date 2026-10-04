@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApi } from '@/hooks/useApi';
 import type { LogRow } from '@/types';
+import { parseDbTimestamp } from '@/format';
 
 const LEVELS = ['all', 'debug', 'info', 'warn', 'error'] as const;
 type Level = (typeof LEVELS)[number];
@@ -14,7 +15,7 @@ const LEVEL_COLORS: Record<string, { text: string; bg: string }> = {
 
 function formatTimestamp(ts: string): string {
   try {
-    const d = new Date(ts);
+    const d = parseDbTimestamp(ts);
     const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const time = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     return `${date} ${time}`;

@@ -1,15 +1,11 @@
 import { useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import type { Goal } from '@/types';
+import { money } from '@/format';
 
+/** Goal amounts are magnitudes: always shown unsigned. */
 function fmt(n: number): string {
-  return (
-    '$' +
-    Math.abs(n).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
+  return money(Math.abs(n));
 }
 
 function barColor(pct: number): string {

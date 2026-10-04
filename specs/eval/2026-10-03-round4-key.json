@@ -1,0 +1,65 @@
+{
+ "note": "id -> arm. The grader must not open this file before grading.",
+ "arms": [
+  "T"
+ ],
+ "skipped": {
+  "O": "frozen cut is null (no viable cut on dev); harness refuses --arm O on heldout-router.v4 (exit 8)"
+ },
+ "key": {
+  "c49eafadf1": {
+   "arm": "T",
+   "row": 69,
+   "q": "profit for june",
+   "persona": "5-single-parent"
+  },
+  "7b664de7b0": {
+   "arm": "T",
+   "row": 11,
+   "q": "navient payments so far this year",
+   "persona": "2-new-grad"
+  },
+  "05c706b1b8": {
+   "arm": "T",
+   "row": 29,
+   "q": "childcare payment",
+   "persona": "5-single-parent"
+  },
+  "4e75b800d7": {
+   "arm": "T",
+   "row": 105,
+   "q": "net worth",
+   "persona": "2-new-grad"
+  },
+  "6ac1232b98": {
+   "arm": "T",
+   "row": 66,
+   "q": "p&l for june",
+   "persona": "2-new-grad"
+  },
+  "e14616c329": {
+   "arm": "T",
+   "row": 97,
+   "q": "balance sheet",
+   "persona": "4-near-retiree"
+  },
+  "86cd1618c9": {
+   "arm": "T",
+   "row": 100,
+   "q": "is my car worth more than the loan",
+   "persona": "5-single-parent"
+  },
+  "d0d22f74ee": {
+   "arm": "T",
+   "row": 39,
+   "q": "ytd spending by category",
+   "persona": "1-comingled-founder"
+  },
+  "2d9515d46d": {
+   "arm": "T",
+   "row": 67,
+   "q": "did we come out ahead in june",
+   "persona": "3-dual-income-household"
+  }
+ }
+}

@@ -1,10 +1,7 @@
 import { useApi } from '@/hooks/useApi';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { money } from '@/format';
 import type { NetWorthResponse } from '@/types';
-
-function fmt(n: number): string {
-  return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export function LiabilitiesCard() {
   // Net worth aggregates the accounts table, which the mirror does not carry —
@@ -45,19 +42,21 @@ export function LiabilitiesCard() {
       <div className="grid grid-cols-3 gap-3 text-center mb-3">
         <div>
           <div className="text-xs text-text-muted">Assets</div>
-          <div className="text-lg font-bold font-mono text-green mt-1">{fmt(data.totalAssets)}</div>
+          <div className="text-lg font-bold font-mono tabular-nums text-green mt-1">{money(data.totalAssets)}</div>
         </div>
         <div>
           <div className="text-xs text-text-muted">Liabilities</div>
-          <div className="text-lg font-bold font-mono text-red mt-1">{fmt(data.totalLiabilities)}</div>
+          {/* Amount owed, shown as a magnitude under the Liabilities label. */}
+          <div className="text-lg font-bold font-mono tabular-nums text-red mt-1">{money(Math.abs(data.totalLiabilities))}</div>
         </div>
         <div>
           <div className="text-xs text-text-muted">Net</div>
           <div
-            className="text-lg font-bold font-mono mt-1"
+            className="text-lg font-bold font-mono tabular-nums mt-1"
             style={{ color: data.netWorth >= 0 ? '#22c55e' : '#ef4444' }}
           >
-            {fmt(data.netWorth)}
+            {/* Signed: a negative net worth must read '-$161,809.00', not '$161,809.00'. */}
+            {money(data.netWorth)}
           </div>
         </div>
       </div>
@@ -66,7 +65,8 @@ export function LiabilitiesCard() {
           {liabilities.map((acct) => (
             <div key={acct.id} className="flex justify-between text-xs">
               <span className="text-text-muted">{acct.name}</span>
-              <span className="font-mono text-red">{fmt(acct.current_balance)}</span>
+              {/* Owed amounts listed as magnitudes (overdrawn assets carry a negative balance). */}
+              <span className="font-mono tabular-nums text-red">{money(Math.abs(acct.current_balance))}</span>
             </div>
           ))}
         </div>

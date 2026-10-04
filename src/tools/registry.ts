@@ -4,6 +4,7 @@ import { discoverSkills } from '../skills/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
 import { getOrchestrationTools } from '../orchestration/registry.js';
 import { getCachedMcpTools } from '../mcp/adapter.js';
+import { mayMutate } from './mutation.js';
 
 const require = createRequire(import.meta.url);
 
@@ -243,6 +244,7 @@ Export transactions to CSV or XLSX files.
 
 - When the user is asking about or querying transactions (use transaction_search)
 - When the user wants to import data (use csv_import or monarch_import)
+- When the user wants a tax / Schedule C export of flagged deductions (use tax_flag with action: export)
 
 ## Usage Notes
 
@@ -445,6 +447,7 @@ const TAX_FLAG_DESCRIPTION = `
 - When the user wants to flag a transaction as tax-deductible
 - When the user asks about tax deductions, Schedule C, or business expenses
 - When the user wants a tax summary or list of flagged deductions
+- When the user wants a Schedule C export / file for taxes, tax software, or their accountant (action: export)
 
 ## When NOT to Use
 
@@ -454,8 +457,10 @@ const TAX_FLAG_DESCRIPTION = `
 ## Usage Notes
 
 - Uses official IRS Schedule C categories (22 categories)
-- Actions: flag, unflag, summary, list
+- Actions: flag, unflag, summary, list, export
 - Summary shows total deductions by IRS category
+- export writes a Schedule C file to filePath: xlsx (default) has a per-line Summary sheet plus a Transactions sheet; csv is the per-line summary only
+- export filePath must end in .xlsx or .csv to match the format
 `.trim();
 
 const SAVINGS_RATE_DESCRIPTION = `
@@ -1118,7 +1123,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  // Orchestration: chains + teams registered as tools
+  // Orchestration: chains + teams registered as tools.
   for (const orchTool of await getOrchestrationTools()) {
     tools.push({
       name: orchTool.name,
@@ -1127,7 +1132,34 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  return tools;
+  // Last, once every tool is registered (conditional, MCP and orchestration
+  // tools included), so no tool a chain names is missed for being pushed later.
+  return resolveOrchestrationMutation(tools);
+}
+
+/**
+ * Set the mutation flag of every chain/team tool (#152). Their steps/members
+ * call tools directly, without the executor's approval gate, so a chain or
+ * team is mutating — and approved once as a whole — when any tool it names:
+ *   - can write,
+ *   - is itself a chain or team (nested orchestration), or
+ *   - is not registered at all (a typo, or a tool behind a missing env var):
+ *     what it would run cannot be shown to be read-only.
+ */
+export function resolveOrchestrationMutation(tools: RegisteredTool[]): RegisteredTool[] {
+  const byName = new Map(tools.map((t) => [t.name, t.tool]));
+  const toolMutates = (name: string): boolean => {
+    const target = byName.get(name);
+    if (!target) return true;
+    if (target.usesTools !== undefined) return true;
+    return mayMutate(target);
+  };
+  return tools.map((entry) => {
+    const uses = entry.tool.usesTools;
+    if (uses === undefined) return entry;
+    const mutates = uses.some(toolMutates);
+    return { ...entry, tool: { ...entry.tool, mutates } };
+  });
 }
 
 /**

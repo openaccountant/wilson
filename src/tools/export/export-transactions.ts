@@ -29,6 +29,7 @@ function getDb(): Database {
  */
 export const exportTransactionsTool = defineTool({
   name: 'export_transactions',
+  mutates: true,
   description:
     'Export transactions to a CSV or XLSX file. Supports filtering by date range, category, ' +
     'and merchant/description. Useful for sharing data or creating reports.',

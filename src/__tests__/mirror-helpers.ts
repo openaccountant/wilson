@@ -10,6 +10,9 @@
 // (exactly the wa-sqlite adapter's semantics).
 import { Database } from '../db/compat-sqlite.js';
 import type {
+  MirrorAccountRow,
+  MirrorBalanceSnapshotRow,
+  MirrorLoanRow,
   MirrorBudgetRow,
   MirrorCategoryRow,
   MirrorEntityRow,
@@ -137,4 +140,56 @@ export function mirrorCategory(overrides: Partial<MirrorCategoryRow> = {}): Mirr
     updated_at: '2026-01-15 12:00:00',
     ...overrides,
   } as MirrorCategoryRow;
+}
+
+/** Full-shape MirrorAccountRow with per-test overrides. */
+export function mirrorAccount(overrides: Partial<MirrorAccountRow> = {}): MirrorAccountRow {
+  return {
+    id: 1,
+    name: 'Everyday Checking',
+    account_type: 'asset',
+    account_subtype: 'checking',
+    institution: 'Test Bank',
+    account_number_last4: '1234',
+    current_balance: 1000.5,
+    currency: 'USD',
+    is_active: 1,
+    notes: null,
+    plaid_account_id: null,
+    entity_id: null,
+    created_at: '2026-01-15 12:00:00',
+    updated_at: '2026-01-15 12:00:00',
+    ...overrides,
+  } as MirrorAccountRow;
+}
+
+/** Full-shape MirrorBalanceSnapshotRow with per-test overrides. */
+export function mirrorSnapshot(overrides: Partial<MirrorBalanceSnapshotRow> = {}): MirrorBalanceSnapshotRow {
+  return {
+    id: 1,
+    account_id: 1,
+    balance: 1000.5,
+    snapshot_date: '2026-01-31',
+    source: 'manual',
+    created_at: '2026-01-31 12:00:00',
+    ...overrides,
+  } as MirrorBalanceSnapshotRow;
+}
+
+/** Full-shape MirrorLoanRow with per-test overrides. */
+export function mirrorLoan(overrides: Partial<MirrorLoanRow> = {}): MirrorLoanRow {
+  return {
+    id: 1,
+    account_id: 2,
+    original_principal: 300000,
+    interest_rate: 6.5,
+    term_months: 360,
+    start_date: '2020-01-01',
+    extra_payment: 100,
+    linked_asset_id: 1,
+    notes: null,
+    created_at: '2026-01-15 12:00:00',
+    updated_at: '2026-01-15 12:00:00',
+    ...overrides,
+  } as MirrorLoanRow;
 }

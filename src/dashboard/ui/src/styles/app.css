@@ -19,6 +19,29 @@
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
+/* Chart kit tokens (src/charts/tokens.ts reads these at runtime, so they are
+   always emitted). Categorical slots 1-7 are a fixed, CVD-validated order for
+   the dark surface; everything past slot 7 folds to --color-chart-neutral.
+   Status colors (green/yellow/red above) are never reused as series colors. */
+@theme static {
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #199e70;
+  --color-chart-4: #c98500;
+  --color-chart-5: #d55181;
+  --color-chart-6: #008300;
+  --color-chart-7: #9085e9;
+  --color-chart-neutral: #5b6170;
+  /* Neutral BAR marks (grey bars, the 'more' dot): >= 3:1 on the raised
+     surface (4.38:1) and on the bar track (3.85:1). The darker
+     --color-chart-neutral stays for donut slices, which have separators. */
+  --color-chart-neutral-bar: #7a8090;
+  --color-chart-grid: #2a2d37;
+  --color-chart-axis: #8b949e;
+  --color-chart-tooltip-bg: #1a1d27;
+  --color-chart-uncovered: #1a1d27;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
@@ -34,4 +57,27 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Chat composer typeahead popover fade-in (disabled under motion-reduce). */
+@keyframes ta-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Windows High Contrast / forced colors: chart marks are inline-colored
+   backgrounds the UA would otherwise strip, leaving invisible bars. Keep the
+   data colors and outline every mark in CanvasText. */
+@media (forced-colors: active) {
+  .chart-mark {
+    forced-color-adjust: none;
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+  .chart-mark-svg {
+    forced-color-adjust: none;
+  }
+  .chart-mark-svg path {
+    stroke: CanvasText;
+  }
 }

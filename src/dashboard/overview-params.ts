@@ -6,7 +6,11 @@
 // when /api/daily-spending lacks params). Parity means replicating these
 // behaviors, not fixing them.
 //
-// Import-safe for the dashboard UI bundle: ZERO imports.
+// Import-safe for the dashboard UI bundle: imports only the zero-import
+// spend-rules module and a type from overview-sql.
+
+import { DASHBOARD_RULES } from '../db/spend-rules.js';
+import type { OverviewOptions } from '../db/overview-sql.js';
 
 export function parseAccountId(params: URLSearchParams): number | undefined {
   const val = params.get('accountId');
@@ -61,4 +65,25 @@ export function parseDailySpendingRange(params: URLSearchParams): DailySpendingR
     return { error: 'startDate and endDate required' };
   }
   return { startDate, endDate };
+}
+
+/**
+ * The dashboard aggregation options for a request: every dashboard rule on
+ * (spend-rules.ts) plus the optional exact `category` filter. Only dashboard
+ * endpoints and the mirror build these — CLI callers never pass options.
+ */
+export function parseDashboardOptions(params: URLSearchParams): OverviewOptions {
+  const category = params.get('category');
+  return category ? { ...DASHBOARD_RULES, category } : { ...DASHBOARD_RULES };
+}
+
+/**
+ * /api/net-worth/trend — trailing months, default 12. Garbage (`months=abc`)
+ * falls back to the default and the value is clamped to [1, 360] so the
+ * date math can never produce an Invalid Date (which used to 500).
+ */
+export function parseNetWorthMonths(params: URLSearchParams): number {
+  const parsed = parseInt(params.get('months') ?? '12', 10);
+  if (!Number.isFinite(parsed)) return 12;
+  return Math.min(360, Math.max(1, parsed));
 }

@@ -2,6 +2,7 @@ import type { LlmResponse, ToolDef } from '../model/types.js';
 import { createProgressChannel } from '../utils/progress-channel.js';
 import type {
   ApprovalDecision,
+  ToolApprovalRequest,
   ToolApprovalEvent,
   ToolDeniedEvent,
   ToolEndEvent,
@@ -13,6 +14,8 @@ import type {
 import type { RunContext } from './run-context.js';
 import { logger } from '../utils/logger.js';
 import { interactionStore } from '../utils/interaction-store.js';
+import { isMutatingCall, sessionApprovalScope } from '../tools/mutation.js';
+import { compactToolSchema } from '../model/providers/transformers.js';
 
 type ToolExecutionEvent =
   | ToolStartEvent
@@ -23,31 +26,34 @@ type ToolExecutionEvent =
   | ToolDeniedEvent
   | ToolLimitEvent;
 
-const TOOLS_REQUIRING_APPROVAL = ['categorize'] as const;
-
 /**
  * Executes tool calls and emits streaming tool lifecycle events.
  */
 export class AgentToolExecutor {
+  /** Session approval keys (SessionApprovalScope.key), shared across queries. */
   private readonly sessionApprovedTools: Set<string>;
 
   constructor(
     private readonly toolMap: Map<string, ToolDef>,
     private readonly signal?: AbortSignal,
-    private readonly requestToolApproval?: (request: {
-      tool: string;
-      args: Record<string, unknown>;
-    }) => Promise<ApprovalDecision>,
+    private readonly requestToolApproval?: (request: ToolApprovalRequest) => Promise<ApprovalDecision>,
     sessionApprovedTools?: Set<string>,
     private readonly model?: string,
   ) {
     this.sessionApprovedTools = sessionApprovedTools ?? new Set();
   }
 
+  /**
+   * @param options.shownTools - Local tool selection: the tools whose schema
+   *   the model saw. A call to any other registered tool whose arguments fail
+   *   its schema gets the schema back instead of running (design 2026-10-03
+   *   §5.4); omitted = every tool was shown (cloud models).
+   */
   async *executeAll(
     response: LlmResponse,
     ctx: RunContext,
     parentInteractionId?: number,
+    options: { shownTools?: ReadonlySet<string> } = {},
   ): AsyncGenerator<ToolExecutionEvent, void> {
     for (const toolCall of response.toolCalls) {
       const toolName = toolCall.name;
@@ -59,7 +65,7 @@ export class AgentToolExecutor {
         if (ctx.scratchpad.hasExecutedSkill(skillName)) continue;
       }
 
-      yield* this.executeSingle(toolName, toolArgs, toolCall.id, ctx, parentInteractionId);
+      yield* this.executeSingle(toolName, toolArgs, toolCall.id, ctx, parentInteractionId, options.shownTools);
     }
   }
 
@@ -69,19 +75,45 @@ export class AgentToolExecutor {
     toolCallId: string,
     ctx: RunContext,
     parentInteractionId?: number,
+    shownTools?: ReadonlySet<string>,
   ): AsyncGenerator<ToolExecutionEvent, void> {
     const toolQuery = this.extractQueryFromArgs(toolArgs);
 
-    if (this.requiresApproval(toolName) && !this.sessionApprovedTools.has(toolName)) {
-      const decision = (await this.requestToolApproval?.({ tool: toolName, args: toolArgs })) ?? 'deny';
-      yield { type: 'tool_approval', tool: toolName, args: toolArgs, approved: decision };
-      if (decision === 'deny') {
-        yield { type: 'tool_denied', tool: toolName, args: toolArgs };
-        return;
-      }
-      if (decision === 'allow-session') {
-        for (const name of TOOLS_REQUIRING_APPROVAL) {
-          this.sessionApprovedTools.add(name);
+    // A tool called from the names-only index with arguments that do not fit
+    // its schema: answer with the schema so the model can call it again. It
+    // never runs, so there is nothing to approve yet — a corrected call goes
+    // through the approval gate below like any other.
+    const unshown = shownTools && !shownTools.has(toolName) ? this.toolMap.get(toolName) : undefined;
+    if (unshown && !unshown.schema.safeParse(toolArgs).success) {
+      const message = `Tool ${toolName} needs these arguments: ${JSON.stringify(compactToolSchema(unshown).parameters)}. Call it again.`;
+      logger.info(`Tool schema returned: ${toolName}`, { tool: toolName });
+      yield { type: 'tool_start', tool: toolName, args: toolArgs };
+      yield { type: 'tool_error', tool: toolName, error: message };
+      ctx.scratchpad.recordToolCall(toolName, toolQuery);
+      ctx.scratchpad.addToolResult(toolName, toolArgs, message);
+      return;
+    }
+
+    // Every call that writes (DB, files, external services) needs the user's
+    // approval before it runs (#152). Which calls write is declared next to
+    // each tool definition (`mutates`, see src/tools/mutation.ts). With no
+    // approval handler the call is denied — fail closed.
+    if (this.requiresApproval(toolName, toolArgs)) {
+      const session = sessionApprovalScope(toolName, this.toolMap.get(toolName), toolArgs);
+      if (!session || !this.sessionApprovedTools.has(session.key)) {
+        const decision =
+          (await this.requestToolApproval?.({ tool: toolName, args: toolArgs, session })) ?? 'deny';
+        yield { type: 'tool_approval', tool: toolName, args: toolArgs, approved: decision };
+        if (decision === 'deny') {
+          yield { type: 'tool_denied', tool: toolName, args: toolArgs };
+          return;
+        }
+        if (decision === 'allow-session' && session) {
+          // Only this tool (or tool + action): approving bulk categorize for
+          // the session must not also wave through delete_transaction, nor
+          // memory_manage `add` allow `deactivate`. Chain/team calls have no
+          // session scope, so 'allow-session' there counts as once.
+          this.sessionApprovedTools.add(session.key);
         }
       }
     }
@@ -207,7 +239,7 @@ export class AgentToolExecutor {
     return undefined;
   }
 
-  private requiresApproval(toolName: string): boolean {
-    return (TOOLS_REQUIRING_APPROVAL as readonly string[]).includes(toolName);
+  private requiresApproval(toolName: string, toolArgs: Record<string, unknown>): boolean {
+    return isMutatingCall(this.toolMap.get(toolName), toolArgs);
   }
 }

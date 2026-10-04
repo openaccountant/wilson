@@ -1,11 +1,9 @@
 import type { Database } from './compat-sqlite.js';
 import {
-  DAILY_SPENDING_SQL,
+  composeDailySpendingSql,
+  composeStreakDailySql,
+  composeWeekSql,
   STREAK_BUDGET_TOTAL_SQL,
-  STREAK_DAILY_SQL,
-  WEEK_TOTAL_SQL,
-  WEEK_BY_CATEGORY_SQL,
-  WEEK_TOP_MERCHANT_SQL,
   BUDGET_COUNTDOWN_BUDGETS_SQL,
   BUDGET_COUNTDOWN_SPENT_SQL,
   computeStreak,
@@ -19,6 +17,10 @@ import {
   type WeekData,
   type WeeklySummaryResult,
   type BudgetCountdownRow,
+  entityScopeParams,
+  type OverviewOptions,
+  type EntityScopedOptions,
+  type WeekSql,
 } from './overview-sql.js';
 
 // The row interfaces moved to overview-sql.ts (shared with the offline
@@ -43,9 +45,13 @@ export type {
 export function getDailySpending(
   db: Database,
   startDate: string,
-  endDate: string
+  endDate: string,
+  accountId?: number,
+  entityId?: number,
+  opts?: OverviewOptions
 ): DailySpendingRow[] {
-  return db.prepare(DAILY_SPENDING_SQL).all({ startDate, endDate }) as DailySpendingRow[];
+  const { sql, params } = composeDailySpendingSql(startDate, endDate, accountId, entityId, opts);
+  return db.prepare(sql).all(params) as DailySpendingRow[];
 }
 
 /**
@@ -57,7 +63,8 @@ export function getDailySpending(
 export function getStreak(
   db: Database,
   dailyBudget?: number,
-  now?: Date
+  now?: Date,
+  opts?: EntityScopedOptions
 ): StreakResult {
   // Compute daily budget from budgets table if not provided
   let budget = dailyBudget;
@@ -67,7 +74,7 @@ export function getStreak(
   }
 
   // Get daily spending for all time, ordered by date descending
-  const rows = db.prepare(STREAK_DAILY_SQL).all() as { date: string; spending: number }[];
+  const rows = db.prepare(composeStreakDailySql(opts)).all(entityScopeParams(opts)) as { date: string; spending: number }[];
 
   return computeStreak(rows, budget, now ?? new Date());
 }
@@ -76,11 +83,13 @@ export function getStreak(
  * Get a summary comparing this week's spending to last week's.
  * Weeks run Monday through Sunday.
  */
-export function getWeeklySummary(db: Database, now?: Date): WeeklySummaryResult {
+export function getWeeklySummary(db: Database, now?: Date, opts?: EntityScopedOptions): WeeklySummaryResult {
   const windows = weekWindows(now ?? new Date());
+  const sql = composeWeekSql(opts);
+  const scope = entityScopeParams(opts);
 
-  const thisWeek = getWeekData(db, windows.thisStart, windows.thisEnd);
-  const lastWeek = getWeekData(db, windows.lastStart, windows.lastEnd);
+  const thisWeek = getWeekData(db, sql, { ...scope, startDate: windows.thisStart, endDate: windows.thisEnd });
+  const lastWeek = getWeekData(db, sql, { ...scope, startDate: windows.lastStart, endDate: windows.lastEnd });
 
   const changeAmount = thisWeek.total - lastWeek.total;
   const changePercent = lastWeek.total > 0 ? Math.round((changeAmount / lastWeek.total) * 100) : 0;
@@ -92,17 +101,17 @@ export function getWeeklySummary(db: Database, now?: Date): WeeklySummaryResult 
   };
 }
 
-function getWeekData(db: Database, startDate: string, endDate: string): WeekData {
+function getWeekData(db: Database, sql: WeekSql, params: Record<string, unknown>): WeekData {
   // Total spending
-  const totalRow = db.prepare(WEEK_TOTAL_SQL).get({ startDate, endDate }) as { total: number };
+  const totalRow = db.prepare(sql.total).get(params) as { total: number };
 
   // By category
   const byCategory = db
-    .prepare(WEEK_BY_CATEGORY_SQL)
-    .all({ startDate, endDate }) as WeekCategorySpending[];
+    .prepare(sql.byCategory)
+    .all(params) as WeekCategorySpending[];
 
   // Top merchant
-  const topMerchantRow = db.prepare(WEEK_TOP_MERCHANT_SQL).get({ startDate, endDate }) as
+  const topMerchantRow = db.prepare(sql.topMerchant).get(params) as
     | { merchant: string }
     | undefined;
 

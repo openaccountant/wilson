@@ -1,5 +1,7 @@
 /** Shared API response types for the Wilson dashboard. */
 
+import type { LocalHandoffV1 } from '../../local-handoff-format.js';
+
 export interface Transaction {
   id: number;
   date: string;
@@ -162,6 +164,10 @@ export interface PnlResponse {
 export interface BudgetVsActualRow {
   category: string;
   monthly_limit: number;
+  /** monthly_limit × months in the requested range (what percent_used compares against). */
+  limit?: number;
+  /** Budget months in the requested range, prorated by day (2 days of a 31-day month → 2/31). */
+  months?: number;
   actual: number;
   remaining: number;
   percent_used: number;
@@ -216,6 +222,62 @@ export interface ChatHistoryRow {
 export interface ChatResponse {
   answer: string;
   sessionId: string | null;
+}
+
+// "@" mention wire format for POST /api/chat (validated + re-resolved from the
+// DB server-side in src/dashboard/mentions.ts). Max 10 per message.
+export type MentionType = 'account' | 'category' | 'merchant' | 'goal' | 'entity';
+
+export interface Mention {
+  type: MentionType;
+  /** DB id — required for every type except merchant. */
+  id?: number;
+  /** Merchant raw key (TRIM(merchant_name) or description from /api/merchants) — matched exactly server-side. */
+  key?: string;
+  /** ≤ 120 chars; display only — the server uses DB labels. */
+  label: string;
+}
+
+export interface ChatRequest {
+  query: string;
+  sessionId?: string;
+  mentions?: Mention[];
+  /**
+   * On-device browser-subagent notes for the server agent (specs/browser-subagent.md
+   * section 8). Optional; the server validates, re-executes and frames it as untrusted.
+   */
+  localHandoff?: LocalHandoffV1;
+}
+
+// Matches GET /api/skills
+export interface SkillListItem {
+  name: string;
+  description: string;
+  tier: 'free' | 'paid';
+  source: string;
+}
+
+// Matches GET /api/merchants?q=&limit=
+export interface MerchantListItem {
+  label: string;
+  n: number;
+  last: string;
+}
+
+// Matches GET /api/categories (CategoryRow in src/db/queries.ts)
+export interface CategoryListItem {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description: string | null;
+}
+
+// Matches GET /api/budgets/limits (BudgetRow in src/db/queries.ts)
+export interface BudgetLimitRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
 }
 
 export interface LogRow {
@@ -383,4 +445,91 @@ export interface CatalogModel {
 export interface ModelsPanel {
   tasks: ModelTaskRow[];
   catalog: CatalogModel[];
+}
+
+// Matches GET /api/coverage response (CoverageResult in src/db/overview-sql.ts):
+// months that have ANY imported transactions, unfiltered.
+export interface CoverageResponse {
+  start: string | null;
+  end: string | null;
+  months: string[];
+}
+
+// ── Spending drill (GET /api/spending/breakdown, GET /api/spending/series) ──
+// Matches SpendingBreakdownResult / SpendingSeriesResult in
+// src/db/spending-drill-sql.ts (both endpoints are mirrored). All amounts are
+// POSITIVE spend under the dashboard spend rules. A bad param answers
+// 400 { error } online and offline alike.
+
+export type SpendingBreakdownBy = 'category' | 'merchant' | 'detailed';
+
+export interface SpendingBreakdownRow {
+  /** Group key: category label (→ cat), merchant key (→ merchant), or category_detailed ('' = none). */
+  key: string;
+  /** Display label (PFC detailed codes humanized; '' detail → 'No detail'). */
+  label: string;
+  total: number;
+  count: number;
+  /** Latest transaction date in the group (YYYY-MM-DD). */
+  last: string;
+  /** Spend in the comparison window: null = not requested or no coverage there; 0 = covered, no spend. */
+  prevTotal: number | null;
+}
+
+export interface SpendingBreakdownResponse {
+  /** Grouping applied: the `by` param, else 'merchant' when cat is set, else 'category'. */
+  by: SpendingBreakdownBy;
+  total: number;
+  count: number;
+  /** Distinct groups in the whole range. */
+  groupCount: number;
+  /** Outflows excluded as transfers & card payments (Income is not counted). */
+  excludedTotal: number;
+  /** Total spend in the comparison window: null = not requested or no coverage there. */
+  prevTotal: number | null;
+  rows: SpendingBreakdownRow[];
+  /** Spend of the groups ranked after this page (offset + limit onward). */
+  otherTotal: number;
+  /** Number of groups ranked after this page. */
+  otherCount: number;
+  /** Transactions in the groups ranked after this page. */
+  otherTxnCount: number;
+  /** More than one distinct non-blank category_detailed: show the by=detailed toggle. */
+  hasDetailed: boolean;
+}
+
+export interface SpendingSeriesResponse {
+  /** YYYY-MM, every month of the requested window. */
+  periods: string[];
+  /** null = month outside unfiltered coverage ('no data'); 0 = covered, no spend. */
+  values: (number | null)[];
+  coverageStart: string | null;
+  coverageEnd: string | null;
+}
+
+// ── open-jev pre-labeler (specs/open-jev-labeler.md §9.1) ───────────────────
+
+// Matches PRELABEL_MODEL in src/prelabel/config.ts, as served in /api/prelabel/config
+export interface PrelabelPins {
+  repo: string;
+  dtype: 'q4f16';
+  device: 'webgpu';
+  temperature: number;
+  templateVersion: 'prelabel-tmpl-v1';
+  modelId: string;
+  revision: string;
+  configSha: string;
+  approxDownloadBytes: number;
+}
+
+// Matches GET /api/prelabel/config (see src/prelabel/routes.ts)
+export interface PrelabelConfig {
+  enabled: boolean;
+  profile: string;
+  pins: PrelabelPins;
+  labels: string[];
+  labelSetVersion: string;
+  marginCut: number;
+  maxRowsPerRun: number;
+  approxDownloadBytes: number;
 }

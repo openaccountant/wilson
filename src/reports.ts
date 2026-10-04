@@ -140,7 +140,8 @@ export async function printBudget(args: string[], injectedDb?: Database): Promis
 
   try {
     const monthArg = getArgValue(args, '--month');
-    const month = monthArg ?? new Date().toISOString().slice(0, 7); // YYYY-MM
+    const now = new Date();
+    const month = monthArg ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM (local)
 
     const rows = getBudgetVsActual(db, month);
 
@@ -412,7 +413,7 @@ export async function printNetWorth(_args: string[], injectedDb?: Database): Pro
       return;
     }
 
-    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     console.log('Net Worth Summary');
     console.log('='.repeat(40));
@@ -459,7 +460,7 @@ export async function printBalanceSheet(_args: string[], injectedDb?: Database):
       return;
     }
 
-    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     console.log('Balance Sheet');
     console.log('='.repeat(60));

@@ -8,6 +8,10 @@ import {
 import { z } from 'zod';
 import type { Database } from '../db/compat-sqlite.js';
 import { insertChatMessage, updateChatAnswer, getRecentChatHistory, createChatSession, updateSessionTitle } from '../db/queries.js';
+// Light, zero-import helpers (not local-handoff.ts, which pulls in the tool
+// catalog): the dashboard prepends a mention block and/or an on-device handoff
+// block to the stored query (src/dashboard/chat.ts).
+import { stripHandoffBlock, stripInjectedContext } from '../dashboard/local-handoff-format.js';
 
 /**
  * Represents a single conversation turn (query + answer + summary)
@@ -17,6 +21,8 @@ export interface Message {
   query: string;
   answer: string | null;   // null until answer completes
   summary: string | null;  // LLM-generated summary, null until answer arrives
+  /** Tools the agent called while answering (in-memory only; local tool selection keeps them in). */
+  toolsUsed?: string[];
 }
 
 /**
@@ -118,7 +124,8 @@ export class InMemoryChatHistory {
   private async generateSummary(query: string, answer: string): Promise<string> {
     const answerPreview = answer.slice(0, 1500); // Limit for prompt size
 
-    const prompt = `Query: "${query}"
+    // Never feed the dashboard's on-device handoff block into the summary.
+    const prompt = `Query: "${stripHandoffBlock(query)}"
 Answer: "${answerPreview}"
 
 Generate a brief 1-2 sentence summary of this answer.`;
@@ -131,8 +138,9 @@ Generate a brief 1-2 sentence summary of this answer.`;
       });
       return response.content.trim();
     } catch {
-      // Fallback to a simple summary if LLM fails
-      return `Answer to: ${query.slice(0, 100)}`;
+      // Fallback to a simple summary if LLM fails (the user's words, not the
+      // dashboard's "@" mention context block or on-device handoff block).
+      return `Answer to: ${stripInjectedContext(query).slice(0, 100)}`;
     }
   }
 
@@ -181,7 +189,7 @@ Generate a brief 1-2 sentence summary of this answer.`;
         updateChatAnswer(this.db, this.lastDbId, answer, lastMessage.summary);
         // Auto-title the session from the first Q&A
         if (!this.sessionTitled && this.sessionId) {
-          const title = lastMessage.summary || lastMessage.query.slice(0, 100);
+          const title = lastMessage.summary || stripInjectedContext(lastMessage.query).trim().slice(0, 100);
           updateSessionTitle(this.db, this.sessionId, title);
           this.sessionTitled = true;
         }
@@ -190,6 +198,29 @@ Generate a brief 1-2 sentence summary of this answer.`;
       }
       this.lastDbId = null;
     }
+  }
+
+  /**
+   * Record tools the agent called for the turn in flight (the latest query
+   * without an answer yet). No pending turn = no-op.
+   */
+  recordToolsUsed(tools: readonly string[]): void {
+    const lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || lastMessage.answer !== null || tools.length === 0) return;
+    const used = (lastMessage.toolsUsed ??= []);
+    for (const tool of tools) if (!used.includes(tool)) used.push(tool);
+  }
+
+  /**
+   * Tools used in the last `turns` completed turns, oldest first, without
+   * duplicates — "now delete it" keeps the previous turn's search/edit tools.
+   */
+  getRecentToolsUsed(turns: number = 2): string[] {
+    if (turns <= 0) return [];
+    const recent = this.messages.filter((m) => m.answer !== null).slice(-turns);
+    const out: string[] = [];
+    for (const m of recent) for (const tool of m.toolsUsed ?? []) if (!out.includes(tool)) out.push(tool);
+    return out;
   }
 
   /**
@@ -213,7 +244,7 @@ Generate a brief 1-2 sentence summary of this answer.`;
 
     const messagesInfo = completedMessages.map((message) => ({
       id: message.id,
-      query: message.query,
+      query: stripHandoffBlock(message.query),
       summary: message.summary,
     }));
 
@@ -260,7 +291,7 @@ Select which previous messages are relevant to understanding or answering the cu
     }
 
     return messages
-      .map((message) => `User: ${message.query}\nAssistant: ${message.summary}`)
+      .map((message) => `User: ${stripHandoffBlock(message.query)}\nAssistant: ${message.summary}`)
       .join('\n\n');
   }
 
@@ -273,7 +304,7 @@ Select which previous messages are relevant to understanding or answering the cu
     }
 
     return messages
-      .map((message) => `User: ${message.query}\nAssistant: ${message.answer}`)
+      .map((message) => `User: ${stripHandoffBlock(message.query)}\nAssistant: ${message.answer}`)
       .join('\n\n');
   }
 
@@ -310,8 +341,10 @@ Select which previous messages are relevant to understanding or answering the cu
         ? message.answer
         : (message.summary ?? message.answer);
 
+      // Replays drop the on-device handoff block: it was context for THAT turn
+      // only (stale mirror numbers, up to 8,000 chars). The DB row keeps it.
       return [
-        { role: 'user', content: message.query },
+        { role: 'user', content: stripHandoffBlock(message.query) },
         { role: 'assistant', content: assistantContent ?? '' },
       ];
     });

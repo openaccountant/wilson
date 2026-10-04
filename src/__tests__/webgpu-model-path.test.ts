@@ -3,18 +3,21 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import {
   checkWebGpuAvailable,
+  resolveTransformersDevice,
   WEBGPU_MODEL_PATTERNS,
 } from '../model/providers/transformers.js';
-import { getModelsForProvider } from '../utils/model.js';
+import { getModelsForProvider, getTransformersCatalogEntry } from '../utils/model.js';
 
 /**
  * Layered coverage for the WebGPU model path (issue #39). Layers 1 and 2 run
- * everywhere, GPU or not. Layers 3 and 4 download ~600 MB and need a real GPU,
+ * everywhere, GPU or not. Layers 3 and 4 download ~570 MB and need a real GPU,
  * so they are opt-in via WILSON_GPU_TESTS=1 — see CONTRIBUTING.md.
  */
 
 const GPU_TESTS = process.env.WILSON_GPU_TESTS === '1';
 const GPU_MODEL = 'onnx-community/Qwen3-0.6B-ONNX';
+// The catalog pin (q4f16) — the same weights the adapter and browser load.
+const GPU_DTYPE = getTransformersCatalogEntry(GPU_MODEL)!.dtype!;
 
 async function loadOnnxBackend() {
   const entry = createRequire(import.meta.url).resolve('@huggingface/transformers');
@@ -39,9 +42,8 @@ describe('layer 1: execution provider resolution', () => {
   });
 });
 
-describe('layer 1: webgpu tags agree with WEBGPU_MODEL_PATTERNS', () => {
+describe('layer 1: webgpu tags agree with server device routing', () => {
   const models = getModelsForProvider('transformers');
-  const matchesPattern = (id: string) => WEBGPU_MODEL_PATTERNS.some((p) => id.includes(p));
 
   test('the provider actually lists models of both kinds', () => {
     expect(models.some((m) => m.tags?.includes('webgpu'))).toBe(true);
@@ -53,9 +55,18 @@ describe('layer 1: webgpu tags agree with WEBGPU_MODEL_PATTERNS', () => {
     test(`${model.id} is ${tagged ? '' : 'not '}dispatched to WebGPU`, () => {
       // A mismatch either hides a GPU model from the picker or sends a CPU
       // model down the webgpu path, which only fails after the download.
-      expect(matchesPattern(model.id)).toBe(tagged);
+      // Catalog entries route by their `device` field, not by name patterns.
+      const repo = model.id.replace(/^transformers:/, '');
+      expect(resolveTransformersDevice(repo) === 'webgpu').toBe(tagged);
     });
   }
+
+  test('uncatalogued repos still route by the legacy name patterns', () => {
+    for (const p of WEBGPU_MODEL_PATTERNS) {
+      expect(resolveTransformersDevice(`someone/custom${p}`)).toBe('webgpu');
+    }
+    expect(resolveTransformersDevice('someone/custom-cpu-model')).toBe('cpu');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -89,7 +100,7 @@ describe('layer 2: capability probe', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Layers 3 and 4 — gated. Download ~600 MB and need a working GPU.
+// Layers 3 and 4 — gated. Download ~570 MB and need a working GPU.
 // ---------------------------------------------------------------------------
 
 describe('layers 3-4: gated GPU generation (WILSON_GPU_TESTS=1)', () => {
@@ -99,7 +110,7 @@ describe('layers 3-4: gated GPU generation (WILSON_GPU_TESTS=1)', () => {
       const { pipeline } = await import('@huggingface/transformers');
       const pipe = await pipeline('text-generation', GPU_MODEL, {
         device: 'webgpu',
-        dtype: 'fp16',
+        dtype: GPU_DTYPE,
       });
       const out = await pipe('Hello', { max_new_tokens: 16, do_sample: false });
       const text = (out as { generated_text: string }[])[0]?.generated_text ?? '';
@@ -114,7 +125,7 @@ describe('layers 3-4: gated GPU generation (WILSON_GPU_TESTS=1)', () => {
       const { pipeline } = await import('@huggingface/transformers');
       const pipe = await pipeline('text-generation', GPU_MODEL, {
         device: 'webgpu',
-        dtype: 'fp16',
+        dtype: GPU_DTYPE,
       });
 
       const rss: number[] = [];

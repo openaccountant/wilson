@@ -235,6 +235,71 @@ describe('agent/prompts', () => {
       expect(prompt).toContain('Tool Usage Policy');
     });
 
+    test('local transformers models get no rich tool descriptions (the adapter injects the schemas once)', async () => {
+      const prompt = await buildSystemPrompt('transformers:onnx-community/granite-4.0-micro-ONNX-web');
+      expect(prompt).not.toContain('Mock Tool Descriptions');
+      expect(prompt).not.toContain('## Available Tools');
+      expect(prompt).toContain('Tool Usage Policy');
+      expect(toolDescSpy).not.toHaveBeenCalled();
+    });
+
+    describe('local transformers prompt trim (design 2026-10-03, Phase 0)', () => {
+      const LOCAL = 'transformers:onnx-community/granite-4.0-micro-ONNX-web';
+      const skills = [
+        { name: 'month-end-close', description: 'Walk through closing the books for the month.', tier: 'free', source: 'builtin', path: '/tmp' },
+        { name: 'tax-prep', description: 'Prepare tax documents.', tier: 'paid', source: 'builtin', path: '/tmp' },
+      ];
+
+      test('skills are listed by name only, with the usage policy kept', async () => {
+        discoverSpy.mockReturnValue(skills);
+        metadataSpy.mockReturnValue('- **month-end-close**: Walk through closing the books for the month.\n- **tax-prep**: Prepare tax documents.');
+
+        const prompt = await buildSystemPrompt(LOCAL);
+        expect(prompt).toContain('Available Skills');
+        expect(prompt).toContain('month-end-close, tax-prep');
+        expect(prompt).toContain('Skill Usage Policy');
+        expect(prompt).not.toContain('Walk through closing the books');
+        expect(metadataSpy).not.toHaveBeenCalled();
+      });
+
+      test('selected skills get their description; the rest stay names only (tool selection, Phase 1)', async () => {
+        discoverSpy.mockReturnValue(skills);
+        const prompt = await buildSystemPrompt(LOCAL, null, { skillSelection: ['tax-prep'] });
+        expect(prompt).toContain('- **tax-prep**: Prepare tax documents.');
+        expect(prompt).toContain('Other skills: month-end-close');
+        expect(prompt).not.toContain('Walk through closing the books');
+        expect(prompt).toContain('Skill Usage Policy');
+
+        // No skill selected: the Phase 0 names-only list, byte for byte.
+        expect(await buildSystemPrompt(LOCAL, null, { skillSelection: [] })).toBe(await buildSystemPrompt(LOCAL, null));
+      });
+
+      test('cloud models ignore a skill selection', async () => {
+        discoverSpy.mockReturnValue(skills);
+        metadataSpy.mockReturnValue('- **month-end-close**: Walk through closing the books for the month.');
+        expect(await buildSystemPrompt('claude-sonnet-4-5', null, { skillSelection: ['tax-prep'] })).toBe(
+          await buildSystemPrompt('claude-sonnet-4-5', null),
+        );
+      });
+
+      test('the numeric table example does not leak figures; the format example stays', async () => {
+        const prompt = await buildSystemPrompt(LOCAL);
+        expect(prompt).not.toContain('842.50');
+        expect(prompt).not.toContain('22%');
+        expect(prompt).toContain('| Category   | Amount  | % Total |');
+        expect(prompt).toContain('$X');
+      });
+
+      test('cloud models keep full skill descriptions and the table example', async () => {
+        discoverSpy.mockReturnValue(skills);
+        metadataSpy.mockReturnValue('- **month-end-close**: Walk through closing the books for the month.');
+
+        const prompt = await buildSystemPrompt('claude-sonnet-4-5');
+        expect(prompt).toContain('Walk through closing the books');
+        expect(prompt).toContain('$842.50');
+      });
+    });
+
     test('includes skills section when skills exist', async () => {
       discoverSpy.mockReturnValue([{ name: 'test-skill', description: 'A test', tier: 'free', source: 'builtin', path: '/tmp' }]);
       metadataSpy.mockReturnValue('- **test-skill**: A test');

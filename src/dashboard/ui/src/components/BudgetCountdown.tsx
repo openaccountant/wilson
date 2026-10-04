@@ -1,6 +1,7 @@
 import { useApi } from '@/hooks/useApi';
 import { useAppState } from '@/state';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { money, moneyWhole } from '@/format';
 import type { BudgetCountdownItem } from '@/types';
 
 function barColor(percent: number): string {
@@ -52,8 +53,8 @@ export function BudgetCountdown() {
             <div key={item.category}>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-text">{item.category}</span>
-                <span className="text-text-muted font-mono">
-                  ${item.remaining.toFixed(0)} left &middot; {item.daysLeft}d &middot; ${item.perDay.toFixed(2)}/day
+                <span className="text-text-muted font-mono tabular-nums">
+                  {moneyWhole(item.remaining)} left &middot; {item.daysLeft}d &middot; {money(item.perDay)}/day
                 </span>
               </div>
               <div className="h-2 bg-border-muted rounded-full overflow-hidden">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api';
+import { money } from '@/format';
 import { useApi } from '@/hooks/useApi';
 import {
   parseStatementContent,
@@ -112,11 +113,9 @@ type AutoBookUi =
 
 const ACCEPTED_EXTENSIONS = ['.csv', '.ofx', '.qif'];
 
+/** Unsigned two-decimal amount (the surrounding copy carries direction). */
 function fmtUsd(n: number): string {
-  return (
-    '$' +
-    Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
+  return money(Math.abs(n));
 }
 
 /** The demo chain drives steps one POST at a time — each node lights on its own response. */

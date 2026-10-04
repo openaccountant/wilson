@@ -1,0 +1,6387 @@
+{
+ "meta": {
+  "startedAt": "2026-10-03T04:58:35.794Z",
+  "model": "onnx-community/Qwen3-0.6B-ONNX",
+  "web": "http://127.0.0.1:56929",
+  "headless": true,
+  "browserVersion": "153.0.8010.12",
+  "adapter": {
+   "vendor": "apple",
+   "architecture": "metal-3",
+   "description": "",
+   "isFallbackAdapter": false,
+   "shaderF16": true,
+   "crossOriginIsolated": false
+  },
+  "firstLoad": {
+   "loadMs": 29803.899999976158,
+   "loadFresh": true,
+   "dtype": "q4f16",
+   "wallMs": 29805
+  },
+  "warmReload": {
+   "loadMs": 1818.8000000715256,
+   "wallMs": 1820
+  },
+  "finishedAt": "2026-10-03T05:00:01.697Z"
+ },
+ "sets": {
+  "gold": {
+   "records": [
+    {
+     "q": "Show me every Whole Foods charge last month",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0.5,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 1,
+     "ms": 353.59999990463257,
+     "workerMs": 353.59999990463257,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 151.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 199.90000009536743,
+       "chars": 36
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.24995900000067195
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No results found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Find all transactions over $200 in June",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 1.8000000715255737,
+     "workerMs": 1.8000000715255737,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.23849999999947613
+      }
+     ],
+     "statusMs": 0.9000000953674316,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "When did I last pay Comcast?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0.09999990463256836,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 1.1999999284744263,
+     "workerMs": 1.1999999284744263,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.15287499999976717
+      }
+     ],
+     "statusMs": 0.5999999046325684,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "List my Uber rides this year",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 1,
+     "ms": 567.7000000476837,
+     "workerMs": 567.7000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 154.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 412,
+       "chars": 83
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.15533400000276743
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "1 transaction found. #15 2026-05-02 -$18.50 Transport Uber trip.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Did I get charged twice by Adobe?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 394.6999999284744,
+     "workerMs": 394.6999999284744,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 164.89999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 227.79999995231628,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.23066700000345008
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Search for anything from Ticketmaster",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 2.100000023841858,
+     "workerMs": 2.100000023841858,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.8999999761581421,
+       "execMs": 0.22537499999452848
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Where did my money go this month?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1172.3999999761581,
+     "workerMs": 1172.3999999761581,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 177,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 993.0999999046326,
+       "chars": 217
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1.3000000715255737,
+       "execMs": 0.6527920000007725
+      }
+     ],
+     "statusMs": 0.6000000238418579,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "- **Groceries**: -$88.50 (1 item, +13%)  \n- **Transport**: -$45.50 (1 item)  \n- **Dining**: -$41.25 (1 item, +25%)  \n- **Subscriptions**: -$15.50 (1 item, +79%)  \n\n**Total**: -$190.75 (49% increase)",
+     "suggestedCall": null
+    },
+    {
+     "q": "Break down my spending by category for the quarter",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1640.5,
+     "workerMs": 1640.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 175.69999992847443,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 1463.2000000476837,
+       "chars": 336
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.18091699999786215
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "- **Groceries**: -$88.50 (51%)\n- **Transport**: -$45.50 (146%)\n- **Dining**: -$41.25 (25%)\n- **Subscriptions**: -$15.50 (91%)\n- **Total**: -$190.75 (76%)\n\n**Breakdown by category for the quarter (2026):**  \n- Groceries: -$88.50  \n- Transport: -$45.50  \n- Dining: -$41.25  \n- Subscriptions: -$15.50  \n- Total: -$190.75",
+     "suggestedCall": null
+    },
+    {
+     "q": "How much did I spend on dining compared to last month?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 136.19999992847443,
+     "workerMs": 136.19999992847443,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 134.79999995231628,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "What are my biggest expense categories this year?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 927.7999999523163,
+     "workerMs": 927.7999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 166.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 759,
+       "chars": 149
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.2937499999970896
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "- Transfer: -$500.00  \n- Dining: -$347.25  \n- Utilities: -$270.75  \n- Shopping: -$204.50  \n- Subscriptions: -$197.00  \n\n$ amounts.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Am I spending more on groceries than before?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 482.89999997615814,
+     "workerMs": 482.89999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 166.20000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 314.6999999284744,
+       "chars": 74
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.2641250000015134
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "No, you are not spending more on groceries than before.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Give me a profit and loss for last quarter",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 976,
+     "workerMs": 976,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 195.80000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 778.1000000238419,
+       "chars": 108
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.8999999761581421,
+       "execMs": 0.4168329999956768
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "Profit & Loss: Q2 2026  \nIncome: $ 11725.00  \nExpenses: $ 786.00  \nNet Profit: $ 10939.00",
+     "suggestedCall": null
+    },
+    {
+     "q": "How much did my business make versus spend in May?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "ungrounded",
+     "ms": 1047.8999999761581,
+     "workerMs": 1047.8999999761581,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 208.5,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 836.7000000476837,
+       "chars": 138
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 1,
+       "execMs": 0.3226250000006985
+      }
+     ],
+     "statusMs": 1.0999999046325684,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Income vs expenses for the year so far",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1041.6000000238419,
+     "workerMs": 1041.6000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 222.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 816.8000000715256,
+       "chars": 101
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.8999999761581421,
+       "execMs": 0.25145800000609597
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "- **Income**: $ 18725.00  \n- **Expenses**: $ 1475.75  \n\n**Net Profit**: $ 17249.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "Did I come out ahead last month?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 682.0999999046326,
+     "workerMs": 682.0999999046326,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 249.90000009536743,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 428.89999997615814,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 1.5,
+       "execMs": 0.41495800000120653
+      }
+     ],
+     "statusMs": 1.5,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$4352.75.",
+     "suggestedCall": null
+    },
+    {
+     "q": "P&L by category for this month",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary",
+      "profit_loss"
+     ],
+     "gateMs": 0.09999990463256836,
+     "route": "spending_summary",
+     "via": "llm",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1030.3000000715256,
+     "workerMs": 1030.3000000715256,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 164,
+       "chars": 35
+      },
+      {
+       "kind": "next",
+       "ms": 229.20000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 633.5,
+       "chars": 80
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1.7999999523162842,
+       "execMs": 0.5717919999951846
+      }
+     ],
+     "statusMs": 1.600000023841858,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "$190.75 spent in July 2026, compared to $190.75 in June 2026.",
+     "suggestedCall": null
+    },
+    {
+     "q": "What is my net worth?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 701.6000000238419,
+     "workerMs": 701.6000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 265.6999999284744,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 432.60000002384186,
+       "chars": 42
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 1.399999976158142,
+       "execMs": 0.7540840000001481
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222,050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show my net worth trend over the last 12 months",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "tool-unavailable",
+     "ms": 141.10000002384186,
+     "workerMs": 141.10000002384186,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 138.79999995231628,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 1,
+       "execMs": 0.0519170000043232
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": {
+      "tool": "net_worth",
+      "args": {
+       "action": "trend",
+       "months": 12
+      }
+     }
+    },
+    {
+     "q": "Give me my balance sheet with assets and liabilities",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 2351.600000023842,
+     "workerMs": 2351.600000023842,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 230,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 2120,
+       "chars": 438
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.8000000715255737,
+       "execMs": 0.34929099999862956
+      }
+     ],
+     "statusMs": 0.6999999284744263,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222050.25  \nTotal assets: $481251.50  \nTotal liabilities: $259201.25  \nAssets:  \n- Wallet (Cash): $250.00  \n- Everyday Checking (Checking): $4000.50  \n- Brokerage (Investment): $50000.75  \n- House (Real Estate): $400000.00  \n- Rainy Day (Savings): $12000.25  \n- Car (Vehicle): $15000.00  \n\nLiabilities:  \n- Car Loan (Auto Loan): $8000.00  \n- Visa (Credit Card): $1200.75  \n- Home Loan (Mortgage): $250000.50",
+     "suggestedCall": null
+    },
+    {
+     "q": "Am I worth more than I was six months ago?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "tool-unavailable",
+     "ms": 1.399999976158142,
+     "workerMs": 1.399999976158142,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.5,
+       "execMs": 0.030542000000423286
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": {
+      "tool": "net_worth",
+      "args": {
+       "action": "trend",
+       "months": 6
+      }
+     }
+    },
+    {
+     "q": "What will my savings look like in three months?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 632.7999999523163,
+     "workerMs": 632.7999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 227.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 403.10000002384186,
+       "chars": 94
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.7142499999972642
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Based on the provided data, your savings will be $27282.50 in three months.",
+     "suggestedCall": null
+    },
+    {
+     "q": "If I cancel Netflix, how much will I save by year end?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 507.60000002384186,
+     "workerMs": 507.60000002384186,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 205.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 299.89999997615814,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.8000000715255737,
+       "execMs": 0.3773749999963911
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Project my cash flow for the next six months",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1526.2000000476837,
+     "workerMs": 1526.2000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 221.20000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 1303,
+       "chars": 171
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.2064170000012382
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$3677.25 (Average monthly net) for 2026-08, $23605.25 (2026-09), $27282.50 (2026-10), $30959.75 (2026-11), $34637.00 (2026-12), and $38314.25 (2027-01).",
+     "suggestedCall": null
+    },
+    {
+     "q": "What if I cut dining out by $100 a month?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 587.0999999046326,
+     "workerMs": 587.0999999046326,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 218.70000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 365,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.2999999523162842,
+       "execMs": 0.2752919999984442
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$3777.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Will I have enough cash by September at my current pace?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 882.1000000238419,
+     "workerMs": 882.1000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 205.10000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 674.6000000238419,
+       "chars": 184
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.0999999046325684,
+       "execMs": 0.3710419999988517
+      }
+     ],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Based on the provided data, with an average monthly net of $3677.25 and a cash amount of $23605.25 at the end of the horizon, you will have enough cash by September.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Recategorize that Starbucks charge as Dining",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0.20000004768371582,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0.20000004768371582,
+     "workerMs": 0.2999999523162842,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Hi, what can you do?",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0.10000002384185791,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Explain what a Roth IRA is",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0.19999992847442627,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0.19999992847442627,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Delete the duplicate Adobe transaction",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Import my new bank statement",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Help me write an email to my accountant",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Flag this charge as tax deductible",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "How much did I pay in total to Costco this year?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 2.700000047683716,
+     "workerMs": 2.700000047683716,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.31745800000499
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Pull up my rent payments from the last three months",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1,
+     "workerMs": 1,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "What did I spend per category in the last 30 days?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1.1999999284744263,
+     "workerMs": 1.1999999284744263,
+     "gens": [],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Which category grew the most compared to the previous period?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 560,
+     "workerMs": 560,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 180.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 377.6999999284744,
+       "chars": 81
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.3273750000007567
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "$41.25 (Dining) grew the most compared to the previous period.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show income minus expenses for the previous quarter",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 115.10000002384186,
+     "workerMs": 115.10000002384186,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 114.20000004768372,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "What was my profit last year?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 477,
+     "workerMs": 477,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 191.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 283.89999997615814,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.1705839999995078
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "+$3137.00",
+     "suggestedCall": null
+    },
+    {
+     "q": "How have my assets and debts changed over the past year?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "tool-unavailable",
+     "ms": 1.6999999284744263,
+     "workerMs": 1.6999999284744263,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.5,
+       "execMs": 0.03291699999681441
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": {
+      "tool": "net_worth",
+      "args": {
+       "action": "trend",
+       "months": 12
+      }
+     }
+    },
+    {
+     "q": "What do my total assets minus liabilities come to?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 775.2000000476837,
+     "workerMs": 775.2000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 217.29999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 556.5,
+       "chars": 59
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.5,
+       "execMs": 0.15108400000463007
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "$222,050.25 - $259,201.25 = $-37,151.00.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Estimate my savings at the end of the year if I keep spending like this",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary",
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "llm",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 657.5999999046326,
+     "workerMs": 657.5999999046326,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 104.60000002384186,
+       "chars": 27
+      },
+      {
+       "kind": "next",
+       "ms": 222.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 328.10000002384186,
+       "chars": 29
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.100000023841858,
+       "execMs": 0.2587920000005397
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$34637.00.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Change my budget goal to $500 a month",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    }
+   ],
+   "score": {
+    "n": 42,
+    "read": {
+     "n": 34,
+     "routedCorrect": 31,
+     "routedCorrectPct": 91.17647058823529,
+     "falselyGated": 0,
+     "falselyGatedPct": 0,
+     "routedWrong": 3,
+     "routedNone": 0
+    },
+    "none": {
+     "n": 8,
+     "diverted": 8,
+     "divertedPct": 100,
+     "misrouted": []
+    },
+    "confusion": {
+     "transaction_search": {
+      "transaction_search": 8
+     },
+     "spending_summary": {
+      "spending_summary": 6,
+      "transaction_search": 1
+     },
+     "profit_loss": {
+      "profit_loss": 5,
+      "spending_summary": 1,
+      "transaction_search": 1
+     },
+     "net_worth": {
+      "net_worth": 6
+     },
+     "forecast": {
+      "forecast": 6
+     },
+     "none": {
+      "gated": 8
+     }
+    },
+    "c4": {
+     "n": 0,
+     "diverted": 0,
+     "pass": false,
+     "enoughRows": false
+    },
+    "c3": {
+     "n": 8,
+     "withRows": 3,
+     "emptyResult": 4,
+     "argsUnfillable": 1,
+     "localAnswerOnEmpty": 0,
+     "other": 0,
+     "pass": true
+    },
+    "c15": {
+     "n": 12,
+     "p50": 0.10000002384185791,
+     "p95": 136.19999992847443,
+     "max": 136.19999992847443,
+     "byPath": {
+      "args-unfillable": {
+       "n": 4,
+       "p50": 1.1999999284744263,
+       "p95": 136.19999992847443,
+       "max": 136.19999992847443
+      },
+      "gated": {
+       "n": 8,
+       "p50": 0,
+       "p95": 0.20000004768371582,
+       "max": 0.20000004768371582
+      }
+     },
+     "pass": true
+    },
+    "keywordOnly": {
+     "read": {
+      "n": 34,
+      "routedCorrect": 29,
+      "routedCorrectPct": 85.29411764705883,
+      "falselyGatedPct": 0
+     },
+     "none": {
+      "n": 8,
+      "diverted": 8,
+      "divertedPct": 100
+     }
+    }
+   },
+   "verdict": {
+    "bars": {
+     "divertedGe95": true,
+     "routedGe90": true,
+     "falselyGatedLe10": true,
+     "c4AllDiverted": false,
+     "c3NoLocalAnswerOnEmpty": true,
+     "c15P95Le2s": true
+    },
+    "allPass": false
+   }
+  },
+  "heldout": {
+   "records": [
+    {
+     "q": "find all my uber charges from last week",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 0.8999999761581421,
+     "workerMs": 0.8999999761581421,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show me anything over $200 at Amazon in September",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 1.399999976158142,
+     "workerMs": 1.399999976158142,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.24025000000256114
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "did I get charged twice by Netflix?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 5,
+     "ms": 486,
+     "workerMs": 486,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 186.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 298.39999997615814,
+       "chars": 62
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.5999999046325684,
+       "execMs": 0.19379200000548735
+      }
+     ],
+     "statusMs": 0.6000000238418579,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No, I did not get charged twice by Netflix.",
+     "suggestedCall": null
+    },
+    {
+     "q": "pull up every transaction with Whole Foods this year",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 4,
+     "ms": 430.6999999284744,
+     "workerMs": 430.6999999284744,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 187.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 241.19999992847443,
+       "chars": 36
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.22404200000164565
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No results found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "what was that $47.12 charge on the 3rd",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 144.5,
+     "workerMs": 144.5,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 143.10000002384186,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.1999999284744263,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "list my deposits from yesterday",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1.100000023841858,
+     "workerMs": 1.100000023841858,
+     "gens": [],
+     "tools": [],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "any charges from hulu lately",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show transactons at starbcks since august",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 0.8999999761581421,
+     "workerMs": 0.8999999761581421,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "look up the payment to my landlord in march",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0.09999990463256836,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0.09999990463256836,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "which purchases did I make at Target 2 weeks ago",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 142.39999997615814,
+     "workerMs": 142.39999997615814,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 141.89999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.5,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "find the venmo payment to Dave",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 2.5,
+     "workerMs": 2.5,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.100000023841858,
+       "execMs": 0.3729590000002645
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "all gas station purchases this month, itemized",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "search for refunds in the last 30 days",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 0.9000000953674316,
+     "workerMs": 0.9000000953674316,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show me my largest 10 transactions this quarter",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 0.5,
+     "workerMs": 0.5,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.5,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "where did I buy coffee last tuesday",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 140.39999997615814,
+     "workerMs": 140.39999997615814,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 139.80000007152557,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.5,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "find the adobe charges",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 396.89999997615814,
+     "workerMs": 396.89999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 162.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 232.69999992847443,
+       "chars": 25
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.5999999046325684,
+       "execMs": 0.21654199999466073
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "$59.75",
+     "suggestedCall": null
+    },
+    {
+     "q": "every transaction tagged groceries in july",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show pending charges from today",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1.100000023841858,
+     "workerMs": 1.100000023841858,
+     "gens": [],
+     "tools": [],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "anything from Delta airlines in 2026",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "lookup charge 'SQ *BLUE BOTTLE'",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what did I pay Comcast in the last three months, each bill",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 146.20000004768372,
+     "workerMs": 146.20000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 144.89999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much did I spend on dining out this month",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 1,
+     "ms": 503.3000000715256,
+     "workerMs": 503.3000000715256,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 140.79999995231628,
+       "chars": 37
+      },
+      {
+       "kind": "next",
+       "ms": 149,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 211.10000002384186,
+       "chars": 26
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.24962499999674037
+      }
+     ],
+     "statusMs": 0.9000000953674316,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "-$41.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "break down my spending by category",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1224.9000000953674,
+     "workerMs": 1224.9000000953674,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 178.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 1043.5,
+       "chars": 210
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.35566600000311155
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "- **Groceries**: -$88.50 (1 item, +13%)\n- **Transport**: -$45.50 (1 item)\n- **Dining**: -$41.25 (1 item, +25%)\n- **Subscriptions**: -$15.50 (1 item, +79%)\n- **Total**: -$190.75 (49% increase)",
+     "suggestedCall": null
+    },
+    {
+     "q": "where is my money going lately",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 134.5,
+     "workerMs": 134.5,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 133.39999997615814,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what are my top spending categories this quarter",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 658.3999999761581,
+     "workerMs": 658.3999999761581,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 173.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 482.2000000476837,
+       "chars": 87
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1.2000000476837158,
+       "execMs": 0.2770830000008573
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "- Groceries: -$88.50  \n- Transportation: -$45.50  \n- Dining: -$41.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "am I spending more on groceries than last month",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 605.7999999523163,
+     "workerMs": 605.7999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 176.10000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 427.7999999523163,
+       "chars": 109
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.2912080000023707
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "Based on the spending summary, you are spending **$41.25 more on dining** than last month.",
+     "suggestedCall": null
+    },
+    {
+     "q": "total spent on subscriptions this year",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "ungrounded",
+     "rows": 7,
+     "ms": 797.7999999523163,
+     "workerMs": 797.7999999523163,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 140.90000009536743,
+       "chars": 37
+      },
+      {
+       "kind": "next",
+       "ms": 217.89999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 436,
+       "chars": 44
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.5,
+       "execMs": 0.34324999999807915
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much have i spent on food so frist",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 144.89999997615814,
+     "workerMs": 144.89999997615814,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 141.89999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.5,
+       "execMs": 0.33970899999985704
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "spending by category for the past 30 days",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1.0999999046325684,
+     "workerMs": 1.0999999046325684,
+     "gens": [],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what percent of my spend goes to transportation",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 142.20000004768372,
+     "workerMs": 142.20000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 141.5,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.7000000476837158,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "give me a rundown of this month's expenses",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 149,
+     "workerMs": 149,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 146.09999990463257,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.399999976158142,
+       "execMs": 0.290541000002122
+      }
+     ],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much did entertainment cost me this quarter",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 142.80000007152557,
+     "workerMs": 142.80000007152557,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 141.60000002384186,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.9000000953674316,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's my biggest expense category ytd",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 478.2999999523163,
+     "workerMs": 478.2999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 170,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 305.39999997615814,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1.2000000476837158,
+       "execMs": 0.28491599999688333
+      }
+     ],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "$1975.75.",
+     "suggestedCall": null
+    },
+    {
+     "q": "compare my spending this month vs the usual",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 392.89999997615814,
+     "workerMs": 392.89999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 163.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 227.5,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.2712919999976293
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "tell me how much I blew on shopping since Jan",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 126.29999995231628,
+     "workerMs": 126.29999995231628,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 125.40000009536743,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "monthly spend breakdown pls",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what did I spend on travel in 2026",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 133.59999990463257,
+     "workerMs": 133.59999990463257,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 132.59999990463257,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much are utilities costing me per month",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 141,
+     "workerMs": 141,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 140.19999992847443,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "summarize expenses for last month by category",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1.0999999046325684,
+     "workerMs": 1.0999999046325684,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's my P&L for Q3",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 476.5,
+     "workerMs": 476.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 289,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.16570900000078836
+      }
+     ],
+     "statusMs": 0.6000000238418579,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$3309.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "income vs expenses this year",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 865.1000000238419,
+     "workerMs": 865.1000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 187.70000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 675.3999999761581,
+       "chars": 101
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.18987499999639113
+      }
+     ],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "- **Income**: $ 18725.00  \n- **Expenses**: $ 1475.75  \n\n**Net Profit**: $ 17249.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "did I make a profit last month",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 518.1000000238419,
+     "workerMs": 518.1000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 187.89999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 328.39999997615814,
+       "chars": 35
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.25304099999630125
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$4352.75 profit.",
+     "suggestedCall": null
+    },
+    {
+     "q": "how much did my side business earn after expenses",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 143,
+     "workerMs": 143,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 141.90000009536743,
+       "chars": 30
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.9000000953674316,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show me profit and loss for the first half of 2026",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 119.5,
+     "workerMs": 119.5,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 118.39999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "net income for the past 12 months",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "am I in the black this quarter?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 132.09999990463257,
+     "workerMs": 132.09999990463257,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 131.20000004768372,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "revenue minus costs for freelance work in august",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "income statement for last year",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much more did I earn than spend in September",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 150.30000007152557,
+     "workerMs": 150.30000007152557,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 147.5,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.399999976158142,
+       "execMs": 0.3148750000036671
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "profit/loss ytd",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 563.5,
+     "workerMs": 563.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 201.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 360,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.5999999046325684,
+       "execMs": 0.16612500000337604
+      }
+     ],
+     "statusMs": 0.9000000953674316,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$17249.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "what's my net income this month",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "ungrounded",
+     "ms": 951.2999999523163,
+     "workerMs": 951.2999999523163,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 150,
+       "chars": 28
+      },
+      {
+       "kind": "next",
+       "ms": 219.10000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 579.1000000238419,
+       "chars": 77
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 1.2999999523162842,
+       "execMs": 0.2514999999984866
+      }
+     ],
+     "statusMs": 1.2999999523162842,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "earnings vs outgoings since January",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "P&L by category for the last quarter",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary",
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 127.20000004768372,
+     "workerMs": 127.20000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 125.69999992847443,
+       "chars": 35
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "are my expenses exceeding my income this year",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 134.40000009536743,
+     "workerMs": 134.40000009536743,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 133.20000004768372,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's my net worth",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 599.0999999046326,
+     "workerMs": 599.0999999046326,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 222.90000009536743,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 374.09999990463257,
+       "chars": 42
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.19475000000966247
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222,050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "show my balance sheet",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 126.79999995231628,
+     "workerMs": 126.79999995231628,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 123.89999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.4000000953674316,
+       "execMs": 0.33654099999694154
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how has my net worth changed over the past year",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "tool-unavailable",
+     "ms": 2.100000023841858,
+     "workerMs": 2.100000023841858,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.060250000009546056
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": {
+      "tool": "net_worth",
+      "args": {
+       "action": "trend",
+       "months": 12
+      }
+     }
+    },
+    {
+     "q": "total assets minus liabilities",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "ungrounded",
+     "ms": 946.7999999523163,
+     "workerMs": 946.7999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 212.89999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 730.8000000715256,
+       "chars": 82
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 1.2999999523162842,
+       "execMs": 0.2873749999998836
+      }
+     ],
+     "statusMs": 1.2999999523162842,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what am I worth right now",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 127,
+     "workerMs": 127,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 125.89999997615814,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "net worth trend since january",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 1,
+     "workerMs": 1,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much debt do I have compared to assets",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 125.19999992847443,
+     "workerMs": 125.19999992847443,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 124.69999992847443,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.5,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show me my overall financial position",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 1.600000023841858,
+     "workerMs": 1.600000023841858,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.22762499999953434
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what is my networth today",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "llm",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 703.3999999761581,
+     "workerMs": 703.3999999761581,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 154.70000004768372,
+       "chars": 28
+      },
+      {
+       "kind": "next",
+       "ms": 202.20000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 344.3000000715256,
+       "chars": 41
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 1,
+       "execMs": 0.19225000000733417
+      }
+     ],
+     "statusMs": 0.3999999761581421,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "balance sheet as of end of last quarter",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 610.7000000476837,
+     "workerMs": 610.7000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 198.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 410,
+       "chars": 30
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.2081659999967087
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "$222050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "how much richer am I than 6 months ago",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 127.30000007152557,
+     "workerMs": 127.30000007152557,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 126.20000004768372,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "give me my assets and liabilities",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 824.1000000238419,
+     "workerMs": 824.1000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 199.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 622.4000000953674,
+       "chars": 99
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.20604099999764003
+      }
+     ],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222050.25  \nTotal assets: $481251.50  \nTotal liabilities: $259201.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "net worth growth this year",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "tool-unavailable",
+     "ms": 1.600000023841858,
+     "workerMs": 1.600000023841858,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.3999999761581421,
+       "execMs": 0.026874999995925464
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": null,
+     "suggestedCall": {
+      "tool": "net_worth",
+      "args": {
+       "action": "trend",
+       "months": 12
+      }
+     }
+    },
+    {
+     "q": "what will my balance be in 3 months",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 484.39999997615814,
+     "workerMs": 484.39999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 199.70000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 283,
+       "chars": 27
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.5999999046325684,
+       "execMs": 0.1890419999981532
+      }
+     ],
+     "statusMs": 0.40000009536743164,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$3677.25",
+     "suggestedCall": null
+    },
+    {
+     "q": "project my cash flow for next quarter",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 444.5,
+     "workerMs": 444.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 196.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 246.5,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.5,
+       "execMs": 0.1854999999923166
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "will I run out of money before December",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 450.89999997615814,
+     "workerMs": 450.89999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 196.5,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 252.79999995231628,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.1693749999976717
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "forecast my spending for next month",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary",
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "llm",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 1308.6999999284744,
+     "workerMs": 1308.6999999284744,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 102.10000002384186,
+       "chars": 27
+      },
+      {
+       "kind": "next",
+       "ms": 195.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 1008.6999999284744,
+       "chars": 264
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.2632500000036089
+      }
+     ],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "- Forecast: 3 months ahead, based on the last 3 months  \n  - Starting cash: $16250.75  \n  - Average monthly income: $3908.33  \n  - Average monthly expenses: $231.08  \n  - Average monthly net: $3677.25  \n\nCash at the end of the horizon: $27282.50",
+     "suggestedCall": null
+    },
+    {
+     "q": "how much will I have saved by next summer",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 617.6999999284744,
+     "workerMs": 617.6999999284744,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 209.5,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 406.09999990463257,
+       "chars": 65
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.8000000715255737,
+       "execMs": 0.22770799999125302
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "By next summer, you will have saved $27282.50.",
+     "suggestedCall": null
+    },
+    {
+     "q": "predict my expenses for the rest of the year",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 133.79999995231628,
+     "workerMs": 133.79999995231628,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 132.89999997615814,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "based on current trends where will I be in 6 months",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0.10000002384185791,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's my projected cash position at end of month",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 134.20000004768372,
+     "workerMs": 134.20000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 133.30000007152557,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "can I afford rent in two months at this rate",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "estimate my savings by year end",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 140.20000004768372,
+     "workerMs": 140.20000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 139.10000002384186,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "cashflow outlook for the next 90 days",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how much will i spend on groceries next month",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 509.1999999284744,
+     "workerMs": 509.1999999284744,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 207.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 298.8000000715256,
+       "chars": 27
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 1.2000000476837158,
+       "execMs": 0.32137500001408625
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$231.08.",
+     "suggestedCall": null
+    },
+    {
+     "q": "if things keep going like this, what's my balance on Jan 1",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "that Starbucks thing should be Dining",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "drop the second Adobe charge",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "the Costco one from Tuesday belongs under Groceries not Shopping",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "make the $12.99 Spotify charge a business expense",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "mark yesterday's Shell receipt as tax deductible",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0.19999992847442627,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "that Uber was actually for work",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "get rid of the duplicate Netflix entry",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0.09999990463256836,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "the amount on my last Target purchase should read 54.20",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "I need the Amazon order from the 5th filed under Gifts",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "flag the dentist payment for taxes",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0.10000002384185791,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "that deposit on Friday is a reimbursement, not income",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "rename the 'SQ *JOES' entry to Joe's Pizza",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "the AirBnb charge needs to go in Travel",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "put the Home Depot one under Home Improvement",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "toss that second Lyft charge, it's a dupe",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "the gym membership should be tagged Health",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "that PayPal transfer was rent, file it that way",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "move the Chipotle lunch into Business Meals",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "last Whole Foods trip should be split: half Groceries, half Household",
+     "expect": "none",
+     "mutation": true,
+     "denylist": true,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "the date on that Venmo is wrong, it was the 12th",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "that charge from Monday is mine but under the Personal entity not LLC",
+     "expect": "none",
+     "mutation": true,
+     "denylist": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "hey there!",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "thanks, that was helpful",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "good morning",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.09999990463256836,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "who are you?",
+     "expect": "none",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 136.10000002384186,
+     "workerMs": 136.10000002384186,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 135,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "lol nice",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what can you do?",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "should I pay off my credit card or invest?",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0.10000002384185791,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "explain what a Roth IRA is",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "is it a good idea to get a 15 year mortgage",
+     "expect": "none",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 134.29999995231628,
+     "workerMs": 134.29999995231628,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 133.39999997615814,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "tips for building an emergency fund",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "how does compound interest work",
+     "expect": "none",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 139.89999997615814,
+     "workerMs": 139.89999997615814,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 137.39999997615814,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 2.399999976158142,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's a good savings rate in general",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "import my Chase CSV",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "connect my bank account",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "export everything to Excel",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "set a budget of $500 for dining",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "remind me to pay rent on the 1st",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0,
+     "workerMs": 0.09999990463256836,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "email me a monthly report",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "what's the weather in Denver",
+     "expect": "none",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [],
+     "gateMs": 0,
+     "route": "none",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "router-none",
+     "ms": 133.5,
+     "workerMs": 133.5,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 132.5,
+       "chars": 23
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "file my taxes for me",
+     "expect": "none",
+     "mutation": false,
+     "gate": "non-data",
+     "workerGate": "non-data",
+     "hits": [],
+     "gateMs": 0,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "non-data",
+     "ms": 0,
+     "workerMs": 0,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "transfer $200 to savings",
+     "expect": "none",
+     "mutation": false,
+     "gate": "mutation-intent",
+     "workerGate": "mutation-intent",
+     "hits": [],
+     "gateMs": 0.10000002384185791,
+     "route": null,
+     "via": null,
+     "outcome": "handoff",
+     "reason": "mutation-intent",
+     "ms": 0.10000002384185791,
+     "workerMs": 0.10000002384185791,
+     "gens": [],
+     "tools": [],
+     "statusMs": 0,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "show me my credit score",
+     "expect": "none",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 2.100000023841858,
+     "workerMs": 2.100000023841858,
+     "gens": [],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.23725000000558794
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    }
+   ],
+   "score": {
+    "n": 123,
+    "read": {
+     "n": 80,
+     "routedCorrect": 40,
+     "routedCorrectPct": 50,
+     "falselyGated": 15,
+     "falselyGatedPct": 18.75,
+     "routedWrong": 14,
+     "routedNone": 11
+    },
+    "none": {
+     "n": 43,
+     "diverted": 42,
+     "divertedPct": 97.67441860465117,
+     "misrouted": [
+      "show me my credit score"
+     ]
+    },
+    "confusion": {
+     "transaction_search": {
+      "transaction_search": 14,
+      "gated": 6,
+      "none": 1
+     },
+     "spending_summary": {
+      "transaction_search": 8,
+      "spending_summary": 7,
+      "none": 2,
+      "gated": 1
+     },
+     "profit_loss": {
+      "profit_loss": 5,
+      "transaction_search": 2,
+      "gated": 4,
+      "none": 2,
+      "net_worth": 1,
+      "spending_summary": 1
+     },
+     "net_worth": {
+      "net_worth": 8,
+      "transaction_search": 2,
+      "none": 3
+     },
+     "forecast": {
+      "forecast": 6,
+      "none": 3,
+      "gated": 4
+     },
+     "none": {
+      "gated": 38,
+      "none": 4,
+      "transaction_search": 1
+     }
+    },
+    "c4": {
+     "n": 14,
+     "diverted": 14,
+     "pass": true,
+     "enoughRows": false
+    },
+    "c3": {
+     "n": 14,
+     "withRows": 3,
+     "emptyResult": 2,
+     "argsUnfillable": 9,
+     "localAnswerOnEmpty": 0,
+     "other": 0,
+     "pass": true
+    },
+    "c15": {
+     "n": 87,
+     "p50": 0,
+     "p95": 142.39999997615814,
+     "max": 146.20000004768372,
+     "byPath": {
+      "args-unfillable": {
+       "n": 19,
+       "p50": 119.5,
+       "p95": 146.20000004768372,
+       "max": 146.20000004768372
+      },
+      "gated": {
+       "n": 53,
+       "p50": 0,
+       "p95": 0.10000002384185791,
+       "max": 0.10000002384185791
+      },
+      "router-none": {
+       "n": 15,
+       "p50": 134.20000004768372,
+       "p95": 140.39999997615814,
+       "max": 140.39999997615814
+      }
+     },
+     "pass": true
+    },
+    "keywordOnly": {
+     "read": {
+      "n": 80,
+      "routedCorrect": 34,
+      "routedCorrectPct": 42.5,
+      "falselyGatedPct": 18.75
+     },
+     "none": {
+      "n": 43,
+      "diverted": 42,
+      "divertedPct": 97.67441860465117
+     }
+    }
+   },
+   "verdict": {
+    "bars": {
+     "divertedGe95": true,
+     "routedGe90": false,
+     "falselyGatedLe10": false,
+     "c4AllDiverted": false,
+     "c3NoLocalAnswerOnEmpty": true,
+     "c15P95Le2s": true
+    },
+    "allPass": false
+   }
+  },
+  "bench": {
+   "records": [
+    {
+     "q": "Show me every Whole Foods charge in June",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 1,
+     "ms": 345.7000000476837,
+     "workerMs": 345.7000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 144.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 199.19999992847443,
+       "chars": 36
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.18912499998987187
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No results found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Did I get charged twice by Netflix?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 5,
+     "ms": 505.2000000476837,
+     "workerMs": 505.2000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 196.70000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 306.39999997615814,
+       "chars": 62
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.8999999761581421,
+       "execMs": 0.24783300000126474
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No, I did not get charged twice by Netflix.",
+     "suggestedCall": null
+    },
+    {
+     "q": "List my Adobe charges this year",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 380.60000002384186,
+     "workerMs": 380.60000002384186,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 161.10000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 217.5,
+       "chars": 40
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.22316599999612663
+      }
+     ],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "2 transactions found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "When did I last pay the Electric Company?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 389.5,
+     "workerMs": 389.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 166.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 220.29999995231628,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.0999999046325684,
+       "execMs": 0.3261670000065351
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "How much did I spend by category this month?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 456.5,
+     "workerMs": 456.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 175.89999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 278.10000002384186,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 1,
+       "execMs": 0.38125000000582077
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "-$190.75.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show my spending by category last month",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 119.59999990463257,
+     "workerMs": 119.59999990463257,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 117.29999995231628,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.0999999046325684,
+       "execMs": 0.2560410000005504
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "What was my profit and loss this month?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 523.3999999761581,
+     "workerMs": 523.3999999761581,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 197.39999997615814,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 324.39999997615814,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.2665409999899566
+      }
+     ],
+     "statusMs": 0.6999999284744263,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$3309.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Income vs expenses last month",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 746.1000000238419,
+     "workerMs": 746.1000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 189.40000009536743,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 554,
+       "chars": 95
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 1.1999999284744263,
+       "execMs": 0.3493330000055721
+      }
+     ],
+     "statusMs": 1.2000000476837158,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "- **Income**: $4725.00  \n- **Expenses**: $372.25  \n\n**Net Profit**: $4352.75",
+     "suggestedCall": null
+    },
+    {
+     "q": "What is my net worth?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 564.6000000238419,
+     "workerMs": 564.6000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 204.70000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 358.10000002384186,
+       "chars": 42
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.20245799999975134
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222,050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show my balance sheet",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "net_worth"
+     ],
+     "gateMs": 0.10000002384185791,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 110.60000002384186,
+     "workerMs": 110.60000002384186,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 108.39999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.100000023841858,
+       "execMs": 0.23929100000532344
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Forecast my cash for the next 3 months",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 497.8000000715256,
+     "workerMs": 497.8000000715256,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 196,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 300.10000002384186,
+       "chars": 29
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.19174999999813735
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$27282.50.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Will I have enough cash in 3 months?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 835.5,
+     "workerMs": 835.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 199.5,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 633.7999999523163,
+       "chars": 175
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.9000000953674316,
+       "execMs": 0.24824999998963904
+      }
+     ],
+     "statusMs": 1.100000023841858,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Based on the provided data, the average monthly net is $3677.25, which is more than $27282.50 in 3 months. Therefore, you will have enough cash in 3 months.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Compare my income to my spending and show my net worth",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "spending_summary",
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 120.80000007152557,
+     "workerMs": 120.80000007152557,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 119.80000007152557,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Show me every Whole Foods charge in June",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 1,
+     "ms": 336.1999999284744,
+     "workerMs": 336.1999999284744,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 135.79999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 198.5,
+       "chars": 36
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.24537499999860302
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No results found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Did I get charged twice by Netflix?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 5,
+     "ms": 474,
+     "workerMs": 474,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 184.59999990463257,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 287.7000000476837,
+       "chars": 62
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.22191700000257697
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "No, I did not get charged twice by Netflix.",
+     "suggestedCall": null
+    },
+    {
+     "q": "List my Adobe charges this year",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 364.5,
+     "workerMs": 364.5,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 155.29999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 207.60000002384186,
+       "chars": 40
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.19591700000455603
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "2 transactions found.",
+     "suggestedCall": null
+    },
+    {
+     "q": "When did I last pay the Electric Company?",
+     "expect": "transaction_search",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "rows": 2,
+     "ms": 360.2000000476837,
+     "workerMs": 360.2000000476837,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 153.20000004768372,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 205.10000002384186,
+       "chars": 34
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 0.7999999523162842,
+       "execMs": 0.21387500000128057
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": "Need more data.",
+     "suggestedCall": null
+    },
+    {
+     "q": "How much did I spend by category this month?",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "spending_summary"
+     ],
+     "gateMs": 0.09999990463256836,
+     "route": "spending_summary",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 432.39999997615814,
+     "workerMs": 432.39999997615814,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 164.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 266,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "spending_summary",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.2889580000046408
+      }
+     ],
+     "statusMs": 0.7999999523162842,
+     "toolsRun": [
+      "spending_summary"
+     ],
+     "text": "-$190.75.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show my spending by category last month",
+     "expect": "spending_summary",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "spending_summary"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 111.70000004768372,
+     "workerMs": 111.70000004768372,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 109.39999997615814,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.100000023841858,
+       "execMs": 0.24933299999975134
+      }
+     ],
+     "statusMs": 1,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "What was my profit and loss this month?",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 480.7999999523163,
+     "workerMs": 480.7999999523163,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 186.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 293.09999990463257,
+       "chars": 28
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.22720900000422262
+      }
+     ],
+     "statusMs": 0.5,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "$3309.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Income vs expenses last month",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "profit_loss"
+     ],
+     "gateMs": 0,
+     "route": "profit_loss",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 737.6000000238419,
+     "workerMs": 737.6000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 191.29999995231628,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 544.6000000238419,
+       "chars": 95
+      }
+     ],
+     "tools": [
+      {
+       "tool": "profit_loss",
+       "wallMs": 0.7000000476837158,
+       "execMs": 0.23325000000477303
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "profit_loss"
+     ],
+     "text": "- **Income**: $4725.00  \n- **Expenses**: $372.25  \n\n**Net Profit**: $4352.75",
+     "suggestedCall": null
+    },
+    {
+     "q": "What is my net worth?",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "net_worth",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 569.6000000238419,
+     "workerMs": 569.6000000238419,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 205,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 362.7999999523163,
+       "chars": 42
+      }
+     ],
+     "tools": [
+      {
+       "tool": "net_worth",
+       "wallMs": 0.5,
+       "execMs": 0.17225000000325963
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "net_worth"
+     ],
+     "text": "Net worth: $222,050.25.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Show my balance sheet",
+     "expect": "net_worth",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "empty-result",
+     "rows": 0,
+     "ms": 114.09999990463257,
+     "workerMs": 114.09999990463257,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 111.60000002384186,
+       "chars": 37
+      }
+     ],
+     "tools": [
+      {
+       "tool": "transaction_search",
+       "wallMs": 1.2000000476837158,
+       "execMs": 0.30508400000690017
+      }
+     ],
+     "statusMs": 0.8999999761581421,
+     "toolsRun": [
+      "transaction_search"
+     ],
+     "text": null,
+     "suggestedCall": null
+    },
+    {
+     "q": "Forecast my cash for the next 3 months",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 507.60000002384186,
+     "workerMs": 507.60000002384186,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 202.60000002384186,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 303,
+       "chars": 29
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.6999999284744263,
+       "execMs": 0.212708000006387
+      }
+     ],
+     "statusMs": 0.7000000476837158,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "$27282.50.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Will I have enough cash in 3 months?",
+     "expect": "forecast",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "forecast"
+     ],
+     "gateMs": 0,
+     "route": "forecast",
+     "via": "keyword",
+     "outcome": "answer",
+     "reason": null,
+     "ms": 834.5999999046326,
+     "workerMs": 834.5999999046326,
+     "gens": [
+      {
+       "kind": "next",
+       "ms": 198.30000007152557,
+       "chars": 25
+      },
+      {
+       "kind": "compose",
+       "ms": 634.5,
+       "chars": 175
+      }
+     ],
+     "tools": [
+      {
+       "tool": "forecast",
+       "wallMs": 0.6000000238418579,
+       "execMs": 0.19970800000010058
+      }
+     ],
+     "statusMs": 0.8000000715255737,
+     "toolsRun": [
+      "forecast"
+     ],
+     "text": "Based on the provided data, the average monthly net is $3677.25, which is more than $27282.50 in 3 months. Therefore, you will have enough cash in 3 months.",
+     "suggestedCall": null
+    },
+    {
+     "q": "Compare my income to my spending and show my net worth",
+     "expect": "profit_loss",
+     "mutation": false,
+     "gate": "route",
+     "workerGate": "route",
+     "hits": [
+      "transaction_search",
+      "spending_summary",
+      "net_worth"
+     ],
+     "gateMs": 0,
+     "route": "transaction_search",
+     "via": "llm",
+     "outcome": "handoff",
+     "reason": "args-unfillable",
+     "ms": 120.89999997615814,
+     "workerMs": 120.89999997615814,
+     "gens": [
+      {
+       "kind": "router",
+       "ms": 119.59999990463257,
+       "chars": 37
+      }
+     ],
+     "tools": [],
+     "statusMs": 1,
+     "toolsRun": [],
+     "text": null,
+     "suggestedCall": null
+    }
+   ]
+  }
+ },
+ "stages": {
+  "gateMs": {
+   "n": 191,
+   "p50": 0,
+   "p95": 0.10000002384185791,
+   "max": 0.5,
+   "mean": 0.01832460795397534
+  },
+  "routerGenMs": {
+   "n": 45,
+   "p50": 133.39999997615814,
+   "p95": 150,
+   "max": 164,
+   "mean": 132.12444444232517
+  },
+  "nextGenMs": {
+   "n": 69,
+   "p50": 195.80000007152557,
+   "p95": 229.20000004768372,
+   "max": 265.6999999284744,
+   "mean": 191.9666666759961
+  },
+  "composeGenMs": {
+   "n": 69,
+   "p50": 360,
+   "p95": 1043.5,
+   "max": 2120,
+   "mean": 475.6246376763219
+  },
+  "toolWallMs": {
+   "n": 90,
+   "p50": 0.7999999523162842,
+   "p95": 1.4000000953674316,
+   "max": 1.7999999523162842,
+   "mean": 0.8888888796170552
+  },
+  "toolExecMs": {
+   "n": 90,
+   "p50": 0.24537499999860302,
+   "p95": 0.4168329999956768,
+   "max": 0.7540840000001481,
+   "mean": 0.2613615777782494
+  },
+  "statusMs": {
+   "n": 130,
+   "p50": 0.8999999761581421,
+   "p95": 1.2000000476837158,
+   "max": 2.399999976158142,
+   "mean": 0.9246153858991769
+  },
+  "answeredTotalMs": {
+   "n": 65,
+   "p50": 563.5,
+   "p95": 1308.6999999284744,
+   "max": 2351.600000023842,
+   "mean": 668.0599999922972
+  },
+  "stepsPerAnsweredRun": {
+   "n": 65,
+   "p50": 1,
+   "p95": 1,
+   "max": 1,
+   "mean": 1
+  },
+  "nextGensPerRun": {
+   "n": 90,
+   "p50": 1,
+   "p95": 1,
+   "max": 1,
+   "mean": 0.7666666666666667
+  }
+ }
+}

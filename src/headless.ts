@@ -37,9 +37,47 @@ import { initEntityClassifyTool } from './tools/entity/entity-classify.js';
 import { initGoalContext, initMemoryContext, initCustomPromptContext } from './agent/prompts.js';
 import { initMcpClients, closeMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
-import { AgentRunnerController } from './controllers/index.js';
+import { AgentRunnerController, type RunQueryResult } from './controllers/index.js';
+import type { AgentConfig } from './agent/index.js';
 import { InMemoryChatHistory } from './utils/in-memory-chat-history.js';
 import { getConfiguredModel } from './utils/config.js';
+
+/**
+ * The agent runner for a headless run. Nobody is there to answer an approval
+ * prompt, so every call that needs one (any write, see #152) is denied
+ * immediately — fail closed instead of hanging on a prompt that never comes.
+ * There is deliberately no auto-approve option.
+ */
+export function createHeadlessRunner(config: AgentConfig, history: InMemoryChatHistory): AgentRunnerController {
+  return new AgentRunnerController(config, history, undefined, { approvals: 'deny' });
+}
+
+/** Explains a denied tool to the person reading headless output. */
+export function headlessDenialMessage(tool: string): string {
+  return (
+    `Denied ${tool}: headless runs (--run) can't approve changes, so it was not run. ` +
+    `Run wilson interactively to review and approve it.`
+  );
+}
+
+/**
+ * Print a headless run's outcome and return the exit code: the answer on
+ * stdout; each denied tool, or "No response generated.", on stderr.
+ */
+export function reportHeadlessResult(
+  result: RunQueryResult | undefined,
+  runner: AgentRunnerController,
+  out: { log: (msg: string) => void; error: (msg: string) => void } = console,
+): number {
+  if (result?.answer) out.log(result.answer);
+  const denied = runner.lastDeniedTools;
+  for (const tool of denied) out.error(headlessDenialMessage(tool));
+  if (result?.answer && denied.length === 0) return 0;
+  if (!result?.answer && denied.length === 0) {
+    out.error(runner.error ? `Error: ${runner.error}` : 'No response generated.');
+  }
+  return 1;
+}
 
 /**
  * Run Open Accountant in headless mode — single query, no TUI, stdout output.
@@ -100,21 +138,13 @@ export async function runHeadless(query: string): Promise<void> {
     const chatHistory = new InMemoryChatHistory();
     chatHistory.setDatabase(db);
 
-    // Create agent runner with user's saved model settings (no TUI callbacks)
-    const agentRunner = new AgentRunnerController(
-      { model, modelProvider: provider, maxIterations: 10 },
-      chatHistory,
-    );
+    // Agent runner with the user's saved model settings; no UI, so any tool
+    // call that needs approval is denied (createHeadlessRunner).
+    const agentRunner = createHeadlessRunner({ model, modelProvider: provider, maxIterations: 10 }, chatHistory);
 
-    // Run the query
     const result = await agentRunner.runQuery(query);
-
-    if (result?.answer) {
-      console.log(result.answer);
-    } else {
-      console.error('No response generated.');
-      process.exitCode = 1;
-    }
+    const exitCode = reportHeadlessResult(result, agentRunner);
+    if (exitCode !== 0) process.exitCode = exitCode;
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     process.exitCode = 1;

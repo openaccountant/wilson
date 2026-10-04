@@ -11,7 +11,11 @@ interface UseApiResult<T> {
   refetch: () => void;
 }
 
-export function useApi<T>(path: string, deps: unknown[] = []): UseApiResult<T> {
+/**
+ * Fetch `path` (re-fetching when it or `deps` change). A `null` path skips the
+ * request entirely — for queries that only make sense once some input exists.
+ */
+export function useApi<T>(path: string | null, deps: unknown[] = []): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +24,14 @@ export function useApi<T>(path: string, deps: unknown[] = []): UseApiResult<T> {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
     setOffline(false);
+    if (path === null) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
 
     api<T>(path)
       .then((result) => {

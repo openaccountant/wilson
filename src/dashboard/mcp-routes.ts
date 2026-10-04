@@ -160,8 +160,11 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
     const op = visibleOperation(getOperationById(activeDb, id), ctx);
     if (!op) return json({ error: 'Not found' }, 404, headers);
     if (op.source === 'chat') {
-      const ok = respondToChatOperation(activeDb, id, 'allow-once');
-      return json({ outcome: ok ? 'committed' : 'unknown' }, 200, headers);
+      // A chat card answers only the exact request it was created for; a
+      // stale one is refused (409) and changes nothing.
+      const result = respondToChatOperation(activeDb, id, 'allow-once');
+      if (!result.ok) return json({ error: result.error, outcome: 'stale' }, 409, headers);
+      return json({ outcome: result.status }, 200, headers);
     }
     return json(approveWebMcpOperation(activeDb, id, getCurrentProfileName()), 200, headers);
   }
@@ -172,8 +175,11 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
     const op = visibleOperation(getOperationById(activeDb, id), ctx);
     if (!op) return json({ error: 'Not found' }, 404, headers);
     if (op.source === 'chat') {
-      const ok = respondToChatOperation(activeDb, id, 'deny');
-      return json({ outcome: ok ? 'rejected' : 'unknown' }, 200, headers);
+      // A chat card answers only the exact request it was created for; a
+      // stale one is refused (409) and changes nothing.
+      const result = respondToChatOperation(activeDb, id, 'deny');
+      if (!result.ok) return json({ error: result.error, outcome: 'stale' }, 409, headers);
+      return json({ outcome: result.status }, 200, headers);
     }
     return json(rejectOperation(activeDb, id), 200, headers);
   }

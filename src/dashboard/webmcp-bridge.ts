@@ -15,7 +15,8 @@
  */
 
 import { confirmationCardModel } from '../mcp/confirmation-card.js';
-import { WILSON_MCP_SESSION_KEY, WILSON_OPEN_AGENT_PANEL_EVENT } from './webmcp-session.js';
+import { bridgeOwnedOperations, nextConfirmationPollDelay, nextToolSyncDelay } from './webmcp-polling.js';
+import { WILSON_MCP_SESSION_KEY, WILSON_OPEN_AGENT_PANEL_EVENT, WILSON_GRANTS_CHANGED_EVENT } from './webmcp-session.js';
 
 export {}; // makes this a module so `declare global` below is valid
 
@@ -52,7 +53,7 @@ interface McpOperation {
 const AUTH_KEY = 'wilson_auth_token';
 const SESSION_KEY = WILSON_MCP_SESSION_KEY;
 const OPEN_PANEL_EVENT = WILSON_OPEN_AGENT_PANEL_EVENT;
-const POLL_INTERVAL_MS = 1500;
+const GRANTS_CHANGED_EVENT = WILSON_GRANTS_CHANGED_EVENT;
 const PREPARE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 function authHeaders(): Record<string, string> {
@@ -187,19 +188,47 @@ function showConfirmationCard(op: McpOperation, onResolved: () => void): void {
   document.body.appendChild(overlay);
 }
 
-function startConfirmationPoller(): void {
-  setInterval(async () => {
-    let operations: McpOperation[];
-    try {
-      const res = await api<{ operations: McpOperation[] }>('/api/mcp/operations');
-      operations = res.operations;
-    } catch {
-      return;
-    }
-    for (const op of operations) {
+// Count of this tab's WebMCP mutating calls waiting on an approval. While > 0
+// the poller runs at its fast cadence; otherwise it backs off (see
+// webmcp-polling.ts) and pauses entirely while the tab is hidden.
+let bridgePending = 0;
+let lastPollHadPending = false;
+let confirmationTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleConfirmationPoll(): void {
+  clearTimeout(confirmationTimer);
+  confirmationTimer = undefined;
+  const delay = nextConfirmationPollDelay({
+    hidden: document.hidden,
+    hasLiveGrants: registeredTools.size > 0,
+    bridgePending: bridgePending > 0,
+    lastPollHadPending,
+  });
+  if (delay === null) return; // Resumed by kickConfirmationPoller on visibility/focus.
+  confirmationTimer = setTimeout(() => void pollConfirmations(), delay);
+}
+
+async function pollConfirmations(): Promise<void> {
+  try {
+    const res = await api<{ operations: McpOperation[] }>('/api/mcp/operations');
+    // source === 'chat' is approved by the React ChatTab's inline card; one
+    // approval surface per operation.
+    const mine = bridgeOwnedOperations(res.operations);
+    lastPollHadPending = mine.length > 0;
+    for (const op of mine) {
       showConfirmationCard(op, () => {});
     }
-  }, POLL_INTERVAL_MS);
+  } catch {
+    lastPollHadPending = false;
+  }
+  scheduleConfirmationPoll();
+}
+
+/** Poll now (tab became visible, or a call just prepared an operation). */
+function kickConfirmationPoller(): void {
+  clearTimeout(confirmationTimer);
+  if (document.hidden) return;
+  void pollConfirmations();
 }
 
 // ── WebMCP tool registration ─────────────────────────────────────────────────
@@ -232,7 +261,14 @@ async function executeMutatingTool(sessionGeneration: string, grantId: string, n
     method: 'POST',
     body: JSON.stringify({ sessionGeneration, grantId, tool: name, args }),
   });
-  const resolved = await pollOperationUntilResolved(prepared.operation.id);
+  bridgePending++;
+  kickConfirmationPoller();
+  let resolved: McpOperation | null;
+  try {
+    resolved = await pollOperationUntilResolved(prepared.operation.id);
+  } finally {
+    bridgePending--;
+  }
   if (!resolved) {
     return { outcome: 'unknown', operationId: prepared.operation.id, reason: 'No response within the approval window.' };
   }
@@ -278,6 +314,7 @@ const registeredTools = new Map<string, AbortController>();
 
 async function syncRegisteredTools(): Promise<void> {
   if (!document.modelContext) return; // No WebMCP support in this browser — nothing to do.
+  // (Callers that care about timing go through syncAndSchedule.)
 
   const sessionGeneration = getSessionGeneration();
   let tools: CatalogTool[] & Array<{ grantId: string }>;
@@ -325,6 +362,36 @@ async function syncRegisteredTools(): Promise<void> {
       registeredTools.delete(tool.name);
     });
   }
+}
+
+// Replaces the old blind 10s loop. A sync happens on load, on tab
+// visible/focus, and on GRANTS_CHANGED; the timer below only covers (a) a few
+// early retries for origin-trial support that registers after this script,
+// and (b) a slow re-check while tools are registered so an expired/revoked
+// grant gets unregistered. Hidden tabs and no-WebMCP browsers run no timer.
+let toolSyncTimer: ReturnType<typeof setTimeout> | undefined;
+let lateAttempts = 0;
+
+function scheduleToolSync(): void {
+  clearTimeout(toolSyncTimer);
+  toolSyncTimer = undefined;
+  const delay = nextToolSyncDelay({
+    hidden: document.hidden,
+    webmcpAvailable: !!document.modelContext,
+    registeredCount: registeredTools.size,
+    lateAttempts,
+  });
+  if (delay === null) return;
+  toolSyncTimer = setTimeout(() => {
+    if (!document.modelContext) lateAttempts++;
+    void syncAndSchedule();
+  }, delay);
+}
+
+async function syncAndSchedule(): Promise<void> {
+  await syncRegisteredTools();
+  scheduleToolSync();
+  scheduleConfirmationPoll(); // live-grant status may have changed the cadence
 }
 
 // ── Minimal grant-management panel ──────────────────────────────────────────
@@ -403,7 +470,8 @@ function buildPanel(): void {
       for (const g of toRevoke) {
         await api(`/api/mcp/grants/${g.id}`, { method: 'DELETE' }).catch(() => {});
       }
-      await syncRegisteredTools();
+      await syncAndSchedule();
+      window.dispatchEvent(new CustomEvent(GRANTS_CHANGED_EVENT, { detail: { from: 'bridge' } }));
       await render();
     };
 
@@ -412,7 +480,8 @@ function buildPanel(): void {
     revokeAllBtn.style.cssText = 'flex:1;padding:6px;border:none;border-radius:8px;background:#3a3a3c;color:#fff;cursor:pointer;';
     revokeAllBtn.onclick = async () => {
       await api('/api/mcp/grants/revoke-session', { method: 'POST', body: JSON.stringify({ sessionGeneration }) }).catch(() => {});
-      await syncRegisteredTools();
+      await syncAndSchedule();
+      window.dispatchEvent(new CustomEvent(GRANTS_CHANGED_EVENT, { detail: { from: 'bridge' } }));
       await render();
     };
 
@@ -425,12 +494,19 @@ function buildPanel(): void {
     if (!panel.hidden) void render();
   };
 
-  // The Demo tab's auto-book opt-in dispatches this event so the attendee can
-  // grant the agent session without hunting for the 🤖 button. Opening here
-  // goes through the exact same panel — no second grant surface.
+  // Settings → Agent access dispatches this so a user can jump from there to
+  // this panel without hunting for the 🤖 button.
   window.addEventListener(OPEN_PANEL_EVENT, () => {
     panel.hidden = false;
     void render();
+  });
+
+  // Settings → Agent access changed this tab's grants: register/unregister
+  // now rather than waiting for a timer, and refresh the panel if it's open.
+  window.addEventListener(GRANTS_CHANGED_EVENT, (e) => {
+    if ((e as CustomEvent<{ from?: string }>).detail?.from === 'bridge') return;
+    void syncAndSchedule();
+    if (!panel.hidden) void render();
   });
 
   document.body.append(button, panel);
@@ -438,12 +514,23 @@ function buildPanel(): void {
 
 function init(): void {
   buildPanel();
-  startConfirmationPoller();
-  void syncRegisteredTools();
-  // Origin-trial support can register after this script runs, or a grant
-  // change elsewhere (another tab, revoke) means the tool set can drift —
-  // resync periodically rather than only once at load.
-  setInterval(() => void syncRegisteredTools(), 10_000);
+  lateAttempts = 0;
+  void syncAndSchedule();
+  kickConfirmationPoller();
+  // A backgrounded tab runs no timers; on return, catch up immediately (grants
+  // may have changed elsewhere, or an operation may be waiting).
+  const resume = () => {
+    if (document.hidden) {
+      clearTimeout(toolSyncTimer);
+      clearTimeout(confirmationTimer);
+      return;
+    }
+    lateAttempts = 0;
+    void syncAndSchedule();
+    kickConfirmationPoller();
+  };
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('focus', resume);
 }
 
 if (document.readyState === 'loading') {

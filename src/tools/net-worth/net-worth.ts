@@ -19,6 +19,7 @@ export function initNetWorthTool(database: Database) {
 
 export const netWorthTool = defineTool({
   name: 'net_worth',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description: 'Calculate net worth summary, trend over time, or full balance sheet.',
   schema: z.object({
     action: z.enum(['summary', 'trend', 'balance_sheet']).describe(

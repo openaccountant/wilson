@@ -17,6 +17,7 @@ function getDb(): Database {
 
 export const alertCheckTool = defineTool({
   name: 'alert_check',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Check for active spending alerts: budget warnings/exceeded, spending spikes, and new recurring charges.',
   schema: z.object({

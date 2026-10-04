@@ -11,12 +11,18 @@
 // the dashboard's mirror worker (against wa-sqlite + AccessHandlePoolVFS).
 
 import {
+  ACCOUNTS_TABLE,
+  BALANCE_SNAPSHOTS_TABLE,
   BUDGETS_TABLE,
   CATEGORIES_TABLE,
   ENTITIES_TABLE,
+  LOANS_TABLE,
   TRANSACTIONS_TABLE,
 } from '../../../../db/schema.js';
 import type {
+  MirrorAccountRow,
+  MirrorBalanceSnapshotRow,
+  MirrorLoanRow,
   MirrorBudgetRow,
   MirrorCategoryRow,
   MirrorEntityRow,
@@ -31,11 +37,14 @@ import type {
  * There is no server endpoint exposing the CLI's schema version (every route in
  * src/dashboard/server.ts is an /api handler), so the marker lives here. Bump it
  * whenever the DDL the mirror carries (TRANSACTIONS_TABLE / ENTITIES_TABLE /
- * BUDGETS_TABLE / CATEGORIES_TABLE) or the SyncPayload shape changes — i.e.
+ * BUDGETS_TABLE / CATEGORIES_TABLE / ACCOUNTS_TABLE / BALANCE_SNAPSHOTS_TABLE /
+ * LOANS_TABLE) or the SyncPayload shape changes — i.e.
  * whenever the CLI's schema moves — and the next sync will drop the mirror and
  * re-seed it from scratch.
  */
-export const MIRROR_SCHEMA_VERSION = 3;
+export const MIRROR_SCHEMA_VERSION = 4;
+// v4 (browser subagent, phase 2): accounts, balance_snapshots and loans, so the
+// mirror can serve net_worth (summary, balance_sheet) and forecast.
 
 // Column lists for the upsert statements. Must match the DDL above (the mirror
 // parity test seeds every column explicitly and fails if one is dropped).
@@ -106,6 +115,41 @@ export const MIRROR_CATEGORY_COLUMNS = [
   'updated_at',
 ] as const;
 
+export const MIRROR_ACCOUNT_COLUMNS = [
+  'id',
+  'name',
+  'account_type',
+  'account_subtype',
+  'institution',
+  'account_number_last4',
+  'current_balance',
+  'currency',
+  'is_active',
+  'notes',
+  'plaid_account_id',
+  // entity_id comes from the server's migration 21, not ACCOUNTS_TABLE —
+  // keep it in the list so the upsert carries it.
+  'entity_id',
+  'created_at',
+  'updated_at',
+] as const;
+
+export const MIRROR_SNAPSHOT_COLUMNS = ['id', 'account_id', 'balance', 'snapshot_date', 'source', 'created_at'] as const;
+
+export const MIRROR_LOAN_COLUMNS = [
+  'id',
+  'account_id',
+  'original_principal',
+  'interest_rate',
+  'term_months',
+  'start_date',
+  'extra_payment',
+  'linked_asset_id',
+  'notes',
+  'created_at',
+  'updated_at',
+] as const;
+
 /**
  * Persistent half of the mirror schema: main tables + meta. Idempotent only on
  * a fresh database — the ALTERs fail on an existing mirror, which is why the
@@ -128,6 +172,13 @@ export async function createPersistentMirrorSchema(db: SqliteBinding): Promise<v
     ALTER TABLE budgets ADD COLUMN entity_id INTEGER REFERENCES entities(id);
     ${CATEGORIES_TABLE}
     CREATE INDEX IF NOT EXISTS idx_mirror_categories_parent ON categories(parent_id);
+    ${ACCOUNTS_TABLE}
+    ALTER TABLE accounts ADD COLUMN entity_id INTEGER REFERENCES entities(id);
+    CREATE INDEX IF NOT EXISTS idx_mirror_accounts_type ON accounts(account_type, account_subtype);
+    ${BALANCE_SNAPSHOTS_TABLE}
+    CREATE INDEX IF NOT EXISTS idx_mirror_snapshots_account_date ON balance_snapshots(account_id, snapshot_date);
+    ${LOANS_TABLE}
+    CREATE INDEX IF NOT EXISTS idx_mirror_loans_account ON loans(account_id);
     CREATE TABLE IF NOT EXISTS mirror_meta (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -146,6 +197,8 @@ export async function ensureConnectionSchema(db: SqliteBinding): Promise<void> {
     CREATE TEMP TABLE IF NOT EXISTS sync_incoming_entities (id INTEGER PRIMARY KEY);
     CREATE TEMP TABLE IF NOT EXISTS sync_incoming_budgets (category TEXT PRIMARY KEY);
     CREATE TEMP TABLE IF NOT EXISTS sync_incoming_categories (id INTEGER PRIMARY KEY);
+    CREATE TEMP TABLE IF NOT EXISTS sync_incoming_accounts (id INTEGER PRIMARY KEY);
+    CREATE TEMP TABLE IF NOT EXISTS sync_incoming_snapshots (id INTEGER PRIMARY KEY);
   `);
 }
 
@@ -173,6 +226,9 @@ export async function resetMirrorSchema(db: SqliteBinding): Promise<void> {
     DROP TABLE IF EXISTS budgets;
     DROP TABLE IF EXISTS categories;
     DROP TABLE IF EXISTS entities;
+    DROP TABLE IF EXISTS loans;
+    DROP TABLE IF EXISTS balance_snapshots;
+    DROP TABLE IF EXISTS accounts;
     DROP TABLE IF EXISTS mirror_meta;
   `);
   await createMirrorSchema(db);
@@ -260,6 +316,13 @@ function buildCategoryUpsertSql(): string {
     ON CONFLICT(id) DO UPDATE SET ${updates}`;
 }
 
+function buildIdUpsertSql(table: string, cols: readonly string[]): string {
+  const placeholders = cols.map((c) => `@${c}`).join(', ');
+  const updates = cols.map((c) => `${c} = excluded.${c}`).join(', ');
+  return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})
+    ON CONFLICT(id) DO UPDATE SET ${updates}`;
+}
+
 /**
  * Apply one full server pull to the mirror in a single transaction.
  *
@@ -284,6 +347,9 @@ export async function applySync(db: SqliteBinding, payload: SyncPayload): Promis
   const entityUpsertSql = buildEntityUpsertSql();
   const budgetUpsertSql = buildBudgetUpsertSql();
   const categoryUpsertSql = buildCategoryUpsertSql();
+  const accountUpsertSql = buildIdUpsertSql('accounts', MIRROR_ACCOUNT_COLUMNS);
+  const snapshotUpsertSql = buildIdUpsertSql('balance_snapshots', MIRROR_SNAPSHOT_COLUMNS);
+  const loanUpsertSql = buildIdUpsertSql('loans', MIRROR_LOAN_COLUMNS);
 
   return await db.transaction(async () => {
     if (seeded) {
@@ -295,6 +361,8 @@ export async function applySync(db: SqliteBinding, payload: SyncPayload): Promis
     await db.prepare('DELETE FROM temp.sync_incoming_entities').run();
     await db.prepare('DELETE FROM temp.sync_incoming_budgets').run();
     await db.prepare('DELETE FROM temp.sync_incoming_categories').run();
+    await db.prepare('DELETE FROM temp.sync_incoming_accounts').run();
+    await db.prepare('DELETE FROM temp.sync_incoming_snapshots').run();
 
     const insertIncomingKey = db.prepare(
       `INSERT INTO temp.sync_incoming (sync_key) VALUES (@syncKey)
@@ -312,10 +380,19 @@ export async function applySync(db: SqliteBinding, payload: SyncPayload): Promis
       `INSERT INTO temp.sync_incoming_categories (id) VALUES (@id)
        ON CONFLICT(id) DO NOTHING`
     );
+    const insertIncomingAccount = db.prepare(
+      `INSERT INTO temp.sync_incoming_accounts (id) VALUES (@id) ON CONFLICT(id) DO NOTHING`
+    );
+    const insertIncomingSnapshot = db.prepare(
+      `INSERT INTO temp.sync_incoming_snapshots (id) VALUES (@id) ON CONFLICT(id) DO NOTHING`
+    );
     const upsertTxn = db.prepare(txnUpsertSql);
     const upsertEntity = db.prepare(entityUpsertSql);
     const upsertBudget = db.prepare(budgetUpsertSql);
     const upsertCategory = db.prepare(categoryUpsertSql);
+    const upsertAccount = db.prepare(accountUpsertSql);
+    const upsertSnapshot = db.prepare(snapshotUpsertSql);
+    const upsertLoan = db.prepare(loanUpsertSql);
 
     for (const row of payload.transactions) {
       const syncKey = transactionSyncKey(row);
@@ -358,6 +435,45 @@ export async function applySync(db: SqliteBinding, payload: SyncPayload): Promis
       await upsertCategory.run(params);
     }
 
+    // Net-worth tables (mirror v4). An absent set is applied as empty (that is how a
+    // sync with the subagent off purges them); `keepNetWorth` leaves all three alone
+    // (a failed v4 pull must not wipe the last good set).
+    const keepNetWorth = payload.keepNetWorth === true;
+    let loansRemoved = 0;
+    if (!keepNetWorth) {
+      for (const row of payload.accounts ?? []) {
+        await insertIncomingAccount.run({ id: row.id });
+        const params: Record<string, unknown> = {};
+        for (const col of MIRROR_ACCOUNT_COLUMNS as readonly string[]) {
+          params[col] = row[col as keyof MirrorAccountRow] ?? null;
+        }
+        await upsertAccount.run(params);
+      }
+      for (const row of payload.balanceSnapshots ?? []) {
+        await insertIncomingSnapshot.run({ id: row.id });
+        const params: Record<string, unknown> = {};
+        for (const col of MIRROR_SNAPSHOT_COLUMNS as readonly string[]) {
+          params[col] = row[col as keyof MirrorBalanceSnapshotRow] ?? null;
+        }
+        await upsertSnapshot.run(params);
+      }
+      // Loans are replaced wholesale: loans.account_id is UNIQUE, so a loan that was
+      // deleted and re-created for the same account (new id) would collide with the
+      // stale row mid-apply if it were upserted by id and reconciled afterwards.
+      const incomingLoans = payload.loans ?? [];
+      const incomingLoanIds = new Set(incomingLoans.map((l) => l.id));
+      const existingLoans = (await db.prepare('SELECT id FROM loans').all()) as Array<{ id: number }>;
+      loansRemoved = existingLoans.filter((l) => !incomingLoanIds.has(Number(l.id))).length;
+      await db.prepare('DELETE FROM loans').run();
+      for (const row of incomingLoans) {
+        const params: Record<string, unknown> = {};
+        for (const col of MIRROR_LOAN_COLUMNS as readonly string[]) {
+          params[col] = row[col as keyof MirrorLoanRow] ?? null;
+        }
+        await upsertLoan.run(params);
+      }
+    }
+
     // Reconcile deletions against the full pulled set: temp tables instead of a
     // giant NOT IN (@...) param list avoids SQLite variable limits and keeps the
     // SQL identical across bindings.
@@ -373,7 +489,16 @@ export async function applySync(db: SqliteBinding, payload: SyncPayload): Promis
     const categoryDelete = await db
       .prepare('DELETE FROM categories WHERE id NOT IN (SELECT id FROM sync_incoming_categories)')
       .run();
+    const accountDelete = keepNetWorth
+      ? { changes: 0 }
+      : await db.prepare('DELETE FROM accounts WHERE id NOT IN (SELECT id FROM sync_incoming_accounts)').run();
+    const snapshotDelete = keepNetWorth
+      ? { changes: 0 }
+      : await db.prepare('DELETE FROM balance_snapshots WHERE id NOT IN (SELECT id FROM sync_incoming_snapshots)').run();
     const deleted =
+      Number((accountDelete as { changes: number }).changes ?? 0) +
+      Number((snapshotDelete as { changes: number }).changes ?? 0) +
+      loansRemoved +
       Number((txnDelete as { changes: number }).changes ?? 0) +
       Number((entityDelete as { changes: number }).changes ?? 0) +
       Number((budgetDelete as { changes: number }).changes ?? 0) +

@@ -1,11 +1,11 @@
-import { useState } from 'react';
 import { WeeklySummary } from '@/components/WeeklySummary';
 import { SpendingHeatmap } from '@/components/SpendingHeatmap';
 import { StreakCounter } from '@/components/StreakCounter';
 import { BudgetCountdown } from '@/components/BudgetCountdown';
 import { SavingsSparkline } from '@/components/SavingsSparkline';
 import { CashflowForecast } from '@/components/CashflowForecast';
-import { DonutChart } from '@/components/DonutChart';
+import { SpendingDrill } from '@/components/spending/SpendingDrill';
+import { FilteredBadge } from '@/components/FilteredBadge';
 import { PnlCard } from '@/components/PnlCard';
 import { BudgetBars } from '@/components/BudgetBars';
 import { AlertList } from '@/components/AlertList';
@@ -13,23 +13,32 @@ import { LiabilitiesCard } from '@/components/LiabilitiesCard';
 import { Dialog } from '@/components/Dialog';
 import { useApi } from '@/hooks/useApi';
 import { useMirrorStatus } from '@/hooks/useMirrorSync';
+import { useUrlState } from '@/hooks/useUrlState';
+import { useAppState } from '@/state';
+import { dayTransactionsPath, daySpendTotal } from '@/lib/overviewQueries';
+import { money } from '@/format';
 import type { Transaction } from '@/types';
 
 export function OverviewTab() {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // The open day dialog lives in the URL (`day=YYYY-MM-DD`) so it survives a
+  // reload and can be linked.
+  const { state: url, navigate } = useUrlState();
+  const selectedDate = url.day;
+  const setSelectedDate = (day: string | null) => navigate((s) => ({ ...s, day }), { mode: 'replace' });
+  const { accountId, entityId, category } = useAppState();
   const mirror = useMirrorStatus();
 
-  const { data: dayTransactions, loading: dayLoading } = useApi<Transaction[]>(
-    `/api/transactions?start=${selectedDate}&end=${selectedDate}&limit=50`,
-    [selectedDate],
-  );
+  // Only fetch while a day is open (null path = skip), scoped to the same
+  // header filters as the heatmap so the dialog total matches the cell.
+  const dayPath = dayTransactionsPath(selectedDate, { accountId, entityId, category });
+  const { data: dayTransactions, loading: dayLoading } = useApi<Transaction[]>(dayPath);
 
-  const dayTotal = (dayTransactions ?? [])
-    .filter((t) => t.amount < 0)
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  const dayTotal = daySpendTotal(dayTransactions ?? []);
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+    // pb-20: a safe area under the last row so the floating 'Agent access'
+    // pill (fixed bottom-left, webmcp-bridge.ts) never covers card footnotes.
+    <div className="flex-1 overflow-y-auto p-6 pb-20 space-y-4">
       {/* Offline pill — same affordance as the transactions tab */}
       {mirror.available && mirror.seeded && !mirror.online && (
         <div className="flex items-center gap-2">
@@ -58,9 +67,9 @@ export function OverviewTab() {
         <CashflowForecast />
       </div>
 
-      {/* Donut + P&L */}
-      <div className="grid grid-cols-2 gap-4">
-        <DonutChart />
+      {/* Spending drill-down (L1 categories → L2 merchants → L3 merchant → txn) + P&L */}
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-start">
+        <SpendingDrill />
         <PnlCard />
       </div>
 
@@ -77,6 +86,11 @@ export function OverviewTab() {
         onClose={() => setSelectedDate(null)}
         title={selectedDate ?? ''}
       >
+        {category && (
+          <div className="mb-3">
+            <FilteredBadge category={category} />
+          </div>
+        )}
         {dayLoading ? (
           <p className="text-text-secondary text-sm">Loading...</p>
         ) : !dayTransactions || dayTransactions.length === 0 ? (
@@ -98,19 +112,20 @@ export function OverviewTab() {
                     )}
                   </div>
                   <span
-                    className={`ml-4 text-sm font-medium whitespace-nowrap ${
+                    className={`ml-4 text-sm font-medium whitespace-nowrap tabular-nums ${
                       txn.amount < 0 ? 'text-red' : 'text-green'
                     }`}
                   >
-                    {txn.amount < 0 ? '-' : '+'}${Math.abs(txn.amount).toFixed(2)}
+                    {txn.amount > 0 ? '+' : ''}
+                    {money(txn.amount)}
                   </span>
                 </li>
               ))}
             </ul>
             <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
               <span className="text-text-secondary text-sm">Total spending</span>
-              <span className="text-red text-sm font-semibold">
-                -${dayTotal.toFixed(2)}
+              <span className="text-red text-sm font-semibold tabular-nums">
+                {money(-dayTotal)}
               </span>
             </div>
           </>

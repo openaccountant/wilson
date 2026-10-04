@@ -9,7 +9,7 @@
 // `available: false` — the app silently stays network-only, never crashes.
 
 import MirrorWorkerCtor from './mirror-worker.ts?worker&inline';
-import { SYNC_PULL_LIMIT, type SyncApplier } from './sync-engine.js';
+import { SYNC_PULL_LIMIT, collectSyncPayload, subagentEnabledFrom, type SyncApplier } from './sync-engine.js';
 import type {
   MirrorState,
   MirrorStatus,
@@ -17,6 +17,9 @@ import type {
   MirrorEntityRow,
   MirrorBudgetRow,
   MirrorCategoryRow,
+  MirrorAccountRow,
+  MirrorBalanceSnapshotRow,
+  MirrorLoanRow,
   SyncPayload,
 } from './types.js';
 
@@ -201,6 +204,18 @@ const syncFetcher = {
   async fetchAllCategories(): Promise<MirrorCategoryRow[]> {
     return fetchJson<MirrorCategoryRow[]>('/api/categories');
   },
+  // Mirror v4, only ever called when the server's subagent is enabled. These are
+  // the same-origin-gated, column-projected routes (sync-routes.ts), not
+  // /api/accounts (SELECT *, which carries notes, plaid ids and account numbers).
+  async fetchAllAccounts(): Promise<MirrorAccountRow[]> {
+    return fetchJson<MirrorAccountRow[]>('/api/sync/accounts');
+  },
+  async fetchAllBalanceSnapshots(): Promise<MirrorBalanceSnapshotRow[]> {
+    return fetchJson<MirrorBalanceSnapshotRow[]>('/api/sync/balance-snapshots');
+  },
+  async fetchAllLoans(): Promise<MirrorLoanRow[]> {
+    return fetchJson<MirrorLoanRow[]>('/api/sync/loans');
+  },
 };
 
 /** The mirror, reached over worker RPC, as a SyncApplier for the sync engine. */
@@ -216,6 +231,15 @@ function rpcSyncTarget(): SyncApplier {
   };
 }
 
+/**
+ * Whether the server's browser subagent is on. A failed request rejects (the sync
+ * then fails like any unreachable-server pull and the mirror keeps its last good
+ * set) rather than reading as "off", which would purge the stored balances.
+ */
+async function subagentEnabled(): Promise<boolean> {
+  return subagentEnabledFrom(await fetchJson<unknown>('/api/config/local-chat'));
+}
+
 let inFlightSync: Promise<void> | null = null;
 
 async function doSync(): Promise<void> {
@@ -226,13 +250,11 @@ async function doSync(): Promise<void> {
   try {
     // Fetch everything BEFORE touching the pool: if any pull fails, the old
     // mirror stays intact and keeps serving its last good set.
-    const profile = await syncFetcher.fetchActiveProfile();
-    const [transactions, entities, budgets, categories] = await Promise.all([
-      syncFetcher.fetchAllTransactions(),
-      syncFetcher.fetchAllEntities(),
-      syncFetcher.fetchAllBudgets(),
-      syncFetcher.fetchAllCategories(),
-    ]);
+    // Balances are pulled only while the browser subagent is enabled, and a failing
+    // v4 fetch is isolated inside collectSyncPayload (the rest still syncs).
+    const netWorth = await subagentEnabled();
+    const payload = await collectSyncPayload(syncFetcher, { netWorth });
+    const profile = payload.profile;
 
     // Per-profile keying: when the server's active profile differs from the
     // pool we have open, rekey to the new profile's pool right before applying
@@ -243,7 +265,7 @@ async function doSync(): Promise<void> {
       setMirrorState({ profile: opened.profile, seeded: opened.seeded, lastSyncedAt: opened.lastSyncedAt });
     }
 
-    await rpcSyncTarget()({ profile, transactions, entities, budgets, categories });
+    await rpcSyncTarget()(payload);
 
     setMirrorState({ online: true, seeded: true, lastSyncedAt: new Date().toISOString() });
     persistProfile(profile);
@@ -251,6 +273,11 @@ async function doSync(): Promise<void> {
     // Network-level or worker-level failure: keep serving the last good set.
     setMirrorState({ online: false });
   }
+}
+
+/** The server's active profile (the same authed direct fetch a sync pull uses). */
+export function fetchActiveMirrorProfile(): Promise<string> {
+  return syncFetcher.fetchActiveProfile();
 }
 
 /** One sync pull (deduplicated while in flight). */
@@ -276,4 +303,26 @@ export async function tryMirror(path: string): Promise<unknown | null> {
   } catch {
     return null;
   }
+}
+
+// ── Scoped tool port (model worker -> mirror) ────────────────────────────────
+
+/**
+ * Open a fresh, scoped tool port for one subagent run. One end of a new
+ * MessageChannel is transferred to the mirror worker (which serves ONLY
+ * `status` and `toolRead` on it, bound to `expectedProfile`); the other end is
+ * returned for the caller to hand to the model worker. The caller closes it
+ * when the run ends.
+ *
+ * Returns null when the mirror is unavailable or has never been seeded, or when
+ * the open profile is not the one the caller expects (a stale run must not read
+ * another profile's data).
+ */
+export function openToolPort(expectedProfile?: string): MessagePort | null {
+  if (!worker || !state.available || !state.seeded || !state.profile) return null;
+  if (expectedProfile !== undefined && expectedProfile !== state.profile) return null;
+  const channel = new MessageChannel();
+  // Fire and forget: the worker's ack has no pending entry and is ignored.
+  worker.postMessage({ id: ++rpcId, type: 'attachPort', profile: state.profile }, [channel.port1]);
+  return channel.port2;
 }

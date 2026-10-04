@@ -3,6 +3,7 @@ import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { Dialog } from '@/components/Dialog';
 import type { InteractionRow, AnnotationStats, TraceRow, TraceStats } from '@/types';
+import { parseDbTimestamp } from '@/format';
 
 type SubTab = 'traces' | 'training';
 
@@ -25,7 +26,7 @@ function fmtDuration(ms: number): string {
 }
 
 function fmtTime(timestamp: string): string {
-  const d = new Date(timestamp);
+  const d = parseDbTimestamp(timestamp);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
@@ -174,7 +175,7 @@ function TracesContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {traces.map((trace) => (
+                  {[...traces].reverse().map((trace) => (
                     <tr key={trace.id} className="border-b border-border/50 hover:bg-border-muted/20">
                       <td className="py-2 text-text-muted text-xs whitespace-nowrap">{fmtTime(trace.timestamp)}</td>
                       <td className="py-2 text-text font-mono text-xs">{trace.model}</td>

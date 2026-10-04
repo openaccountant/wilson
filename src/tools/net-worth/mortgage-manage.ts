@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import { hasLicense } from '../../licensing/license.js';
@@ -21,6 +22,7 @@ export function initMortgageManageTool(database: Database) {
 
 export const mortgageManageTool = defineTool({
   name: 'mortgage_manage',
+  mutates: mutatesUnlessAction('schedule', 'summary', 'payoff'),
   description: 'Manage loans and view amortization schedules, payoff simulations.',
   schema: z.object({
     action: z.enum(['add', 'update', 'schedule', 'summary', 'payoff']).describe(

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { createTestDb } from './helpers.js';
 import { Database } from '../db/compat-sqlite.js';
-import { apiTransactions, apiEntities, apiBudgetLimits, apiCategories, apiImport } from '../dashboard/api.js';
+import { apiTransactions, apiEntities, apiBudgetLimits, apiCategories, apiImport, apiCoverage } from '../dashboard/api.js';
 import { insertTransactions } from '../db/queries.js';
 import { createEntity, updateEntity } from '../db/entity-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
@@ -35,6 +35,7 @@ const accountId = insertAccount(serverDb, {
 });
 
 const bizEntityId = createEntity(serverDb, { name: 'Side Business', color: '#3b82f6' });
+const defaultEntityId = (serverDb.prepare('SELECT id FROM entities WHERE is_default = 1').get() as { id: number }).id;
 
 // Most rows carry external_ids (like real imports); one is NULL-external
 // (legacy row) to exercise the id:<serverId> sync-key fallback.
@@ -48,6 +49,12 @@ insertTransactions(serverDb, [
   { date: '2026-03-07', description: 'Electric Company', amount: -120.0, category: 'Utilities', external_id: 'ext-util-1' },
   { date: '2026-02-15', description: 'Costco run', amount: -210.1, category: 'Groceries', external_id: 'ext-grocery-3' },
   { date: '2026-03-08', description: 'Paycheck', amount: 3500.0, category: 'Income', external_id: 'ext-pay-1' },
+  // Dashboard-rule edges: a card payment (never spend), blank and literal
+  // 'Uncategorized' categories, a blank merchant_name (merchant label falls
+  // back to description).
+  { date: '2026-03-06', description: 'CARD PAYMENT', amount: -300.0, category: 'Credit Card', external_id: 'ext-cc-1' },
+  { date: '2026-03-06', description: 'Blank cat', amount: -2.5, category: '', merchant_name: '  ', external_id: 'ext-blank-1' },
+  { date: '2026-03-07', description: 'Literal uncat', amount: -3.5, category: 'Uncategorized', external_id: 'ext-uncat-1' },
 ]);
 
 // Link some rows to the account and to entities, like the server pipelines do.
@@ -126,6 +133,23 @@ const parityQueries: string[] = [
   `accountId=${accountId}&category=Groceries&limit=10000000`,
   `entityId=${bizEntityId}&start=2026-01-01&end=2026-12-31&limit=2`,
   'isRecurring=true&limit=10000000',         // not parsed by apiTransactions, but harmless
+  // ── Charting batch 1: aliases, SQL paging, exact merchant, dashboard rules
+  'startDate=2026-03-02&endDate=2026-03-07&limit=10000000', // overview-style aliases
+  'start=2026-03-05&startDate=2026-01-01&limit=10000000',    // start wins over startDate
+  'limit=3&offset=2',                        // a middle page
+  'limit=4&offset=4',
+  'offset=5',                                // default limit + offset
+  'limit=5&offset=1000',                     // past the end → empty
+  'limit=5&offset=abc',                      // bad offset → 0
+  'limit=-2',                                // negative limit → empty
+  'merchantExact=Whole%20Foods&limit=10000000',
+  'merchantExact=Blank%20cat&limit=10000000', // blank merchant_name → description
+  'merchantExact=whole%20foods&limit=10000000', // exact is case-sensitive → empty
+  'spendOnly=1&limit=10000000',
+  'spendOnly=true&category=Credit%20Card&limit=10000000', // non-spend → empty
+  'category=Uncategorized&limit=10000000',   // NULL + blank + literal
+  `entityId=${defaultEntityId}&limit=10000000`, // default entity owns NULL rows
+  `entityId=${defaultEntityId}&category=Uncategorized&limit=3&offset=1`,
 ];
 
 describe('mirror parity with the server for the same query', () => {
@@ -133,6 +157,20 @@ describe('mirror parity with the server for the same query', () => {
     const fromServer = apiTransactions(serverDb, new URLSearchParams(query));
     const fromMirror = await serveApiPath(mirrorBinding, `/api/transactions?${query}`);
     expect(fromMirror).toEqual(fromServer);
+  });
+
+  test('/api/coverage', async () => {
+    const fromServer = apiCoverage(serverDb);
+    const fromMirror = await serveApiPath(mirrorBinding, '/api/coverage');
+    expect(fromMirror).toEqual(fromServer);
+    expect(fromServer).toEqual({ start: '2026-02-15', end: '2026-03-11', months: ['2026-02', '2026-03'] });
+  });
+
+  test('offset pages concatenate to the unpaged list', async () => {
+    const all = (await serveApiPath(mirrorBinding, '/api/transactions?limit=10000000')) as unknown[];
+    const p1 = (await serveApiPath(mirrorBinding, '/api/transactions?limit=4')) as unknown[];
+    const p2 = (await serveApiPath(mirrorBinding, '/api/transactions?limit=4&offset=4')) as unknown[];
+    expect([...p1, ...p2]).toEqual(all.slice(0, 8));
   });
 
   test('/api/entities', async () => {

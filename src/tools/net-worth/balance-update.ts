@@ -12,6 +12,7 @@ export function initBalanceUpdateTool(database: Database) {
 
 export const balanceUpdateTool = defineTool({
   name: 'balance_update',
+  mutates: true,
   description: 'Update the current balance of a financial account and record a snapshot.',
   schema: z.object({
     accountId: z.number().describe('Account ID to update'),

@@ -2,7 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiBudgetLimits, apiCategories, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
   apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
@@ -21,10 +21,17 @@ import {
   apiImport, apiDemoTraceStep, type ImportRequestBody,
   apiReviewQueue, apiConfirmReview, apiCorrectReview,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
+  apiSkills, apiMerchants,
 } from './api.js';
+import { validateMentions, resolveMentionContext } from './mentions.js';
+import { isBadRequest } from './spending-params.js';
+import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
 import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
+import { hasLicense } from '../licensing/license.js';
+import { getCheckoutUrl } from '../licensing/upsell.js';
 import { initChatSession, handleChatMessage } from './chat.js';
 import {
   isAuthEnabled, enableAuth, disableAuth,
@@ -36,8 +43,10 @@ import {
   getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
 import { handleMcpRoute } from './mcp-routes.js';
+import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
 import { revokeGrantsForUser } from '../mcp/store.js';
+import { handlePrelabelRoute } from '../prelabel/routes.js';
 
 const DEFAULT_PORT = 3141;
 
@@ -133,6 +142,11 @@ export async function serveDashboardAsset(
   return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
 }
 
+// Profile names become path segments (see resolveProfile in profile/context.ts),
+// so the HTTP API validates them — unlike the CLI's --profile flag, this accepts
+// arbitrary input over the network and must not allow "../" traversal.
+const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
 type Role = 'admin' | 'viewer';
@@ -210,6 +224,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         delete headers['Access-Control-Allow-Origin'];
         Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
       }
+      if (path.startsWith('/api/sync/')) {
+        // Raw ledger rows for the mirror: never the wildcard (see sync-routes.ts).
+        for (const k of Object.keys(headers)) delete headers[k];
+        Object.assign(headers, syncCorsHeaders(actualPort, req.headers.get('Origin')));
+      }
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers });
@@ -275,6 +294,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           });
           if (mcpResponse) return mcpResponse;
         }
+
+        // Raw rows for the offline mirror's v4 sync (behind the auth gate above).
+        const syncResponse = handleSyncRoute(req, path, { activeDb, headers, port: actualPort });
+        if (syncResponse) return syncResponse;
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
@@ -396,6 +419,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.name) {
             return Response.json({ error: 'name required' }, { status: 400, headers });
           }
+          if (!PROFILE_NAME_RE.test(body.name)) {
+            return Response.json(
+              { error: 'name must be 1-64 characters of letters, numbers, "-" or "_"' },
+              { status: 400, headers },
+            );
+          }
           switchProfile(body.name);
           return Response.json({ active: getCurrentProfileName() }, { headers });
         }
@@ -411,6 +440,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/budgets') {
           return Response.json(apiBudgets(activeDb, url.searchParams), { headers });
         }
+        if (path === '/api/coverage') {
+          return Response.json(apiCoverage(activeDb), { headers });
+        }
         if (path === '/api/budgets/limits') {
           // Raw budget rows (sync feed for the offline mirror) — distinct from
           // /api/budgets, the vs-actual aggregation. Exact-match check, so the
@@ -420,6 +452,31 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/categories') {
           // Raw category rows (sync feed for the offline mirror).
           return Response.json(apiCategories(activeDb), { headers });
+        }
+        if (path === '/api/category-options') {
+          // Header category filter options (every label in transactions).
+          return Response.json(apiCategoryOptions(activeDb), { headers });
+        }
+        if (path === '/api/spending/breakdown' || path === '/api/spending/series') {
+          // Spending drill (mirrored). A bad param is a 400 { error }, never a 500.
+          const result = path === '/api/spending/breakdown'
+            ? await apiSpendingBreakdown(activeDb, url.searchParams)
+            : await apiSpendingSeries(activeDb, url.searchParams);
+          if (isBadRequest(result)) {
+            return Response.json({ error: result.error }, { status: 400, headers });
+          }
+          return Response.json(result, { headers });
+        }
+        if (path === '/api/skills') {
+          // Chat "/" menu source. Name/description/tier/source only — never the SKILL.md path.
+          return Response.json(apiSkills(), { headers });
+        }
+        if (path === '/api/merchants') {
+          // Chat "@" menu source: distinct merchants with txn counts (read-only aggregate).
+          return Response.json(
+            apiMerchants(activeDb, url.searchParams.get('q'), url.searchParams.get('limit')),
+            { headers },
+          );
         }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });
@@ -434,10 +491,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           return Response.json(apiDailySpending(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/streak') {
-          return Response.json(apiStreak(activeDb), { headers });
+          return Response.json(apiStreak(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/weekly-summary') {
-          return Response.json(apiWeeklySummary(activeDb), { headers });
+          return Response.json(apiWeeklySummary(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/budget-countdown') {
           return Response.json(apiBudgetCountdown(activeDb, url.searchParams), { headers });
@@ -487,6 +544,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
+
+        // ── open-jev pre-labeler (own origin gate, specs/open-jev-labeler.md §9.0) ──
+        const pre = await handlePrelabelRoute(req, url, { db: activeDb, headers, authEnabled, currentUser, canWrite, port: actualPort, profile: getCurrentProfileName(), peerAddress: server.requestIP(req)?.address }); if (pre) return pre;
 
         // ── Goals ──────────────────────────────────────────────────
 
@@ -669,6 +729,39 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             },
           });
         }
+        if (path === '/api/export/tax') {
+          // Schedule C export of flagged deductions — Pro, like tax_flag itself.
+          if (!hasLicense('pro')) {
+            return Response.json(
+              { error: 'Tax export is a Pro feature.', upgradeUrl: getCheckoutUrl('annual') },
+              { status: 402, headers },
+            );
+          }
+          const yearParam = url.searchParams.get('year');
+          const year = yearParam ? Number(yearParam) : new Date().getFullYear();
+          const format = url.searchParams.get('format') ?? 'xlsx';
+          if (!Number.isInteger(year) || year < 1900 || year > 9999 || (format !== 'csv' && format !== 'xlsx')) {
+            return Response.json({ error: 'year must be a 4-digit year and format csv or xlsx' }, { status: 400, headers });
+          }
+          const report = buildScheduleC(activeDb, year);
+          const filename = `schedule-c-${year}.${format}`;
+          if (format === 'csv') {
+            return new Response(scheduleCToCsv(report), {
+              headers: {
+                ...headers,
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+              },
+            });
+          }
+          return new Response(new Uint8Array(scheduleCToXlsxBuffer(report)), {
+            headers: {
+              ...headers,
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'Content-Disposition': `attachment; filename="${filename}"`,
+            },
+          });
+        }
 
         // ── Logs & Traces ───────────────────────────────────────────
 
@@ -696,11 +789,32 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string };
+          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
-          const result = await handleChatMessage(body.query, body.sessionId);
+          // "@" mentions: shape-checked here, then every entity is re-read from
+          // the DB (client labels are never trusted) into a context block.
+          const mentions = validateMentions(body.mentions);
+          if (!mentions.ok) {
+            return Response.json({ error: mentions.error }, { status: 400, headers });
+          }
+          const contextBlock = resolveMentionContext(activeDb, mentions.mentions);
+          // On-device subagent handoff (advisory): validated, its steps re-run
+          // on this DB, rendered as a framed untrusted block after the mention
+          // block. Invalid or oversized payloads render '' and never fail the chat.
+          // Honoured only while subagent.enabled is on: with the flag off the field
+          // is not even parsed, so a forged handoff cannot inject a block or make the
+          // server run tools on a path the feature does not expose.
+          const handoffBlock = apiLocalChatConfig().subagent.enabled
+            ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
+            : '';
+          const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined);
+          // One chat run at a time (chat.ts activeChatRun): a concurrent
+          // message is refused, never queued behind another run's approval.
+          if (result.busy) {
+            return Response.json({ error: result.answer, sessionId: result.sessionId }, { status: 409, headers });
+          }
           return Response.json(result, { headers });
         }
 

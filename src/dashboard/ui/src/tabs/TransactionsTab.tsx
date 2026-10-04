@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { useMirrorStatus } from '@/hooks/useMirrorSync';
 import { useAppState } from '@/state';
+import { useUrlState } from '@/hooks/useUrlState';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
@@ -133,15 +134,24 @@ function TxRow({
   entities,
   onUpdate,
   score,
+  highlighted,
 }: {
   tx: Transaction;
   entities: Entity[];
   onUpdate: (txId: number, entityId: number | null) => void;
   /** Cosine similarity in [-1, 1] — present only on semantic matches. */
   score?: number;
+  /** The row a drill-down 'Open in Transactions' link pointed at (URL `txn`). */
+  highlighted?: boolean;
 }) {
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-surface transition-colors">
+    <tr
+      data-txn-id={tx.id}
+      aria-current={highlighted ? 'true' : undefined}
+      className={`border-b border-border last:border-b-0 hover:bg-surface transition-colors ${
+        highlighted ? 'bg-green/10 outline outline-1 outline-green/40' : ''
+      }`}
+    >
       <td className="px-4 py-3 text-text-secondary font-mono text-xs whitespace-nowrap">
         {formatDate(tx.date)}
       </td>
@@ -150,7 +160,8 @@ function TxRow({
           <span className="truncate max-w-[300px]">
             {tx.merchant_name ?? tx.description}
           </span>
-          {tx.pending && (
+          {/* SQLite hands back 0/1, not a boolean — `0 && …` would render a literal "0". */}
+          {!!tx.pending && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-border text-text-muted uppercase tracking-wider">
               pending
             </span>
@@ -213,16 +224,31 @@ export function TransactionsTab() {
   const [zoneDragOver, setZoneDragOver] = useState(false);
   const mirror = useMirrorStatus();
   const { dateRange, setDateRange, accountId, category: globalCategory, entityId } = useAppState();
+  // Drill-down links ('Open in Transactions') carry the exact merchant key and
+  // optionally a transaction id; a plain tab switch drops both.
+  const { state: url, navigate } = useUrlState();
+  const merchantExact = url.merchant;
+  const highlightId = url.txn && /^\d+$/.test(url.txn) ? Number(url.txn) : null;
+  const clearMerchant = () => navigate((s) => ({ ...s, merchant: null, txn: null }), { mode: 'replace' });
 
   const apiPath = useMemo(() => {
     const parts = [`start=${dateRange.startDate}`, `end=${dateRange.endDate}`, 'limit=500'];
     if (accountId != null) parts.push(`accountId=${accountId}`);
     if (globalCategory) parts.push(`category=${encodeURIComponent(globalCategory)}`);
     if (entityId != null) parts.push(`entityId=${entityId}`);
+    // Exact label match — never the fuzzy `merchant` (description LIKE) param.
+    if (merchantExact) parts.push(`merchantExact=${encodeURIComponent(merchantExact)}`);
     return `/api/transactions?${parts.join('&')}`;
-  }, [dateRange, accountId, globalCategory, entityId]);
+  }, [dateRange, accountId, globalCategory, entityId, merchantExact]);
 
   const { data, loading, error, refetch } = useApi<Transaction[]>(apiPath, [apiPath]);
+
+  // Bring the linked transaction into view once its page has loaded.
+  useEffect(() => {
+    if (highlightId == null || !data) return;
+    const row = document.querySelector<HTMLElement>(`tr[data-txn-id="${highlightId}"]`);
+    row?.scrollIntoView({ block: 'center' });
+  }, [highlightId, data]);
   const { data: entitiesData } = useApi<Entity[]>('/api/entities');
   const entities = useMemo(() => entitiesData ?? [], [entitiesData]);
 
@@ -234,6 +260,13 @@ export function TransactionsTab() {
     }
     return Array.from(set).sort();
   }, [data]);
+
+  // Drop a tab-local category filter whose category is no longer in the
+  // loaded page (date range / account / entity changed); otherwise the select
+  // falls back to "All Categories" while every row is still filtered out.
+  useEffect(() => {
+    if (categoryFilter && data && !categories.includes(categoryFilter)) setCategoryFilter('');
+  }, [categories, categoryFilter, data]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -385,6 +418,22 @@ export function TransactionsTab() {
           </select>
         </div>
 
+        {merchantExact && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border border-green/40 bg-green/10 text-green max-w-full">
+              <span className="truncate">Merchant: {merchantExact}</span>
+              <button
+                type="button"
+                onClick={clearMerchant}
+                aria-label={`Clear merchant filter ${merchantExact}`}
+                className="bg-transparent border-none p-0 text-green hover:text-text cursor-pointer leading-none"
+              >
+                &times;
+              </button>
+            </span>
+          </div>
+        )}
+
         {banner && (
           <div className="flex items-center justify-between border border-green-700/50 bg-green-900/30 text-text rounded-md px-3 py-2 text-sm">
             <span className="break-words">{banner}</span>
@@ -505,7 +554,13 @@ export function TransactionsTab() {
               <TxTableHead entities={entities} />
               <tbody>
                 {filtered.map((tx) => (
-                  <TxRow key={tx.id} tx={tx} entities={entities} onUpdate={handleEntityUpdate} />
+                  <TxRow
+                    key={tx.id}
+                    tx={tx}
+                    entities={entities}
+                    onUpdate={handleEntityUpdate}
+                    highlighted={tx.id === highlightId}
+                  />
                 ))}
               </tbody>
             </table>

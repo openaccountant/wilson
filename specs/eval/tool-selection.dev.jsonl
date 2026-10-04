@@ -1,0 +1,80 @@
+{"q": "how much did I spend on dining last month?", "tools": ["spending_summary"], "origin": "doc-dev"}
+{"q": "where does my money go", "tools": ["spending_summary"], "origin": "doc-dev"}
+{"q": "show me all my Amazon charges", "tools": ["transaction_search"], "origin": "doc-dev"}
+{"q": "when did I last pay the electric bill", "tools": ["transaction_search"], "origin": "doc-dev"}
+{"q": "any weird charges this month?", "tools": ["anomaly_detect"], "origin": "doc-dev"}
+{"q": "did I get double charged anywhere", "tools": ["anomaly_detect"], "origin": "doc-dev"}
+{"q": "what subscriptions am I paying for", "tools": ["anomaly_detect", "plaid_recurring"], "origin": "doc-dev"}
+{"q": "import ~/Downloads/chase.csv", "tools": ["csv_import"], "origin": "doc-dev"}
+{"q": "load my bank statement from statement.csv", "tools": ["csv_import"], "origin": "doc-dev"}
+{"q": "categorize my uncategorized transactions", "tools": ["categorize"], "origin": "doc-dev"}
+{"q": "sort out the labels on my spending", "tools": ["categorize"], "origin": "doc-dev"}
+{"q": "change the Starbucks charge on 9/12 to Dining", "tools": ["edit_transaction", "transaction_search"], "origin": "doc-dev"}
+{"q": "delete that duplicate Netflix transaction", "tools": ["delete_transaction", "transaction_search"], "origin": "doc-dev"}
+{"q": "set a $400 grocery budget", "tools": ["budget_set"], "origin": "doc-dev"}
+{"q": "am I over budget this month", "tools": ["budget_check"], "origin": "doc-dev"}
+{"q": "export my transactions to a spreadsheet", "tools": ["export_transactions"], "origin": "doc-dev"}
+{"q": "give me a PDF-style financial report for Q3", "tools": ["generate_report"], "origin": "doc-dev"}
+{"q": "what's my profit and loss this quarter", "tools": ["profit_loss"], "origin": "doc-dev"}
+{"q": "did I make more than I spent in August", "tools": ["profit_loss"], "origin": "doc-dev"}
+{"q": "why was my profit lower than last month", "tools": ["profit_diff"], "origin": "doc-dev"}
+{"q": "what's my savings rate", "tools": ["savings_rate"], "origin": "doc-dev"}
+{"q": "what's my net worth", "tools": ["net_worth"], "origin": "doc-dev"}
+{"q": "add my Vanguard brokerage account", "tools": ["account_manage"], "origin": "doc-dev"}
+{"q": "my checking balance is now $5,200", "tools": ["balance_update"], "origin": "doc-dev"}
+{"q": "track my mortgage: 300k at 6.5% for 30 years", "tools": ["mortgage_manage"], "origin": "doc-dev"}
+{"q": "link the transfer to my savings account", "tools": ["link_transactions"], "origin": "doc-dev"}
+{"q": "flag the home office purchases as deductible", "tools": ["tax_flag"], "origin": "doc-dev"}
+{"q": "export my Schedule C for my accountant", "tools": ["tax_flag"], "origin": "doc-dev"}
+{"q": "always put Uber under Transport", "tools": ["rule_manage"], "origin": "doc-dev"}
+{"q": "create a new category called Pets", "tools": ["category_manage"], "origin": "doc-dev"}
+{"q": "I want to save $10k for a vacation by June", "tools": ["goal_manage"], "origin": "doc-dev"}
+{"q": "remember that I get paid on the 15th", "tools": ["memory_manage"], "origin": "doc-dev"}
+{"q": "split my business and personal spending into entities", "tools": ["entity_manage"], "origin": "doc-dev"}
+{"q": "which transactions belong to my LLC", "tools": ["entity_classify"], "origin": "doc-dev"}
+{"q": "sync my bank accounts", "tools": ["plaid_sync"], "origin": "doc-dev"}
+{"q": "what are my current account balances from the bank", "tools": ["plaid_balances"], "origin": "doc-dev"}
+{"q": "pull in my crypto from Coinbase", "tools": ["coinbase_sync"], "origin": "doc-dev"}
+{"q": "any alerts I should know about", "tools": ["alert_check"], "origin": "doc-dev"}
+{"q": "what is the current IRS mileage rate", "tools": ["web_search"], "origin": "doc-dev"}
+{"q": "do a full audit of my finances", "tools": ["chain_full_audit", "skill"], "origin": "doc-dev"}
+{"q": "help me prep my taxes", "tools": ["skill", "tax_flag"], "origin": "doc-dev"}
+{"q": "run a subscription audit", "tools": ["skill", "anomaly_detect"], "origin": "doc-dev"}
+{"q": "how long is my runway if I quit my job", "tools": ["skill", "spending_summary"], "origin": "doc-dev"}
+{"q": "build me a zero-based budget", "tools": ["skill", "budget_set"], "origin": "doc-dev"}
+{"q": "year end summary please", "tools": ["chain_year_end_summary", "skill"], "origin": "doc-dev"}
+{"q": "compare my grocery spending this month vs last", "tools": ["spending_summary"], "origin": "doc-dev"}
+{"q": "how many times did I eat out in September", "tools": ["transaction_search"], "origin": "doc-dev"}
+{"q": "recategorize all the Costco charges as Groceries", "tools": ["edit_transaction", "transaction_search", "rule_manage"], "origin": "doc-dev"}
+{"q": "import from Monarch", "tools": ["monarch_import"], "origin": "doc-dev"}
+{"q": "what's the biggest expense I had this year", "tools": ["transaction_search", "spending_summary"], "origin": "doc-dev"}
+{"q": "what did groceries cost me in July", "tools": ["spending_summary"], "origin": "doc-fresh"}
+{"q": "top 5 merchants I paid this year", "tools": ["spending_summary"], "origin": "doc-fresh"}
+{"q": "find the payment to Delta Airlines", "tools": ["transaction_search"], "origin": "doc-fresh"}
+{"q": "did my rent go out on the 1st?", "tools": ["transaction_search"], "origin": "doc-fresh"}
+{"q": "is anything off with my credit card bill", "tools": ["anomaly_detect"], "origin": "doc-fresh"}
+{"q": "which recurring charges could I cancel", "tools": ["anomaly_detect", "plaid_recurring"], "origin": "doc-fresh"}
+{"q": "here is my Amex export: amex_2026.csv, bring it in", "tools": ["csv_import"], "origin": "doc-fresh"}
+{"q": "auto-assign categories to the new stuff", "tools": ["categorize"], "origin": "doc-fresh"}
+{"q": "the Shell gas purchase should be Transport not Shopping", "tools": ["edit_transaction", "transaction_search"], "origin": "doc-fresh"}
+{"q": "get rid of the test transaction for $0.01", "tools": ["delete_transaction", "transaction_search"], "origin": "doc-fresh"}
+{"q": "cap my restaurant spending at 250 a month", "tools": ["budget_set"], "origin": "doc-fresh"}
+{"q": "how am I tracking against my limits", "tools": ["budget_check"], "origin": "doc-fresh"}
+{"q": "download everything as an xlsx", "tools": ["export_transactions"], "origin": "doc-fresh"}
+{"q": "write up a monthly summary I can send to my wife", "tools": ["generate_report"], "origin": "doc-fresh"}
+{"q": "was the business profitable in Q2", "tools": ["profit_loss"], "origin": "doc-fresh"}
+{"q": "what drove the drop in income between June and July", "tools": ["profit_diff"], "origin": "doc-fresh"}
+{"q": "what percent of my income am I keeping", "tools": ["savings_rate"], "origin": "doc-fresh"}
+{"q": "total assets minus liabilities?", "tools": ["net_worth"], "origin": "doc-fresh"}
+{"q": "I opened a new Ally high-yield account", "tools": ["account_manage"], "origin": "doc-fresh"}
+{"q": "my 401k is at 84,300 as of today", "tools": ["balance_update"], "origin": "doc-fresh"}
+{"q": "how much interest will I pay on my home loan", "tools": ["mortgage_manage"], "origin": "doc-fresh"}
+{"q": "that $2,000 out of checking was a payment to my credit card, connect them", "tools": ["link_transactions"], "origin": "doc-fresh"}
+{"q": "mark the laptop as a business expense for taxes", "tools": ["tax_flag"], "origin": "doc-fresh"}
+{"q": "any time I see Whole Foods, file it as Groceries", "tools": ["rule_manage"], "origin": "doc-fresh"}
+{"q": "rename the Misc category to Household", "tools": ["category_manage"], "origin": "doc-fresh"}
+{"q": "how close am I to my emergency fund target", "tools": ["goal_manage"], "origin": "doc-fresh"}
+{"q": "don't forget I'm self-employed", "tools": ["memory_manage"], "origin": "doc-fresh"}
+{"q": "refresh transactions from my linked banks", "tools": ["plaid_sync"], "origin": "doc-fresh"}
+{"q": "what's the 2026 standard deduction", "tools": ["web_search"], "origin": "doc-fresh"}
+{"q": "walk me through closing the books for September", "tools": ["skill"], "origin": "doc-fresh"}

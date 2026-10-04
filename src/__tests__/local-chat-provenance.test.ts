@@ -69,11 +69,13 @@ describe('deriveChatProvenance', () => {
 describe('PROVENANCE_BADGES', () => {
   const expectedStates: ChatProvenance[] = [
     'local-with-context',
+    'local-tools',
+    'server-continued',
     'server-fallback',
     'unavailable',
   ];
 
-  test('has exactly the three ChatProvenance keys, no more', () => {
+  test('has exactly the five ChatProvenance keys, no more', () => {
     expect(Object.keys(PROVENANCE_BADGES).sort()).toEqual([...expectedStates].sort());
   });
 
@@ -83,13 +85,55 @@ describe('PROVENANCE_BADGES', () => {
     }
   });
 
-  test('all three labels are distinct (guards a copy-paste typo shipping a wrong badge)', () => {
+  test('all five labels are distinct (guards a copy-paste typo shipping a wrong badge)', () => {
     expect(new Set(Object.values(PROVENANCE_BADGES)).size).toBe(expectedStates.length);
+  });
+
+  test('subagent badges use the spec wording', () => {
+    expect(PROVENANCE_BADGES['local-tools']).toBe('answered locally · on-device lookups');
+    expect(PROVENANCE_BADGES['server-continued']).toBe('server · continued from on-device work');
   });
 
   test('local state carries the on-device label; the two server states do not', () => {
     expect(PROVENANCE_BADGES['local-with-context']).toBe('answered locally · on-device');
     expect(PROVENANCE_BADGES['server-fallback']).toBe('server fallback');
     expect(PROVENANCE_BADGES['unavailable']).toBe('server agent');
+  });
+});
+
+describe('deriveChatProvenance: browser subagent (spec section 10)', () => {
+  test('a subagent answer is local-tools; a bundle answer stays local-with-context', () => {
+    expect(
+      deriveChatProvenance({ localAnswered: true, hybridLayerPresent: true, localMode: 'subagent', handoffSent: false }),
+    ).toBe('local-tools');
+    expect(
+      deriveChatProvenance({ localAnswered: true, hybridLayerPresent: true, localMode: 'bundle', handoffSent: false }),
+    ).toBe('local-with-context');
+    // No mode given (every pre-subagent caller) means bundle.
+    expect(deriveChatProvenance({ localAnswered: true, hybridLayerPresent: true })).toBe('local-with-context');
+  });
+
+  test('a server answer after a handoff WITH a payload is server-continued', () => {
+    expect(deriveChatProvenance({ localAnswered: false, hybridLayerPresent: true, handoffSent: true })).toBe(
+      'server-continued',
+    );
+  });
+
+  test('a server answer without a payload keeps the existing rule', () => {
+    expect(deriveChatProvenance({ localAnswered: false, hybridLayerPresent: true, handoffSent: false })).toBe(
+      'server-fallback',
+    );
+    expect(deriveChatProvenance({ localAnswered: false, hybridLayerPresent: false, handoffSent: false })).toBe(
+      'unavailable',
+    );
+  });
+
+  test('precedence: a local answer wins over handoffSent; handoffSent wins over layer presence', () => {
+    expect(
+      deriveChatProvenance({ localAnswered: true, hybridLayerPresent: true, localMode: 'subagent', handoffSent: true }),
+    ).toBe('local-tools');
+    expect(deriveChatProvenance({ localAnswered: false, hybridLayerPresent: false, handoffSent: true })).toBe(
+      'server-continued',
+    );
   });
 });

@@ -44,8 +44,26 @@ function waSqliteWasmInline(): Plugin {
   };
 }
 
+/**
+ * In production the dashboard server injects the WebMCP bridge <script> into
+ * the HTML it serves (injectWebMcpBridge in src/dashboard/server.ts). The dev
+ * server serves index.html itself, so inject the same tag here — otherwise
+ * `bun run dev` has no Agent access panel and no confirmation cards at all.
+ */
+function webMcpBridgeDevTag(): Plugin {
+  return {
+    name: 'webmcp-bridge-dev-tag',
+    apply: 'serve',
+    transformIndexHtml() {
+      return [{ tag: 'script', attrs: { src: '/webmcp-bridge.js', defer: true }, injectTo: 'body' }];
+    },
+  };
+}
+
+const DASHBOARD_ORIGIN = 'http://localhost:3141';
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile(), waSqliteWasmInline()],
+  plugins: [react(), tailwindcss(), viteSingleFile(), waSqliteWasmInline(), webMcpBridgeDevTag()],
   // The mirror worker imports wa-sqlite's ESM build (which uses import.meta.url),
   // so the inline worker must be bundled as an ES module; the wasm-inline plugin
   // must apply to the worker bundle too (workers are bundled separately at build).
@@ -66,9 +84,18 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3141',
+      // WebMCP grants are bound to the request Origin (deriveScope in
+      // src/dashboard/mcp-routes.ts). Present the dashboard's own origin so a
+      // grant made through the dev server matches what the same tab's later
+      // GETs (which carry no Origin header) resolve to — i.e. dev behaves
+      // exactly like `wilson --dashboard`.
+      // changeOrigin rewrites Host to the dashboard's own, so /api/prelabel/* passes its Host check
+      // (a Host of localhost:5173 is refused as DNS rebinding).
+      '/api': { target: DASHBOARD_ORIGIN, changeOrigin: true, headers: { origin: DASHBOARD_ORIGIN } },
+      '/mcp': { target: DASHBOARD_ORIGIN, headers: { origin: DASHBOARD_ORIGIN } },
+      '/webmcp-bridge.js': DASHBOARD_ORIGIN,
       // Prebuilt hybrid chunk + ort binaries are served by the API server.
-      '/assets': 'http://localhost:3141',
+      '/assets': DASHBOARD_ORIGIN,
     },
   },
   build: {

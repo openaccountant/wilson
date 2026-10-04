@@ -1,0 +1,93 @@
+{
+  "persona": "2-new-grad",
+  "as_of": "2026-06-30",
+  "transaction_months": [
+    "2026-06"
+  ],
+  "accounts": [
+    {
+      "key": "checking",
+      "name": "Everyday Checking",
+      "account_type": "asset",
+      "account_subtype": "checking",
+      "institution": "Bayfront Bank",
+      "account_number_last4": "7720",
+      "current_balance": 1879.14,
+      "notes": "Only account. Paid every other week.",
+      "ledger": {
+        "file": "2-new-grad/checking.csv",
+        "sign": 1
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 1240.55
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 905.2
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 1480
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 1115.75
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 800
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 1879.14
+        }
+      ]
+    },
+    {
+      "key": "student_loan",
+      "name": "Student Loan",
+      "account_type": "liability",
+      "account_subtype": "student_loan",
+      "institution": "Navient",
+      "account_number_last4": "6150",
+      "current_balance": 35111.15,
+      "notes": "Federal-style student loan, paid in two installments of $210 each month.",
+      "loan": {
+        "original_principal": 38000,
+        "interest_rate": 0.058,
+        "term_months": 120,
+        "start_date": "2025-07-01",
+        "extra_payment": 0,
+        "notes": "10-year plan, first payment July 2025."
+      },
+      "snapshots": [
+        {
+          "date": "2026-01-31",
+          "balance": 36335.18
+        },
+        {
+          "date": "2026-02-28",
+          "balance": 36092.73
+        },
+        {
+          "date": "2026-03-31",
+          "balance": 35849.11
+        },
+        {
+          "date": "2026-04-30",
+          "balance": 35604.31
+        },
+        {
+          "date": "2026-05-31",
+          "balance": 35358.32
+        },
+        {
+          "date": "2026-06-30",
+          "balance": 35111.15
+        }
+      ]
+    }
+  ]
+}

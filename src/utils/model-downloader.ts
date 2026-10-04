@@ -91,10 +91,18 @@ export async function pullTransformersModel(
   const { env, pipeline } = await import('@huggingface/transformers');
   configureTransformersEnv(env);
 
+  // Download exactly the weights inference will load: the dtype the adapter
+  // resolves for this model's real device. Omitting dtype here would fetch
+  // fp32 (the cpu default) — the wrong, largest files. The session itself is
+  // built on CPU, so a pre-download never needs a GPU.
+  const { resolveServerDtype, resolveTransformersDevice } = await import('../model/providers/transformers.js');
+  const dtype = await resolveServerDtype(modelId, resolveTransformersDevice(modelId));
+
   await pipeline('text-generation', modelId, {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     progress_callback: makeProgressCallback(onProgress) as any,
     device: 'cpu',
+    dtype,
   });
 
   onProgress?.(100);

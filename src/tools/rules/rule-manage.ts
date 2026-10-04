@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { addRule, updateRule, deleteRule, getRules } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
 
@@ -17,6 +18,7 @@ function getDb(): Database {
 
 export const ruleManageTool = defineTool({
   name: 'rule_manage',
+  mutates: mutatesUnlessAction('list'),
   description:
     'Manage categorization rules. Rules auto-categorize transactions by pattern before the LLM runs. ' +
     'Supports add, update, delete, and list actions.',

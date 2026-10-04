@@ -7,13 +7,16 @@ import {
   isMirrorSeeded,
   resetMirrorSchema,
   setMeta,
+  MIRROR_ACCOUNT_COLUMNS,
   MIRROR_BUDGET_COLUMNS,
   MIRROR_CATEGORY_COLUMNS,
+  MIRROR_LOAN_COLUMNS,
   MIRROR_SCHEMA_VERSION,
+  MIRROR_SNAPSHOT_COLUMNS,
 } from '../dashboard/ui/src/store/mirror-schema.js';
 import { serveApiPath } from '../dashboard/ui/src/store/mirror-reads.js';
 import type { MirrorTransactionRow, MirrorEntityRow, MirrorBudgetRow, MirrorCategoryRow, SyncPayload } from '../dashboard/ui/src/store/types.js';
-import { createMirrorDb, mirrorTxn, mirrorEntity, mirrorBudget, mirrorCategory } from './mirror-helpers.js';
+import { createMirrorDb, mirrorTxn, mirrorEntity, mirrorBudget, mirrorCategory, mirrorAccount, mirrorSnapshot, mirrorLoan } from './mirror-helpers.js';
 
 function payload(overrides: Partial<SyncPayload> = {}): SyncPayload {
   return {
@@ -209,7 +212,7 @@ describe('applySync — restored mirror (offline reload)', () => {
     // connection, so only the persistent tables exist — recreate them WITHOUT
     // the temp tables, then sync again.
     const restored = await createMirrorDb();
-    await restored.exec('DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS budgets; DROP TABLE IF EXISTS categories; DROP TABLE IF EXISTS entities; DROP TABLE IF EXISTS mirror_meta;');
+    await restored.exec('DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS budgets; DROP TABLE IF EXISTS categories; DROP TABLE IF EXISTS entities; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS balance_snapshots; DROP TABLE IF EXISTS loans; DROP TABLE IF EXISTS mirror_meta;');
     await createPersistentMirrorSchema(restored);
 
     const result = await applySync(restored, payload({
@@ -250,6 +253,8 @@ describe('applySync — budgets', () => {
     expect(rows.find((r) => r.category === 'Groceries')).toEqual({
       category: 'Groceries',
       monthly_limit: 200,
+      limit: 200,
+      months: 1,
       actual: 0,
       remaining: 200,
       percent_used: 0,
@@ -355,5 +360,116 @@ describe('applySync — schema v3', () => {
     expect(Object.keys(budgetCols).sort()).toEqual([...MIRROR_BUDGET_COLUMNS].sort());
     const categoryCols = (await db.prepare('SELECT * FROM categories LIMIT 1').all())[0];
     expect(Object.keys(categoryCols).sort()).toEqual([...MIRROR_CATEGORY_COLUMNS].sort());
+  });
+});
+
+
+// ── Mirror v4: accounts, balance_snapshots, loans (spec section 7.2) ─────────
+
+describe('mirror v4 tables', () => {
+  async function tableNames(db: Awaited<ReturnType<typeof createMirrorDb>>): Promise<string[]> {
+    const rows = (await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()) as Array<{ name: string }>;
+    return rows.map((r) => r.name);
+  }
+
+  test('the schema version is 4', () => {
+    expect(MIRROR_SCHEMA_VERSION).toBe(4);
+  });
+
+  test('createMirrorSchema carries the three new tables with the server columns', async () => {
+    const db = await createMirrorDb();
+    const names = await tableNames(db);
+    for (const t of ['accounts', 'balance_snapshots', 'loans']) expect(names).toContain(t);
+    const cols = async (t: string) => ((await db.prepare(`PRAGMA table_info(${t})`).all()) as Array<{ name: string }>).map((c) => c.name);
+    for (const c of MIRROR_ACCOUNT_COLUMNS) expect(await cols('accounts')).toContain(c);
+    for (const c of MIRROR_SNAPSHOT_COLUMNS) expect(await cols('balance_snapshots')).toContain(c);
+    for (const c of MIRROR_LOAN_COLUMNS) expect(await cols('loans')).toContain(c);
+    // entity_id is the server's migration-21 column on accounts.
+    expect(MIRROR_ACCOUNT_COLUMNS).toContain('entity_id');
+  });
+
+  test('resetMirrorSchema drops and recreates them (data gone, tables back)', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({ accounts: [mirrorAccount()], balanceSnapshots: [mirrorSnapshot()], loans: [mirrorLoan()] }));
+    await resetMirrorSchema(db);
+    for (const t of ['accounts', 'balance_snapshots', 'loans']) {
+      const row = (await db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get()) as { n: number };
+      expect(row.n).toBe(0);
+    }
+  });
+
+  test('applySync stores every column of every new row, unchanged', async () => {
+    const db = await createMirrorDb();
+    const acct = mirrorAccount({ id: 7, name: 'Rainy Day', account_subtype: 'savings', current_balance: 12000.25, notes: 'n', plaid_account_id: 'p-1', entity_id: 3 });
+    const snap = mirrorSnapshot({ id: 9, account_id: 7, balance: 11000.5, snapshot_date: '2026-06-30', source: 'plaid' });
+    const loan = mirrorLoan({ id: 5, account_id: 8, linked_asset_id: 7, notes: 'fixed' });
+    await applySync(db, payload({ accounts: [acct], balanceSnapshots: [snap], loans: [loan] }));
+    expect(await db.prepare('SELECT * FROM accounts').all()).toEqual([acct as unknown as Record<string, unknown>]);
+    expect(await db.prepare('SELECT * FROM balance_snapshots').all()).toEqual([snap as unknown as Record<string, unknown>]);
+    expect(await db.prepare('SELECT * FROM loans').all()).toEqual([loan as unknown as Record<string, unknown>]);
+  });
+
+  test('a refresh updates in place and reconciles deletions for all three tables', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({
+      accounts: [mirrorAccount({ id: 1 }), mirrorAccount({ id: 2, name: 'Gone' })],
+      balanceSnapshots: [mirrorSnapshot({ id: 1 }), mirrorSnapshot({ id: 2, snapshot_date: '2026-02-28' })],
+      loans: [mirrorLoan({ id: 1, account_id: 2 }), mirrorLoan({ id: 2, account_id: 3 })],
+    }));
+    const result = await applySync(db, payload({
+      accounts: [mirrorAccount({ id: 1, current_balance: 77.25 })],
+      balanceSnapshots: [mirrorSnapshot({ id: 1, balance: 5 })],
+      loans: [mirrorLoan({ id: 1, interest_rate: 7 })],
+    }));
+    expect(result.seeded).toBe(false);
+    expect(result.deleted).toBeGreaterThanOrEqual(3);
+    expect(await db.prepare('SELECT id, current_balance FROM accounts').all()).toEqual([{ id: 1, current_balance: 77.25 }]);
+    expect(await db.prepare('SELECT id, balance FROM balance_snapshots').all()).toEqual([{ id: 1, balance: 5 }]);
+    expect(await db.prepare('SELECT id, interest_rate FROM loans').all()).toEqual([{ id: 1, interest_rate: 7 }]);
+  });
+
+  test('a loan deleted and re-created for the same account (new id) syncs instead of tripping UNIQUE(account_id)', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({ accounts: [mirrorAccount({ id: 2 })], loans: [mirrorLoan({ id: 1, account_id: 2, interest_rate: 6.5 })] }));
+    const result = await applySync(db, payload({ accounts: [mirrorAccount({ id: 2 })], loans: [mirrorLoan({ id: 9, account_id: 2, interest_rate: 7 })] }));
+    expect(result.deleted).toBe(1);
+    expect(await db.prepare('SELECT id, account_id, interest_rate FROM loans').all()).toEqual([{ id: 9, account_id: 2, interest_rate: 7 }]);
+  });
+
+  test('a payload without the v4 fields (an older caller) is treated as empty sets, not an error', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({ accounts: [mirrorAccount()] }));
+    await applySync(db, payload());
+    expect(await db.prepare('SELECT id FROM accounts').all()).toEqual([]);
+  });
+
+  test('v3 -> v4: a mirror stamped with schema 3 and lacking the new tables drops and re-seeds', async () => {
+    const db = await createMirrorDb();
+    await applySync(db, payload({ transactions: [mirrorTxn({ id: 1, external_id: 'old-1' }) as unknown as MirrorTransactionRow] }));
+    // Make it a faithful v3 mirror: v3 marker, and none of the v4 tables.
+    await db.exec('DROP TABLE accounts; DROP TABLE balance_snapshots; DROP TABLE loans;');
+    await setMeta(db, 'schema_version', '3');
+    expect(await isMirrorSeeded(db)).toBe(false);
+
+    const result = await applySync(db, payload({
+      transactions: [mirrorTxn({ id: 2, external_id: 'new-1' }) as unknown as MirrorTransactionRow],
+      accounts: [mirrorAccount()],
+    }));
+    expect(result.seeded).toBe(true);
+    expect((await serveTransactions(db)).map((r) => r.external_id)).toEqual(['new-1']);
+    expect(await db.prepare('SELECT id FROM accounts').all()).toEqual([{ id: 1 }]);
+    expect(await isMirrorSeeded(db)).toBe(true);
+    expect(await getMeta(db, 'schema_version')).toBe('4');
+  });
+
+  test('createPersistentMirrorSchema alone (a restored pool) already includes the new tables', async () => {
+    const db = await createMirrorDb();
+    await db.exec('DROP TABLE accounts; DROP TABLE balance_snapshots; DROP TABLE loans;');
+    // A fresh persistent schema on a new connection:
+    const fresh = await createMirrorDb();
+    await fresh.exec('DROP TABLE accounts; DROP TABLE balance_snapshots; DROP TABLE loans; DROP TABLE transactions; DROP TABLE entities; DROP TABLE budgets; DROP TABLE categories; DROP TABLE mirror_meta;');
+    await createPersistentMirrorSchema(fresh);
+    const names = ((await fresh.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()) as Array<{ name: string }>).map((r) => r.name);
+    for (const t of ['accounts', 'balance_snapshots', 'loans']) expect(names).toContain(t);
   });
 });

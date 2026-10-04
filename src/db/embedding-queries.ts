@@ -1,5 +1,6 @@
 import type { Database } from './compat-sqlite.js';
 import { DEFAULT_EMBEDDING_MODEL, normalizeVector } from '../utils/embeddings.js';
+import { buildTransactionConditions, type TransactionWhereRules } from './transaction-where.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -202,37 +203,37 @@ function dotProduct(a: Float32Array, b: Float32Array): number {
  * Both the query vector and the stored vectors are L2-normalized, so the dot
  * product equals cosine similarity. Ties break on ascending source_id for
  * deterministic ordering. This layer never embeds — vectors in, vectors out.
+ *
+ * `rules` (opt-in, dashboard only) switches the category/entity filters to the
+ * dashboard semantics shared with /api/transactions (transaction-where.ts):
+ * 'Uncategorized' matches NULL/blank rows, and the default entity also owns
+ * entity_id IS NULL rows. Without rules the prefilter SQL is the historical
+ * exact-match form (the CLI semantic-search tool path).
  */
 export function searchTransactionsSemantic(
   db: Database,
   queryVec: Float32Array,
   filters: SemanticTransactionFilters = {},
   k: number = 10,
-  model: string = DEFAULT_EMBEDDING_MODEL
+  model: string = DEFAULT_EMBEDDING_MODEL,
+  rules: TransactionWhereRules = {}
 ): SemanticTransactionResult[] {
-  const conditions: string[] = [];
-  const params: Record<string, unknown> = { model };
-
-  if (filters.dateStart) {
-    conditions.push('t.date >= @dateStart');
-    params.dateStart = filters.dateStart;
-  }
-  if (filters.dateEnd) {
-    conditions.push('t.date <= @dateEnd');
-    params.dateEnd = filters.dateEnd;
-  }
-  if (filters.category) {
-    conditions.push('t.category = @category');
-    params.category = filters.category;
-  }
-  if (filters.accountId !== undefined) {
-    conditions.push('t.account_id = @accountId');
-    params.accountId = filters.accountId;
-  }
-  if (filters.entityId !== undefined) {
-    conditions.push('t.entity_id = @entityId');
-    params.entityId = filters.entityId;
-  }
+  // Same builder as getTransactions / the mirror, alias-qualified. With no
+  // rules it yields exactly the historical t.date / t.category = / t.account_id
+  // / t.entity_id = conditions, in the same order.
+  const built = buildTransactionConditions(
+    {
+      dateStart: filters.dateStart,
+      dateEnd: filters.dateEnd,
+      category: filters.category,
+      accountId: filters.accountId,
+      entityId: filters.entityId,
+    },
+    rules,
+    't'
+  );
+  const conditions = built.conditions;
+  const params: Record<string, unknown> = { model, ...built.params };
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
