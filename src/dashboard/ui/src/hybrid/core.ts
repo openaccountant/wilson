@@ -13,6 +13,7 @@
  */
 
 import { CURRENT_MESSAGE_MARKER } from '../../../../utils/history-context.js';
+import { looksLikeBareToolCall } from '../../../../model/tool-call-parse.js';
 import { money } from '../format';
 import type { LocalHandoffV1 } from '../../../../dashboard/local-handoff-format.js';
 
@@ -363,7 +364,7 @@ export function looksLikeNeedMoreData(raw: string): boolean {
 
 // Tool-call marker detection. The tags are written as unicode escapes so they
 // never appear literally in this file.
-// Repo tool-call marker - mirrors parseToolCall in src/model/providers/transformers.ts.
+// Repo tool-call marker (the tagged form parseToolCall in src/model/tool-call-parse.ts accepts).
 const TOOL_CALL_REPO = new RegExp('\x3ctool_call>[\\s\\S]*?\x3c/tool_call>');
 // Qwen3's native tool-call form.
 const TOOL_CALL_QWEN = new RegExp('\x3ctool_call>[\\s\\S]*?\x3ctool_response>');
@@ -375,7 +376,9 @@ const TOOL_CALL_QWEN = new RegExp('\x3ctool_call>[\\s\\S]*?\x3ctool_response>');
  */
 export function classifyLocalOutput(raw: string): LocalVerdict {
   const text = stripThinking(raw);
-  if (TOOL_CALL_REPO.test(text) || TOOL_CALL_QWEN.test(text)) {
+  // Bare/fenced JSON calls (granite) share the server's balanced-brace scan, so
+  // a call followed by invented text is still detected rather than shown raw.
+  if (TOOL_CALL_REPO.test(text) || TOOL_CALL_QWEN.test(text) || looksLikeBareToolCall(text)) {
     return { kind: 'handoff', reason: 'tool-call' };
   }
   if (text.includes(NEED_MORE_SENTINEL)) {

@@ -22,7 +22,7 @@ const qwenNativeToolCall = `${LT}tool_call>{"name": "query_transactions", "argum
 
 describe('classifyLocalOutput', () => {
   describe('tool-call shapes → handoff tool-call', () => {
-    test('repo marker form (mirrors parseToolCall in transformers.ts)', () => {
+    test('repo marker form (tagged form of parseToolCall)', () => {
       const v = classifyLocalOutput(`Let me check. ${repoToolCall}`);
       expect(v).toEqual({ kind: 'handoff', reason: 'tool-call' });
     });
