@@ -3,12 +3,27 @@
 // Scenes are selectable via argv (default: all). Each -> its own WebM in dash-video/.
 import { chromium } from 'playwright';
 import { rename } from 'node:fs/promises';
+import { DEMO_ADMIN } from './demo-admin.mjs';
 
 const BASE = 'http://localhost:3141';
 const W = 1400, H = 860, OUT = 'demos/tape-video/dash-video';
 const want = process.argv.slice(2);
 const run = (n) => want.length === 0 || want.includes(n);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// The demo profile has dashboard auth ON (scripts/demo-enable-auth.ts), so every scene starts logged in as the
+// demo-only admin. Node's fetch sends no Origin header, so the state-change origin gate lets the login through.
+// If auth is off the login simply fails and scenes run as before.
+let sessionToken = null;
+try {
+  const res = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(DEMO_ADMIN),
+  });
+  if (res.ok) sessionToken = (await res.json()).token ?? null;
+} catch { /* dashboard down or auth off: scenes will show it */ }
+console.log(sessionToken ? '  logged in as demo admin' : '  (no demo-admin login: auth off or admin not set up)');
 
 const browser = await chromium.launch({ channel: 'chrome' });
 
@@ -19,6 +34,7 @@ async function scene(name, fn) {
     recordVideo: { dir: OUT, size: { width: W, height: H } },
     colorScheme: 'dark',
   });
+  if (sessionToken) await ctx.addInitScript((t) => { try { localStorage.setItem('wilson_auth_token', t); } catch {} }, sessionToken);
   const page = await ctx.newPage();
   ctx.setDefaultTimeout(8000);           // hard cap so nothing hangs the recording
   try { await fn(page); } catch (e) { console.log(`  [${name}] ${e.message}`); }

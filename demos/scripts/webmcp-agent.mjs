@@ -107,7 +107,8 @@ try {
   // 2. Read: find the charge and how this merchant is usually categorized.
   emit('think', `Looking up "${QUERY}"…`);
   const search = await call(client, 'transaction_search', { query: QUERY });
-  const rows = search?.transactions ?? [];
+  // /mcp returns {items:[{id,date,desc,amount,category}]}; older builds returned {transactions:[{description}]}.
+  const rows = (search?.items ?? search?.transactions ?? []).map((r) => ({ ...r, description: r.description ?? r.desc }));
   const target = rows.filter((r) => !r.category).sort((a, b) => b.date.localeCompare(a.date))[0];
   if (!target) {
     emit('error', `Nothing uncategorized matches "${QUERY}".`);

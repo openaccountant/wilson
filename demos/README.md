@@ -109,11 +109,38 @@ Don't reseed unless `scripts/verify-accuracy.sh` actually fails — a single
 run occasionally flakes on one LLM-judged check due to model
 non-determinism; re-run it before concluding the data is actually broken.
 
+## Demo auth: dashboard login on the demo profile
+
+`/mcp` client tokens (`wmcp_` + 32 random bytes, minted in Settings -> Agent
+access, shown once) carry write tools only while dashboard auth is on. With
+auth off, `categorize_transaction` cannot be granted. So the demo profile runs
+with auth ON and a fixed, **demo-only** admin (public credentials in
+`demos/scripts/demo-admin.mjs`: `demo-admin` / `demo-only-not-a-secret`; never
+reuse them on a profile with real data):
+
+```
+bun run scripts/demo-enable-auth.ts            # enable, idempotent; demo profile only
+bun run scripts/demo-enable-auth.ts --disable  # back to auth off
+```
+
+Run it once after seeding, then (re)start `wilson --profile demo --dashboard`.
+Enabling auth revokes every existing WebMCP grant by design, so do it before
+minting the token you record with. Both dashboard recorders log in as that
+admin on their own: `record-dashboard.mjs` (session token into every scene's
+localStorage) and `record-webmcp-agent.mjs` (login via `/api/auth/login`).
+
 ## WebMCP agent demo (`scripts/record-webmcp-agent.mjs`)
 
 Approval cards are hold-to-approve (0.6 s press-and-hold; a plain click does
-nothing), and `/mcp` client tokens carry write tools only while dashboard auth
-is on. The harness now holds Approve with `page.mouse.down()`/`up()`.
-TODO: the demo profile has auth off, so `categorize_transaction` cannot be
-granted to the token as the script expects; enable auth on the profile (and log
-the page in as its admin) before recording.
+nothing). The recorder holds Approve with `page.mouse.down()` -> wait 0.8 s ->
+`page.mouse.up()`; any new approval step must do the same. Order of play:
+`demo-enable-auth.ts`, start the dashboard (`:3141`; for the Vite dev UI on
+`:5173` also set `WILSON_DASHBOARD_DEV=1`, or point `WILSON_DEMO_BASE` at
+`http://localhost:3141` to use the built UI), then
+`bun demos/scripts/record-webmcp-agent.mjs`. It logs in as the demo admin,
+grants `spending_summary`, `transaction_search` and `categorize_transaction`
+to a fresh token in the UI (Settings -> Agent access -> External MCP clients ->
+Mint token), the separate agent process uses that token, and at the end the
+token is revoked so the same agent is refused. Minting is limited to 5 per
+hour per user, so budget your takes (a restart of the dashboard resets the
+counter). The recorder resets the target row (`TARGET_ID`) before and after.
