@@ -5,7 +5,8 @@
  * local models call it that way even when the user named another month
  * (granite, asked about "August 2026" in October, called
  * {period: 'month'} and answered with October's numbers). Instead of hoping
- * the model maps dates, the agent fills the named month into the call.
+ * the model maps dates, the agent fills the named month into the call. It also
+ * works around transaction_search's year-as-merchant quirk (see below).
  */
 
 const MONTHS = [
@@ -41,10 +42,20 @@ export function namedMonth(query: string, now: Date = new Date()): string | null
   return found.size === 1 ? [...found][0] : null;
 }
 
+/** A month (as transaction_search's parser spells them) followed by a year. */
+const SEARCH_MONTH_YEAR_RE = new RegExp(
+  `\\b(${MONTHS.join('|')}|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec),?\\s*(\\d{4})\\b`,
+  'gi',
+);
+
 /**
  * The call's arguments with the query's named month filled in, or the same
- * object when there is nothing to change: spending_summary for the current
- * month (or with no period) while the user asked about another month.
+ * object when there is nothing to change:
+ * - spending_summary for the current month (or with no period) while the
+ *   user asked about another month gets that month;
+ * - transaction_search drops a current-year year after a month name: its
+ *   parser keeps the year in the merchant words ("August 2026 expenses" ->
+ *   merchant "2026", no rows) and defaults to the current year anyway.
  */
 export function resolveLocalDateArgs(
   query: string,
@@ -52,6 +63,11 @@ export function resolveLocalDateArgs(
   args: Record<string, unknown>,
   now: Date = new Date(),
 ): Record<string, unknown> {
+  if (tool === 'transaction_search' && typeof args.query === 'string') {
+    const year = String(now.getFullYear());
+    const stripped = args.query.replace(SEARCH_MONTH_YEAR_RE, (all, month: string, y: string) => (y === year ? month : all));
+    return stripped === args.query ? args : { ...args, query: stripped };
+  }
   if (tool !== 'spending_summary') return args;
   if (args.month !== undefined || (args.period !== undefined && args.period !== 'month')) return args;
   const month = namedMonth(query, now);

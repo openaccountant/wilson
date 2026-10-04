@@ -59,6 +59,18 @@ describe('resolveLocalDateArgs', () => {
     expect(resolveLocalDateArgs(query, 'spending_summary', explicit, NOW)).toBe(explicit);
     const search = { query: 'expenses' };
     expect(resolveLocalDateArgs(query, 'transaction_search', search, NOW)).toBe(search);
+    const other = { action: 'list' };
+    expect(resolveLocalDateArgs(query, 'budget_check', other, NOW)).toBe(other);
     expect(resolveLocalDateArgs('biggest expenses?', 'spending_summary', args, NOW)).toBe(args);
+  });
+
+  // transaction_search keeps the year after a month in its merchant words
+  // ("August 2026 expenses" -> merchant "2026", 0 rows; granite then made up
+  // numbers). A current-year year adds nothing to the parse, so drop it.
+  test('transaction_search: a current-year year after a month is dropped', () => {
+    expect(resolveLocalDateArgs(query, 'transaction_search', { query: 'August 2026 expenses' }, NOW)).toEqual({ query: 'August expenses' });
+    expect(resolveLocalDateArgs('x', 'transaction_search', { query: 'dining in aug, 2026' }, NOW)).toEqual({ query: 'dining in aug' });
+    const older = { query: 'August 2025 expenses' };
+    expect(resolveLocalDateArgs(query, 'transaction_search', older, NOW)).toBe(older);
   });
 });

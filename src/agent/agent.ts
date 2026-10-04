@@ -293,7 +293,8 @@ export class Agent {
       }
 
       // Local models: fill a month the user named into spending_summary,
-      // which the model calls for the current month.
+      // which the model calls for the current month (and tidy
+      // transaction_search's month + year, see local-date-args.ts).
       if (local) {
         const userQuery = stripInjectedContext(query);
         for (const call of response.toolCalls) call.args = resolveLocalDateArgs(userQuery, call.name, call.args);
