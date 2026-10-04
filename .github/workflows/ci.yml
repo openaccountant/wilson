@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
 
 jobs:
   check:
@@ -24,6 +24,14 @@ jobs:
           bun-version: "1.4.2"
 
       - run: bun install --frozen-lockfile
+
+      # Root typecheck and chat-markdown-img.test.ts import
+      # src/dashboard/ui/src/lib/chatMarkdown.tsx, which needs the UI package's
+      # own deps (react types etc.). It has a separate lockfile, so a fresh
+      # checkout fails typecheck without this.
+      - name: Install dashboard UI deps
+        working-directory: src/dashboard/ui
+        run: npm ci
 
       - name: Typecheck
         run: bun run typecheck
