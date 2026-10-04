@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
-import { ensureTestProfile, collectEvents, mockTool } from './helpers.js';
+import { ensureTestProfile, collectEvents, createTestDb, mockTool } from './helpers.js';
 import type { LlmResponse, ProviderAdapter } from '../model/types.js';
 import * as realPrompts from '../agent/prompts.js';
 import * as skillsIndex from '../skills/index.js';
@@ -74,6 +74,9 @@ const toolCards = await import('../agent/tool-cards.js');
 const { setSetting } = await import('../utils/config.js');
 const { InMemoryChatHistory } = await import('../utils/in-memory-chat-history.js');
 const { createFakeEmbedder } = await import('./fake-embedder.js');
+const prompts = await import('../agent/prompts.js');
+const { initSpendingSummaryTool } = await import('../tools/query/spending-summary.js');
+const { insertTransactions } = await import('../db/queries.js');
 
 const LOCAL_MODEL = 'transformers:onnx-community/granite-4.0-micro-ONNX-web';
 
@@ -219,6 +222,7 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     setSetting('localToolSelection', 'auto');
     adapterResponses = [makeResponse('ok')];
     adapterCallCount = 0;
+    (prompts.buildIterationPrompt as unknown as { mockClear: () => void }).mockClear();
     mockAdapterCall.mockReset();
     mockAdapterCall.mockImplementation(async () => {
       const response = adapterResponses[Math.min(adapterCallCount, adapterResponses.length - 1)];
@@ -375,6 +379,81 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     } finally {
       restore();
     }
+  });
+
+  // Granite asked "biggest expenses in August 2026?" called spending_summary
+  // for the current month, then answered with the tool block verbatim.
+  const ECHO = '### spending_summary(period=month, compareWithPrevious=true)\n{"data":{"period":"August 2025"}}';
+  const summaryCall = () => makeResponse('', [{ id: 'tc1', name: 'spending_summary', args: { period: 'month', compareWithPrevious: true } }]);
+  const iterationPromptCalls = () => (prompts.buildIterationPrompt as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+  beforeEach(() => {
+    const db = createTestDb();
+    insertTransactions(db, [{ date: '2025-08-12', description: 'Airline', amount: -640, category: 'Travel' }]);
+    initSpendingSummaryTool(db);
+  });
+
+  test('local model: a month named in the query is filled into spending_summary', async () => {
+    const restore = stubLocalModel();
+    try {
+      adapterResponses = [summaryCall(), makeResponse('done')];
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 3 });
+      const events = await collectEvents(agent.run('What were my biggest expenses in August 2025?'));
+      const start = events.find((e) => e.type === 'tool_start') as any;
+      expect(start.args).toEqual({ period: 'month', compareWithPrevious: true, month: '2025-08' });
+      const end = events.find((e) => e.type === 'tool_end') as any;
+      expect(JSON.parse(end.result).data.period).toBe('August 2025');
+    } finally {
+      restore();
+    }
+  });
+
+  test('cloud model: spending_summary arguments are left as the model wrote them', async () => {
+    adapterResponses = [summaryCall(), makeResponse('done')];
+    const agent = await Agent.create({ model: 'claude-sonnet-4-5', maxIterations: 3 });
+    const events = await collectEvents(agent.run('What were my biggest expenses in August 2025?'));
+    expect((events.find((e) => e.type === 'tool_start') as any).args).toEqual({ period: 'month', compareWithPrevious: true });
+  });
+
+  test('local model: an answer copying the tool results is re-prompted once', async () => {
+    const restore = stubLocalModel();
+    try {
+      adapterResponses = [summaryCall(), makeResponse(ECHO), makeResponse('Travel was your biggest expense at $640.')];
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 5 });
+      const events = await collectEvents(agent.run('What were my biggest expenses in August 2025?'));
+      expect(adapterCalls()).toHaveLength(3);
+      const options = iterationPromptCalls().map((c) => c[3] as Record<string, unknown> | undefined);
+      expect(options.at(-1)).toEqual({ local: true, retry: true });
+      expect(options.some((o) => o?.local === true && !o.retry)).toBe(true);
+      expect((events.find((e) => e.type === 'done') as any).answer).toBe('Travel was your biggest expense at $640.');
+    } finally {
+      restore();
+    }
+  });
+
+  test('local model: a second copy falls back to the formatted summary, never the raw block', async () => {
+    const restore = stubLocalModel();
+    try {
+      adapterResponses = [summaryCall(), makeResponse(ECHO), makeResponse(ECHO)];
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 5 });
+      const events = await collectEvents(agent.run('What were my biggest expenses in August 2025?'));
+      expect(adapterCalls()).toHaveLength(3);
+      const answer = (events.find((e) => e.type === 'done') as any).answer as string;
+      expect(answer).toStartWith("Here's what I found:");
+      expect(answer).toContain('Spending Summary: August 2025');
+      expect(answer).not.toContain('###');
+      expect(answer).not.toContain('"data"');
+    } finally {
+      restore();
+    }
+  });
+
+  test('cloud model: the answer is never checked or rewritten', async () => {
+    adapterResponses = [summaryCall(), makeResponse(ECHO)];
+    const agent = await Agent.create({ model: 'claude-sonnet-4-5', maxIterations: 5 });
+    const events = await collectEvents(agent.run('What were my biggest expenses?'));
+    expect(adapterCalls()).toHaveLength(2);
+    expect((events.find((e) => e.type === 'done') as any).answer).toBe(ECHO);
+    expect(iterationPromptCalls().every((c) => c[3] === undefined)).toBe(true);
   });
 
   test('local model: long chat history is trimmed to the budget instead of failing', async () => {

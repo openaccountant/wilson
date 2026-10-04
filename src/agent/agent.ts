@@ -31,6 +31,8 @@ import {
 } from './tool-selection.js';
 import { getCardEmbedder, skillCardText, toolCardText, toolSchemaTokens, type EmbedFn } from './tool-cards.js';
 import { CPU_SOFT_PROMPT_BUDGET, planLocalPrompt } from './local-prompt-planner.js';
+import { resolveLocalDateArgs } from './local-date-args.js';
+import { isToolResultEcho, toolResultsFallback } from './local-answer-check.js';
 
 
 const DEFAULT_MODEL = 'gpt-5.2';
@@ -69,6 +71,8 @@ interface LocalRun {
   called: Set<string>;
   /** Tool list of the last tool_selection event, to emit only on change. */
   lastEmitted: string | null;
+  /** Answer copied from the tool results: 'pending' re-prompts the next call, once per run. */
+  echoRetry: 'none' | 'pending' | 'done';
 }
 
 /** A local call's prompt pieces, from the planner. */
@@ -264,16 +268,35 @@ export class Agent {
 
       // No tool calls = final answer is in this response
       if (!hasToolCalls(response)) {
+        let answer = responseText ?? '';
+        // Local models: an answer that copies the tool results gets one
+        // re-prompt, then the latest result's own formatted summary.
+        if (local && local.called.size > 0 && isToolResultEcho(answer, local.called)) {
+          if (local.echoRetry === 'none' && ctx.iteration < this.maxIterations) {
+            local.echoRetry = 'pending';
+            logger.warn(`Local answer copied the tool results, re-prompting`, { preview: answer.slice(0, 120) });
+            continue;
+          }
+          logger.warn(`Local answer copied the tool results again, using the formatted result`);
+          answer = toolResultsFallback(ctx.scratchpad.getToolCallRecords());
+        }
         const totalTime = Date.now() - startTime;
         const tokenUsage = ctx.tokenCounter.getUsage();
         logger.info(`Agent run completed (direct response)`, {
           iterations: ctx.iteration,
           totalTimeMs: totalTime,
           totalTokens: tokenUsage?.totalTokens,
-          answerChars: (responseText ?? '').length,
+          answerChars: answer.length,
         });
-        yield* this.handleDirectResponse(responseText ?? '', ctx);
+        yield* this.handleDirectResponse(answer, ctx);
         return;
+      }
+
+      // Local models: fill a month the user named into spending_summary,
+      // which the model calls for the current month.
+      if (local) {
+        const userQuery = stripInjectedContext(query);
+        for (const call of response.toolCalls) call.args = resolveLocalDateArgs(userQuery, call.name, call.args);
       }
 
       // Execute tools and add results to scratchpad
@@ -404,6 +427,7 @@ export class Agent {
       hardLimit: hardBudget !== null,
       called: new Set(),
       lastEmitted: null,
+      echoRetry: 'none',
     };
   }
 
@@ -431,6 +455,8 @@ export class Agent {
       ...local.called,
       ...local.selection.tools.filter((t) => local.selection.reasons[t] === 'named' || local.selection.reasons[t] === 'called'),
     ]);
+    const retry = local.echoRetry === 'pending';
+    if (retry) local.echoRetry = 'done';
     const plan = planLocalPrompt({
       model: this.model,
       budget: local.budget,
@@ -448,7 +474,7 @@ export class Agent {
             results: {
               blocks: ctx.scratchpad.getToolResultBlocks(),
               render: (results: string) =>
-                buildIterationPrompt(query, results, ctx.scratchpad.formatToolUsageForPrompt()),
+                buildIterationPrompt(query, results, ctx.scratchpad.formatToolUsageForPrompt(), { local: true, retry }),
             },
           }),
     });
