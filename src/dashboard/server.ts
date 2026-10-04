@@ -1002,6 +1002,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         if (path === '/api/chat' && req.method === 'POST') {
           const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
+          // Headers may have arrived while auth was off; re-check after the body read.
+          if (authTurnedOnMidRequest()) return unauthorized();
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
@@ -1021,6 +1023,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const handoffBlock = apiLocalChatConfig().subagent.enabled
             ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb) })
             : '';
+          if (authTurnedOnMidRequest()) return unauthorized();
           // The run belongs to this user: its approval cards are theirs alone,
           // and a user who cannot write gets every write denied (#156).
           const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined, {
