@@ -1345,6 +1345,12 @@ function requireCategory(db: Database, raw: string): CategoryLookup {
 }
 
 /** How a summary names a transaction: by id and date, never by its bank text. */
+/** `-$240.00`, `$1,234.50`: the signed amount as the ledger shows it. */
+function formatCardAmount(amount: number): string {
+  const abs = Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${amount < 0 ? '-' : ''}$${abs}`;
+}
+
 function describeTransaction(txn: TransactionRow): string {
   return `transaction #${txn.id} (${txn.date})`;
 }
@@ -1373,9 +1379,11 @@ export function prepareMutation(db: Database, toolName: string, args: Record<str
     return {
       transactionId: id,
       revision: txn.revision,
-      before: { category: storedCategoryLabel(db, txn.category), entity_id: txn.entity_id },
+      // An empty category reads "Uncategorized" on the card, not a bare dash, and the amount sits in the
+      // server-written summary so the human sees exactly which row (date, amount, bank text) is changing.
+      before: { category: storedCategoryLabel(db, txn.category) ?? 'Uncategorized', entity_id: txn.entity_id },
       after: { category: category.label, entity_id: entityId ?? null },
-      summary: `Categorize ${describeTransaction(txn)} as "${category.label}"`,
+      summary: `Categorize transaction #${txn.id} (${txn.date}, ${formatCardAmount(txn.amount)}) as "${category.label}"`,
       bankData: bankDataFor(txn),
       // The resolved entity is persisted so commit writes exactly what the card showed
       // (an omitted `entityId` means "keep the current one", never "clear it").

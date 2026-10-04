@@ -315,6 +315,17 @@ describe('prepareMutation / commitMutation', () => {
     expect(delta.revision).toBe(1);
   });
 
+  test('categorize_transaction: an uncategorized row reads "Uncategorized" and the summary carries the signed amount', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const id = firstTxnId(db);
+    db.prepare('UPDATE transactions SET category = NULL, amount = -240 WHERE id = @id').run({ id });
+    const delta = prepareMutation(db, 'categorize_transaction', { id, category: 'Entertainment' });
+    expect(delta.before).toMatchObject({ category: 'Uncategorized' });
+    expect(delta.summary).toContain('-$240.00');
+    expect(delta.summary).toContain('as "Entertainment"');
+  });
+
   test('prepare on a missing transaction throws NotFoundError (no card for a row that does not exist)', () => {
     const db = createTestDb();
     seedTestData(db);
