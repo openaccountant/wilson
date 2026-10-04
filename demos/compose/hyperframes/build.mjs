@@ -16,7 +16,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseJsonl, summaryFromStream } from "../../rig/lib/actor-log.mjs";
 import { parseAudit, checkStreamAgainstAudit, auditProblems, transcriptFromAudit } from "../../rig/lib/ab-audit.mjs";
-import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping, findEvent, fillTokens, MissingValue, cardZoomWindows, zoomTweens, normRect, firstAppearance } from "./plan.mjs";
+import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping, findEvent, fillTokens, MissingValue, cardZoomWindows, zoomTweens, normRect, firstAppearance, lastJump } from "./plan.mjs";
 const arg = (k) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : undefined; };
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const takeDir = arg("take");
@@ -49,6 +49,15 @@ const skipped = [];
 
 // ---- cards: join per card, bind to proposals ----
 const cards = bindProposals(joinCards(ev.events, cfg.cards), entries, cfg.binding ?? { strategy: "none" });
+/** Gray frames of a fractional rect of the recording, sampled at fps from lo to hi (source seconds), via ffmpeg. */
+const grabFrames = (lo, hi, rect, fps) => {
+  const W = 96, H = 64, size = W * H;
+  const r = spawnSync("ffmpeg", ["-v", "error", "-ss", String(Math.max(0, lo)), "-t", String(hi - Math.max(0, lo)), "-i", path.join(takeDir, "video.mp4"), "-vf",
+    `fps=${fps},crop=iw*${rect.w}:ih*${rect.h}:iw*${rect.x}:ih*${rect.y},scale=${W}:${H},format=gray`, "-f", "rawvideo", "-"], { maxBuffer: 1 << 28 });
+  if (r.status !== 0) throw new Error("footage detection needs ffmpeg on PATH: " + String(r.stderr ?? r.error));
+  const frames = []; for (let o = 0; o + size <= r.stdout.length; o += size) frames.push(r.stdout.subarray(o, o + size));
+  return frames;
+};
 // ---- when did each card really appear? The host's card-shown event is polled and can lag the footage ----
 //  cardStart "event" (default): the host event. "audit": the audit end time of the invoke that raised the card (an early bound; on take21 the
 //  card appeared ~1.2 s after it). "footage": the first frame in which the card's rectangle changes (ffmpeg, 10 fps), searched between
@@ -56,7 +65,7 @@ const cards = bindProposals(joinCards(ev.events, cfg.cards), entries, cfg.bindin
 const cardStart = cfg.cardStart ?? "event";
 if (!["event", "audit", "footage"].includes(cardStart)) throw new Error(`unknown cardStart "${cardStart}"`);
 const detect = { fps: 10, lead: 4, fraction: 0.5, minMax: 5, ...(cfg.cardDetect ?? {}) };
-const cardStartNotes = [];
+const cardStartNotes = []; const footageNotes = [];
 if (cardStart !== "event") {
   for (const c of cards) {
     const ev0 = c.shown; const floor = c.proposal?.endSrc ?? c.proposal?.src;
@@ -68,11 +77,7 @@ if (cardStart !== "event") {
     const rect = normRect(c.box, viewport) ?? normRect((cfg.cardDetect ?? {}).rect ?? cfg.zoom?.card?.rect, viewport);
     if (!rect) throw new Error(`cardStart footage: card ${c.opId ?? c.index} has no box and the config has no cardDetect.rect / zoom.card.rect`);
     const lo = Math.max(0, (floor != null && floor < ev0 ? Math.max(floor, ev0 - detect.lead) : ev0 - detect.lead) - 0.3); const dur = ev0 + 0.5 - lo;
-    const W = 96, H = 64, size = W * H;
-    const r = spawnSync("ffmpeg", ["-v", "error", "-ss", String(lo), "-t", String(dur), "-i", path.join(takeDir, "video.mp4"), "-vf",
-      `fps=${detect.fps},crop=iw*${rect.w}:ih*${rect.h}:iw*${rect.x}:ih*${rect.y},scale=${W}:${H},format=gray`, "-f", "rawvideo", "-"], { maxBuffer: 1 << 28 });
-    if (r.status !== 0) throw new Error("cardStart footage needs ffmpeg on PATH: " + String(r.stderr ?? r.error));
-    const frames = []; for (let o = 0; o + size <= r.stdout.length; o += size) frames.push(r.stdout.subarray(o, o + size));
+    const frames = grabFrames(lo, lo + dur, rect, detect.fps);
     const t = firstAppearance(frames, detect.fps, lo, { fraction: detect.fraction, minMax: detect.minMax });
     if (t == null || t > ev0 + 0.5) cardStartNotes.push(`card ${c.index}: no change detected in ${lo.toFixed(1)}-${(lo + dur).toFixed(1)}s, kept event ${ev0.toFixed(2)}s`);
     else { c.shown = Math.min(t, ev0); cardStartNotes.push(`card ${c.index}: footage ${c.shown.toFixed(2)}s (event ${ev0.toFixed(2)}s, audit ${floor?.toFixed(2) ?? "n/a"}s)`); }
@@ -107,11 +112,28 @@ const cnt = (d) => decisions.filter((x) => x === d).length;
 const agentTools = [...new Set(entries.filter((e) => e.accepted && e.argv[0] === "webmcp" && e.argv[1] === "invoke").map((e) => e.argv[2]))].join(" \u00b7 ");
 const vars = { target: cfg.target ?? "", agentTools, nCards: cards.length, nApproved: cnt("approve"), nRejected: cnt("reject"), nAllowed: cnt("allow"), targetId: target?.txId ?? "", targetAfter: target?.after ?? "",
   targetIs: target ? (target.decision === "approve" ? `is now ${target.after}.` : "is unchanged.") : "" };
+for (const e of entries) if (e.accepted && e.argv[0] === "webmcp" && e.argv[1] === "invoke") { const k = "calls_" + e.argv[2]; vars[k] = (vars[k] ?? 0) + 1; } // audited invoke counts, e.g. {calls_get_interaction}
 const fill = (s) => fillTokens(s, ev.events, vars);
+const namedMemo = {};
 
 // ---- anchors -> source seconds ----
 const at = (a, segs) => {
   const off = a.offset ?? 0;
+  if (a.anchor) { // a named anchor from cfg.anchors; the footage kind looks for the last change in a rect, with an event fallback
+    if (namedMemo[a.anchor] === undefined) {
+      const d = cfg.anchors?.[a.anchor]; if (!d) throw new Error(`unknown anchor "${a.anchor}"`);
+      let t = null;
+      if (d.footage && cfg.footageAnchors !== "skip") {
+        const f = d.footage; const rect = normRect(f.rect, viewport); const lo = at(f.from, segs); const hi = at(f.to, segs); const fps = f.fps ?? 10;
+        t = lastJump(grabFrames(lo, hi, rect, fps), fps, Math.max(0, lo), { fraction: f.fraction ?? 0.5, minMax: f.minMax ?? 5 });
+        footageNotes.push(`anchor ${a.anchor}: ${t == null ? "no change in " + lo.toFixed(1) + "-" + hi.toFixed(1) + "s" : "footage " + t.toFixed(2) + "s"}`);
+      }
+      if (t == null && d.fallback) t = at(d.fallback, segs);
+      namedMemo[a.anchor] = t;
+    }
+    if (namedMemo[a.anchor] == null) throw new MissingAnchor(`anchor ${a.anchor} could not be placed`);
+    return namedMemo[a.anchor] + off;
+  }
   if (a.max || a.min) { // latest / earliest of the alternatives that exist in this take (at least one must)
     const vs = (a.max ?? a.min).map((x) => { try { return at(x, segs); } catch (e) { if (e instanceof MissingAnchor) return null; throw e; } }).filter((v) => v != null);
     if (!vs.length) throw new MissingAnchor("none of the alternatives of " + JSON.stringify(a.max ?? a.min) + " exist in this take");
@@ -140,10 +162,23 @@ const attempt = (item, what, fn) => {
     throw e;
   }
 };
-const segCfg = cfg.segments;
+// `each: <event>` (+ where) on a segment/caption/zoom makes one per matching event; atOffset/endOffset are seconds from that event.
+const eachHits = (c) => ev.events.filter((e) => e.name === c.each && e.t_ms != null && (!c.where || Object.entries(c.where).every(([k, v]) => findEvent([e], e.name, { [k]: v }))));
+const segCfg = (cfg.segments ?? []).flatMap((g, i) => {
+  if (!g.each) return [{ g, label: g.id ?? i }];
+  const hits = eachHits(g);
+  if (!hits.length) skipped.push(`segment ${g.id ?? i} (no ${g.each} events)`);
+  return hits.map((h, n) => ({ g: { ...g, optional: true, from: { event: g.each, where: g.where, nth: n, offset: g.atOffset ?? -2 }, to: { event: g.each, where: g.where, nth: n, offset: g.endOffset ?? 3 } }, label: `${g.id ?? i}[${n}]` }));
+});
 const segRaw = [];
-segCfg.forEach((g, i) => { segRaw[i] = attempt(g, `segment ${g.id ?? i}`, () => ({ s: at(g.from, segRaw), e: at(g.to, segRaw), cfgIndex: i })); });
-const segs = segRaw.filter(Boolean);
+segCfg.forEach(({ g, label }, i) => { segRaw[i] = attempt(g, `segment ${label}`, () => ({ s: at(g.from, segRaw), e: at(g.to, segRaw), cfgIndex: i })); });
+const segs = [];
+for (const g of segRaw.filter(Boolean).sort((a, b) => a.s - b.s)) { // never overlap or reorder footage; a segment wholly inside the previous one adds nothing
+  const prevEnd = segs.at(-1)?.e ?? -Infinity;
+  if (g.e <= prevEnd + 0.1) { skipped.push(`segment ${g.cfgIndex} (already inside the previous segment)`); continue; }
+  if (g.s < prevEnd) g.s = prevEnd;
+  segs.push(g);
+}
 if (!segs.length) throw new Error("no segments survive: nothing to cut");
 for (let i = 1; i < segs.length; i++) if (segs[i].s < segs[i - 1].e) segs[i].s = segs[i - 1].e; // never overlap or reorder footage
 for (const g of segs) if (g.e - g.s < 0.1) throw new Error(`segment ${g.cfgIndex} is empty after ordering (${g.s.toFixed(2)}..${g.e.toFixed(2)})`);
@@ -196,7 +231,10 @@ const rowTimes = rows.map((r) => {
 });
 
 // ---- annotations: global config copy + per-card items, then clipped so none overlap ----
-const pc = cfg.perCard ? perCardItems(cfg.perCard, cards, { target: cfg.target, targetTxId: target?.txId ?? null }) : { caps: [], cos: [] };
+// A card whose whole life (shown..resolved) is in cut footage is not annotated: its overlays would describe frames that are not in the cut.
+const keptCards = cards.filter((c) => toComp(c.shown) !== null || toComp(c.resolved) !== null);
+for (const c of cards) if (!keptCards.includes(c)) skipped.push(`card ${c.index} overlays (card is in cut footage)`);
+const pc = cfg.perCard ? perCardItems(cfg.perCard, keptCards, { target: cfg.target, targetTxId: target?.txId ?? null }) : { caps: [], cos: [] };
 const mapT = (src) => toCompOrCut(src);
 // `each: <event name>` (+ optional `where`) makes one item per matching event; {@this.field} quotes that event, atOffset/endOffset are seconds from it.
 const expandEach = (list, what) => list.flatMap((c, i) => {
@@ -206,12 +244,12 @@ const expandEach = (list, what) => list.flatMap((c, i) => {
   return hits.map((h, n) => ({ c: { ...c, at: { event: c.each, where: c.where, nth: n, offset: c.atOffset ?? 0 }, end: { event: c.each, where: c.where, nth: n, offset: c.endOffset ?? 3 }, optional: true }, i, ctx: { this: h }, what: `${what} ${i}[${n}]` }));
 });
 const capItems = [
-  ...expandEach(cfg.captions ?? [], "caption").map(({ c, what, ctx }) => attempt(c, what, () => ({ start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), t: fillTokens(c.t, ev.events, vars, ctx), optional: !!c.optional }))).filter(Boolean),
+  ...expandEach(cfg.captions ?? [], "caption").map(({ c, what, ctx }) => attempt(c, what, () => { if (ctx && toComp(ctx.this.t_ms / 1000) === null) throw new MissingAnchor("its event is in cut footage"); return { start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), t: fillTokens(c.t, ev.events, vars, ctx), optional: !!c.optional }; })).filter(Boolean),
   ...pc.caps.map((c) => ({ start: mapT(c.start), end: mapT(c.end), t: c.t, optional: !!c.optional, card: c.card })),
 ].filter((c) => c.end > c.start);
 const DASH_W = 1304, DASH_H = 815, K = DASH_W / 1200; // config callout x/y are in a 1200x750 design space
 const coItems = [
-  ...(cfg.callouts ?? []).map((c, i) => attempt(c, `callout ${c.id ?? i}`, () => ({ id: c.id ?? `co${i}`, start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), x: c.x, y: c.y, txt: fill(c.txt), sub: fill(c.sub ?? ""), src: c.src ? fill(c.src) : "" }))).filter(Boolean),
+  ...(cfg.callouts ?? []).map((c, i) => attempt(c, `callout ${c.id ?? i}`, () => ({ id: c.id ?? `co${i}`, start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), x: c.x, y: c.y, w: c.w, txt: fill(c.txt), sub: fill(c.sub ?? ""), src: c.src ? fill(c.src) : "" }))).filter(Boolean),
   ...pc.cos.map((c) => ({ ...c, start: mapT(c.start), end: mapT(c.end) })),
 ].filter((c) => c.end > c.start);
 const caps = scheduleOverlays(capItems);
@@ -221,19 +259,32 @@ const cuts = segs.slice(1).map((g, i) => ({ c: g.c, gap: g.s - segs[i].e })).fil
 
 // ---- zoom: honest crop (uniform scale + pan of the same recording), eased ----
 const zoomCfg = cfg.zoom ?? {};
+// A window lives inside one kept segment: clip its end to that segment's end, drop it if its start is in cut footage.
+const clipToSeg = (s, e) => { const g = segs.find((x) => s >= x.s - 1e-6 && s <= x.e + 1e-6); return g ? [s, Math.min(e, g.e)] : null; };
+const zoomSpecs = (zoomCfg.windows ?? []).flatMap((z, i) => {
+  if (!z.each) return [{ z, what: `zoom ${z.id ?? i}`, wins: [{ from: z.from, to: z.to, rect: z.rect, pad: z.pad, maxScale: z.maxScale }] }];
+  const hits = eachHits(z);
+  if (!hits.length) skipped.push(`zoom ${z.id ?? i} (no ${z.each} events)`);
+  return hits.map((h, n) => ({ z: { ...z, optional: true }, what: `zoom ${z.id ?? i}[${n}]`, ev: h,
+    wins: (z.phases ?? [{ from: z.atOffset ?? -2, to: z.endOffset ?? 3, rect: z.rect }]).map((ph) => ({ from: { event: z.each, where: z.where, nth: n, offset: ph.from }, to: { event: z.each, where: z.where, nth: n, offset: ph.to }, rect: ph.rect ?? z.rect, pad: ph.pad ?? z.pad, maxScale: ph.maxScale ?? z.maxScale })) }));
+});
 const zwins = [
-  ...cardZoomWindows(zoomCfg.card, cards, viewport).map((w) => ({ ...w, start: mapT(w.start), end: mapT(w.end) })),
-  ...(zoomCfg.windows ?? []).map((z, i) => attempt(z, `zoom ${z.id ?? i}`, () => {
-    const rect = normRect(z.rect, viewport); if (!rect) throw new Error(`zoom ${z.id ?? i} has no valid rect`);
-    return { start: mapT(at(z.from, segRaw)), end: mapT(at(z.to, segRaw)), rect, source: "config" };
-  })).filter(Boolean),
+  ...cardZoomWindows(zoomCfg.card, keptCards, viewport).map((w) => ({ ...w, start: mapT(w.start), end: mapT(w.end) })),
+  ...zoomSpecs.flatMap(({ z, what, ev: hit, wins }) => attempt(z, what, () => {
+    if (hit && toComp(hit.t_ms / 1000) === null) throw new MissingAnchor("its event is in cut footage");
+    return wins.map((w) => {
+      const rect = normRect(w.rect, viewport); if (!rect) throw new Error(`${what} has no valid rect`);
+      const c = clipToSeg(at(w.from, segRaw), at(w.to, segRaw)); if (!c) throw new MissingAnchor("its start is in cut footage");
+      return { start: mapT(c[0]), end: mapT(c[1]), rect, pad: w.pad, maxScale: w.maxScale, source: "config" };
+    });
+  }) ?? []),
 ].filter((w) => w.end - w.start > 0.8);
 const ztw = zoomTweens(zwins, { ease: zoomCfg.ease ?? 0.6, pad: zoomCfg.card?.pad, maxScale: zoomCfg.card?.maxScale });
 const zbadges = []; { let on = null; for (const z of ztw) { if (z.s > 1 && on === null) on = z.t; if (z.s === 1 && on !== null) { zbadges.push({ a: on, b: z.t + z.d }); on = null; } } }
 
 const segVideo = segs.map((g, i) => `      <video id="seg${i}" class="vid" src="${VIDEO}" data-start="${g.c.toFixed(3)}" data-duration="${g.d.toFixed(3)}" data-media-start="${g.s.toFixed(3)}" data-track-index="1" muted playsinline></video>`).join("\n");
 const capHtml = caps.map((c, i) => `<div class="cap" id="cap${i}"${c.card !== undefined ? ` data-card="${c.card}"` : ""}${c.t.length > 190 ? ' style="font-size:30px"' : c.t.length > 150 ? ' style="font-size:34px"' : ""}>${esc(c.t)}</div>`).join("\n");
-const coHtml = callouts.map((c) => `<div class="co" id="${c.id}"${c.card !== undefined ? ` data-card="${c.card}"` : ""} style="left:${Math.round(c.x * K)}px;top:${Math.round(c.y * K)}px"><div class="cot">${esc(c.txt)}</div>${c.sub ? `<div class="cos">${esc(c.sub)}</div>` : ""}${c.src ? `<div class="cos src">${esc(c.src)}</div>` : ""}</div>`).join("\n");
+const coHtml = callouts.map((c) => `<div class="co" id="${c.id}"${c.card !== undefined ? ` data-card="${c.card}"` : ""} style="left:${Math.round(c.x * K)}px;top:${Math.round(c.y * K)}px${c.w ? `;max-width:${c.w}px` : ""}"><div class="cot">${esc(c.txt)}</div>${c.sub ? `<div class="cos">${esc(c.sub)}</div>` : ""}${c.src ? `<div class="cos src">${esc(c.src)}</div>` : ""}</div>`).join("\n");
 const cutHtml = cuts.map((c, i) => `<div class="cutbadge" id="cut${i}">CUT – ${Math.round(c.gap)} s of dead time removed</div>`).join("\n");
 const zoomHtml = zbadges.map((z, i) => `<div class="cutbadge zoombadge" id="zb${i}">ZOOM – crop of the same recording</div>`).join("\n");
 
@@ -358,5 +409,12 @@ fs.writeFileSync(path.join(OUT, "index.html"), html);
 console.error("out", OUT);
 console.error("segs", segs.map((g) => [g.s.toFixed(1), g.e.toFixed(1), g.c.toFixed(1)]), "TOTAL", TOTAL);
 console.error("rows", rows.length, "cards", cards.map((c) => `${c.index}:${c.kind}:${c.decision}:#${c.txId}`).join(" "), "captions", caps.length, "callouts", callouts.length, "zooms", zwins.map((w) => `${w.source}@${w.start.toFixed(1)}-${w.end.toFixed(1)}`).join(","));
+{ // diagnostics: footage kept with no caption for more than half a second (an empty caption bar)
+  const sorted = [...caps].sort((x, y) => x.start - y.start); const gaps = []; let cur = TITLE;
+  for (const c of sorted) { if (c.start - cur > 0.5) gaps.push([cur, c.start]); cur = Math.max(cur, c.end); }
+  if (TOTAL - cur > 0.5) gaps.push([cur, TOTAL]);
+  if (gaps.length) console.error("WARNING empty caption bar (comp s): " + gaps.map(([a, z]) => `${a.toFixed(1)}-${z.toFixed(1)}`).join(", "));
+}
+if (footageNotes.length) console.error("footage anchors:\n  " + footageNotes.join("\n  "));
 if (cardStartNotes.length) console.error("cardStart " + cardStart + ":\n  " + cardStartNotes.join("\n  "));
 if (skipped.length) console.error("skipped optional items:\n  - " + skipped.join("\n  - "));

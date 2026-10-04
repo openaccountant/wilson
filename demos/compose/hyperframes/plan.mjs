@@ -121,7 +121,7 @@ export function perCardItems(cfg, cards, base = {}) {
       caps.push({ start: c.resolved, end: tail, t: f(cfg.resolved[d]), card: c.index });
     }
     const co = cfg.coShown; const cd = cfg.coDecide?.[d];
-    if (co) cos.push({ id: `co_c${c.index}_a`, start: c.shown + 0.2, end: shownEnd - 0.1, x: co.x, y: co.y, txt: f(co.txt), sub: f(co.sub), ...(co.src ? { src: f(co.src) } : {}), card: c.index });
+    if (co) cos.push({ id: `co_c${c.index}_a`, start: c.shown + 0.2, end: shownEnd - 0.1, x: co.x, y: co.y, txt: f(co.txt), sub: f(co.sub), ...(co.src ? { src: f(co.src) } : {}), ...(co.w ? { w: co.w } : {}), card: c.index });
     if (cd && decideAt != null) cos.push({ id: `co_c${c.index}_b`, start: decideAt, end: tail, x: cd.x ?? co?.x ?? 40, y: cd.y ?? co?.y ?? 400, txt: f(cd.txt), sub: f(cd.sub), card: c.index });
   }
   return { caps, cos };
@@ -147,15 +147,15 @@ export function findEvent(events, name, where = null, nth = 0) {
   return nth === 'last' ? m.at(-1) : m[nth];
 }
 
-const TOKEN = /\{@([\w-]+)(?:\[(\w+)=([^\]]+)\])?((?:\.\w+)*)(?:\|([^}]*))?\}/g;
+const TOKEN = /\{@([\w-]+)(?:\[(\w+)=([^\]]+)\])?((?:\.\w+)*)(?::(\w+))?(?:#([^|}]*))?(?:\|([^}]*))?\}/g;
 
 /**
  * Fill {@event.field}, {@event[phase=after-agent].field}, {@catch-score.wrongIds.length}, {@this.rating} (the event an `each`
- * item iterates over, passed as ctx.this). Arrays of primitives join with " · ". `{@event.field|fallback}` uses the fallback text
+ * item iterates over, passed as ctx.this). Arrays of primitives join with " · ". `{@event.rows:row}` pluralises a number ("1 row", "3 rows"); `{@event.field#Prefix: }` prints the prefix only when the value exists; `{@event.field|fallback}` uses the fallback text
  * when the event or field is absent or null. Throws MissingValue otherwise (the caller decides: skip an optional item, fail a required one).
  */
 export function fillTokens(s, events, extra = {}, ctx = {}) {
-  return String(s).replace(TOKEN, (_, name, k, v, pathStr, dflt) => {
+  return String(s).replace(TOKEN, (_, name, k, v, pathStr, unit, prefix, dflt) => {
     try {
       const e = name === 'this' ? ctx.this : findEvent(events, name, k ? { [k]: v } : null);
       if (!e) throw new MissingValue(`event ${name}${k ? `[${k}=${v}]` : ''} is not in events.json`);
@@ -167,12 +167,16 @@ export function fillTokens(s, events, extra = {}, ctx = {}) {
       if (val == null) throw new MissingValue(`event ${name} field ${pathStr.slice(1)} is null`);
       if (Array.isArray(val)) return val.map(String).join(' · ');
       if (typeof val === 'object') throw new MissingValue(`event ${name} field ${pathStr.slice(1)} is an object; quote a field of it`);
-      return String(val);
+      if (unit && Number.isFinite(Number(val))) return (prefix ?? '') + `${val} ${unit}${Number(val) === 1 ? '' : 's'}`;
+      return (prefix ?? '') + String(val);
     } catch (err) {
       if (err instanceof MissingValue && dflt !== undefined) return dflt;
       throw err;
     }
-  }).replace(/\{(\w+)\}/g, (_, key) => (key in extra ? String(extra[key]) : `{${key}}`));
+  }).replace(/\{(\w+)\}/g, (_, key) => {
+    if (key in extra) return String(extra[key]);
+    throw new MissingValue(`variable {${key}} has no value in this take`); // never leave a template placeholder on screen
+  });
 }
 
 // ---- zoom: an honest crop of the recording, eased in and out ----
@@ -180,12 +184,13 @@ export function fillTokens(s, events, extra = {}, ctx = {}) {
 /** Normalise a rect to fractions of the frame. Values all <= 1 are taken as fractions already; otherwise divided by the recorded viewport (CSS px). */
 export function normRect(r, viewport) {
   if (!r) return null;
-  const vals = [r.x, r.y, r.w, r.h];
+  const w0 = r.w ?? r.width; const h0 = r.h ?? r.height; // Playwright's boundingBox says width/height
+  const vals = [r.x, r.y, w0, h0];
   if (vals.some((v) => typeof v !== 'number' || !Number.isFinite(v))) return null;
   const frac = vals.every((v) => v <= 1);
-  if (frac) return { x: r.x, y: r.y, w: r.w, h: r.h };
+  if (frac) return { x: r.x, y: r.y, w: w0, h: h0 };
   if (!viewport?.width || !viewport?.height) return null;
-  return { x: r.x / viewport.width, y: r.y / viewport.height, w: r.w / viewport.width, h: r.h / viewport.height };
+  return { x: r.x / viewport.width, y: r.y / viewport.height, w: w0 / viewport.width, h: h0 / viewport.height };
 }
 
 /**
@@ -231,7 +236,7 @@ export function zoomTweens(wins, { ease = 0.6, pad, maxScale } = {}) {
   const tw = [];
   const lastEnd = () => (tw.length ? tw.at(-1).t + tw.at(-1).d : 0);
   for (let i = 0; i < w.length; i++) {
-    const z = zoomCrop(w[i].rect, { pad, maxScale });
+    const z = zoomCrop(w[i].rect, { pad: w[i].pad ?? pad, maxScale: w[i].maxScale ?? maxScale });
     const glide = i > 0 && w[i].start - w[i - 1].end < 2 * ease;
     tw.push({ t: Math.max(lastEnd(), glide ? w[i].start - ease : w[i].start), d: ease, ...z });
     const next = w[i + 1];
@@ -279,4 +284,19 @@ export function firstAppearance(frames, fps, t0, { fraction = 0.5, minMax = 5 } 
   if (max < minMax) return null;
   const i = d.findIndex((x) => x >= fraction * max);
   return +(t0 + i / fps).toFixed(3);
+}
+
+/**
+ * When did something in a rectangle LAST change? Same frames as firstAppearance; the last frame whose difference from its predecessor reaches
+ * `fraction` of the largest such jump in the window (e.g. a dialog closing: earlier jumps such as it opening do not count).
+ * Returns null when no jump reaches `minMax` grey levels.
+ */
+export function lastJump(frames, fps, t0, { fraction = 0.5, minMax = 5 } = {}) {
+  if (frames.length < 2) return null;
+  const d = [0];
+  for (let k = 1; k < frames.length; k++) { let s = 0; for (let i = 0; i < frames[k].length; i++) s += Math.abs(frames[k][i] - frames[k - 1][i]); d.push(s / frames[k].length); }
+  const max = Math.max(...d);
+  if (max < minMax) return null;
+  let last = -1; d.forEach((x, k) => { if (x >= fraction * max) last = k; });
+  return +(t0 + last / fps).toFixed(3);
 }

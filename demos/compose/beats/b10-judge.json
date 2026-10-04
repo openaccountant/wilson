@@ -55,7 +55,149 @@
       "pad": 0.03,
       "maxScale": 2.6,
       "holdAfter": 0.6
-    }
+    },
+    "windows": [
+      {
+        "id": "tiles",
+        "each": "tiles",
+        "phases": [
+          {
+            "from": -0.2,
+            "to": 3.3,
+            "rect": {
+              "x": 0.78,
+              "y": 0.245,
+              "w": 0.215,
+              "h": 0.12
+            },
+            "maxScale": 2.2
+          }
+        ]
+      },
+      {
+        "id": "verdict-row-verdict-accepted",
+        "each": "verdict-accepted",
+        "phases": [
+          {
+            "from": -2.0,
+            "to": 2.6,
+            "rect": {
+              "x": 0.0,
+              "y": 0.27,
+              "w": 0.77,
+              "h": 0.17
+            },
+            "pad": 0.01,
+            "maxScale": 1.3
+          }
+        ]
+      },
+      {
+        "id": "verdict-row-verdict-rejected",
+        "each": "verdict-rejected",
+        "phases": [
+          {
+            "from": -2.0,
+            "to": 2.6,
+            "rect": {
+              "x": 0.0,
+              "y": 0.27,
+              "w": 0.77,
+              "h": 0.17
+            },
+            "pad": 0.01,
+            "maxScale": 1.3
+          }
+        ]
+      },
+      {
+        "id": "annotation-dialog",
+        "optional": true,
+        "from": {
+          "anchor": "dialogClosed",
+          "offset": -5.5
+        },
+        "to": {
+          "anchor": "dialogClosed",
+          "offset": -0.5
+        },
+        "rect": {
+          "x": 0.23,
+          "y": 0.55,
+          "w": 0.52,
+          "h": 0.2
+        },
+        "maxScale": 1.7
+      },
+      {
+        "id": "annotation-row",
+        "optional": true,
+        "from": {
+          "anchor": "dialogClosed",
+          "offset": 0.3
+        },
+        "to": {
+          "anchor": "dialogClosed",
+          "offset": 4.8
+        },
+        "rect": {
+          "x": 0.02,
+          "y": 0.78,
+          "w": 0.78,
+          "h": 0.06
+        },
+        "maxScale": 1.3,
+        "pad": 0.01
+      },
+      {
+        "id": "export-default",
+        "from": {
+          "event": "export-done",
+          "where": {
+            "variant": "default"
+          },
+          "offset": -3
+        },
+        "to": {
+          "event": "export-done",
+          "where": {
+            "variant": "default"
+          },
+          "offset": 3.4
+        },
+        "rect": {
+          "x": 0.01,
+          "y": 0.15,
+          "w": 0.46,
+          "h": 0.13
+        },
+        "maxScale": 2.0
+      },
+      {
+        "id": "export-with-judge",
+        "from": {
+          "event": "export-done",
+          "where": {
+            "variant": "with-judge"
+          },
+          "offset": -4.5
+        },
+        "to": {
+          "event": "export-done",
+          "where": {
+            "variant": "with-judge"
+          },
+          "offset": 4.4
+        },
+        "rect": {
+          "x": 0.01,
+          "y": 0.15,
+          "w": 0.46,
+          "h": 0.13
+        },
+        "maxScale": 2.0
+      }
+    ]
   },
   "segments": [
     {
@@ -66,22 +208,42 @@
       },
       "to": {
         "event": "grants-applied",
-        "offset": 5
+        "offset": 3.5
       }
     },
     {
-      "id": "agent-working",
+      "id": "agent-reads",
       "from": {
         "cmd": "firstAgentCommand",
         "offset": -1
       },
       "to": {
-        "event": "last-card-resolved",
+        "cmd": "firstAgentCommand",
+        "offset": 6
+      }
+    },
+    {
+      "id": "card",
+      "from": {
+        "min": [
+          {
+            "cmd": "firstProposal",
+            "offset": -0.3
+          },
+          {
+            "event": "first-card-shown",
+            "offset": -1.5
+          }
+        ]
+      },
+      "to": {
+        "event": "card-resolved",
+        "nth": "last",
         "offset": 3
       }
     },
     {
-      "id": "judge-queue",
+      "id": "tiles-queue",
       "from": {
         "event": "tiles",
         "where": {
@@ -90,34 +252,67 @@
         "offset": -1.5
       },
       "to": {
-        "max": [
-          {
-            "event": "catch-score",
-            "offset": 5
-          },
-          {
-            "event": "verdict-accepted",
-            "nth": "last",
-            "offset": 3
-          },
-          {
-            "event": "verdict-rejected",
-            "nth": "last",
-            "offset": 3
-          }
-        ]
+        "event": "catch-score",
+        "offset": 5
+      }
+    },
+    {
+      "id": "first-accept",
+      "from": {
+        "event": "verdict-accepted",
+        "nth": 0,
+        "offset": -2.2
+      },
+      "to": {
+        "event": "verdict-accepted",
+        "nth": 0,
+        "offset": 2.8
+      },
+      "optional": true
+    },
+    {
+      "id": "wrong-accepts",
+      "each": "verdict-accepted",
+      "where": {
+        "verdict": "wrong"
+      },
+      "atOffset": -2.2,
+      "endOffset": 2.8
+    },
+    {
+      "id": "rejects",
+      "each": "verdict-rejected",
+      "atOffset": -2.2,
+      "endOffset": 2.8
+    },
+    {
+      "id": "tiles-review",
+      "optional": true,
+      "from": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-review"
+        },
+        "offset": -1.5
+      },
+      "to": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-review"
+        },
+        "offset": 3.5
       }
     },
     {
       "id": "human-annotation",
       "optional": true,
       "from": {
-        "event": "human-annotation-saved",
-        "offset": -8
+        "anchor": "dialogClosed",
+        "offset": -6
       },
       "to": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 4.5
       }
     },
     {
@@ -144,10 +339,14 @@
         "where": {
           "variant": "with-judge"
         },
-        "offset": -6
+        "offset": -4.5
       },
       "to": {
-        "event": "beat-end"
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": 4.5
       }
     }
   ],
@@ -205,18 +404,42 @@
       "optional": true,
       "if": "human-annotation-saved",
       "at": {
-        "event": "human-annotation-saved",
+        "anchor": "dialogClosed",
         "offset": 0.2
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 4
       },
-      "x": 560,
-      "y": 560,
+      "x": 380,
+      "y": 30,
       "txt": "Agent-present window: 2 hours",
       "sub": "A rating saved while an agent had access, or within 2 hours of it, is flagged",
-      "src": "src/dashboard/judgement-routes.ts:42 · REVIEW_AGENT_WINDOW_MS = 2 * 60 * 60 * 1000"
+      "src": "src/dashboard/judgement-routes.ts:42 · REVIEW_AGENT_WINDOW_MS = 2 * 60 * 60 * 1000",
+      "w": 560
+    },
+    {
+      "id": "co_truth",
+      "at": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-agent"
+        },
+        "offset": -1.3
+      },
+      "end": {
+        "event": "tiles",
+        "where": {
+          "phase": "after-agent"
+        },
+        "offset": 3.5
+      },
+      "x": 380,
+      "y": 520,
+      "w": 560,
+      "txt": "Ground truth comes from the seed",
+      "sub": "The catch-score compares the Judge's ratings with the seed's list of wrong answers",
+      "src": "ground truth: src/demo/founder-seed.ts (wrong: true)"
     }
   ],
   "captions": [
@@ -249,10 +472,10 @@
         "edge": "s"
       },
       "end": {
-        "event": "first-card-shown",
-        "offset": -0.3
+        "seg": 1,
+        "edge": "e"
       },
-      "t": "The agent calls: {agentTools}."
+      "t": "The agent reads the logged interactions one call at a time: {calls_get_interaction} get_interaction calls in all, {calls_list_interactions} list_interactions. Only the first seconds are shown."
     },
     {
       "optional": true,
@@ -273,40 +496,24 @@
         "where": {
           "phase": "after-agent"
         },
-        "offset": -0.2
+        "offset": -1.5
       },
       "end": {
-        "event": "tiles",
-        "where": {
-          "phase": "after-agent"
-        },
-        "offset": 3.5
+        "max": [
+          {
+            "event": "tiles",
+            "where": {
+              "phase": "after-agent"
+            },
+            "offset": 3.5
+          },
+          {
+            "event": "queue-shown",
+            "offset": -0.3
+          }
+        ]
       },
       "t": "After the agent: Judge: proposed {@tiles[phase=after-agent].proposed} / accepted {@tiles[phase=after-agent].accepted}."
-    },
-    {
-      "optional": true,
-      "at": {
-        "event": "queue-shown",
-        "offset": -0.2
-      },
-      "end": {
-        "event": "queue-shown",
-        "offset": 4.5
-      },
-      "t": "The Judge queue: {@queue-shown.proposals.length} proposals from the agent, each with a rating and a rationale."
-    },
-    {
-      "each": "verdict-accepted",
-      "atOffset": -0.3,
-      "endOffset": 3,
-      "t": "The human accepts the proposal for interaction #{@this.interactionId}: rating {@this.rating}. {@this.reason|}"
-    },
-    {
-      "each": "verdict-rejected",
-      "atOffset": -0.3,
-      "endOffset": 3,
-      "t": "The human rejects the proposal for interaction #{@this.interactionId} (proposed rating {@this.rating}). {@this.reason|}"
     },
     {
       "at": {
@@ -317,7 +524,43 @@
         "event": "catch-score",
         "offset": 5
       },
-      "t": "The Judge caught {@catch-score.caught.length} of {@catch-score.wrongIds.length} deliberately wrong answers. Missed {@catch-score.missed.length}. False alarms {@catch-score.falseAlarms.length}."
+      "t": "The Judge queue holds {@queue-shown.proposals.length} proposals. The Judge caught {@catch-score.caught.length} of {@catch-score.wrongIds.length} deliberately wrong answers. Missed {@catch-score.missed.length}. False alarms {@catch-score.falseAlarms.length}."
+    },
+    {
+      "each": "verdict-accepted",
+      "atOffset": -2.0,
+      "endOffset": 2.8,
+      "where": {
+        "verdict": "good"
+      },
+      "t": "The human accepts the proposal for interaction #{@this.interactionId}: rating {@this.rating}. Seed ground truth: a correct answer."
+    },
+    {
+      "each": "verdict-accepted",
+      "atOffset": -2.0,
+      "endOffset": 2.8,
+      "where": {
+        "verdict": "wrong"
+      },
+      "t": "The human accepts the proposal for interaction #{@this.interactionId}: rating {@this.rating}. Seed ground truth: a deliberately wrong answer, and the agent rated it {@this.rating}."
+    },
+    {
+      "each": "verdict-rejected",
+      "atOffset": -2.0,
+      "endOffset": 2.8,
+      "where": {
+        "verdict": "wrong"
+      },
+      "t": "The human rejects the proposal for interaction #{@this.interactionId} (proposed rating {@this.rating}). Seed ground truth: #{@this.interactionId} is a deliberately wrong answer, so a {@this.rating} is too generous."
+    },
+    {
+      "each": "verdict-rejected",
+      "atOffset": -2.0,
+      "endOffset": 2.8,
+      "where": {
+        "verdict": "good"
+      },
+      "t": "The human rejects the proposal for interaction #{@this.interactionId} (proposed rating {@this.rating})."
     },
     {
       "optional": true,
@@ -326,44 +569,39 @@
         "where": {
           "phase": "after-review"
         },
-        "offset": -0.2
+        "offset": -1.5
       },
       "end": {
         "event": "tiles",
         "where": {
           "phase": "after-review"
         },
-        "offset": 3.5
+        "offset": 3.3
       },
       "t": "After the human's review: Judge: proposed {@tiles[phase=after-review].proposed} / accepted {@tiles[phase=after-review].accepted}."
     },
     {
       "optional": true,
-      "if": {
-        "event": "human-annotation-saved",
-        "where": {
-          "agentPresent": false
-        }
-      },
+      "if": "human-annotation-saved",
       "at": {
-        "event": "human-annotation-saved",
-        "offset": -3
+        "anchor": "dialogClosed",
+        "offset": -6
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": -0.3
       },
-      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}. It is saved with agentPresent: false."
+      "t": "The human opens interaction #{@human-annotation-saved.interactionId} and writes their own label: rating {@human-annotation-saved.rating}, note “{@human-annotation-saved.note}”."
     },
     {
       "optional": true,
       "at": {
-        "event": "human-annotation-saved",
-        "offset": -3
+        "anchor": "dialogClosed",
+        "offset": 0
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 5
       },
       "if": [
         {
@@ -382,17 +620,17 @@
           }
         }
       ],
-      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out for two reasons: it is flagged agent-present, and an SFT export keeps only runs rated 4 or higher (src/training/annotations.ts:405)."
+      "t": "Saved: rating {@human-annotation-saved.rating} for interaction #{@human-annotation-saved.interactionId}, with agentPresent: true. The default export leaves it out for two reasons: it is flagged agent-present, and an SFT export keeps only runs rated 4 or higher (src/training/annotations.ts:405)."
     },
     {
       "optional": true,
       "at": {
-        "event": "human-annotation-saved",
-        "offset": -3
+        "anchor": "dialogClosed",
+        "offset": 0
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 5
       },
       "if": [
         {
@@ -413,17 +651,17 @@
           }
         }
       ],
-      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out because it is flagged agent-present."
+      "t": "Saved: rating {@human-annotation-saved.rating} for interaction #{@human-annotation-saved.interactionId}, with agentPresent: true. The default export leaves it out because it is flagged agent-present."
     },
     {
       "optional": true,
       "at": {
-        "event": "human-annotation-saved",
-        "offset": -3
+        "anchor": "dialogClosed",
+        "offset": 0
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 5
       },
       "if": [
         {
@@ -444,17 +682,17 @@
           }
         }
       ],
-      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: true. The default export leaves it out because it is flagged agent-present."
+      "t": "Saved: rating {@human-annotation-saved.rating} for interaction #{@human-annotation-saved.interactionId}, with agentPresent: true. The default export leaves it out because it is flagged agent-present."
     },
     {
       "optional": true,
       "at": {
-        "event": "human-annotation-saved",
-        "offset": -3
+        "anchor": "dialogClosed",
+        "offset": 0
       },
       "end": {
-        "event": "human-annotation-saved",
-        "offset": 3
+        "anchor": "dialogClosed",
+        "offset": 5
       },
       "if": {
         "event": "human-annotation-saved",
@@ -462,7 +700,7 @@
           "agentPresent": false
         }
       },
-      "t": "The human rates interaction #{@human-annotation-saved.interactionId} themselves: rating {@human-annotation-saved.rating}, saved with agentPresent: false."
+      "t": "Saved: rating {@human-annotation-saved.rating} for interaction #{@human-annotation-saved.interactionId}, with agentPresent: false."
     },
     {
       "at": {
@@ -496,7 +734,33 @@
         },
         "offset": 3.4
       },
-      "t": "Default export ({@export-done[variant=default].kind}), includeJudge {@export-done[variant=default].includeJudge}, includeAgentPresent {@export-done[variant=default].includeAgentPresent}: {@export-done[variant=default].rows} rows. {@export-done[variant=default].provenance|}"
+      "t": "Default export ({@export-done[variant=default].kind}), includeJudge {@export-done[variant=default].includeJudge}, includeAgentPresent {@export-done[variant=default].includeAgentPresent}: {@export-done[variant=default].rows:row}. {@export-done[variant=default].provenance#Counted from: |}"
+    },
+    {
+      "optional": true,
+      "if": {
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge",
+          "includeJudge": true,
+          "includeAgentPresent": true
+        }
+      },
+      "at": {
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": -4.5
+      },
+      "end": {
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": -0.3
+      },
+      "t": "Now the same export with “Include accepted agent judgements” and “Include ratings made while an agent had access” ticked."
     },
     {
       "at": {
@@ -507,10 +771,13 @@
         "offset": -0.3
       },
       "end": {
-        "event": "beat-end",
-        "offset": -0.2
+        "event": "export-done",
+        "where": {
+          "variant": "with-judge"
+        },
+        "offset": 4.4
       },
-      "t": "With both options ticked (includeJudge {@export-done[variant=with-judge].includeJudge}, includeAgentPresent {@export-done[variant=with-judge].includeAgentPresent}): {@export-done[variant=with-judge].rows} rows. Judge rows: {@export-done[variant=with-judge].judgeRows|not recorded in the file}. Human rows: {@export-done[variant=with-judge].humanRows|not recorded in the file}. Interactions in the file: {@export-done[variant=with-judge].interactionIdsInFile.length|not recorded in the file}. {@export-done[variant=with-judge].provenance|}"
+      "t": "Second export (includeJudge {@export-done[variant=with-judge].includeJudge}, includeAgentPresent {@export-done[variant=with-judge].includeAgentPresent}): {@export-done[variant=with-judge].rows:row}. Judge rows: {@export-done[variant=with-judge].judgeRows|not recorded in the file}. Human rows: {@export-done[variant=with-judge].humanRows|not recorded in the file}. Interactions in the file: {@export-done[variant=with-judge].interactionIdsInFile.length|not recorded in the file}. {@export-done[variant=with-judge].provenance#Counted from: |}"
     }
   ],
   "perCard": {
@@ -519,7 +786,7 @@
       "read"
     ],
     "requireDecisionEvents": false,
-    "resolvedHold": 1.5,
+    "resolvedHold": 3,
     "behindDialog": "A detail panel was in the way of the card for {tool}; the human closes it to reach the card.",
     "propose": "The agent invokes {tool}; the dashboard raises a confirmation card.",
     "shown": "Confirmation card for {tool}. Nothing has changed yet.",
@@ -529,12 +796,14 @@
       "allow": "The human allows {tool}. Outcome: {outcome}"
     },
     "coShown": {
-      "x": 30,
+      "x": 20,
       "y": 20,
       "txt": "The card is the server's text, not the agent's",
       "sub": "{cardText}",
-      "src": "src/dashboard/webmcp-bridge.ts:214-215 · “the server computed in prepare … Never the agent's own prose”"
-    }
+      "src": "src/dashboard/webmcp-bridge.ts:214-215 · “the server computed in prepare … Never the agent's own prose”",
+      "w": 470
+    },
+    "hold": "The human holds Approve on the card for {tool}."
   },
   "holds": [
     {
@@ -558,5 +827,31 @@
     "lead": 4,
     "fraction": 0.5,
     "minMax": 5
+  },
+  "footageAnchors": "detect",
+  "anchors": {
+    "dialogClosed": {
+      "footage": {
+        "rect": {
+          "x": 0.23,
+          "y": 0.1,
+          "w": 0.54,
+          "h": 0.8
+        },
+        "from": {
+          "event": "human-annotation-saved",
+          "offset": -9
+        },
+        "to": {
+          "event": "human-annotation-saved",
+          "offset": 0
+        },
+        "fps": 10
+      },
+      "fallback": {
+        "event": "human-annotation-saved",
+        "offset": -3
+      }
+    }
   }
 }

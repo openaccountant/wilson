@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 // @ts-expect-error plain .mjs compose helper
-import { fillTokens, MissingValue, zoomCrop, zoomTweens, cardZoomWindows, joinCards, firstAppearance, findEvent } from '../../demos/compose/hyperframes/plan.mjs';
+import { fillTokens, MissingValue, zoomCrop, zoomTweens, cardZoomWindows, joinCards, firstAppearance, lastJump, normRect, findEvent } from '../../demos/compose/hyperframes/plan.mjs';
 
 const DEMOS = path.join(import.meta.dir, '../../demos');
 const FIXTURE = JSON.parse(fs.readFileSync(path.join(DEMOS, 'compose/fixtures/b10-judge.FIXTURE-NOT-A-RECORDING.events.json'), 'utf8'));
@@ -38,7 +38,7 @@ const make = (mutate?: (events: Array<Record<string, unknown>>) => void) => {
 // the fixture take has no real video, so use the host's card events (cardStart 'event'); the footage detector is unit-tested below
 const build = (take: string, out: string) => {
   const cfg = path.join(out, 'cfg.json');
-  fs.writeFileSync(cfg, JSON.stringify({ ...JSON.parse(fs.readFileSync(CFG, 'utf8')), cardStart: 'event' }));
+  fs.writeFileSync(cfg, JSON.stringify({ ...JSON.parse(fs.readFileSync(CFG, 'utf8')), cardStart: 'event', footageAnchors: 'skip' }));
   return spawnSync('node', [path.join(DEMOS, 'compose/hyperframes/build.mjs'), '--take', take, '--config', cfg, '--out', out], { encoding: 'utf8' });
 };
 const caps = (html: string) => [...html.matchAll(/<div class="cap" id="cap\d+"[^>]*>([^<]*)<\/div>/g)].map((m) => m[1]);
@@ -53,6 +53,7 @@ describe('tokens, zoom and per-card helpers', () => {
     expect(() => fillTokens('{@catch-score.nope}', ev)).toThrow(MissingValue);
     expect(fillTokens('[{@nope.x|none}]', ev)).toBe('[none]');
     expect(fillTokens('{@this.rating}', ev, {}, { this: { rating: 3 } })).toBe('3');
+    expect(fillTokens('{@export-done[variant=default].rows:row}|{@export-done[variant=with-judge].rows:row}|{@export-done[variant=default].provenance#From: |x}|{@nope.y#From: |none}', ev)).toBe('0 rows|3 rows|From: the downloaded file|none');
     expect(fillTokens('{@export-done[variant=default].includeJudge}/{@export-done[variant=with-judge].includeJudge}', ev)).toBe('false/true');
     expect(fillTokens('{@export-done[variant=with-judge].judgeRows|not recorded in the file}', ev)).toBe('not recorded in the file'); // null is never rendered as 0
     expect(findEvent(ev, 'human-annotation-saved', { rating: { lt: 4 } })).toBeTruthy(); expect(findEvent(ev, 'human-annotation-saved', { rating: { gte: 4 } })).toBeUndefined();
@@ -82,6 +83,12 @@ describe('card first appearance from footage', () => {
     expect(firstAppearance(toast, 10, 50)).toBe(50.5);
     expect(firstAppearance([10, 10, 10, 12].map(frame), 10, 50)).toBeNull();
   });
+  test('lastJump finds a dialog closing (the last big change), not it opening; normRect takes Playwright width/height', () => {
+    const seq = [10, 10, 60, 60, 60, 12, 12, 12].map(frame); // opens at 0.2 s, closes at 0.5 s
+    expect(lastJump(seq, 10, 50)).toBe(50.5);
+    expect(lastJump([10, 10, 11].map(frame), 10, 50)).toBeNull();
+    expect(normRect({ x: 720, y: 450, width: 360, height: 225 }, { width: 1440, height: 900 })).toEqual({ x: 0.5, y: 0.5, w: 0.25, h: 0.25 });
+  });
 });
 
 describe('build.mjs with the b10 config on the hand-made fixture', () => {
@@ -95,14 +102,15 @@ describe('build.mjs with the b10 config on the hand-made fixture', () => {
     const c = caps(html).join('\n');
     expect(c).toContain('Judge: proposed 0 / accepted 0'); expect(c).toContain('Judge: proposed 4 / accepted 0'); expect(c).toContain('Judge: proposed 0 / accepted 1');
     expect(c).toContain('caught 1 of 4 deliberately wrong answers');
-    expect(c).toContain('saved with agentPresent: true');
+    expect(c).toContain('with agentPresent: true. The default export leaves it out for two reasons');
     expect(c).toContain('Default export (sft), includeJudge false, includeAgentPresent false: 0 rows.');
     expect(c).toContain('includeAgentPresent true): 3 rows. Judge rows: not recorded in the file. Human rows: 1. Interactions in the file: 3.');
     expect(c).toContain('for two reasons: it is flagged agent-present, and an SFT export keeps only runs rated 4 or higher (src/training/annotations.ts:405)');
     expect(c).toContain('“Include ratings made while an agent had access”');
-    expect(c).toContain('The human accepts the proposal for interaction #8'); expect(c).toContain('The human rejects the proposal for interaction #7');
-    expect(c).toContain('The agent calls: get_judge_rubric');
-    expect((html.match(/id="seg\d+"/g) ?? []).length).toBe(6);
+    expect(c).toContain('Seed ground truth: a deliberately wrong answer, and the agent rated it 1.'); expect(c).toContain('Seed ground truth: #7 is a deliberately wrong answer, so a 5 is too generous.');
+    expect(c).toContain('0 rows. Counted from: the downloaded file'); expect(c).toContain('3 rows. Judge rows');
+    expect(c).toContain('get_interaction calls in all');
+    expect((html.match(/id="seg\d+"/g) ?? []).length).toBe(8);
     expect(html).toContain('src/dashboard/judgement-routes.ts:42');
     expect(html).not.toMatch(/\{@|\{\w+\}/); // no unfilled template
     expect(fs.existsSync(path.join(DEMOS, 'compose/hyperframes/index.html'))).toBe(false); // never written into the template dir
@@ -120,7 +128,7 @@ describe('build.mjs with the b10 config on the hand-made fixture', () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/skipped optional items/);
     const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
-    expect((html.match(/id="seg\d+"/g) ?? []).length).toBe(5);
+    expect((html.match(/id="seg\d+"/g) ?? []).length).toBe(7); // the annotation segment is gone, and so are the verdict ones
     expect(caps(html).join('\n')).not.toContain('themselves');
   });
 

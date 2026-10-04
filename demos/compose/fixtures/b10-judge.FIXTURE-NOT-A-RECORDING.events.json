@@ -133,7 +133,8 @@
    "proposalId": 2,
    "interactionId": 8,
    "rating": 1,
-   "reason": "matches my read"
+   "reason": "matches my read",
+   "verdict": "wrong"
   },
   {
    "name": "verdict-rejected",
@@ -141,7 +142,8 @@
    "proposalId": 1,
    "interactionId": 7,
    "rating": 5,
-   "reason": "that answer is wrong"
+   "reason": "that answer is wrong",
+   "verdict": "wrong"
   },
   {
    "name": "catch-score",
@@ -185,7 +187,7 @@
    "includeJudge": false,
    "includeAgentPresent": false,
    "rows": 0,
-   "provenance": "counted from the downloaded file"
+   "provenance": "the downloaded file"
   },
   {
    "name": "export-done",
@@ -195,7 +197,7 @@
    "includeJudge": true,
    "includeAgentPresent": true,
    "rows": 3,
-   "provenance": "counted from the downloaded file",
+   "provenance": "the downloaded file",
    "interactionIdsInFile": [
     7,
     8,

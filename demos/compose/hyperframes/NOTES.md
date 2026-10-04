@@ -122,6 +122,15 @@ None observed. Frame-by-frame capture means GSAP `tl.set(display)` row reveals, 
 - Move panels into sub-compositions to quiet the lint and make Studio editing nicer.
 - Record the actor log with sub-second timestamps and a timestamp on the result output; the 1 s resolution and the `result` ordering are the weakest links in "timed to the event log".
 
+
+## Cutting a long take (beat 10 additions)
+
+- `each` on a segment, caption or zoom window: one per matching event (`each`, `where`, `atOffset`, `endOffset`; zoom windows take `phases: [{from, to, rect}]` so one event can pan across two rects). An each caption or zoom whose event is in cut footage is skipped; a segment wholly inside the previous one is dropped. Segments are sorted by start, so they can be listed in any order.
+- `anchors`: named anchors, e.g. `dialogClosed: {footage: {rect, from, to}, fallback: {event, offset}}`. `footage` takes the LAST big change of that rectangle between `from` and `to` (ffmpeg; a dialog closing), else `fallback`. Use `{anchor: "dialogClosed", offset}` anywhere an anchor goes. `footageAnchors: "skip"` forces the fallbacks (tests).
+- Audited counts as variables: `{calls_<tool>}` (e.g. `{calls_get_interaction}`) count the agent's `webmcp invoke <tool>` entries in `ab-audit.jsonl`. A copy string with any unfilled `{name}` fails (required) or is skipped (optional) instead of reaching the screen.
+- Zoom rects: a `box` on `card-shown` may use `width`/`height` (Playwright `boundingBox`). Callouts take `w` (max width in px) so a callout can stay clear of a zoomed card.
+- stderr prints `WARNING empty caption bar (comp s): ...` for any kept footage with no caption for more than 0.5 s.
+
 ## Card first appearance, measured (beat 5 take21)
 
 | card | host `card-shown` | audit end of the `--detach` invoke | first frame the card changes (footage) |
