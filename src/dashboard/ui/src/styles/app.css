@@ -81,3 +81,51 @@ body {
     stroke: CanvasText;
   }
 }
+
+/*
+ * Declarative WebMCP forms: what the page shows while an agent is working a form.
+ * Each rule has its own @supports block: a browser that does not know a pseudo-class would drop the whole
+ * rule, and a shared block would take the other rule down with it.
+ */
+@supports selector(:tool-form-active) {
+  form:tool-form-active {
+    outline: 1px dashed var(--color-yellow);
+    outline-offset: 4px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-yellow) 5%, transparent);
+  }
+}
+
+@supports selector(:tool-submit-active) {
+  button:tool-submit-active {
+    box-shadow: 0 0 0 1px var(--color-green);
+  }
+}
+
+@supports selector(:tool-submit-active) {
+  button:tool-submit-active::after {
+    content: 'AGENT';
+    margin-left: 6px;
+    font: 600 9px/1 var(--font-mono);
+    letter-spacing: 0.08em;
+    color: var(--color-yellow);
+  }
+}
+
+/*
+ * An agent just moved something on the page (threat T16): for a moment its human action buttons are paused, and look it.
+ * The same window blocks the clicks themselves (agentGuard.ts); this is only the visible state.
+ */
+body[data-agent-guard] main :is(button, [role='button'], input[type='submit'], select) {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+/*
+ * A declarative form's field while a person's save is in flight. Never the `disabled` / `readonly` attributes: Chrome omits
+ * those fields from the tool's schema, and a schema that changes mid-call cancels the agent's call. See `fieldLock`.
+ */
+.tool-field-locked {
+  opacity: 0.5;
+  pointer-events: none;
+}

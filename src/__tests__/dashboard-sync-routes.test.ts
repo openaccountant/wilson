@@ -204,8 +204,8 @@ describe('GET /api/sync/* origin gate', () => {
 
   const PATHS = ['/api/sync/accounts', '/api/sync/balance-snapshots', '/api/sync/loans'];
 
-  async function expectRefused(res: Response) {
-    expect(res.status).toBe(403);
+  async function expectRefused(res: Response, status = 403) {
+    expect(res.status).toBe(status);
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
     const text = await res.text();
     expect(text).not.toContain('Everyday Checking');
@@ -238,7 +238,8 @@ describe('GET /api/sync/* origin gate', () => {
   test('a rebound Host is refused even when the request looks same-origin', async () => {
     for (const path of PATHS) {
       const res = await fetch(base + path, { headers: { ...SAME_ORIGIN, Host: `attacker.example:${port}` } });
-      await expectRefused(res);
+      // The dashboard-wide Host gate (origin-gate.ts checkHost) answers first: 421 Misdirected Request.
+      await expectRefused(res, 421);
     }
   });
 

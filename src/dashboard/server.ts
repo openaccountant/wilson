@@ -19,7 +19,7 @@ import {
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
-  apiReviewQueue, apiConfirmReview, apiCorrectReview,
+  apiReviewQueue, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
   apiSkills, apiMerchants,
 } from './api.js';
@@ -28,27 +28,37 @@ import { isBadRequest } from './spending-params.js';
 import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
-import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
+import { exportSftJsonl, exportDpoJsonl, getTrainingStats, exportProvenance, type ExportQualifyOptions } from '../training/export.js';
+import { annotateAgentPresent, handleJudgementRoute } from './judgement-routes.js';
 import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
 import { hasLicense } from '../licensing/license.js';
 import { getCheckoutUrl } from '../licensing/upsell.js';
 import { initChatSession, handleChatMessage, getCategorizeProgress } from './chat.js';
 import {
-  isAuthEnabled, enableAuth, disableAuth,
+  isAuthEnabled, enableAuth, disableAuth, lanAuthReady,
   listUsers, getUserCount, deactivateUser, hashPassword, insertUser, createFirstAdmin,
   verifyLogin, validateToken, revokeToken, cleanExpiredSessions, canWrite,
   type DashboardUser,
 } from './auth.js';
 import {
-  getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
+  getActiveDb, getOpenDbs, switchProfile, peekProfileDb, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
+import {
+  checkHost, checkStateChange, corsHeaders, isAllowedOrigin, isLoopbackBind, isLoopbackPeer, requireBrowserProof,
+} from './origin-gate.js';
+import { getGlobalAgentState } from '../mcp/global-state.js';
 import { handleMcpRoute } from './mcp-routes.js';
 import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
-import { revokeGrantsForUser } from '../mcp/store.js';
+import { isAgentPresent, revokeGrantsForUser } from '../mcp/store.js';
+import { runMcpMaintenance, runMcpMaintenanceAll, MAINTENANCE_INTERVAL_MS } from '../mcp/maintenance.js';
+import { appendRestExportAudit, appendRestWriteAudit } from '../mcp/audit.js';
 import { handlePrelabelRoute } from '../prelabel/routes.js';
 
 const DEFAULT_PORT = 3141;
+
+/** The 6-hourly MCP housekeeping timer for each running server, so stopDashboardServer can clear it. */
+const maintenanceTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
 
 /**
  * Paths whose own auth model replaces the dashboard bearer-token check:
@@ -59,19 +69,18 @@ const DEFAULT_PORT = 3141;
 const MCP_HTTP_PATH = '/mcp';
 
 /**
- * `/api/mcp/*` and `/mcp` carry grant tokens and mutation approvals — never
- * safe to hand to `*`. A request with no Origin header (a non-browser HTTP
- * client, e.g. Hronaut hitting `/mcp` directly) isn't a CORS-relevant
- * request at all, so there's nothing to restrict; a browser request gets
- * reflected only when it already matches this server's own origin.
+ * Bun's idle timeout is per connection and its maximum is 255 s. A `/mcp` tool
+ * call that waits for a human to approve a card holds its connection open for up
+ * to 240 s (see MUTATION_APPROVAL_WAIT_MS in src/mcp/http-server.ts), so the
+ * default 10 s would cut it off.
  */
-function mcpCorsHeaders(port: number, requestOrigin: string | null): Record<string, string> {
-  if (!requestOrigin) return {};
-  const ownOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
-  if (ownOrigins.includes(requestOrigin)) {
-    return { 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
-  }
-  return {};
+export const DASHBOARD_IDLE_TIMEOUT_S = 255;
+
+const LOOPBACK_DEFAULT = '127.0.0.1';
+
+/** `WILSON_DASHBOARD_HOST`, else `dashboardHost` in agent-access.json, else loopback. Read once at startup. */
+function resolveBindHost(): string {
+  return process.env.WILSON_DASHBOARD_HOST?.trim() || getGlobalAgentState().dashboardHost || LOOPBACK_DEFAULT;
 }
 
 /** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
@@ -155,6 +164,29 @@ function canManageUsers(role: Role): boolean {
   return role === 'admin';
 }
 
+/**
+ * A hostile page must not be able to frame the dashboard: a framed page is same-origin
+ * with itself, so it would pass the browser-proof gate and could show the user's approval
+ * cards and kill-switch controls under an attacker's overlay (clickjacking). Sent on every
+ * response, API and static assets included.
+ */
+export const ANTI_FRAMING_HEADERS: Record<string, string> = {
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "frame-ancestors 'none'",
+};
+
+function withAntiFraming(res: Response): Response {
+  try {
+    for (const [k, v] of Object.entries(ANTI_FRAMING_HEADERS)) res.headers.set(k, v);
+    return res;
+  } catch {
+    // Immutable headers (a proxied or already-sent response): rebuild around the same body.
+    const headers = new Headers(res.headers);
+    for (const [k, v] of Object.entries(ANTI_FRAMING_HEADERS)) headers.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  }
+}
+
 // ── Server ──────────────────────────────────────────────────────────────────
 
 /**
@@ -168,11 +200,47 @@ export interface DashboardServerOptions {
    * Production default is the local embedTexts engine.
    */
   traceEmbed?: EmbedFn;
+  /**
+   * Bind address. Defaults to `WILSON_DASHBOARD_HOST`, then `dashboardHost` in
+   * `~/.openaccountant/agent-access.json`, then 127.0.0.1. A non-loopback bind
+   * is the "LAN mode": it refuses to start, and answers 503, while the active
+   * profile has dashboard auth off.
+   */
+  hostname?: string;
+}
+
+/** A request's JSON body, or `null` when it is missing or malformed (the route's schema then answers 400). */
+async function readJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Each of these is a separate, explicit per-export opt-in; anything but the literal "true" is off. */
+function trainingExportFlags(url: URL): ExportQualifyOptions {
+  return {
+    includeJudge: url.searchParams.get('includeJudge') === 'true',
+    includeAgentPresent: url.searchParams.get('includeAgentPresent') === 'true',
+    includeHandoff: url.searchParams.get('includeHandoff') === 'true',
+  };
 }
 
 export async function startDashboardServer(db: Database, preferredPort?: number, options?: DashboardServerOptions) {
   const traceEmbed = options?.traceEmbed;
   const port = preferredPort ?? DEFAULT_PORT;
+
+  // The bind address is read once, here: a profile switch cannot change it.
+  const hostname = options?.hostname ?? resolveBindHost();
+  const lanMode = !isLoopbackBind(hostname);
+  if (lanMode && !lanAuthReady(db)) {
+    throw new Error(
+      `Refusing to bind the dashboard to ${hostname} until dashboard auth is on AND an active admin user exists for this profile. ` +
+      'Start on 127.0.0.1, create the admin account (the dashboard asks on first visit) and enable auth, then bind to the network. ' +
+      'Turning auth on with no users is not enough: the first caller of /api/auth/setup would become admin.'
+    );
+  }
 
   // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
   let reactDashboardHtml: string | null = null;
@@ -196,12 +264,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
   // Clean expired sessions on startup
   try { cleanExpiredSessions(db); } catch { /* table may not exist yet */ }
 
-  const server = Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
-      const path = url.pathname;
+  // WebMCP housekeeping (expired grants, tokens, old operations, audit retention) at startup and every 6 h.
+  runMcpMaintenance(db);
 
+  const handleRequest = async (req: Request, bunServer: { requestIP(req: Request): { address: string } | null; timeout(req: Request, seconds: number): void }): Promise<Response> => {
       // `port` may be 0 (ephemeral, e.g. in tests) — server.port is the actual
       // bound port once Bun.serve has returned, which is what a real request's
       // Origin header will contain. `server` is safe to reference here even
@@ -209,17 +275,29 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
       // ever runs after that assignment has completed.
       const actualPort = server.port ?? port;
 
-      const isMcpPath = path === MCP_HTTP_PATH || path.startsWith('/api/mcp');
-      const headers: Record<string, string> = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-      };
-      if (isMcpPath) {
-        // Never the wildcard for grant/approval/mutation traffic — see mcpCorsHeaders.
-        delete headers['Access-Control-Allow-Origin'];
-        Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
+      // DNS rebinding: only our own loopback names (or an allowlisted Host) may address this server.
+      // Applies to every path, the HTML page and the bridge script included.
+      // This runs before the URL is parsed: a malformed Host makes `req.url` unparseable.
+      const hostDenied = checkHost(req, actualPort);
+      if (hostDenied) return hostDenied;
+
+      let url: URL;
+      try {
+        url = new URL(req.url);
+      } catch {
+        return new Response(null, { status: 400 });
       }
+      const path = url.pathname;
+
+      // CORS reflects an allowlisted Origin and nothing else. There is no wildcard.
+      const requestOrigin = req.headers.get('Origin');
+      const headers: Record<string, string> = {
+        // The reflected origin differs per request, so a cache must key on it.
+        Vary: 'Origin',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, X-Wilson-Agent-Session',
+        ...corsHeaders(actualPort, requestOrigin),
+      };
       if (path.startsWith('/api/sync/')) {
         // Raw ledger rows for the mirror: never the wildcard (see sync-routes.ts).
         for (const k of Object.keys(headers)) delete headers[k];
@@ -230,9 +308,33 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         return new Response(null, { status: 204, headers });
       }
 
+      // `/mcp` authenticates with a client token, so the state-change rule below does not apply
+      // to it, but a browser page from another origin must not be able to reach it either.
+      if (path === MCP_HTTP_PATH && requestOrigin !== null && !isAllowedOrigin(requestOrigin, actualPort)) {
+        return Response.json(
+          { jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' }, id: null },
+          { status: 403, headers }
+        );
+      }
+
+      const stateDenied = checkStateChange(req, path, actualPort);
+      if (stateDenied) {
+        for (const [k, v] of Object.entries(headers)) stateDenied.headers.set(k, v);
+        return stateDenied;
+      }
+
       try {
         // Get active DB (may change after profile switch)
         const activeDb = getActiveDb();
+
+        // LAN rule, checked on EVERY request: auth is per profile, so a switch (or an admin turning
+        // auth off) can leave the served profile open while the socket is reachable from the network.
+        if (lanMode && !lanAuthReady(activeDb)) {
+          return Response.json(
+            { error: { code: 'lan_auth_required', message: 'This profile needs dashboard auth enabled and an active admin user before it can be used over the network.' } },
+            { status: 503, headers }
+          );
+        }
 
         // ── Static hybrid-chat assets (public) ────────────────────────
         // Module scripts and ORT's own wasm fetches cannot send auth headers,
@@ -247,11 +349,14 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         const authEnabled = isAuthEnabled(activeDb);
 
         if (authEnabled) {
-          // Extract token from header or query param
+          // The bearer comes from the Authorization header. A `?token=` query token is accepted
+          // only for GET /api/export/* downloads (an <a href> cannot send a header); anywhere else
+          // it would put a credential in logs and Referer headers for no reason.
           const authHeader = req.headers.get('Authorization');
+          const isExportDownload = req.method === 'GET' && path.startsWith('/api/export/');
           const token = authHeader?.startsWith('Bearer ')
             ? authHeader.slice(7)
-            : url.searchParams.get('token');
+            : isExportDownload ? url.searchParams.get('token') : null;
 
           if (token) {
             currentUser = validateToken(activeDb, token);
@@ -281,10 +386,39 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         const authTurnedOnMidRequest = () => !authEnabled && isAuthEnabled(activeDb);
         const unauthorized = () => Response.json({ error: 'Unauthorized' }, { status: 401, headers });
 
+        // Export downloads are the one REST read path the audit log covers.
+        // Every request that reaches an export route is audited whatever its
+        // method, and only GET is served: a POST used to return the ledger
+        // with no audit row.
+        if (path.startsWith('/api/export/')) {
+          try {
+            const exportUserId = authEnabled && currentUser ? currentUser.id : null;
+            // A training export says what it may contain (human, judge, agent-present, handoff) and whether an agent had
+            // live access, so a download with opt-ins never looks like a default one in the log.
+            const detail = path.startsWith('/api/export/training/')
+              ? `provenance=${exportProvenance(trainingExportFlags(url))} agent_present=${isAgentPresent(activeDb, exportUserId, getCurrentProfileName())}`
+              : undefined;
+            appendRestExportAudit(activeDb, {
+              route: path,
+              userId: exportUserId,
+              role: authEnabled && currentUser ? currentUser.role : 'admin',
+              origin: req.headers.get('Origin') ?? 'direct',
+              detail,
+            });
+          } catch (err) {
+            console.error('[mcp-audit] failed to audit export:', err);
+          }
+          if (req.method !== 'GET') {
+            return Response.json({ error: 'Method Not Allowed' }, { status: 405, headers: { ...headers, Allow: 'GET' } });
+          }
+        }
+
         // ── WebMCP bridge (Streamable-HTTP fallback + browser-facing API) ──
 
         if (path === MCP_HTTP_PATH) {
-          return handleMcpHttpRequest(activeDb, req);
+          return handleMcpHttpRequest(activeDb, req, bunServer.requestIP(req)?.address, getCurrentProfileName(), {
+            setIdleTimeout: (seconds) => bunServer.timeout(req, seconds),
+          });
         }
 
         if (path.startsWith('/api/mcp/')) {
@@ -327,7 +461,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/auth/setup' && req.method === 'POST') {
-          // Only allowed when 0 users exist
+          // Only allowed when 0 users exist, and in LAN mode only from this machine
+          // (defense in depth: the LAN rule above already refuses a profile with no admin).
+          if (lanMode && !isLoopbackPeer(bunServer.requestIP(req)?.address)) {
+            return Response.json({ error: 'First-admin setup is only allowed from this machine while the dashboard is on the network.' }, { status: 403, headers });
+          }
           if (getUserCount(activeDb) > 0) {
             return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
           }
@@ -398,6 +536,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           }
           const id = parseInt(userDeleteMatch[1], 10);
           const success = deactivateUser(activeDb, id);
+          // A deactivated user's WebMCP grants die with the account, not at the grant's TTL.
+          if (success) revokeGrantsForUser(activeDb, id);
           return Response.json({ success, id }, { headers });
         }
 
@@ -435,9 +575,38 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
               { status: 400, headers },
             );
           }
+          // In LAN mode a switch must not expose a profile that has no dashboard auth.
+          if (lanMode) {
+            const target = peekProfileDb(body.name);
+            if (!target || !lanAuthReady(target)) {
+              return Response.json(
+                { error: 'That profile has no dashboard auth and admin user; set them up before switching while the dashboard is on the network.' },
+                { status: 409, headers }
+              );
+            }
+          }
           switchProfile(body.name);
           return Response.json({ active: getCurrentProfileName() }, { headers });
         }
+
+        // A human REST write that an agent could also drive through the page (budget, goal, review confirm and
+        // correct) leaves a `transport='rest'` audit row saying whether an agent had live access at the time,
+        // computed here from server state. A failed write changed nothing and is not recorded.
+        const auditRestWrite = (route: string, success: boolean, agentPresentOverride?: boolean): void => {
+          if (!success) return;
+          try {
+            const userId = authEnabled && currentUser ? currentUser.id : null;
+            appendRestWriteAudit(activeDb, {
+              route,
+              userId,
+              role: authEnabled && currentUser ? currentUser.role : 'admin',
+              origin: req.headers.get('Origin') ?? 'direct',
+              agentPresent: agentPresentOverride ?? isAgentPresent(activeDb, userId, getCurrentProfileName()),
+            });
+          } catch (err) {
+            console.error('[mcp-audit] failed to audit a REST write:', err);
+          }
+        };
 
         // ── Data API routes ─────────────────────────────────────────
 
@@ -452,6 +621,23 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
         if (path === '/api/coverage') {
           return Response.json(apiCoverage(activeDb), { headers });
+        }
+        // Set one category's monthly limit (admin only). The Goals tab's budget form; an agent reaches the same
+        // change through the `set_budget` tool and its confirmation card.
+        const budgetPutMatch = path.match(/^\/api\/budgets\/([^/]+)$/);
+        if (budgetPutMatch && budgetPutMatch[1] !== 'limits' && req.method === 'PUT') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          let category: string;
+          try {
+            category = decodeURIComponent(budgetPutMatch[1]);
+          } catch {
+            return Response.json({ error: 'malformed category' }, { status: 400, headers });
+          }
+          const result = apiSetBudget(activeDb, category, await readJsonBody(req));
+          auditRestWrite('/api/budgets/:category', result.success);
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
         if (path === '/api/budgets/limits') {
           // Raw budget rows (sync feed for the offline mirror) — distinct from
@@ -552,6 +738,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const result = reviewMatch[2] === 'confirm'
             ? apiConfirmReview(activeDb, id)
             : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+          auditRestWrite(`/api/reviews/:id/${reviewMatch[2]}`, result.success);
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
 
@@ -561,7 +748,19 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // ── Goals ──────────────────────────────────────────────────
 
         if (path === '/api/goals') {
-          return Response.json(apiGoals(activeDb), { headers });
+          return Response.json(apiGoals(activeDb, url.searchParams), { headers });
+        }
+        // Edit a goal's target amount, date or status (admin only). The Goals tab's edit form; an agent reaches
+        // the same change through the `update_goal` tool and its confirmation card, never through this route.
+        const goalPatchMatch = path.match(/^\/api\/goals\/(\d+)$/);
+        if (goalPatchMatch && req.method === 'PATCH') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await readJsonBody(req);
+          const result = apiUpdateGoal(activeDb, parseInt(goalPatchMatch[1], 10), body);
+          auditRestWrite('/api/goals/:id', result.success);
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
         const goalSnapshotMatch = path.match(/^\/api\/goals\/(\d+)\/snapshots$/);
         if (goalSnapshotMatch) {
@@ -968,12 +1167,45 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         const annotateMatch = path.match(/^\/api\/interactions\/(\d+)\/annotate$/);
         if (annotateMatch && req.method === 'POST') {
+          // A label is a human's act, and it feeds the training export: it needs the dashboard page's browser proof,
+          // exactly like the judge queue (a token-bearing script or a cross-origin page must not be able to write one).
+          const proof = requireBrowserProof(req, actualPort);
+          if (proof) {
+            for (const [k, v] of Object.entries(headers)) proof.headers.set(k, v);
+            return proof;
+          }
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const id = parseInt(annotateMatch[1], 10);
-          const body = await req.json() as Record<string, unknown>;
-          return Response.json(apiAnnotateInteraction(activeDb, id, body), { headers });
+          let body: unknown;
+          try {
+            body = await req.json();
+          } catch {
+            return Response.json({ error: { code: 'invalid_args', message: 'Request body must be valid JSON' } }, { status: 400, headers });
+          }
+          // Whether an agent had live access is computed here from server state (a header could be left out): a label
+          // written then stays out of the default training export.
+          const annotateUserId = authEnabled && currentUser ? currentUser.id : null;
+          const agentPresent = annotateAgentPresent(activeDb, annotateUserId, getCurrentProfileName());
+          const result = apiAnnotateInteraction(activeDb, id, body, { agentPresent });
+          // The audit row records the same flag the stored label got (window rule), not a fresh live-only check.
+          auditRestWrite('/api/interactions/:id/annotate', result.ok, agentPresent);
+          if (!result.ok) return Response.json({ error: result.error }, { status: result.status, headers });
+          return Response.json({ annotation: result.annotation }, { headers });
+        }
+
+        // ── Judge queue: a person accepts, rejects or revokes what an agent proposed ─────────────────
+        if (path === '/api/judgements' || path.startsWith('/api/judgements/')) {
+          const judgementResponse = await handleJudgementRoute(req, url, path, {
+            activeDb,
+            currentUser,
+            authEnabled,
+            port: actualPort,
+            headers,
+            profile: getCurrentProfileName(),
+          });
+          if (judgementResponse) return judgementResponse;
         }
 
         const runMatch = path.match(/^\/api\/runs\/(.+)$/);
@@ -987,34 +1219,42 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── Training Export ──────────────────────────────────────────
 
+        // Each of these is a separate, explicit per-export opt-in; anything but the literal "true" is off. The default
+        // export is human labels only. The provenance header says what the file may contain.
+        const exportFlags = (): ExportQualifyOptions => trainingExportFlags(url);
+
         if (path === '/api/export/training/sft') {
           const minRating = parseInt(url.searchParams.get('minRating') ?? '4', 10);
           const callTypesParam = url.searchParams.get('callTypes');
           const callTypes = callTypesParam ? callTypesParam.split(',') : ['agent'];
           const model = url.searchParams.get('model') ?? undefined;
-          const jsonl = exportSftJsonl(activeDb, { minRating, callTypes, model });
+          const flags = exportFlags();
+          const jsonl = exportSftJsonl(activeDb, { minRating, callTypes, model, ...flags });
           return new Response(jsonl, {
             headers: {
               ...headers,
               'Content-Type': 'application/x-ndjson',
-              'Content-Disposition': 'attachment; filename="wilson-sft.jsonl"',
+              'Content-Disposition': `attachment; filename="${flags.includeJudge ? 'wilson-sft-with-judge.jsonl' : 'wilson-sft.jsonl'}"`,
+              'X-Wilson-Export-Provenance': exportProvenance(flags),
             },
           });
         }
 
         if (path === '/api/export/training/dpo') {
-          const jsonl = exportDpoJsonl(activeDb);
+          const flags = exportFlags();
+          const jsonl = exportDpoJsonl(activeDb, flags);
           return new Response(jsonl, {
             headers: {
               ...headers,
               'Content-Type': 'application/x-ndjson',
-              'Content-Disposition': 'attachment; filename="wilson-dpo.jsonl"',
+              'Content-Disposition': `attachment; filename="${flags.includeJudge ? 'wilson-dpo-with-judge.jsonl' : 'wilson-dpo.jsonl'}"`,
+              'X-Wilson-Export-Provenance': exportProvenance(flags),
             },
           });
         }
 
         if (path === '/api/export/training/stats') {
-          return Response.json(getTrainingStats(activeDb), { headers });
+          return Response.json(getTrainingStats(activeDb, exportFlags()), { headers });
         }
 
         return new Response('Not Found', { status: 404, headers });
@@ -1024,8 +1264,32 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           { status: 500, headers }
         );
       }
+  };
+
+  const server = Bun.serve({
+    hostname,
+    port,
+    idleTimeout: DASHBOARD_IDLE_TIMEOUT_S,
+    // Never Bun's development error page: it prints source and absolute paths.
+    development: false,
+    error() {
+      return new Response('Internal Server Error', { status: 500, headers: { 'Content-Type': 'text/plain', ...ANTI_FRAMING_HEADERS } });
+    },
+    async fetch(req, bunServer) {
+      return withAntiFraming(await handleRequest(req, bunServer));
     },
   });
+
+  const maintenanceTimer = setInterval(() => {
+    try {
+      getActiveDb(); // make sure the active profile is open and so included
+      runMcpMaintenanceAll(getOpenDbs(), getCurrentProfileName());
+    } catch (err) {
+      console.error('[mcp-maintenance] sweep failed:', err);
+    }
+  }, MAINTENANCE_INTERVAL_MS);
+  maintenanceTimer.unref?.();
+  maintenanceTimers.set(server, maintenanceTimer);
 
   return { server, url: `http://localhost:${port}` };
 }
@@ -1034,5 +1298,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
  * Stop the dashboard server.
  */
 export function stopDashboardServer(server: ReturnType<typeof Bun.serve>): void {
+  const timer = maintenanceTimers.get(server);
+  if (timer) {
+    clearInterval(timer);
+    maintenanceTimers.delete(server);
+  }
   server.stop();
 }

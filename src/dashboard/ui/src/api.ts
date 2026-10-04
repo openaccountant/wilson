@@ -11,8 +11,13 @@ import { tryMirror } from './store/mirror-client';
 
 const AUTH_KEY = 'wilson_auth_token';
 
+/**
+ * Relative in dev too: the page on :5173 talks to the dashboard through vite's proxy (see
+ * vite.config.ts), so every request is same-origin and the server's Origin / Host gate sees
+ * what a production page would send. Run the server with WILSON_DASHBOARD_DEV=1.
+ */
 export function getBaseUrl(): string {
-  if (import.meta.env.DEV) return 'http://localhost:3141';
+  if (import.meta.env.DEV) return '';
   return window.location.origin;
 }
 

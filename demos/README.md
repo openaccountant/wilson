@@ -108,3 +108,12 @@ The demo profile (`~/.openaccountant/profiles/demo`) is seeded Jan-Aug 2026.
 Don't reseed unless `scripts/verify-accuracy.sh` actually fails — a single
 run occasionally flakes on one LLM-judged check due to model
 non-determinism; re-run it before concluding the data is actually broken.
+
+## WebMCP agent demo (`scripts/record-webmcp-agent.mjs`)
+
+Approval cards are hold-to-approve (0.6 s press-and-hold; a plain click does
+nothing), and `/mcp` client tokens carry write tools only while dashboard auth
+is on. The harness now holds Approve with `page.mouse.down()`/`up()`.
+TODO: the demo profile has auth off, so `categorize_transaction` cannot be
+granted to the token as the script expects; enable auth on the profile (and log
+the page in as its admin) before recording.

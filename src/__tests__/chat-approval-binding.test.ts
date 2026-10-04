@@ -299,7 +299,8 @@ describe('POST /api/chat while another chat is running', () => {
     const { server } = await startDashboardServer(db, 0);
     const base = `http://localhost:${server.port}`;
     const post = (path: string, body?: unknown) =>
-      fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      // Origin + Sec-Fetch-Site: what the dashboard page sends, and the browser proof approving needs.
+      fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'Sec-Fetch-Site': 'same-origin' }, body: body === undefined ? undefined : JSON.stringify(body) });
     try {
       const restaurant = txn(db, 'Restaurant')!;
       script = [

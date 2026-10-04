@@ -45,6 +45,28 @@ function formatPnl(pnl: ProfitLossRow, label: string): string {
   return lines.join('\n');
 }
 
+export interface ProfitLossOptions {
+  period?: 'month' | 'quarter' | 'year';
+  offset?: number;
+}
+
+/**
+ * Profit & loss for a period, read from the database passed in (see
+ * computeSpendingSummary for why the chat and WebMCP tools share this).
+ */
+export function computeProfitLoss(database: Database, opts: ProfitLossOptions = {}) {
+  const { start, end, label } = getPeriodDates(opts.period ?? 'month', opts.offset ?? 0);
+  const pnl = getProfitLoss(database, start, end);
+  const formatted = formatPnl(pnl, label);
+
+  return {
+    period: label,
+    dateRange: { start, end },
+    ...pnl,
+    formatted,
+  };
+}
+
 export const profitLossTool = defineTool({
   name: 'profit_loss',
   mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
@@ -57,16 +79,6 @@ export const profitLossTool = defineTool({
       .describe('Period offset (0=current, -1=previous)'),
   }),
   func: async ({ period, offset }) => {
-    const database = getDb();
-    const { start, end, label } = getPeriodDates(period, offset);
-    const pnl = getProfitLoss(database, start, end);
-    const formatted = formatPnl(pnl, label);
-
-    return formatToolResult({
-      period: label,
-      dateRange: { start, end },
-      ...pnl,
-      formatted,
-    });
+    return formatToolResult(computeProfitLoss(getDb(), { period, offset }));
   },
 });

@@ -6,6 +6,8 @@ import { runMigrations } from '../db/migrations.js';
 import { insertTransactions, setBudget } from '../db/queries.js';
 import { setActiveProfilePaths, getActiveProfile } from '../profile/index.js';
 import { setEmbedOnWriteEmbedder } from '../utils/embed-on-write.js';
+import { setGlobalStateFile } from '../mcp/global-state.js';
+import { setApprovalDwellMs } from '../mcp/engine.js';
 import { fakeEmbedText } from './fake-embedder.js';
 import type { LlmResponse, ToolDef } from '../model/types.js';
 import type { LlmResult } from '../model/llm.js';
@@ -26,12 +28,31 @@ function installDefaultEmbedOnWriteEmbedder(): void {
   setEmbedOnWriteEmbedder(async (texts) => texts.map(fakeEmbedText));
 }
 
+let agentAccessIsolated = false;
+
+/** The temp agent-access.json every test process uses instead of `~/.openaccountant/agent-access.json`. */
+export function testAgentAccessFile(): string {
+  return path.join(os.tmpdir(), `oa-test-agent-access-${process.pid}.json`);
+}
+
+/**
+ * The kill switch lives in a file under the real `~/.openaccountant`. Tests must
+ * neither read a developer's real switch (it would 403 every agent call) nor
+ * write one, so each test process points the state at a temp file once.
+ */
+function isolateAgentAccessState(): void {
+  if (agentAccessIsolated) return;
+  agentAccessIsolated = true;
+  setGlobalStateFile(testAgentAccessFile());
+}
+
 /**
  * Ensure a test profile is set so modules that call getActiveProfile() don't throw.
  * Uses a temp directory. Safe to call multiple times (idempotent).
  */
 export function ensureTestProfile(): void {
   installDefaultEmbedOnWriteEmbedder();
+  isolateAgentAccessState();
   try {
     getActiveProfile();
   } catch {
@@ -49,6 +70,9 @@ export function ensureTestProfile(): void {
 
 export function createTestDb(): Database {
   ensureTestProfile();
+  // Approval cards enforce a 1 s dwell floor (T16). Nearly every test approves what it just prepared, so the
+  // floor is relaxed for them; the tests that cover it restore it with `setApprovalDwellMs(null)`.
+  setApprovalDwellMs(0);
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');

@@ -135,8 +135,10 @@ function traceErrorFrom(err: unknown): string {
   const sep = err.message.indexOf(':');
   if (err.message.startsWith('API ') && sep !== -1) {
     try {
-      const body = JSON.parse(err.message.slice(sep + 1)) as { error?: string; message?: string };
-      if (body.error) return body.error;
+      const body = JSON.parse(err.message.slice(sep + 1)) as { error?: string | { message?: string }; message?: string };
+      // The MCP routes answer { error: { code, message, hint? } }; the trace routes answer { error: string }.
+      if (typeof body.error === 'string' && body.error) return body.error;
+      if (body.error && typeof body.error === 'object' && body.error.message) return body.error.message;
       if (body.message) return body.message;
     } catch {
       /* fall through to the raw message */
@@ -452,17 +454,17 @@ export function AgentTraceSection() {
   // Everything here rides the dashboard's WebMCP tool-gate substrate
   // (spec-50): the attendee opts the tab's agent session in via the Agent
   // access panel (zero tools exposed by default, revocable any time), the
-  // booking is PREPARED through /api/mcp/prepare, and the write lands only
+  // booking is PREPARED through /api/mcp/call (a change always answers with an
+  // operation: the server decides, never this page), and the write lands only
   // when the human approves the bridge's confirmation card. Denying — or
   // never approving — leaves the data untouched. This section never renders
   // its own approve/deny buttons and never calls a write route directly.
 
   /** Fresh grant check: the exposed-tools list for THIS tab. */
   const fetchExposedGrant = useCallback(async (): Promise<string | null> => {
-    const sessionGeneration = ensureSessionGeneration();
-    const res = await api<{ tools: Array<{ name: string; grantId: string }> }>(
-      `/api/mcp/tools?sessionGeneration=${encodeURIComponent(sessionGeneration)}`,
-    );
+    const res = await api<{ tools: Array<{ name: string; grantId: string }> }>('/api/mcp/tools', {
+      headers: { 'X-Wilson-Agent-Session': ensureSessionGeneration() },
+    });
     return pickGrant(res.tools);
   }, []);
 
@@ -486,7 +488,9 @@ export function AgentTraceSection() {
         await new Promise((r) => setTimeout(r, AUTOBOOK_POLL_INTERVAL_MS));
         if (runIdRef.current !== runId) return;
         try {
-          const res = await api<{ operation: { status: string } }>(`/api/mcp/operations/${operationId}`);
+          const res = await api<{ operation: { status: string } }>(`/api/mcp/operations/${operationId}`, {
+            headers: { 'X-Wilson-Agent-Session': ensureSessionGeneration() },
+          });
           const op = res.operation;
           if (op.status !== 'pending') {
             const phase = phaseFor(op);
@@ -513,28 +517,41 @@ export function AgentTraceSection() {
     [],
   );
 
-  /** Prepare the booking for one candidate row through /api/mcp/prepare — no write happens here. */
+  /** Prepare the booking for one candidate row through /api/mcp/call — no write happens here. */
   const prepareBooking = useCallback(
     async (runId: number, grantId: string, transactionId: number, category: string) => {
       const description = predictDescriptionRef.current ?? '';
       const sessionGeneration = ensureSessionGeneration();
       try {
-        const res = await api<{ operation: { id: string; status: string; summary: string | null } }>(
-          '/api/mcp/prepare',
+        const res = await api<{ kind: string; operation: { id: string; status: string } }>(
+          '/api/mcp/call',
           {
             method: 'POST',
+            headers: { 'X-Wilson-Agent-Session': sessionGeneration },
             body: JSON.stringify({
-              sessionGeneration,
               grantId,
               tool: AUTOBOOK_TOOL,
               args: { id: transactionId, category },
             }),
           },
         );
+        // The booking tool is a change, so the server answers with an operation waiting for the card. Anything else is not a booking.
+        if (res.kind !== 'operation') throw new Error('The server did not prepare a booking for approval.');
         if (runIdRef.current !== runId) return;
         const op = res.operation;
-        setAutoBook({ phase: 'awaiting', operationId: op.id, summary: op.summary });
-        await awaitOperation(runId, op.id, op.summary, description);
+        // The agent's copy of the operation carries no row text; the card's summary comes from the human route.
+        let summary: string | null = null;
+        try {
+          const card = await api<{ operation: { summary: string | null } }>(`/api/mcp/operations/${op.id}`, {
+            headers: { 'X-Wilson-Agent-Session': sessionGeneration },
+          });
+          summary = card.operation.summary;
+        } catch {
+          // The summary is context only; the card itself still works without it.
+        }
+        if (runIdRef.current !== runId) return;
+        setAutoBook({ phase: 'awaiting', operationId: op.id, summary });
+        await awaitOperation(runId, op.id, summary, description);
       } catch (err) {
         if (runIdRef.current !== runId) return;
         // Un-gated (no/revoked/foreign grant, viewer) → back to the opt-in beat,

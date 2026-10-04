@@ -1,5 +1,162 @@
 # Changelog
 
+## Unreleased
+
+### WebMCP judge for LLM traces and training data (P4a)
+
+**An agent can now propose ratings for your recorded model calls, and nothing it proposes is used until you accept it.** Grant the judge tools in Settings -> Agent access like the others; with no grant none is registered. They live on the LLM tab and the reads also work on `/mcp`.
+
+- `list_interactions`, `get_interaction`, `get_judge_rubric` (read): list the calls to judge, read one in sections (an overview, or its prompt, response or tool calls in pages of up to 1,200 characters), and fetch the rubric and its version. The judge is blind: no output ever carries your rating, preference, notes or tags, or whether you rated the call. It never sees the system prompt (your memories and custom prompt), and tool results show only as an 80-character preview with their size. Text comes wrapped as `untrusted_text` with hidden characters stripped and digits, emails and phone numbers masked. The grant row says "Includes your chat history and financial data", and every page counts against the daily read budget.
+- `propose_judgements` (proposal, Ask by default, admin only): up to 20 ratings per call with a 20-600 character rationale, a model name the agent declares, and the rubric version it judged by (an old version is a 409 `rubric_changed`). It writes only inert `proposed` rows. Limits: 6 calls a minute (shared with the form) and `judgeDailyLimit` items a day (default 300, set only in Settings -> admin, never by a tool).
+- `judge_interaction` (proposal, a form in the Training detail panel, "Agent judgement"): the single-item version. An agent submits it; a person cannot, whatever the form was filled with.
+
+**Judge queue** (LLM -> Judge queue): each proposal shows the declared model, the agent-written rationale as plain text with links removed, criteria and tags, and your own rating beside it (red border when it is two stars or more apart). Accept needs a real click after the row has been on screen for 0.8 s; Reject is one click; Revoke undoes an accepted one. Bulk Accept takes at most 10 rows you expanded, behind a confirm and a 0.6 s press-and-hold. The server refuses to accept a proposal younger than 1 s. The header shows agreement with your ratings and the number of **blind** proposals it is measured on (not counting the form, nor a call made after the agent opened that interaction's panel). Stats now read "SFT-ready runs", "Complete DPO pairs" and "Judge: proposed / accepted".
+
+**Training export defaults changed.** The default SFT and DPO export is **human labels only**. Each of these is its own checkbox in the new Export options block, unchecked on load and reset after every export (checking one makes the download a press-and-hold; the file goes through `fetch` with your login, not a `?token=` URL):
+- "Include accepted agent judgements" (`includeJudge=true`): adds accepted judge rows for interactions you did not rate yourself. A human rating always wins over a judge on the same interaction. Proposed, rejected, revoked and superseded rows are never exported.
+- "Include ratings made while an agent had access" (`includeAgentPresent=true`): a rating you clicked while an agent held a live grant is marked `AGENT PRESENT` and left out by default, because the page cannot tell your click from an agent's.
+- "Include prompts with on-device assistant notes" (`includeHandoff=true`): the browser subagent puts an untrusted notes block in the prompt it hands to the server agent. Runs and pairs whose prompt carries that block are left out unless you opt in; the judge sees it as a marked, shortened excerpt. The response header `X-Wilson-Export-Provenance` says what a file may contain (`human`, `human+judge`, ...).
+
+**Annotation fixes.** Annotating is versioned: a new rating inserts a new version and supersedes the old one, and fields you do not send are kept (a rating-only save no longer wipes your notes). Rows are never deleted, and database triggers allow nothing but a status change (and the review stamp) on a row. `POST /api/interactions/:id/annotate` validates its body: a bad rating is a 400, an unknown interaction a 404 (it used to answer 200 `{success:false}`). "SFT ready" counted rows; it now counts the runs (SFT lines) an export would write, and "DPO pairs" counts complete pairs only (a pair id with just one side no longer counts).
+
+**An agent-opened panel keeps your labels out.** When an agent opens an interaction with `open_interaction`, the Training detail panel does not load your rating, preference, notes or pair id until you click or type in it (a script-made event does not count; a real click by an agent driving the browser does, the residual in threat T34).
+
+**Review fixes.** The judge can no longer rebuild a full tool result by paging an agent run's prompt (the recorded prompt of a second iteration embeds them; that block is now replaced by a one-line note). A rating written while an agent had access stays flagged through later edits of tags or notes, and the Training panel no longer prefills it as yours: rate it again yourself once 2 hours have passed with no agent access to take it over. An accepted judgement is left out of the judge export when an agent had live access at the time you clicked Accept, unless "ratings made while an agent had access" is ticked too. `includeJudge` never pulls in a run containing an interaction you rated below the minimum. Training exports are audited with what they may contain (`provenance=human+judge agent_present=false`), the agreement figure counts one proposal per agent and interaction, and the database refuses to insert an accepted judge row.
+
+**Browser proof and the review window for labels.** `POST /api/interactions/:id/annotate` now needs the dashboard page's browser proof (an allowlisted `Origin` and `Sec-Fetch-Site: same-origin`), like the judge queue; a request without them is a 403 `origin_required`. Whether an agent was present is decided with the same 2-hour window as an accepted judgement: a label written while an agent had access, or when the user held any grant (live, expired or revoked), raised an agent operation or flipped the kill switch in the last 2 hours, is `dashboard_agent_present`, and re-sending every label field inside the window does not clear it. Such labels stay out of the default SFT export.
+
+**Chain and team calls are recorded.** Calls made by chains and teams are stored as call types `chain` and `team`, each with its own run id (`chain-<uuid>`, `team-<uuid>`), so the judge can read them. The default SFT export (`agent` calls only) is unchanged.
+
+**Category names.** A custom category name now also keeps `. , ( ) +` and the curly apostrophe (so "Dr. Visits", "Kids (Activities)", "Coffee, Tea", "Gas + Electric" and "Mom’s Gifts" show as written). A colon, quote, bracket or hidden character still makes it show as `#<id> (custom)`, and the 32-character cap stays.
+
+New routes: `GET /api/judgements`, `POST /api/judgements/:id/accept|reject|revoke`, `POST /api/judgements/bulk` (admin, same-origin browser only), and judgement actions and annotations are recorded in Activity with whether an agent was present. Migrations v32 (annotation provenance) and v33 (integrity triggers). The grant schema digests changed for no existing tool, so existing grants stay valid.
+
+### WebMCP imperative journeys (P3)
+
+**Six new agent tools to find your way around the dashboard.** Grant them in Settings -> Agent access like the others; with no grant none is registered. All but `list_review_queue` work inside the dashboard tab only (not on `/mcp`).
+
+- `navigate_to_tab` (any tab): switch the dashboard to another tab, by the same route as a click. Not Settings: an agent cannot open the Agent Access Center, ask the user to. It also refuses while you are in Settings, so an agent cannot pull you away from unsaved edits there. It answers once the tab shows, with the tools available there.
+- `get_page_context` (any tab): where you are: tab, date range, filters, the selected row and how many rows are listed. Ids, counts and filter values only, never a description or an amount.
+- `open_transaction` (Transactions): scroll to and highlight one transaction by id and return its compact row. If a filter hides it, the tab drops its own filters (and says so); if the date range excludes it, the range moves to that month (a row inside the range never changes it); the answer says whether the row is really on screen.
+- `list_review_queue` (Review, also offered on `/mcp`): the pending review queue, compact and paged.
+- `open_review_item` (Review): pre-select one pending review in the "Resolve a review" form. It resolves nothing.
+- `open_interaction` (LLM): open one model call in the Training detail panel. The agent gets its model, call type and status, never prompts or ratings.
+
+A tab's tools exist only while that tab shows. The bridge unregisters them when you switch tabs and registers the next tab's in one pass (about 50 ms), and a page tool is registered only while the dashboard has a handler mounted for it. A call that outlives its tab answers "The Transactions tab is not open. Call navigate_to_tab with tab='transactions' first." instead of acting on a screen that is gone. Grants, Off/Ask/Allow, the kill switch, rate limits, the daily read budget and the Activity log (transport `page`) all apply as for every other tool; `open_transaction` reads a row for the page, so it counts against the read budget. Tools that change what you see are not advertised as read-only.
+
+**BREAKING (for callers of the old routes): `POST /api/mcp/read` and `POST /api/mcp/prepare` are removed** (404). Use `POST /api/mcp/call`, with the tab session in the `X-Wilson-Agent-Session` header and the grant id as a UUID; the server answers `{kind:'read'|'operation'|'page'}`. The dashboard's own callers (the Demo auto-book request) are moved.
+
+Under the hood: the page tools' pure logic lives in `webmcp-page-tools-core.ts` and the text hygiene rules (hidden characters, PII masking) moved to `src/mcp/text-hygiene.ts` so browser code shares them. No migration.
+
+### WebMCP declarative forms (P2)
+
+**Five dashboard forms are now agent tools.** A browser agent can fill and submit them like any form, but only after you grant the tool; with no grant a form carries no `toolname` and is invisible to agents. Grant them in Settings -> Agent access like the other tools. They work inside the dashboard tab only: none of them is offered on `/mcp`, and a client token cannot carry one.
+
+- `filter_transactions` (Transactions): filter by text, category and date range. The filter bar is now a form with a category picker (every category, by id) and From/To dates; people keep filtering live as they type. An agent gets up to 10 compact rows, and the table shows the same filter.
+- `review_action` (Review): a new "Resolve a review" form above the table, confirm or correct one pending review.
+- `set_budget` (Goals): a new Budgets section that lists the limits and sets one category's monthly limit.
+- `update_goal` (Goals): a new "Edit a goal" form for target amount, target date and status (every goal is pickable, including paused and completed ones). The goal cards get an Edit button.
+- `set_forecast_inputs` (Forecast, when there is under six months of history): the manual inputs are a form; the agent is told the projected 10th, 50th and 90th percentile once the forecast has run.
+
+Changes still wait for you. A submit by an agent on `review_action`, `set_budget` or `update_goal` goes through the same approval card as every other change, and the agent hears the outcome only after you answered it. If an agent fills a change form and something else clicks Submit, the form is treated as the agent's and still goes through the card, with the result shown under the form and an amber "Agent filled this form" banner. No change form auto-submits; only the filter and forecast forms do. A form that an agent is working gets a dashed amber outline.
+
+Forms that people use directly
+- New admin-only routes: `PUT /api/budgets/:category` with `{monthlyLimit}` (0 to 10,000,000) and `PATCH /api/goals/:id` with `{targetAmount?, targetDate?, status?}`. Viewers get 403. `GET /api/goals?status=all` lists every goal.
+- Budget, goal and review confirm/correct writes record a `rest_write` row in the Activity log saying whether an agent had live access at that moment (worked out by the server, so an agent cannot hide it).
+- Resolving a review now bumps the transaction's revision, so a categorize or edit card prepared before it goes stale instead of overwriting your decision.
+- Option labels in these forms hold only ids, dates, amounts and safe category names: never a merchant, description or goal title. A custom category with an unusual name shows as `#12 (custom)`.
+
+The `judge_interaction` form shell is not part of P2: it ships with its catalog entry in P4a, and the forms table here lists only the five tools that exist.
+
+Under the hood: tools have `surface`, `exposure` (imperative or declarative) and `autosubmit`, and a new `page` class for tools whose work happens in the page; the dashboard's tab ids are one list (`TAB_IDS`) shared by the tab bar, the router and the server. No migration.
+
+### WebMCP user control center (P1)
+
+**Grants last 1 hour by default** (was 12 hours). Pick 15 minutes, 1 hour, 4 hours or 12 hours per profile in Settings -> Agent access. It applies to new grants; existing ones keep their expiry. A change card is also refused if you approve it less than 1 second after it appeared.
+
+**BREAKING for scripted approvals: an approval card's Approve must be held.** It is enabled after 0.8 s, ignores script-generated clicks and key presses, and needs a 0.6 s press-and-hold; the server also refuses an approval younger than 1 s. A script or demo harness that clicks Approve once no longer approves anything: hold the button (mouse down, wait at least 600 ms, mouse up) or approve through the API from the dashboard origin.
+
+Settings -> Agent access is now the place to control agents
+- A global kill switch ("Agent access (all profiles)", admin only). Off: no tool is exposed to any agent or MCP client in any profile, every grant is revoked and pending approvals are rejected. It lives in `~/.openaccountant/agent-access.json`, so a profile switch does not turn it back on, and grants made before it went off stay dead in other profiles even after you turn it on again. Turning it back on does not restore grants, and it also revokes every client token in the active profile (a token in another profile that was minted before the switch went off stops working too). If `agent-access.json` exists but cannot be parsed, access stays off until you flip the switch in Settings.
+- Off, Ask or Allow for each tool, per user. Reads default to Allow, changes to Ask, and a change can never be Allow. A tool set to Off cannot be granted, is not registered with the browser, and answers 403 `policy_off` on `/mcp`. Viewers can only set policies on read tools.
+- Ask on a read: the call waits behind an "Allow read" card that shows what will run (for transaction search, the filter Wilson parsed from the query, otherwise the full arguments). Only the agent that asked gets the data, once; it is dropped after 5 minutes (or at once when you turn the kill switch off). Over `/mcp` the call waits for you the same way.
+- Pending approvals, a readable Activity log (filter by tool and decision, "client-reported" transport flagged, compaction notices shown as notices), per-grant revoke, and the external-client token panel with a new editor for a token's tools, all on one page.
+- The floating "AGENT ACCESS" panel is restyled and shows the same state: status dot, kill switch, this tab's grants, pending approvals and the last five calls, with a link to Settings. Both surfaces refresh within 5 seconds and at once when either changes something, including across tabs.
+
+Dashboard responses now carry `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'`, so another site cannot frame the dashboard and overlay its approval controls. Tools you set to Off or Ask before turning on dashboard auth keep that setting for each new account until the account chooses its own. With dashboard auth off, Ask on a read from an external MCP client is not a real approval (anyone on the machine can answer it); Settings says so.
+
+Approval cards
+- Approve is enabled after 0.8 s, ignores script-generated clicks and key presses, and must be held for 0.6 s. The server refuses an approval younger than 1 s (409 `approval_too_fast`) and the operation stays pending.
+- A transaction's description now has its own quoted row on the card instead of sitting inside the summary sentence.
+- Offline, nothing under `/api/mcp/` is served from the local mirror.
+- A new card appears above the ones already showing, so the card you are reading never moves.
+
+Migrations: v30 `mcp_tool_policies`; v31 adds `kind` and `bank_data` to `mcp_operations`.
+
+### WebMCP network boundary and client tokens (P0b)
+
+**BREAKING: `/mcp` needs a client token.** The tab's session id is no longer accepted as a bearer: it answers 401 with a message pointing here. Mint a token in Settings -> Agent access -> External MCP clients, shown once, then put it in your MCP client config as `Authorization: Bearer wmcp_...`. Tokens are per profile.
+
+**BREAKING: while dashboard auth is off, `/mcp` client tokens are read-only.** A token can carry read tools only, and the write tools of an existing token are hidden and refused, so an external client can never approve its own change. To let an external agent write, turn on dashboard auth for the profile (auth on and at least one active admin), then mint a token with the write tools.
+
+**BREAKING: the dashboard binds 127.0.0.1.** To serve it on a network, set `WILSON_DASHBOARD_HOST` (or `dashboardHost` in `~/.openaccountant/agent-access.json`), turn on dashboard auth for the profile first (auth on AND at least one active admin user: turning the flag on with no users does not count), and list the names you use in `WILSON_DASHBOARD_ALLOWED_HOSTS` and `WILSON_DASHBOARD_ALLOWED_ORIGINS`. With the dashboard on the network, startup refuses to run while the active profile has auth off or no active admin (the CLI prints the reason and keeps running without a dashboard), every request answers 503 `lan_auth_required` if that stops being true, `/api/auth/setup` only answers a loopback peer, and switching to a profile without auth and an admin answers 409. Only `localhost`, `::1` and literal 127.0.0.0/8 addresses count as loopback binds; a name like `127.example.com` is a network bind. Unauthenticated `/mcp` calls are audited by tool name only (their arguments are never previewed, and PII masking is linear-time and size-bounded), and the `/mcp` 4 MB body cap is enforced while streaming, so a chunked body cannot skip it.
+
+**BREAKING: the dev UI needs `WILSON_DASHBOARD_DEV=1`.** Start the dashboard server with it when you use `npm run dev` in `src/dashboard/ui`; the dev UI now reaches the server through vite's proxy, same-origin.
+
+Network boundary
+- Every path checks `Host` (`localhost`, `127.0.0.1` or `[::1]` on the server's port, or an allowlisted name): anything else is a 421, which closes DNS rebinding.
+- CORS reflects only allowlisted origins; the `Access-Control-Allow-Origin: *` is gone. A foreign `Origin` gets no CORS headers.
+- A POST, PUT, PATCH or DELETE under `/api` is a 403 when its `Origin` is not allowlisted (`Origin: null` included) or `Sec-Fetch-Site` is not `same-origin`/`none`. This stops text/plain cross-site and other-localhost-port requests.
+- Grant and tool routes no longer assume `http://localhost:<port>` when `Origin` is missing: a browser request must carry an allowlisted `Origin` or `Sec-Fetch-Site: same-origin`, else 403 `origin_required`. Approve, reject, grants and client-token routes need both headers, which stops a naive `curl` from an MCP client's shell tool. Only enabling dashboard auth closes the gap against deliberate header forgery.
+- `?token=` is accepted only on `GET /api/export/*` downloads.
+- The server's idle timeout is 255 s so a `/mcp` call waiting for your approval is not cut off.
+
+Client tokens (migration v29)
+- `wmcp_` plus 32 random bytes; only its sha256 is stored. Revoke or rotate any time, effective at once; mint and rotate are limited to 5 per hour per user. Choose 1, 7, 30 (default) or 90 days.
+- A token carries only tools offered on `/mcp`. While dashboard auth is off a token can carry read tools only, so an external client can never approve its own change; viewers mint read tools only. Turning auth off later hides and refuses the write tools of existing tokens.
+- Every use re-reads the owner: a deactivated user's token is a 401, a demoted user loses the write tools, and a profile switch makes the token unknown.
+- A write call over `/mcp` waits up to 240 s for your answer, then returns `outcome: "unknown"` with the operation id. The new `get_operation_result` tool (only on `/mcp`, only for operations that token created) returns the outcome later. An approval card names the token that asked.
+- `/mcp` failures: a request without a valid token is a 401 and, per address, 10 per minute before a 429 (a valid token is never limited by that). A foreign `Origin` on `/mcp` is a 403.
+- An unauthenticated `/mcp` request reads at most 64 KB of body for at most 2 s (only to audit tool names), is not read at all when `Content-Length` is larger, and holds its connection 10 s rather than 255 s. A valid token's own refused calls (bad arguments, tools it does not hold) have a per-token bucket (20 per minute, 10 back to back) and then get a 429, without affecting other clients.
+- Rotate is owner-only: an admin can still revoke another user's token but cannot rotate it (the new credential would be attributed to that user).
+- An operation an external client raised while auth was on goes stale (`auth_disabled`) if auth is turned off before it is approved.
+
+Network boundary hardening
+- With `WILSON_DASHBOARD_DEV=1` the vite origins (`:5173`) are still accepted for state changes and browser proof, but never get CORS headers, so another app on that port cannot read your ledger. Only the server's own origins and `WILSON_DASHBOARD_ALLOWED_ORIGINS` do.
+- A malformed `Host` is rejected (421/400, empty body) before the URL is parsed, and the server runs with Bun's development mode off and a generic 500 handler, so no error page can leak source paths.
+
+### WebMCP core hardening (P0a)
+
+**BREAKING: existing agent grants stop working.** Tool schemas are now strict and tightened, so every grant issued against the old schemas is invalid (`schema_changed`). Grant tools again from Settings -> Agent access or the bridge panel. The `sessionGeneration` query/body parameter is deprecated and must now be a UUID v4; the tab session id travels in the `X-Wilson-Agent-Session` header.
+
+Agent tool calls
+- One server path for every tool call, `POST /api/mcp/call` (the older `/api/mcp/read` and `/api/mcp/prepare` wrappers were removed again in P3). The server, not the client, decides read versus change.
+- Arguments are validated on the server: unknown arguments, bad types and invisible, control or bidi characters get an actionable 400.
+- `tax_flag` only flags and unflags; reading tax data moved to the new `tax_summary` tool. The MCP `forecast` tool allows horizons up to 60 months; every other caller stays at 24.
+
+Reads and privacy
+- Read tools return compact, paged, PII-masked output (at most 1,500 characters per call, `limit` 1-25, `nextCursor`) from the request's own database.
+- Card and account numbers are masked when split by spaces, tabs, newlines, dots or slashes, and when written with fullwidth digits.
+- Per-session and per-user rate limits and a daily read budget (2,000 rows / 300,000 characters) apply. The budget is reserved before a read runs, so parallel calls cannot overshoot it.
+- What an agent gets back about a change it proposed carries no row text: no description, notes, before/after or summary, and the result after approval is sanitized the same way as a read. Only the confirmation card shows the full change.
+
+Approvals and ownership
+- A change is never written until a human approves it. An operation past its window answers 409 `expired` and never commits; approving a change needs the admin role (with auth on, a viewer can approve only the read-ask cards of their own grants, from P1); only the owner can act on an operation when auth is on; a deactivated or demoted owner makes it stale.
+- Every call re-checks the granting user, so a deactivated or demoted user is refused on every transport and deactivating a user revokes their grants.
+- A chat change belongs to the user who started the chat run. If no owner is known the approval is refused and the agent is told no. Unanswered chat approvals expire and leave the queue.
+- The operations API no longer returns `session_generation` or `grant_id`, and "Requested by" on the card is worked out by the server.
+
+Audit and abuse limits
+- Every agent tool call is audited in the new `mcp_audit_log` table (migration v28), reads and refused calls included, with 90-day retention by default. Refused and rate-limited calls fold into per-minute rows.
+- CSV, XLSX, P&L, net-worth and training exports are GET-only and audited under a fixed route label; other methods get 405.
+- `/mcp`: bodies over 4 MiB get a 413. Refusals inside a batch are audited even when another call in it ran.
+
+Fixes
+- `categorize_transaction` without `entityId` no longer clears the transaction's entity.
+- A grant or operation that expired earlier the same day no longer counts as live until midnight.
+
+The `{ kind: 'page' }` response of `POST /api/mcp/call` arrived with the declarative forms (P2) and the page tools (P3).
+
 ## [v0.9.1] — 2026-09-25
 
 ### Fixes

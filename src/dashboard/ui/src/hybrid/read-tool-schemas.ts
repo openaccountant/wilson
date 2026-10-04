@@ -36,7 +36,20 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
     "properties": {
       "query": {
         "type": "string",
-        "description": "Natural language query about transactions"
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "Natural language query, e.g. \"dining in August\""
+      },
+      "cursor": {
+        "description": "nextCursor from the previous page of the same call. Omit for page 1.",
+        "type": "string",
+        "maxLength": 200
+      },
+      "limit": {
+        "description": "Rows per page, 1-25 (default 10)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 25
       }
     },
     "required": [
@@ -49,6 +62,7 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
     "type": "object",
     "properties": {
       "period": {
+        "description": "Calendar period (default month)",
         "type": "string",
         "enum": [
           "month",
@@ -57,7 +71,19 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
         ]
       },
       "compareWithPrevious": {
+        "description": "Include the previous period total per category",
         "type": "boolean"
+      },
+      "cursor": {
+        "description": "nextCursor from the previous page of the same call. Omit for page 1.",
+        "type": "string",
+        "maxLength": 200
+      },
+      "limit": {
+        "description": "Rows per page, 1-25 (default 10)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 25
       }
     },
     "additionalProperties": false
@@ -67,6 +93,7 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
     "type": "object",
     "properties": {
       "period": {
+        "description": "Calendar period (default month)",
         "type": "string",
         "enum": [
           "month",
@@ -75,8 +102,10 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
         ]
       },
       "offset": {
-        "description": "0 = current period, -1 = previous, etc.",
-        "type": "number"
+        "description": "0 = current period, -1 = previous, down to -24",
+        "type": "integer",
+        "minimum": -24,
+        "maximum": 0
       }
     },
     "additionalProperties": false
@@ -91,11 +120,19 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
           "summary",
           "trend",
           "balance_sheet"
-        ]
+        ],
+        "description": "summary, trend or balance_sheet"
       },
       "months": {
-        "description": "Number of months for trend (default 12)",
-        "type": "number"
+        "description": "Months of history for trend, 1-120 (default 12)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 120
+      },
+      "cursor": {
+        "description": "nextCursor from the previous page of the same call. Omit for page 1.",
+        "type": "string",
+        "maxLength": 200
       }
     },
     "required": [
@@ -108,14 +145,20 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
     "type": "object",
     "properties": {
       "trailingMonths": {
-        "description": "Lookback window in months (default 3)",
-        "type": "number"
+        "description": "Lookback window in months, 1-24 (default 3)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 24
       },
       "horizonMonths": {
-        "description": "Projection horizon in months (default 3)",
-        "type": "number"
+        "description": "Projection horizon in months, 1-60 (default 3)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 60
       },
       "whatIf": {
+        "description": "Up to 5 what-if adjustments",
+        "maxItems": 5,
         "type": "array",
         "items": {
           "type": "object",
@@ -125,19 +168,24 @@ export const READ_TOOL_SCHEMAS: Readonly<Record<ReadToolName, JsonSchema>> = dee
               "enum": [
                 "adjust_category",
                 "drop_recurring"
-              ]
+              ],
+              "description": "What-if kind"
             },
             "category": {
               "description": "Category to adjust (adjust_category)",
-              "type": "string"
+              "type": "string",
+              "maxLength": 64
             },
             "monthlyDelta": {
               "description": "Signed change to monthly spend (adjust_category)",
-              "type": "number"
+              "type": "number",
+              "minimum": -1000000000,
+              "maximum": 1000000000
             },
             "description": {
               "description": "Description substring to match (drop_recurring)",
-              "type": "string"
+              "type": "string",
+              "maxLength": 60
             }
           },
           "required": [
@@ -162,10 +210,20 @@ function check(schema: JsonSchema, value: unknown, path: string): string | null 
     return `${path}: not one of ${schema.enum.join('|')}`;
   }
   switch (schema.type) {
-    case 'string':
-      return typeof value === 'string' ? null : `${path}: expected string`;
+    case 'string': {
+      if (typeof value !== 'string') return `${path}: expected string`;
+      if (typeof schema.minLength === 'number' && value.length < schema.minLength) return `${path}: shorter than ${schema.minLength}`;
+      if (typeof schema.maxLength === 'number' && value.length > schema.maxLength) return `${path}: longer than ${schema.maxLength}`;
+      return null;
+    }
     case 'number':
-      return typeof value === 'number' && Number.isFinite(value) ? null : `${path}: expected a finite number`;
+    case 'integer': {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return `${path}: expected a finite number`;
+      if (schema.type === 'integer' && !Number.isInteger(value)) return `${path}: expected an integer`;
+      if (typeof schema.minimum === 'number' && value < schema.minimum) return `${path}: below ${schema.minimum}`;
+      if (typeof schema.maximum === 'number' && value > schema.maximum) return `${path}: above ${schema.maximum}`;
+      return null;
+    }
     case 'boolean':
       return typeof value === 'boolean' ? null : `${path}: expected boolean`;
     case 'array': {

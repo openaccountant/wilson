@@ -20,18 +20,10 @@
  * use the UI's `@/` path alias or touch `window`.
  */
 
-export const TAB_IDS = [
-  'overview',
-  'transactions',
-  'review',
-  'accounts',
-  'goals',
-  'forecast',
-  'chat',
-  'llm',
-  'logs',
-  'settings',
-] as const;
+// The one tab list lives in webmcp-session.ts (itself import-free). A relative path, not an alias, so bun tests
+// resolve it too.
+import { TAB_IDS } from '../../../webmcp-session.js';
+export { TAB_IDS };
 
 export type UrlTab = (typeof TAB_IDS)[number];
 

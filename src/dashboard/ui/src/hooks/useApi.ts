@@ -14,8 +14,11 @@ interface UseApiResult<T> {
 /**
  * Fetch `path` (re-fetching when it or `deps` change). A `null` path skips the
  * request entirely — for queries that only make sense once some input exists.
+ *
+ * `init` is passed to every request (headers, mostly). It is read when the effect runs, not tracked as a
+ * dependency: change `path` or `deps` to refetch.
  */
-export function useApi<T>(path: string | null, deps: unknown[] = []): UseApiResult<T> {
+export function useApi<T>(path: string | null, deps: unknown[] = [], init?: RequestInit): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +36,7 @@ export function useApi<T>(path: string | null, deps: unknown[] = []): UseApiResu
     }
     setLoading(true);
 
-    api<T>(path)
+    api<T>(path, init)
       .then((result) => {
         if (!cancelled) {
           setData(result);

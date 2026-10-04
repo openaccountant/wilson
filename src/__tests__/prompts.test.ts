@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, beforeAll, afterAll, spyOn, setSystemTime } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
+import { omitIterationToolResults } from '../agent/iteration-prompt-format.js';
 import {
   getCurrentDate,
   buildIterationPrompt,
@@ -54,6 +55,17 @@ describe('agent/prompts', () => {
       const prompt = buildIterationPrompt('spending summary', toolResults);
       expect(prompt).toContain('Data retrieved from tool calls');
       expect(prompt).toContain('spending_summary');
+    });
+
+    test('the judge cut removes every tool result from what this builder writes, and keeps the query and the closing line', () => {
+      const prompt = buildIterationPrompt('what did I buy?', '### transaction_search\n[{"merchant":"SECRET_MERCHANT"}]', '## Tool Usage This Query\n\n- transaction_search: 1/3 calls');
+      const cut = omitIterationToolResults(prompt);
+      expect(cut.omittedChars).toBeGreaterThan(0);
+      expect(cut.text).toContain('Query: what did I buy?');
+      expect(cut.text).toContain('tool results omitted');
+      expect(cut.text).toContain('Continue working toward answering the query.');
+      expect(cut.text).not.toContain('SECRET_MERCHANT');
+      expect(omitIterationToolResults(buildIterationPrompt('q', '')).omittedChars).toBe(0);
     });
 
     test('omits tool results section when empty', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { readFileSync } from 'fs';
 import { createTestDb } from './helpers.js';
+import { bfetch } from './mcp-helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createFakeEmbedder } from './fake-embedder.js';
@@ -49,7 +50,7 @@ async function start() {
 }
 
 async function j(base: string, path: string, init?: RequestInit) {
-  const res = await fetch(base + path, init);
+  const res = await bfetch(base + path, init);
   const contentType = res.headers.get('content-type') ?? '';
   const body = contentType.includes('json') ? await res.json() : await res.text();
   return { status: res.status, body: body as any };
@@ -77,6 +78,15 @@ async function setup() {
   return { db, base, importedIds };
 }
 
+/** The one tool path (`POST /api/mcp/call`): the session travels in a header, the call in the body. */
+function callAs(base: string, sessionGeneration: string, body: Record<string, unknown>) {
+  return j(base, '/api/mcp/call', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': sessionGeneration },
+    body: JSON.stringify(body),
+  });
+}
+
 async function grantTool(base: string, sessionGeneration: string, tool = 'categorize_transaction') {
   const res = await post(base, '/api/mcp/grants', { sessionGeneration, tools: [tool] });
   expect(res.status).toBe(200);
@@ -100,11 +110,11 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
   test('exposed-tools list starts empty; granting exposes the mutating tool; revoking empties it again', async () => {
     const { base } = await start();
 
-    const fresh = await j(base, '/api/mcp/tools?sessionGeneration=tab-1');
+    const fresh = await j(base, '/api/mcp/tools?sessionGeneration=11111111-1111-4111-8111-111111111111');
     expect(fresh.body.tools).toEqual([]);
 
-    const grant = await grantTool(base, 'tab-1');
-    const tools = await j(base, '/api/mcp/tools?sessionGeneration=tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
+    const tools = await j(base, '/api/mcp/tools?sessionGeneration=11111111-1111-4111-8111-111111111111');
     expect(tools.body.tools).toHaveLength(1);
     const tool = tools.body.tools[0];
     expect(tool.name).toBe('categorize_transaction');
@@ -114,7 +124,7 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
     expect(tool.annotations.readOnlyHint).toBe(false);
 
     await j(base, `/api/mcp/grants/${grant.id}`, { method: 'DELETE' });
-    const after = await j(base, '/api/mcp/tools?sessionGeneration=tab-1');
+    const after = await j(base, '/api/mcp/tools?sessionGeneration=11111111-1111-4111-8111-111111111111');
     expect(after.body.tools).toEqual([]);
   });
 
@@ -123,28 +133,28 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
     const txnId = payrollCandidates(db)[0].id;
     expect(rowState(db, txnId)).toEqual({ category: null, revision: 1 });
 
-    // Unknown grant id.
-    const unknownGrant = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: 'no-such-grant', tool: 'categorize_transaction',
+    // Unknown grant id (a well-formed one: a malformed id is a 400 before any grant is looked up).
+    const unknownGrant = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: crypto.randomUUID(), tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     expect(unknownGrant.status).toBe(403);
     expect(rowState(db, txnId)).toEqual({ category: null, revision: 1 });
 
     // Revoked grant.
-    const grant = await grantTool(base, 'tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
     await j(base, `/api/mcp/grants/${grant.id}`, { method: 'DELETE' });
-    const revoked = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: grant.id, tool: 'categorize_transaction',
+    const revoked = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: grant.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     expect(revoked.status).toBe(403);
     expect(rowState(db, txnId)).toEqual({ category: null, revision: 1 });
 
     // Grant from a foreign tab/session generation.
-    const other = await grantTool(base, 'other-tab');
-    const foreign = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: other.id, tool: 'categorize_transaction',
+    const other = await grantTool(base, '22222222-2222-4222-8222-222222222222');
+    const foreign = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: other.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     expect(foreign.status).toBe(403);
@@ -155,7 +165,7 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
 
   test('no write until the confirmation round-trip completes: prepare writes nothing, approve commits once', async () => {
     const { db, base, importedIds } = await setup();
-    const grant = await grantTool(base, 'tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
 
     const cand = await post(base, '/api/demo/autobook/candidates', {
       description: 'PAYROLL DEPOSIT - ACME CORP',
@@ -165,8 +175,8 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
     const txnId = cand.body.candidates[0].id as number;
 
     // Prepare: a pending operation exists, but the row is untouched.
-    const prepared = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: grant.id, tool: 'categorize_transaction',
+    const prepared = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: grant.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     expect(prepared.status).toBe(200);
@@ -183,15 +193,15 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
 
   test('deny produces no data change, and a late approve cannot re-apply a rejected operation', async () => {
     const { db, base, importedIds } = await setup();
-    const grant = await grantTool(base, 'tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
     const cand = await post(base, '/api/demo/autobook/candidates', {
       description: 'MAPLE AVE APARTMENTS RENT', importedIds,
     });
     const txnId = cand.body.candidates[0].id as number;
     expect(rowState(db, txnId)).toEqual({ category: null, revision: 1 });
 
-    const prepared = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: grant.id, tool: 'categorize_transaction',
+    const prepared = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: grant.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     const rejected = await post(base, `/api/mcp/operations/${prepared.body.operation.id}/reject`, {});
@@ -206,14 +216,14 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
 
   test('revoking the grant between prepare and approve leaves the row untouched (stale)', async () => {
     const { db, base, importedIds } = await setup();
-    const grant = await grantTool(base, 'tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
     const cand = await post(base, '/api/demo/autobook/candidates', {
       description: 'MAPLE AVE APARTMENTS RENT', importedIds,
     });
     const txnId = cand.body.candidates[0].id as number;
 
-    const prepared = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: grant.id, tool: 'categorize_transaction',
+    const prepared = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: grant.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Home' },
     });
     await j(base, `/api/mcp/grants/${grant.id}`, { method: 'DELETE' });
@@ -279,7 +289,7 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
 
   test('the pending operation names the exact change — description, date, and target category', async () => {
     const { db, base, importedIds } = await setup();
-    const grant = await grantTool(base, 'tab-1');
+    const grant = await grantTool(base, '11111111-1111-4111-8111-111111111111');
     const cand = await post(base, '/api/demo/autobook/candidates', {
       description: 'PAYROLL DEPOSIT - ACME CORP', importedIds,
     });
@@ -289,17 +299,20 @@ describe('auto-book gate (spec-50 non-negotiables in the demo context)', () => {
       date: string;
     };
 
-    const prepared = await post(base, '/api/mcp/prepare', {
-      sessionGeneration: 'tab-1', grantId: grant.id, tool: 'categorize_transaction',
+    const prepared = await callAs(base, '11111111-1111-4111-8111-111111111111', {
+      grantId: grant.id, tool: 'categorize_transaction',
       args: { id: txnId, category: 'Income' },
     });
-    const summary: string = prepared.body.operation.summary;
-    expect(summary).toContain(txn.description);
+    // The agent's copy carries no row text; the card (the operations route) does.
+    expect(prepared.body.operation.summary).toBeUndefined();
+    const readback = await j(base, `/api/mcp/operations/${prepared.body.operation.id}`);
+    // The summary names the change (which transaction, from/to) in the server's own words; the bank description
+    // sits on its own `bank_data` row so bank text and server wording are never one string (T10).
+    const summary: string = readback.body.operation.summary;
+    expect(summary).toContain(`#${txnId}`);
     expect(summary).toContain(txn.date);
     expect(summary).toContain('Income');
-
-    // The single-operation read (what the section polls) carries the same context.
-    const readback = await j(base, `/api/mcp/operations/${prepared.body.operation.id}`);
-    expect(readback.body.operation.summary).toBe(summary);
+    expect(summary).not.toContain(txn.description);
+    expect(readback.body.operation.bank_data).toBe(`"${txn.description}"`);
   });
 });

@@ -38,6 +38,12 @@ import {
   MCP_OPERATIONS_TABLE,
   MCP_APPROVAL_TOKENS_TABLE,
   MCP_OPERATION_SUMMARY_COLUMN,
+  MCP_AUDIT_LOG_TABLE,
+  MCP_CLIENT_TOKENS_TABLE,
+  MCP_TOOL_POLICIES_TABLE,
+  MCP_OPERATION_KIND_COLUMNS,
+  ANNOTATION_PROVENANCE_COLUMNS,
+  ANNOTATION_INTEGRITY,
 } from './schema.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -78,6 +84,13 @@ export const MIGRATIONS: Migration[] = [
   { version: 25, name: 'add_transaction_revision', up: TRANSACTION_REVISION_COLUMN },
   { version: 26, name: 'create_mcp_tables', up: MCP_GRANTS_TABLE + MCP_OPERATIONS_TABLE + MCP_APPROVAL_TOKENS_TABLE },
   { version: 27, name: 'add_mcp_operation_summary', up: MCP_OPERATION_SUMMARY_COLUMN },
+  { version: 28, name: 'create_mcp_audit_log', up: MCP_AUDIT_LOG_TABLE },
+  { version: 29, name: 'create_mcp_client_tokens', up: MCP_CLIENT_TOKENS_TABLE },
+  { version: 30, name: 'create_mcp_tool_policies', up: MCP_TOOL_POLICIES_TABLE },
+  { version: 31, name: 'add_mcp_operation_kind', up: MCP_OPERATION_KIND_COLUMNS },
+  // v34+ is reserved by another branch (open-jev proposals on categorization_reviews).
+  { version: 32, name: 'add_annotation_provenance', up: ANNOTATION_PROVENANCE_COLUMNS },
+  { version: 33, name: 'annotation_integrity', up: ANNOTATION_INTEGRITY },
 ];
 
 // ── Migration Runner ─────────────────────────────────────────────────────────

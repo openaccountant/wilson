@@ -9,6 +9,7 @@ import {
 } from '../dashboard/ui/src/lib/netWorthForecastProtocol.js';
 import { DRAG_PATHS, RELEASE_PATHS } from '../dashboard/ui/src/lib/netWorthForecast.js';
 import { TAB_IDS as URL_TAB_IDS } from '../dashboard/ui/src/lib/urlState.js';
+import { TAB_IDS } from '../dashboard/webmcp-session.js';
 
 // Pure, dependency-free supersession/policy tests (no worker, no DOM, no
 // timing) plus source-level architecture pins, following the readFileSync
@@ -409,19 +410,11 @@ describe('single-file build invariant', () => {
 });
 
 describe('tab registration lockstep', () => {
-  function extractTabIds(tabBarSource: string): string[] {
-    const block = tabBarSource.match(/const TABS = \[([\s\S]*?)\]\s*as const;/);
-    if (!block) throw new Error('TabBar.tsx: could not locate the TABS array');
-    const ids: string[] = [];
-    const idRe = /id:\s*'([a-z0-9-]+)'/g;
-    let m: RegExpExecArray | null;
-    while ((m = idRe.exec(block[1])) !== null) ids.push(m[1]);
-    return ids;
-  }
-
-  function extractTabComponentKeys(appSource: string): string[] {
-    const block = appSource.match(/const TAB_COMPONENTS: Record<TabId, React\.FC> = \{([\s\S]*?)\};/);
-    if (!block) throw new Error('App.tsx: could not locate the TAB_COMPONENTS map');
+  // The ids live in one list (TAB_IDS, webmcp-session.ts; tab-ids-parity.test.ts pins that nothing else lists them).
+  // What is left to keep in step is every map keyed by a tab id: the tab bar's labels and the app's components.
+  function extractRecordKeys(source: string, declaration: RegExp, what: string): string[] {
+    const block = source.match(declaration);
+    if (!block) throw new Error(`could not locate ${what}`);
     const ids: string[] = [];
     const keyRe = /^\s*([a-z0-9-]+):\s*\S+?,?\s*$/gm;
     let m: RegExpExecArray | null;
@@ -429,18 +422,18 @@ describe('tab registration lockstep', () => {
     return ids;
   }
 
-  test('TABS, the URL-state TAB_IDS, and TAB_COMPONENTS agree on membership and order, and include forecast', () => {
+  test('TAB_LABELS and TAB_COMPONENTS have exactly the TAB_IDS keys, in order, and include forecast', () => {
     const tabBarSource = read(uiSrc, 'components', 'TabBar.tsx');
     const appSource = read(uiSrc, 'App.tsx');
 
-    const tabIds = extractTabIds(tabBarSource);
-    // The hash parser's tab whitelist (formerly App.tsx's `valid` array).
-    const validIds: string[] = [...URL_TAB_IDS];
-    const componentKeys = extractTabComponentKeys(appSource);
+    const labelKeys = extractRecordKeys(tabBarSource, /const TAB_LABELS: Record<TabId, string> = \{([\s\S]*?)\};/, 'the TAB_LABELS map');
+    const componentKeys = extractRecordKeys(appSource, /const TAB_COMPONENTS: Record<TabId, React\.FC> = \{([\s\S]*?)\};/, 'the TAB_COMPONENTS map');
 
-    expect(validIds).toEqual(tabIds);
-    expect(componentKeys).toEqual(tabIds);
-    expect(tabIds).toContain('forecast');
+    expect(labelKeys).toEqual([...TAB_IDS]);
+    expect(componentKeys).toEqual([...TAB_IDS]);
+    expect(TAB_IDS).toContain('forecast');
+    // The URL-hash parser (lib/urlState.ts) reads the same list.
+    expect([...URL_TAB_IDS]).toEqual([...TAB_IDS]);
   });
 });
 

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useNetWorthForecast } from '@/hooks/useNetWorthForecast';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import { ForecastFanChart } from '@/components/ForecastFanChart';
 import { ForecastControls } from '@/components/ForecastControls';
-import { ManualInputsForm } from '@/components/ManualInputsForm';
+import { ManualInputsForm, type ManualInputValues } from '@/components/ManualInputsForm';
 import { ForecastAssumptions } from '@/components/ForecastAssumptions';
 import {
   deriveNetWorthInputs,
@@ -17,6 +17,7 @@ import {
   SHOCK_DEFAULT_YEAR,
 } from '@/lib/netWorthForecast';
 import { DEFAULT_SEED } from '@/lib/forecastCore';
+import { forecastReflectsValues } from '@/lib/forecastAgentAwait';
 import type { NetWorthResponse, MonthlyCashflowRow } from '@/types';
 import { moneyWhole } from '@/format';
 
@@ -55,6 +56,12 @@ function partialHistoryMedians(history: MonthlyCashflowRow[] | null): {
     medianIncome: median(usable.map((r) => r.income)),
     medianContribution: median(usable.map((r) => r.income - r.expenses)),
   };
+}
+
+/** What an agent is told after `set_forecast_inputs`: the horizon and the 10th, 50th and 90th percentile net worth there. */
+function projectionAnswer(point: { p10: number; p50: number; p90: number } | undefined, horizonMonths: number) {
+  if (!point) return { outcome: 'unknown', reason: 'The projection produced no result.' };
+  return { horizonMonths, p10: Math.round(point.p10), p50: Math.round(point.p50), p90: Math.round(point.p90) };
 }
 
 export function ForecastTab() {
@@ -132,7 +139,7 @@ export function ForecastTab() {
     startMonth,
   ]);
 
-  const { forecast, refining, error: simError, onInputChange, onInputSettled } =
+  const { forecast, forecastInput, quality, refining, error: simError, onInputChange, onInputSettled } =
     useNetWorthForecast();
 
   // Every slider (or manual-input) change re-posts a draft run; the hook
@@ -143,6 +150,54 @@ export function ForecastTab() {
   }, [simInput]);
 
   const handleSettled = () => onInputSettled(simInput);
+
+  // An agent filled the manual inputs (`set_forecast_inputs`): the page computes, so the call resolves only when the
+  // projection for exactly those numbers has finished (a 'final' run posted with the current input), never from
+  // the chart that was on screen before.
+  const pendingAgentRef = useRef<{ values: ManualInputValues; resolve: (answer: unknown) => void; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const [agentCheck, setAgentCheck] = useState(0);
+  const projectionReady =
+    forecast !== null && quality === 'final' && forecastInput !== null && JSON.stringify(forecastInput) === JSON.stringify(simInput);
+
+  useEffect(() => {
+    const pending = pendingAgentRef.current;
+    if (!pending || !projectionReady || !forecast) return;
+    // The projection must be OF the applied values: its own input carries them (a standing projection of the person's numbers never answers).
+    if (!forecastReflectsValues(pending.values, forecastInput)) return;
+    // The boxes must already hold the requested numbers (they reach this tab's state a render after they are typed).
+    if (
+      manualStartNetWorth !== pending.values.start_net_worth ||
+      manualMonthlyIncome !== pending.values.monthly_income ||
+      manualMonthlyContribution !== pending.values.monthly_savings
+    ) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    pendingAgentRef.current = null;
+    pending.resolve(projectionAnswer(forecast.points[forecast.points.length - 1], horizonYears * 12));
+  }, [agentCheck, projectionReady, forecast, forecastInput, manualStartNetWorth, manualMonthlyIncome, manualMonthlyContribution, horizonYears]);
+
+  useEffect(() => () => {
+    const pending = pendingAgentRef.current;
+    if (pending) clearTimeout(pending.timer);
+    pendingAgentRef.current = null;
+  }, []);
+
+  function awaitProjection(values: ManualInputValues): Promise<unknown> {
+    return new Promise((resolve) => {
+      const previous = pendingAgentRef.current;
+      if (previous) {
+        clearTimeout(previous.timer);
+        previous.resolve({ outcome: 'unknown', reason: 'A newer request replaced this one.' });
+      }
+      const timer = setTimeout(() => {
+        pendingAgentRef.current = null;
+        resolve({ outcome: 'unknown', reason: 'The projection had not finished after 20 seconds. Look at the Forecast tab.' });
+      }, 20_000);
+      pendingAgentRef.current = { values, resolve, timer };
+      setAgentCheck((n) => n + 1); // look now: the numbers may already be shown and computed
+    });
+  }
 
   const handleReset = () => {
     setSavingsDeltaPp(DEFAULT_SAVINGS_DELTA_PP);
@@ -228,6 +283,7 @@ export function ForecastTab() {
           onStartNetWorthChange={setManualStartNetWorth}
           onMonthlyIncomeChange={setManualMonthlyIncome}
           onMonthlyContributionChange={setManualMonthlyContribution}
+          awaitProjection={awaitProjection}
         />
       )}
 

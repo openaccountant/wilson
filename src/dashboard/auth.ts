@@ -57,6 +57,21 @@ export function disableAuth(db: Database): void {
   ).run();
 }
 
+/** True when at least one active admin account exists, i.e. someone can actually log in and manage the dashboard. */
+export function hasActiveAdmin(db: Database): boolean {
+  const row = db.prepare("SELECT 1 AS ok FROM dashboard_users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
+  return !!row;
+}
+
+/**
+ * The precondition for serving a profile over the network: the auth flag is on
+ * AND an active admin exists. The flag alone is not enough, because with zero
+ * users `/api/auth/setup` is public and the first caller would become admin.
+ */
+export function lanAuthReady(db: Database): boolean {
+  return isAuthEnabled(db) && hasActiveAdmin(db);
+}
+
 // ── Users ───────────────────────────────────────────────────────────────────
 
 export function hashPassword(password: string): Promise<string> {

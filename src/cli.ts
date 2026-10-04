@@ -1252,6 +1252,11 @@ export async function runCli() {
 
     if (query === '/dashboard') {
       chatLog.addQuery(query);
+      if (!dashUrl) {
+        chatLog.finalizeAnswer('The dashboard is not running. It refuses to start on a network address while dashboard auth is off for this profile.');
+        tui.requestRender();
+        return;
+      }
       openBrowser(dashUrl);
       chatLog.finalizeAnswer(`Dashboard at ${dashUrl}`);
       tui.requestRender();
@@ -1476,9 +1481,16 @@ export async function runCli() {
 
   // Auto-start dashboard server
   const { startDashboardServer, stopDashboardServer } = await import('./dashboard/server.js');
-  const { server: dashServer, url: dashUrl } = await startDashboardServer(db);
-  (globalThis as any).__oaDashboard = dashServer;
-  intro.setDashboard(dashUrl);
+  // The dashboard refuses to start on a network address while this profile has auth off; the TUI must still run.
+  let dashUrl: string | null = null;
+  try {
+    const started = await startDashboardServer(db);
+    (globalThis as any).__oaDashboard = started.server;
+    dashUrl = started.url;
+    intro.setDashboard(dashUrl);
+  } catch (err) {
+    console.error(`Dashboard not started: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   tui.start();
   await new Promise<void>((resolve) => {

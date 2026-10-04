@@ -36,21 +36,12 @@ const MONTH_NAMES: Record<string, number> = {
 };
 
 /**
- * Parse a natural language query into transaction filters.
- *
- * Handles patterns like:
- * - "dining in January" -> category + date filter
- * - "Amazon purchases" -> description LIKE '%Amazon%'
- * - "over $100" / "more than $50" -> amount filter
- * - "last month", "this year", specific months
- */
-/**
  * Get category names from DB with fallback to hardcoded list.
  */
-function getCategoryNames(): string[] {
-  if (!db) return CATEGORIES;
+function getCategoryNames(database: Database | null = db): string[] {
+  if (!database) return CATEGORIES;
   try {
-    const rows = getCategories(db);
+    const rows = getCategories(database);
     if (rows.length > 0) return rows.map(r => r.name);
   } catch {
     // categories table may not exist
@@ -58,7 +49,20 @@ function getCategoryNames(): string[] {
   return CATEGORIES;
 }
 
-function parseNaturalQuery(query: string): TransactionFilters {
+/**
+ * Parse a natural language query into transaction filters.
+ *
+ * Handles patterns like:
+ * - "dining in January" -> category + date filter
+ * - "Amazon purchases" -> description LIKE '%Amazon%'
+ * - "over $100" / "more than $50" -> amount filter
+ * - "last month", "this year", specific months
+ *
+ * `database` is where category names are looked up. It defaults to the chat
+ * tool's module database; the WebMCP engine passes the request's own database
+ * so nothing crosses profiles.
+ */
+export function parseNaturalQuery(query: string, database: Database | null = db): TransactionFilters {
   const filters: TransactionFilters = {};
   const lowerQuery = query.toLowerCase();
   const now = new Date();
@@ -66,7 +70,7 @@ function parseNaturalQuery(query: string): TransactionFilters {
   const currentMonth = now.getMonth() + 1;
 
   // --- Category detection ---
-  const categoryNames = getCategoryNames();
+  const categoryNames = getCategoryNames(database);
   const matchedCategory = categoryNames.find((cat) =>
     lowerQuery.includes(cat.toLowerCase())
   );
@@ -205,7 +209,7 @@ export const transactionSearchTool = defineTool({
   }),
   func: async ({ query }) => {
     const database = getDb();
-    const filters = parseNaturalQuery(query);
+    const filters = parseNaturalQuery(query, database);
     const transactions = getTransactions(database, filters);
     const formatted = formatResults(transactions);
 

@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback, Fragment } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment, type ChangeEvent } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
-import type { ReviewQueueItem } from '@/types';
+import type { CategoryRow, ReviewQueueItem } from '@/types';
 import { CATEGORIES } from '../../../../tools/categorize/categories.js';
 import { orderByLane, type LaneRoute } from '@/prelabel/core';
 import type { PrelabelResult } from '@/prelabel/protocol';
@@ -10,6 +10,13 @@ import { PrelabelPanel } from '@/components/prelabel/PrelabelPanel';
 import { PrelabelChip } from '@/components/prelabel/PrelabelChip';
 import { LaneHeaderRow } from '@/components/prelabel/LaneHeaderRow';
 import { QuickConfirmButton } from '@/components/prelabel/QuickConfirmButton';
+import { useDeclarativeTool, useHumanBusy } from '@/agent/useDeclarativeTool';
+import { useWebMcpPageTools } from '@/agent/useWebMcpPageTools';
+import { usePageContext } from '@/agent/WebMcpProvider';
+import { pageError, pollUntil } from '@webmcp-page-tools';
+import { armPageGuard, scrollForAgent, useAgentGuard } from '@/agent/agentGuard';
+import { AgentFilledBanner, AgentOutcomeNote } from '@/components/agent/AgentFilledBanner';
+import { buildCategoryOptions, buildReviewOptions, fieldLock } from '@declarative-submit';
 
 /** Confidence at or below which a suggestion landed in the review queue (src/tools/categorize). */
 const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -44,6 +51,8 @@ function ReviewRow({
   categories,
   canAct,
   route,
+  selected,
+  guarded,
   onResolved,
   onError,
 }: {
@@ -52,6 +61,10 @@ function ReviewRow({
   canAct: boolean;
   /** open-jev second opinion for this row; absent when the feature is off. */
   route?: LaneRoute;
+  /** An agent pre-selected this review (`open_review_item`). */
+  selected?: boolean;
+  /** An agent just moved to this row: its action buttons stay off for a moment (T16), so a click aimed elsewhere cannot land here. */
+  guarded?: boolean;
 
   onResolved: (category: string) => void;
   onError: (message: string) => void;
@@ -76,7 +89,12 @@ function ReviewRow({
   }
 
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-surface transition-colors">
+    <tr
+      data-review-id={review.review_id}
+      aria-current={selected ? 'true' : undefined}
+      data-agent-guard={guarded ? '' : undefined}
+      className={`scroll-mt-12 border-b border-border last:border-b-0 hover:bg-surface transition-colors ${selected ? 'ring-1 ring-inset ring-green bg-green/10' : ''}`}
+    >
       <td className="px-4 py-3 text-text-secondary font-mono text-xs whitespace-nowrap">
         {formatDate(review.date)}
       </td>
@@ -111,11 +129,11 @@ function ReviewRow({
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
             {route?.kind === 'agrees' ? (
-              <QuickConfirmButton busy={busy} onConfirm={() => resolve('confirm')} />
+              <QuickConfirmButton busy={busy || !!guarded} onConfirm={() => resolve('confirm')} />
             ) : (
               <button
                 onClick={() => resolve('confirm')}
-                disabled={busy}
+                disabled={busy || guarded}
                 className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors cursor-pointer border-none whitespace-nowrap"
                 title="Apply the suggested category"
               >
@@ -125,7 +143,7 @@ function ReviewRow({
             <select
               value={pick}
               onChange={(e) => setPick(e.target.value)}
-              disabled={busy}
+              disabled={busy || guarded}
               className="bg-surface-raised border border-border rounded px-1.5 py-1.5 text-xs text-text-secondary focus:outline-none focus:border-green disabled:opacity-50 max-w-[140px] cursor-pointer"
             >
               <option value="">Correct…</option>
@@ -137,16 +155,164 @@ function ReviewRow({
             </select>
             <button
               onClick={() => resolve('correct')}
-              disabled={busy || !pick}
+              disabled={busy || guarded || !pick}
               className="bg-surface-raised hover:bg-border-muted disabled:opacity-50 disabled:cursor-not-allowed text-text-secondary border border-border text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap"
               title="Apply the category you picked instead"
             >
               Apply
             </button>
+            {guarded && (
+              <span role="status" className="text-[10px] text-yellow whitespace-nowrap">
+                Agent moved the view, actions paused…
+              </span>
+            )}
           </div>
         </td>
       )}
     </tr>
+  );
+}
+
+/**
+ * Resolve one pending review from a form. The form is also a declarative WebMCP tool (`review_action`): a person
+ * submits it like any form (the same REST routes as the row buttons), while an agent's submit becomes a proposal
+ * that waits for the approval card. Option labels are ids, dates and amounts only (no merchant text).
+ */
+function ReviewActionForm({
+  reviews,
+  categoryRows,
+  preselect,
+  guarded,
+  onResolved,
+  onError,
+  onSettled,
+}: {
+  reviews: ReviewQueueItem[];
+  categoryRows: CategoryRow[];
+  /** An agent asked to pre-select a review (`open_review_item`). The nonce makes asking again for the same id count. */
+  preselect: { id: number; nonce: number } | null;
+  /** An agent just moved the view: the human Resolve button stays off for a moment (T16). */
+  guarded: boolean;
+  onResolved: (category: string) => void;
+  onError: (message: string) => void;
+  onSettled: () => void;
+}) {
+  const [reviewId, setReviewId] = useState('');
+  const [action, setAction] = useState<'confirm' | 'correct'>('confirm');
+  const [categoryId, setCategoryId] = useState('');
+  const { busy, setBusy, isBusy } = useHumanBusy();
+
+  const reviewOptions = useMemo(() => buildReviewOptions(reviews), [reviews]);
+  const categoryOptions = useMemo(() => buildCategoryOptions(categoryRows), [categoryRows]);
+
+  async function resolveAsHuman() {
+    const id = Number(reviewId);
+    if (!Number.isInteger(id) || id <= 0) return onError('Pick a review to resolve.');
+    const category = categoryRows.find((c) => String(c.id) === categoryId)?.name;
+    if (action === 'correct' && !category) return onError('Pick the category to correct it to.');
+    setBusy(true);
+    try {
+      const result = await api<{ success: boolean; category: string }>(`/api/reviews/${id}/${action}`, {
+        method: 'POST',
+        body: action === 'correct' ? JSON.stringify({ category }) : undefined,
+      });
+      if (result.success) {
+        setReviewId('');
+        setCategoryId('');
+        onResolved(result.category);
+      }
+    } catch (err) {
+      onError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const declarative = useDeclarativeTool({
+    tool: 'review_action',
+    // The form advertises itself only once BOTH option lists exist. Chrome derives the tool's schema from the DOM it sees,
+    // and a `category_id` select that offered only its empty option made `action=correct` unusable by an agent (L2).
+    ready: reviewOptions.length > 0 && categoryOptions.length > 0,
+    onAgentCleared: () => {
+      setReviewId('');
+      setAction('confirm');
+      setCategoryId('');
+    },
+    onHumanSubmit: resolveAsHuman,
+    humanBusy: isBusy,
+    // The agent's call ended (approved, rejected, expired...): the queue may have changed. Refetch only once the agent
+    // has its answer: a refetch swaps this form for a skeleton, and a form removed mid-call cancels the call.
+    onSettled,
+  });
+  // Option lists are frozen while an agent call is in flight (a changed select makes Chrome re-derive the schema).
+  const shownReviewOptions = declarative.hold('reviews', reviewOptions);
+  const shownCategoryOptions = declarative.hold('categories', categoryOptions);
+
+  // Only the review is chosen: the action and the category stay as they are, and nothing is submitted. An agent
+  // changed what this mutating form acts on, so the form is agent-touched (amber banner; the next submit, even a
+  // human click, goes through the approval card) until it is submitted, reset or cancelled: not on the cue's timer.
+  const { markAgentTouched } = declarative;
+  useEffect(() => {
+    if (preselect === null) return;
+    setReviewId(String(preselect.id));
+    markAgentTouched();
+  }, [preselect, markAgentTouched]);
+
+  const selectClass =
+    'bg-surface-raised border border-border rounded px-2 py-1.5 text-xs text-text-secondary focus:outline-none focus:border-green cursor-pointer';
+  // A person's resolve in flight locks the fields WITHOUT `disabled` (a disabled field leaves the tool's schema and cancels a running call).
+  const lock = fieldLock(busy);
+
+  return (
+    <div className="bg-surface-raised border border-border rounded-lg p-4 mb-4">
+      {declarative.agentTouched && <AgentFilledBanner />}
+      <form key={declarative.formKey} className="flex flex-wrap items-end gap-3" aria-label="Resolve a review" {...declarative.formProps}>
+        <label className={`text-xs text-text-muted ${lock.wrapperClass}`}>
+          <span className="block mb-1">Review</span>
+          <select name="review_id" value={reviewId} onChange={lock.guard((e: ChangeEvent<HTMLSelectElement>) => setReviewId(e.target.value))} {...lock.fieldProps} className={`${selectClass} min-w-[220px]`} {...declarative.field('review_id')}>
+            <option value="">Choose a review…</option>
+            {shownReviewOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={`text-xs text-text-muted ${lock.wrapperClass}`}>
+          <span className="block mb-1">Action</span>
+          <select name="action" value={action} onChange={lock.guard((e: ChangeEvent<HTMLSelectElement>) => setAction(e.target.value as 'confirm' | 'correct'))} {...lock.fieldProps} className={selectClass} {...declarative.field('action')}>
+            <option value="confirm">confirm</option>
+            <option value="correct">correct</option>
+          </select>
+        </label>
+        <label className={`text-xs text-text-muted ${lock.wrapperClass}`}>
+          <span className="block mb-1">Category (for correct)</span>
+          <select name="category_id" value={categoryId} onChange={lock.guard((e: ChangeEvent<HTMLSelectElement>) => setCategoryId(e.target.value))} {...lock.fieldProps} className={`${selectClass} max-w-[200px]`} {...declarative.field('category_id')}>
+            <option value="">—</option>
+            {/* Always every category (ids and safe labels), whatever review or action is chosen: Chrome builds the enum from these. */}
+            {shownCategoryOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={busy || guarded}
+          data-agent-guard={guarded ? '' : undefined}
+          className="bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none whitespace-nowrap"
+        >
+          Resolve
+        </button>
+        {guarded && (
+          <span role="status" className="text-[10px] text-yellow">
+            Agent moved the view, actions paused…
+          </span>
+        )}
+      </form>
+      <AgentOutcomeNote outcome={declarative.outcome} />
+    </div>
   );
 }
 
@@ -167,7 +333,7 @@ export function ReviewTab() {
   const { data: authStatus } = useApi<AuthStatus>('/api/auth/status');
   // Offer exactly what apiCorrectReview accepts: names in the categories table,
   // falling back to the static CATEGORIES list it also validates against.
-  const { data: categoryRows } = useApi<{ name: string }[]>('/api/categories');
+  const { data: categoryRows } = useApi<CategoryRow[]>('/api/categories');
 
   const categories = useMemo(() => {
     const names = (categoryRows ?? []).map((r) => r.name).filter(Boolean);
@@ -198,6 +364,46 @@ export function ReviewTab() {
   const showLanes = prelabel.active && prelabel.results.size > 0;
   const laneCounts = { ATTENTION: 0, QUICK: 0 };
   for (const e of lanes) laneCounts[e.route.lane]++;
+
+  // ── Agent journey: show one review (`open_review_item`) ────────────────────
+  // The bridge registers the tool only while this tab shows, after the server confirmed the review is pending. The
+  // handler pre-selects it in the form and says whether that really happened.
+  const [preselect, setPreselect] = useState<{ id: number; nonce: number } | null>(null);
+  const latest = useRef({ pending, canAct });
+  latest.current = { pending, canAct };
+  // Whatever an agent moves to, the human Confirm/Apply/Resolve buttons stay off for a moment (T16).
+  const { guarded, armGuard } = useAgentGuard();
+
+  useWebMcpPageTools('review', {
+    open_review_item: async (args, { signal }) => {
+      const reviewId = args.reviewId as number;
+      const { pending: queue, canAct: mayAct } = latest.current;
+      // Refusals are RESULTS ({ error: { code, message } }): Chrome 154 hides the text of a thrown error from the agent.
+      if (!queue.some((r) => r.review_id === reviewId)) {
+        return { reviewId, prefilled: false, ...pageError('not_found', 'That review is not in the queue shown. Call list_review_queue for the current ids.') };
+      }
+      if (!mayAct) return { reviewId, prefilled: false, ...pageError('read_only', 'The review form is read-only for this role.') };
+      armGuard();
+      setPreselect({ id: reviewId, nonce: Date.now() });
+      const prefilled = await pollUntil(
+        () => (document.querySelector('form[aria-label="Resolve a review"] select[name="review_id"]') as HTMLSelectElement | null)?.value === String(reviewId),
+        signal,
+        { timeoutMs: 2000 }
+      );
+      // Only when the row is not already fully visible, and only as far as needed; a scroll moves every row, so the page waits too.
+      if (scrollForAgent(document.querySelector(`[data-review-id="${reviewId}"]`))) armPageGuard();
+      return prefilled ? { reviewId, prefilled: true } : { reviewId, prefilled: false, ...pageError('form_not_showing', 'The review form is not showing.') };
+    },
+  });
+
+  // The cue fades: it is a pointer to a row, not a state the user has to clear.
+  useEffect(() => {
+    if (preselect === null) return;
+    const timer = setTimeout(() => setPreselect(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [preselect]);
+
+  usePageContext('review', { selection: { reviewId: preselect?.id ?? null }, visibleRows: pending.length });
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -265,6 +471,18 @@ export function ReviewTab() {
           </div>
         )}
 
+        {!loading && !error && canAct && pending.length > 0 && (
+          <ReviewActionForm
+            reviews={pending}
+            categoryRows={categoryRows ?? []}
+            preselect={preselect}
+            guarded={guarded}
+            onResolved={handleResolved}
+            onError={handleError}
+            onSettled={refetch}
+          />
+        )}
+
         {!loading && !error && pending.length > 0 && (
           <div className="bg-surface-raised border border-border rounded-lg overflow-hidden">
             <table className="w-full text-sm">
@@ -291,6 +509,8 @@ export function ReviewTab() {
                       categories={categories}
                       canAct={canAct}
                       route={prelabel.active ? route : undefined}
+                      selected={r.review_id === preselect?.id}
+                      guarded={guarded && r.review_id === preselect?.id}
                       onResolved={handleResolved}
                       onError={handleError}
                     />
