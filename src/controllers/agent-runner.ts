@@ -283,6 +283,9 @@ export class AgentRunnerController {
           completed: true,
         });
         break;
+      case 'tool_selection':
+        // Local tool selection diagnostics: logged by the agent, not displayed.
+        return;
       case 'tool_limit':
       case 'context_cleared':
         this.pushEvent({

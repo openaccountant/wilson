@@ -140,6 +140,25 @@ export interface ContextClearedEvent {
   keptCount: number;
 }
 
+/**
+ * Local models only: which tools (full schema) and skills a call sees, why,
+ * and where the prompt's tokens go. Emitted on a run's first call and again
+ * whenever the set changes (design 2026-10-03 §5.8). Not shown or persisted.
+ */
+export interface ToolSelectionEvent {
+  type: 'tool_selection';
+  tools: string[];
+  /** Registered tools listed by name only (still callable). */
+  indexed: string[];
+  skills: string[];
+  reasons: Record<string, string>;
+  /** True when keyword groups stood in for the embedder. */
+  fallback: boolean;
+  tokens: { fixed: number; tools: number; history: number; results: number; total: number; budget: number };
+  /** Trim steps the planner took for this call. */
+  trimmed: string[];
+}
+
 // Re-export TokenUsage from model types (single source of truth)
 import type { TokenUsage } from '../model/types.js';
 export type { TokenUsage };
@@ -170,6 +189,7 @@ export type AgentEvent =
   | ToolDeniedEvent
   | ToolLimitEvent
   | ContextClearedEvent
+  | ToolSelectionEvent
   | DoneEvent;
 
 /**

@@ -274,6 +274,31 @@ export async function selectTools(input: SelectToolsInput): Promise<ToolSelectio
 }
 
 /**
+ * The `k` tools whose cards best match `text` (skill instructions: only a few
+ * SKILL.md files name their tools), skipping `exclude`. [] when embedding fails.
+ */
+export async function rankToolsForText(
+  text: string,
+  tools: ToolCandidate[],
+  embed: EmbedFn,
+  k: number,
+  exclude: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
+  try {
+    const cards = await embed(tools.map((t) => t.card));
+    const [q] = await embed([text]);
+    return tools
+      .map((t, i) => ({ name: t.name, score: dot(q, cards[i]) }))
+      .filter((r) => !exclude.has(r.name))
+      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+      .slice(0, k)
+      .map((r) => r.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Grow a run's selection (R5: monotonic — nothing is ever removed). Tools the
  * model called always join; their affinities and skill-referenced tools join
  * while the selected set stays within the tool budget.

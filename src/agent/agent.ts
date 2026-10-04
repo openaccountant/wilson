@@ -9,7 +9,7 @@ import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { buildHistoryContext } from '../utils/history-context.js';
 import { estimateTokens, CONTEXT_THRESHOLD, KEEP_TOOL_USES } from '../utils/tokens.js';
 import { formatUserFacingError, isContextOverflowError } from '../utils/errors.js';
-import type { AgentConfig, AgentEvent, ContextClearedEvent, TokenUsage } from '../agent/types.js';
+import type { AgentConfig, AgentEvent, ContextClearedEvent, TokenUsage, ToolSelectionEvent } from '../agent/types.js';
 import { createRunContext, type RunContext } from './run-context.js';
 import { AgentToolExecutor } from './tool-executor.js';
 import { logger } from '../utils/logger.js';
@@ -21,8 +21,11 @@ import { getLocalTokenCounter, localPromptBudget } from '../model/providers/tran
 import {
   CORE_TOOLS,
   LOCAL_TOOL_SELECTION_KEY,
+  growSelection,
+  rankToolsForText,
   selectTools,
   shouldSelectTools,
+  toolsNamedIn,
   type ToolCandidate,
   type ToolSelection,
 } from './tool-selection.js';
@@ -74,6 +77,8 @@ interface LocalCall {
   systemPrompt: string;
   tools: ToolDef[];
   toolIndex: string[];
+  /** Set when the tools or skills differ from the last call's. */
+  event?: ToolSelectionEvent;
 }
 
 /**
@@ -206,6 +211,7 @@ export class Agent {
           // budget (history or tool results, selected tools, index).
           const localCall = local ? this.planLocalCall(local, ctx, query, inMemoryHistory) : undefined;
           shownTools = localCall ? new Set(localCall.tools.map((t) => t.name)) : undefined;
+          if (localCall?.event) yield localCall.event;
           const result = await this.callModel(localCall?.prompt ?? currentPrompt, ctx, true, localCall);
           response = result.response;
           usage = result.usage;
@@ -296,6 +302,14 @@ export class Agent {
       const calledNow = toolRecords.slice(recordsBefore).map(t => t.tool);
       inMemoryHistory?.recordToolsUsed(calledNow);
 
+      // Local models: the selected set only grows (R5) — called tools, the
+      // tools that usually come next, and tools a skill's instructions need.
+      if (local) {
+        calledNow.forEach((t) => local.called.add(t));
+        const skillTools = await this.skillTools(local, toolRecords.slice(recordsBefore));
+        local.selection = growSelection(local.selection, { called: calledNow, skillTools }, local.candidates).selection;
+      }
+
       yield* this.manageContextThreshold(ctx);
 
       // Build iteration prompt with full tool results (Anthropic-style)
@@ -380,13 +394,6 @@ export class Agent {
       buildSystemPrompt(this.model, parts.soulContent, { skillSelection: [] }),
     ]);
     const hardBudget = localPromptBudget(this.model);
-    logger.debug(`Local tool selection`, {
-      tools: selection.tools,
-      skills: selection.skills,
-      reasons: selection.reasons,
-      fallback: selection.fallback,
-      schemaTokens: selection.tokens.tools,
-    });
     return {
       selection,
       candidates,
@@ -398,6 +405,23 @@ export class Agent {
       called: new Set(),
       lastEmitted: null,
     };
+  }
+
+  /**
+   * Tools the instructions of skills invoked this iteration call for: those
+   * they name, plus the top 3 by embedding (only a few SKILL.md files name
+   * their tools).
+   */
+  private async skillTools(local: LocalRun, records: Array<{ tool: string; result: string }>): Promise<string[]> {
+    const names = local.candidates.map((c) => c.name);
+    const out: string[] = [];
+    for (const r of records) {
+      if (r.tool !== 'skill' || r.result.startsWith('Error')) continue;
+      out.push(...toolsNamedIn(r.result, names));
+      const exclude = new Set([...local.selection.tools, ...out]);
+      out.push(...(await rankToolsForText(r.result.slice(0, 2000), local.candidates, withEmbedTimeout(getCardEmbedder()), 3, exclude)));
+    }
+    return out;
   }
 
   /** Plan one local call: first call carries chat history, later calls the tool results. */
@@ -429,7 +453,27 @@ export class Agent {
           }),
     });
     if (plan.trimmed.length > 0) logger.debug(`Local prompt trimmed`, { trimmed: plan.trimmed, tokens: plan.tokens });
-    return { prompt: plan.userPrompt, systemPrompt: plan.systemPrompt, tools: plan.tools, toolIndex: plan.toolIndex };
+
+    const tools = plan.tools.map((t) => t.name);
+    const skills = plan.systemPrompt === local.system ? local.selection.skills : [];
+    const key = `${tools.join(',')}|${skills.join(',')}`;
+    let event: ToolSelectionEvent | undefined;
+    if (key !== local.lastEmitted) {
+      local.lastEmitted = key;
+      const { budget, template: _template, ...tokens } = plan.tokens;
+      event = {
+        type: 'tool_selection',
+        tools,
+        indexed: plan.toolIndex,
+        skills,
+        reasons: Object.fromEntries([...tools, ...skills].map((n) => [n, local.selection.reasons[n] ?? ''])),
+        fallback: local.selection.fallback,
+        tokens: { ...tokens, budget },
+        trimmed: plan.trimmed,
+      };
+      logger.debug(`Local tool selection`, { ...event });
+    }
+    return { prompt: plan.userPrompt, systemPrompt: plan.systemPrompt, tools: plan.tools, toolIndex: plan.toolIndex, event };
   }
 
   /**

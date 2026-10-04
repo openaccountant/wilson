@@ -4,6 +4,7 @@ import {
   CORE_TOOLS,
   SELECTION_DEFAULTS,
   growSelection,
+  rankToolsForText,
   selectTools,
   selectionTexts,
   shouldSelectTools,
@@ -330,6 +331,16 @@ describe('growSelection', () => {
     const { selection, added } = growSelection(sel, { called: ['spending_summary'] }, REGISTRY);
     expect(added).toEqual([]);
     expect(selection.tools).toEqual(sel.tools);
+  });
+
+  test('skill instructions are ranked against the cards; failures give nothing', async () => {
+    const embed = createFakeEmbedder().embed;
+    const top = await rankToolsForText('refresh linked banks then remove duplicates', REGISTRY, embed, 2, new Set(['transaction_search']));
+    expect(top).toEqual(['plaid_sync', 'delete_transaction']);
+    const broken = async () => {
+      throw new Error('x');
+    };
+    expect(await rankToolsForText('anything', REGISTRY, broken, 3)).toEqual([]);
   });
 
   test('tool names mentioned in skill instructions are found', () => {

@@ -329,6 +329,39 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     }
   });
 
+  test('local model: the set grows during a run (called tool, affinities) and each change is reported', async () => {
+    const restore = stubLocalModel();
+    try {
+      adapterResponses = [
+        makeResponse('', [{ id: 'tc1', name: 'transaction_search', args: { query: 'netflix' } }]),
+        makeResponse('', [{ id: 'tc2', name: 'mortgage_manage', args: { action: 'summary' } }]),
+        makeResponse('done'),
+      ];
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 4, requestToolApproval: async () => 'allow-once' });
+      const events = await collectEvents(agent.run('import my bank statement from statement.csv'));
+      const sent = adapterCalls().map((c) => c.tools.map((t: { name: string }) => t.name) as string[]);
+      expect(sent).toHaveLength(3);
+      // After the search: edit/delete join (search → act).
+      expect(sent[0]).not.toContain('delete_transaction');
+      expect(sent[1]).toEqual(expect.arrayContaining(['edit_transaction', 'delete_transaction']));
+      // After calling an indexed tool: it joins; nothing seen earlier is removed.
+      expect(sent[2]).toContain('mortgage_manage');
+      for (const name of sent[0]) expect(sent[1]).toContain(name);
+      for (const name of sent[1]) expect(sent[2]).toContain(name);
+      expect(adapterCalls()[2].toolIndex).not.toContain('mortgage_manage');
+
+      const selections = events.filter((e) => e.type === 'tool_selection') as any[];
+      expect(selections).toHaveLength(3);
+      expect(selections[0].tools).toEqual(sent[0]);
+      expect(selections[1].reasons.delete_transaction).toBe('after transaction_search');
+      expect(selections[2].reasons.mortgage_manage).toBe('called');
+      expect(selections[0].tokens.budget).toBe(8192);
+      expect(selections[0].tokens.total).toBeLessThanOrEqual(8192);
+    } finally {
+      restore();
+    }
+  });
+
   test('local model: tools used in the last turns stay selected; the run records what it called', async () => {
     const restore = stubLocalModel();
     try {
