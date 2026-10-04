@@ -271,6 +271,7 @@ export class Agent {
       }
 
       // Execute tools and add results to scratchpad
+      const recordsBefore = ctx.scratchpad.getToolCallRecords().length;
       for await (const event of this.toolExecutor.executeAll(response, ctx, lastInteractionId ?? undefined, { shownTools })) {
         yield event;
         if (event.type === 'tool_denied') {
@@ -290,6 +291,10 @@ export class Agent {
       const toolRecords = ctx.scratchpad.getToolCallRecords();
       const lastTools = toolRecords.slice(-10).map(t => t.tool);
       logger.info(`Iteration ${ctx.iteration} completed`, { toolsCalled: lastTools, totalToolCalls: toolRecords.length });
+
+      // Remembered per turn so the next turn's local tool selection keeps them.
+      const calledNow = toolRecords.slice(recordsBefore).map(t => t.tool);
+      inMemoryHistory?.recordToolsUsed(calledNow);
 
       yield* this.manageContextThreshold(ctx);
 
@@ -366,6 +371,7 @@ export class Agent {
       prevQuery: prevQuery ? stripInjectedContext(prevQuery) : null,
       tools: candidates,
       skills,
+      stickyTools: history?.getRecentToolsUsed(2) ?? [],
       embed: withEmbedTimeout(getCardEmbedder()),
     });
 

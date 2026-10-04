@@ -21,6 +21,8 @@ export interface Message {
   query: string;
   answer: string | null;   // null until answer completes
   summary: string | null;  // LLM-generated summary, null until answer arrives
+  /** Tools the agent called while answering (in-memory only; local tool selection keeps them in). */
+  toolsUsed?: string[];
 }
 
 /**
@@ -196,6 +198,29 @@ Generate a brief 1-2 sentence summary of this answer.`;
       }
       this.lastDbId = null;
     }
+  }
+
+  /**
+   * Record tools the agent called for the turn in flight (the latest query
+   * without an answer yet). No pending turn = no-op.
+   */
+  recordToolsUsed(tools: readonly string[]): void {
+    const lastMessage = this.messages[this.messages.length - 1];
+    if (!lastMessage || lastMessage.answer !== null || tools.length === 0) return;
+    const used = (lastMessage.toolsUsed ??= []);
+    for (const tool of tools) if (!used.includes(tool)) used.push(tool);
+  }
+
+  /**
+   * Tools used in the last `turns` completed turns, oldest first, without
+   * duplicates — "now delete it" keeps the previous turn's search/edit tools.
+   */
+  getRecentToolsUsed(turns: number = 2): string[] {
+    if (turns <= 0) return [];
+    const recent = this.messages.filter((m) => m.answer !== null).slice(-turns);
+    const out: string[] = [];
+    for (const m of recent) for (const tool of m.toolsUsed ?? []) if (!out.includes(tool)) out.push(tool);
+    return out;
   }
 
   /**

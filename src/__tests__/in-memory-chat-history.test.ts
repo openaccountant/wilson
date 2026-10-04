@@ -334,6 +334,35 @@ describe('InMemoryChatHistory selectRelevantMessages', () => {
     expect(result).toEqual([]);
   });
 
+  test('tools used are recorded on the pending turn and read back for the last N completed turns', async () => {
+    history.saveUserQuery('q1');
+    history.recordToolsUsed(['csv_import']);
+    await history.saveAnswer('a1');
+    history.saveUserQuery('q2');
+    history.recordToolsUsed(['transaction_search']);
+    history.recordToolsUsed(['edit_transaction', 'transaction_search']);
+    await history.saveAnswer('a2');
+    history.saveUserQuery('q3');
+    history.recordToolsUsed(['tax_flag']);
+    await history.saveAnswer('a3');
+
+    expect(history.getRecentToolsUsed(2)).toEqual(['transaction_search', 'edit_transaction', 'tax_flag']);
+    expect(history.getRecentToolsUsed(3)).toContain('csv_import');
+
+    // The turn in flight does not count, and a completed turn takes no more.
+    history.saveUserQuery('q4');
+    history.recordToolsUsed(['net_worth']);
+    expect(history.getRecentToolsUsed(1)).toEqual(['tax_flag']);
+  });
+
+  test('recording with no pending turn is a no-op', async () => {
+    history.recordToolsUsed(['csv_import']);
+    history.saveUserQuery('q');
+    await history.saveAnswer('a');
+    history.recordToolsUsed(['csv_import']);
+    expect(history.getRecentToolsUsed(2)).toEqual([]);
+  });
+
   test('setSessionId and getSessionId', () => {
     expect(history.getSessionId()).toBeNull();
     history.setSessionId('custom-id-123');

@@ -329,6 +329,29 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     }
   });
 
+  test('local model: tools used in the last turns stay selected; the run records what it called', async () => {
+    const restore = stubLocalModel();
+    try {
+      const history = new InMemoryChatHistory(LOCAL_MODEL);
+      history.saveUserQuery('hello there');
+      history.recordToolsUsed(['mortgage_manage']);
+      await history.saveAnswer('Hi.');
+      history.saveUserQuery('and then?');
+      mockAdapterCall.mockClear();
+      adapterResponses = [
+        makeResponse('', [{ id: 'tc1', name: 'spending_summary', args: {} }]),
+        makeResponse('done'),
+      ];
+      adapterCallCount = 0;
+      const agent = await Agent.create({ model: LOCAL_MODEL, maxIterations: 3 });
+      await collectEvents(agent.run('and then?', history));
+      expect(adapterCalls()[0].tools.map((t: { name: string }) => t.name)).toContain('mortgage_manage');
+      expect(history.getMessages().at(-1)!.toolsUsed).toEqual(['spending_summary']);
+    } finally {
+      restore();
+    }
+  });
+
   test('local model: long chat history is trimmed to the budget instead of failing', async () => {
     const restore = stubLocalModel();
     try {
