@@ -28,7 +28,8 @@ MODEL="ollama:gemma4:12b"
 cd "$REPO"
 
 say() { printf '[run-beat] %s\n' "$*"; }
-die() { printf '[run-beat] FAILED: %s\n' "$*" >&2; exit 1; }
+FAIL_REASON=""
+die() { FAIL_REASON="$*"; printf '[run-beat] FAILED: %s\n' "$*" >&2; exit 1; }
 
 # ---------- preflight ----------
 for t in node bun ffmpeg ffprobe curl lsof; do command -v "$t" >/dev/null || die "$t not found on PATH"; done
@@ -52,19 +53,34 @@ if [[ -z "$TAKE" ]]; then
 fi
 [[ "$TAKE" =~ ^[0-9]+$ ]] || die "--take must be a number"
 TAKE_DIR="$BEAT_ROOT/take$TAKE"
-[[ -e "$TAKE_DIR" ]] && die "$TAKE_DIR already exists (pick another --take; takes are never overwritten)"
+if [[ -e "$TAKE_DIR" ]]; then
+  # A take that FAILED (marker written by this script) is evidence, not a result: it is moved aside, never deleted,
+  # so the same --take number can be retried. Anything else is never touched.
+  if [[ -f "$TAKE_DIR/FAILED" ]]; then
+    ASIDE="$TAKE_DIR.failed-$(date +%s)"; mv "$TAKE_DIR" "$ASIDE" && say "previous failed take moved to $ASIDE"
+  else
+    die "$TAKE_DIR already exists and is not a failed take (pick another --take; takes are never overwritten)"
+  fi
+fi
 mkdir -p "$TAKE_DIR"
 say "beat $BEAT take $TAKE -> $TAKE_DIR"
 
 # ---------- always stop the host ----------
 STOPPED=0
+SRC="$MEDIA/$NAME/$BEAT"
 cleanup() {
   local rc=$?
+  trap - EXIT
   if [[ $STOPPED -eq 0 ]]; then
     say "stopping host (cleanup)"
     node "$RIG/stop.mjs" --name "$NAME" || say "WARNING: stop.mjs reported a problem; check: lsof -iTCP:$DASH_PORT,$CDP_PORT,$CTL_PORT -sTCP:LISTEN"
   fi
-  [[ $rc -ne 0 ]] && say "FAILED (exit $rc). Partial files, if any: $TAKE_DIR  host log: $TAKE_DIR/host.log"
+  if [[ $rc -ne 0 ]]; then
+    # Keep the evidence IN the take dir: whatever the rig produced (partial video, events, human-error screenshot).
+    for f in "$SRC"/*; do [[ -f "$f" && ! -e "$TAKE_DIR/$(basename "$f")" ]] && cp "$f" "$TAKE_DIR/" 2>/dev/null; done
+    { echo "exit $rc"; echo "reason: ${FAIL_REASON:-interrupted or unexpected error}"; date -u +%FT%TZ; } > "$TAKE_DIR/FAILED"
+    say "FAILED (exit $rc). Evidence kept in $TAKE_DIR (host.log, actor.log/jsonl, partial video/events if recorded). Retry with the same --take $TAKE."
+  fi
   exit $rc
 }
 trap cleanup EXIT
@@ -95,7 +111,7 @@ say "grants applied; starting the agent"
 node "$RIG/actor.mjs" --beat "$BEAT" --take-dir "$TAKE_DIR" --cdp-port $CDP_PORT --session s
 ACTOR_RC=$?
 if [[ $ACTOR_RC -ne 0 ]]; then
-  case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; *) W="claude failed or reported an error";; esac
+  case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; 5) W="actor ran a command outside the allowed set (policy violation)";; *) W="claude failed or reported an error";; esac
   die "$W (exit $ACTOR_RC). See $TAKE_DIR/actor.log and actor.jsonl"
 fi
 "${CTL[@]}" wait beat-end 180000 >/dev/null || {
@@ -107,7 +123,6 @@ fi
 node "$RIG/stop.mjs" --name "$NAME"; STOPRC=$?
 STOPPED=1
 [[ $STOPRC -eq 0 ]] || die "stop.mjs failed"
-SRC="$MEDIA/$NAME/$BEAT"
 for f in video.mp4 events.json; do [[ -s "$SRC/$f" ]] || die "missing $SRC/$f after stop"; cp "$SRC/$f" "$TAKE_DIR/$f"; done
 node "$RIG/keyframes.mjs" --beat "$BEAT" --name "$NAME" --out "$TAKE_DIR/frames" >/dev/null || die "keyframes failed"
 FRAMES=$(ls "$TAKE_DIR/frames" | wc -l | tr -d ' ')

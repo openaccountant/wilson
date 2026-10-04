@@ -6,13 +6,15 @@
 //                            [--timeout-s 600] [--claude claude]
 //
 // The HARNESS writes <take-dir>/actor.log (from the stream) and <take-dir>/actor.jsonl (raw stream-json).
-// Exit codes: 0 finished, 2 setup problem, 3 timeout, 4 claude failed or reported an error.
+// actor.jsonl is the raw stream-json, one event per line, plus a harness receipt time in `_rx` on each line.
+// Exit codes: 0 finished, 2 setup problem, 3 timeout, 4 claude failed or reported an error,
+//             5 policy violation (the stream contains a command outside the allowed set).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { parseArgs, safeSegment, assertScratch, RIG_DIR } from './lib/common.mjs';
-import { resolveAgentBrowser, agentBrowserEnv, allowedBashPattern, SYSTEM_CHROME } from './lib/agent-browser.mjs';
-import { createFormatter } from './lib/actor-log.mjs';
+import { resolveAgentBrowser, agentBrowserEnv, allowedBashPatterns, SYSTEM_CHROME } from './lib/agent-browser.mjs';
+import { createFormatter, auditEvents, parseJsonl } from './lib/actor-log.mjs';
 
 const die = (code, msg) => { console.error(`[actor] ${msg}`); process.exit(code); };
 const { flags } = parseArgs(process.argv.slice(2));
@@ -38,13 +40,16 @@ const logFile = path.join(takeDir, 'actor.log');
 const jsonlFile = path.join(takeDir, 'actor.jsonl');
 fs.writeFileSync(logFile, '');
 fs.writeFileSync(jsonlFile, '');
+// What build.mjs needs to replay and re-audit the stream.
+fs.writeFileSync(path.join(takeDir, 'actor-meta.json'), JSON.stringify({ bin: ab.bin, cdpPort, session, beat, model }, null, 2));
 
-// Only Bash exists as a tool, and only the vendored agent-browser (exact path prefix, our port and session) is allowed.
+// Only Bash exists as a tool, and only these vendored agent-browser subcommands (exact path prefix, our port and session):
+// webmcp list|invoke|result, snapshot, get url. Not close, eval, click, fill, screenshot, state save, open, --cdp retargeting.
 // No --dangerously-skip-permissions: anything else is denied in headless mode.
 const args = [
   '-p', '--model', model, '--output-format', 'stream-json', '--verbose',
   '--tools', 'Bash',
-  '--allowedTools', allowedBashPattern(ab.bin, cdpPort, session),
+  '--allowedTools', ...allowedBashPatterns(ab.bin, cdpPort, session),
   '--permission-mode', 'default',
   '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
   '--setting-sources', 'project',
@@ -61,10 +66,11 @@ let buf = '';
 let resultEv = null;
 const handleLine = (line) => {
   if (!line.trim()) return;
-  fs.appendFileSync(jsonlFile, line + '\n');
-  let ev; try { ev = JSON.parse(line); } catch { return; }
+  const now = new Date();
+  let ev; try { ev = JSON.parse(line); } catch { fs.appendFileSync(jsonlFile, JSON.stringify({ type: 'unparsed', _rx: now.toISOString(), raw: line.slice(0, 2000) }) + '\n'); return; }
+  fs.appendFileSync(jsonlFile, JSON.stringify({ ...ev, _rx: now.toISOString() }) + '\n');
   if (ev.type === 'result') resultEv = ev;
-  const lines = fmt.feed(ev, new Date());
+  const lines = fmt.feed(ev, now);
   if (lines.length) fs.appendFileSync(logFile, lines.join('\n') + '\n');
 };
 child.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { handleLine(buf.slice(0, i)); buf = buf.slice(i + 1); } });
@@ -74,6 +80,11 @@ child.on('error', (e) => die(2, `could not start ${claudeBin}: ${e.message}`));
 child.on('close', (code, sig) => {
   clearTimeout(timer);
   if (buf.trim()) handleLine(buf);
+  const violations = auditEvents(parseJsonl(fs.readFileSync(jsonlFile, 'utf8')), ab.bin, cdpPort, session);
+  if (violations.length) {
+    fs.appendFileSync(logFile, `[POLICY] ${violations.length} command(s) outside the allowed set\n`);
+    die(5, `policy violation: ${violations.map((v) => `${JSON.stringify(v.command.slice(0, 200))} (${v.reason})`).join('; ')}`);
+  }
   if (timedOut) { fs.appendFileSync(logFile, `[SUMMARY] (actor timed out after ${timeoutS}s)\n`); die(3, `timed out after ${timeoutS}s`); }
   if (code !== 0 || !resultEv || resultEv.is_error) {
     if (stderr.trim()) console.error(stderr.trim().slice(0, 2000));

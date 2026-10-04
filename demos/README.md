@@ -148,20 +148,40 @@ the host (verified pid-file kill) on any failure.
 Output, never committed: `/private/tmp/claude-501/wilson-demos/<beat>/take<N>/` with `video.mp4`, `events.json`,
 `actor.log`, `actor.jsonl` (raw stream-json), `host.log`, `frames/`, `cut.mp4`. Existing takes are never overwritten.
 
-The agent: `rig/actor.mjs` runs `claude -p --output-format stream-json --verbose` with `--tools Bash` and
-`--allowedTools` limited to the exact absolute path of the vendored agent-browser with `--cdp <port> --session s`;
-no `--dangerously-skip-permissions`, cwd is an empty directory inside the take. The brief is
-`rig/beats/<beat>.brief.md`. The harness (not the model) writes `actor.log` and a final `[SUMMARY]` line from the
-stream. Compose copy lives in `compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all
-timing from `events.json` and the actor log.
+The agent: `rig/actor.mjs` runs `claude -p --output-format stream-json --verbose` with `--tools Bash` and five narrow
+`--allowedTools` patterns, each the exact absolute path of the vendored agent-browser with `--cdp <port> --session s`
+plus one subcommand: `webmcp list`, `webmcp invoke`, `webmcp result`, `snapshot`, `get url`. `close`, `eval`, `click`,
+`fill`, `screenshot`, `state save`, `open` and a re-targeted `--cdp` are not allowed (so the model cannot press Approve
+on its own card). No `--dangerously-skip-permissions`; cwd is an empty directory inside the take. The brief is
+`rig/beats/<beat>.brief.md`. After the run the harness audits `actor.jsonl` and fails the take (actor exit 5, and again
+in the HyperFrames build) if any tool use falls outside that set, including a command that was attempted and denied.
 
-What varies between takes: which reads the agent runs, which row it proposes and the category it picks (the Kiln row
-is the human script's explicit target, so a take where the agent proposes anything else fails by design rather than being
-approved), how long gemma takes to categorize, and the Approve timing. The cut's captions are filled from the take's
-own data (`{category}`, `{id}`).
+Transcript integrity: the harness (not the model) writes `actor.jsonl` (raw stream-json plus a harness receipt time `_rx`
+per line) and `actor.log`, a readable view (commands collapsed to one line, every tool-output line indented, so model-
+or page-controlled text cannot forge a command or `[SUMMARY]` line). The cut does not parse `actor.log`; `build.mjs`
+replays `actor.jsonl` through `rig/lib/actor-log.mjs` and renders structured entries. Compose copy lives in
+`compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all timing from `events.json` and
+the receipt times.
 
-How failures surface (non-zero exit, a `[run-beat] FAILED: ...` line, files left in the take dir):
-preflight problems name the missing piece; host failure shows `host.log`; the actor exits 2 (setup), 3 (timeout,
-default 600 s) or 4 (claude error); the beat not ending means the human script rejected what the agent proposed or hit a
-precondition (see `human-script-error` in `events.json` and `host.log`); a take where the agent never proposes a change
-fails in the HyperFrames build with "no mutating proposal". Re-run with the next `--take`.
+What varies between takes: which reads the agent runs, which rows it proposes and the categories it picks, how long
+gemma takes to categorize, and the Approve timing. The cut's captions are filled from the take's own data
+(`{category}`, `{id}`).
+
+**Most takes can still fail, and that is by design.** The agent is a real LLM choosing its own actions and the human on
+camera is a script that only approves the explicit target (`SQ *KILN & CO STUDIO`, -$240.00, Uncategorized to a real
+category). The brief steers the agent (read September, biggest uncategorized expense first) but cannot force it. Any
+other change card is rejected on camera and never approved; the human then waits up to 150 s for a proposal for the
+target. If the agent never proposes it (it finishes, or proposes only other rows), the human script errors and the take
+fails with the reason in `events.json` (`human-script-error`). Other known failure causes: the agent's first reads
+return nothing and it spends time re-querying (the brief now says September and lists the search semantics), a
+proposal that times out because the human is gone, gemma leaving the target categorized. Expect to run a few takes
+and keep the good one; do not expect every take to produce a cut.
+
+How failures surface (non-zero exit, a `[run-beat] FAILED: ...` line): preflight problems name the missing piece; host
+failure shows `host.log`; the actor exits 2 (setup), 3 (timeout, default 600 s), 4 (claude error) or 5 (policy
+violation); the beat not ending means the human script errored (see `human-script-error` in `events.json`, `host.log`);
+a take with no mutating proposal fails in the HyperFrames build. On ANY failure the take dir keeps the evidence
+(`host.log`, `actor.log`/`actor.jsonl`, and the partial `video.mp4`/`video.webm`, `events.json`, `human-error.png` when
+the rig produced them) plus a `FAILED` file with the exit code and reason. A failed take dir is moved aside to
+`take<N>.failed-<epoch>` if you re-run with the same `--take N`; a take dir without a `FAILED` marker is never
+overwritten.

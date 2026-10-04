@@ -190,11 +190,18 @@ export async function humanScript(page, ctx) {
     const btn = card.getByRole('button', { name: /Reject|Don't allow/ });
     await h.click(btn, { pause: 300 });
     log('reject-clicked', { index: i, reason });
-    throw new Error(`refusing to approve an unexpected card: ${reason} | card text: ${String(extra.text ?? '').slice(0, 500)}`);
+    rejectedOther++;
+    await h.pause(1500);
   };
+  // The agent chooses its own proposals. A card that is not the target change is rejected (never approved) and the
+  // human keeps waiting for the agent's next proposal; only a take with no resolved target card fails.
+  let rejectedOther = 0;
   for (let i = 0; i < 8; i++) {
     const card = page.locator(CARD).first();
-    await card.waitFor({ timeout: 10 * 60_000 });
+    await card.waitFor({ timeout: rejectedOther ? 150_000 : 10 * 60_000 }).catch((e) => {
+      if (rejectedOther) throw new Error(`the agent proposed ${rejectedOther} other change(s), which were rejected, and then never proposed the target ${TARGET.description}: ${e.message}`);
+      throw e;
+    });
     await h.pause(1800); // the card arms after 800 ms; give a viewer time to read it
     const text = await readCard(card);
     const heading = headingOf(text);
@@ -204,7 +211,7 @@ export async function humanScript(page, ctx) {
     await h.moveTo(card, { settle: 2200 });
     if (isRead) {
       // A read card is allowed only for a tool we granted that is read-only.
-      if (!READ_TOOLS.has(tool)) await reject(card, i, `read card for unexpected tool ${JSON.stringify(tool)}`, { text });
+      if (!READ_TOOLS.has(tool)) { await reject(card, i, `read card for unexpected tool ${JSON.stringify(tool)}`, { text }); continue; }
       log('card-checked', { index: i, tool, kind: 'read', problems: [] });
       const allow = card.getByRole('button', { name: /Hold to allow/ });
       await allow.waitFor({ timeout: 10000 });
@@ -216,7 +223,7 @@ export async function humanScript(page, ctx) {
     }
     const check = await checkChangeCard(card);
     log('card-checked', { index: i, tool: check.tool, kind: 'change', rows: check.rows, problems: check.problems });
-    if (check.problems.length) await reject(card, i, check.problems.join('; '), { text: check.text });
+    if (check.problems.length) { await reject(card, i, check.problems.join('; '), { text: check.text }); continue; }
     chosenCategory = check.rows.find((r) => /^categor/i.test(r[0] ?? ''))?.[2] ?? null;
 
     if (decision === 'deny') {
@@ -240,7 +247,7 @@ export async function humanScript(page, ctx) {
     }
     break;
   }
-  if (chosenCategory === null) throw new Error('no change card was resolved');
+  if (chosenCategory === null) throw new Error(`no change card for the target was resolved (${rejectedOther} other card(s) rejected)`);
 
   // 4. The ledger after: switch away and back so the Transactions tab refetches, then show the row.
   await h.pause(2600);

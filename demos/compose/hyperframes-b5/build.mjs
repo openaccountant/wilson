@@ -1,15 +1,23 @@
 // Generates index.html from a take's REAL event log + actor transcript + video, and a per-beat config.
 //   node build.mjs --take /private/tmp/claude-501/wilson-demos/<beat>/take<N> [--config ../beats/<beat>.json]
-// Timing is derived from events.json keys and actor.log wall clocks; copy and callouts come from the config.
+// Timing is derived from events.json keys and the harness receipt times in actor.jsonl; copy and callouts come from the config.
+// The transcript is rendered from the STRUCTURED actor.jsonl (replayed through rig/lib/actor-log.mjs), never parsed from
+// actor.log text, so model- or page-controlled text cannot forge a command or SUMMARY row. The stream is also re-audited
+// against the allowed command set: a take containing any other command is refused.
 import fs from "node:fs";
 import path from "node:path";
+import { auditEvents, parseJsonl, transcriptFromEvents } from "../../rig/lib/actor-log.mjs";
 const arg = (k) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : undefined; };
 const takeDir = arg("take");
 if (!takeDir) { console.error("usage: node build.mjs --take <take dir> [--config <beat json>]"); process.exit(2); }
 const ev = JSON.parse(fs.readFileSync(path.join(takeDir, "events.json"), "utf8"));
 const cfgPath = arg("config") ?? path.join(path.dirname(new URL(import.meta.url).pathname), "..", "beats", ev.beat + ".json");
 const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
-const log = fs.readFileSync(path.join(takeDir, "actor.log"), "utf8").split("\n");
+const meta = JSON.parse(fs.readFileSync(path.join(takeDir, "actor-meta.json"), "utf8"));
+const stream = parseJsonl(fs.readFileSync(path.join(takeDir, "actor.jsonl"), "utf8"));
+const violations = auditEvents(stream, meta.bin, meta.cdpPort, meta.session);
+if (violations.length) throw new Error("take refused: actor ran commands outside the allowed set: " + violations.map((v) => JSON.stringify(v.command.slice(0, 160)) + " (" + v.reason + ")").join("; "));
+const transcript = transcriptFromEvents(stream, meta);
 fs.mkdirSync("assets", { recursive: true });
 fs.copyFileSync(path.join(takeDir, "video.mp4"), "assets/take.mp4");
 const VIDEO = "assets/take.mp4";
@@ -17,19 +25,23 @@ const VIDEO = "assets/take.mp4";
 const hasE = (n) => ev.events.some((e) => e.name === n && e.t_ms != null);
 // card-shown / card-resolved also fire for read cards; the beat's anchors mean the CHANGE card.
 const pick = { "card-shown": (x) => x.change, "card-resolved": (x) => x.decision };
-const E = (n) => { const e = ev.events.find((x) => x.name === n && x.t_ms != null && (!pick[n] || pick[n](x))); if (!e) throw new Error(`event ${n} missing from ${takeDir}/events.json`); return e.t_ms / 1000; };
+// The agent may propose more than one change; the human rejects non-target cards. The beat's anchors mean the cards that
+// led to the resolved decision: the LAST change card shown before it.
+const resolvedMs = ev.events.find((x) => x.name === "card-resolved" && x.decision && x.t_ms != null)?.t_ms ?? Infinity;
+const lastShown = ev.events.filter((x) => x.name === "card-shown" && x.change && x.t_ms != null && x.t_ms <= resolvedMs).at(-1);
+const E = (n) => { if (n === "card-shown" && lastShown) return lastShown.t_ms / 1000; const e = ev.events.find((x) => x.name === n && x.t_ms != null && (!pick[n] || pick[n](x))); if (!e) throw new Error(`event ${n} missing from ${takeDir}/events.json`); return e.t_ms / 1000; };
 const rec0 = Date.parse(ev.recordingStartedAt);
 const day = ev.recordingStartedAt.slice(0, 10);
 const logT = (hms) => (Date.parse(day + "T" + hms + "Z") - rec0) / 1000; // 1s resolution
 const decision = ev.events.find((e) => e.name === "card-resolved" && e.decision)?.decision ?? (hasE("approve-pressed") ? "approve" : "deny");
 
-// ---- agent commands from the transcript ----
-const cmdRe = /^\[(\d\d:\d\d:\d\d)\] \$ (.*)$/;
-const cmds = []; // {i, ts, src, cmd}
-log.forEach((l, i) => { const m = l.match(cmdRe); if (m) cmds.push({ i, ts: m[1], src: logT(m[1]), cmd: m[2] }); });
+// ---- agent commands from the transcript (structured entries) ----
+const cmds = transcript.entries.map((e, i) => ({ i, ts: e.ts, src: logT(e.ts), cmd: e.cmd, out: e.out }));
+const resolvedSrc = resolvedMs / 1000;
 const proposals = cmds.filter((c) => /webmcp invoke \w+ .*--detach/.test(c.cmd));
-const firstProposal = proposals[0];
-if (!firstProposal) throw new Error("no mutating (--detach) proposal in actor.log; the agent did not propose a change in this take");
+// the proposal the human resolved: the last --detach invoke at or before the resolution (1 s clock resolution)
+const firstProposal = proposals.filter((c) => c.src <= resolvedSrc + 1).at(-1) ?? proposals[0];
+if (!firstProposal) throw new Error("no mutating (--detach) proposal in actor.jsonl; the agent did not propose a change in this take");
 const propJson = /--params\s+'?(\{.*\})'?/.exec(firstProposal.cmd)?.[1];
 let propArgs = {}; try { propArgs = JSON.parse(propJson); } catch {}
 const beforeProp = cmds.filter((c) => c.src < firstProposal.src && /webmcp (list|invoke)/.test(c.cmd));
@@ -64,21 +76,20 @@ const toCompOrCut = (src) => { // source time in a cut -> the start of the segme
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const rows = []; // {src, ...}
 const keep = (cmd) => /webmcp (list|invoke|result)/.test(cmd);
-const isHead = (l) => cmdRe.test(l) || l.startsWith("[SUMMARY]");
 for (const c of cmds) {
   if (!keep(c.cmd)) continue;
   rows.push({ src: c.src, ts: c.ts, cmd: c.cmd });
-  const out = []; for (let k = c.i + 1; k < log.length && !isHead(log[k]); k++) out.push(log[k]);
+  const out = c.out;
   if (/--detach/.test(c.cmd) && /: pending$/.test(out[0] ?? "")) rows.push({ src: c.src, out: out[0], kind: "pending" });
   if (/webmcp result /.test(c.cmd)) {
     if (/: completed$/.test(out[0] ?? "")) { // result blocks until the card resolves
-      rows.push({ src: T.resolved, out: out[0], kind: "done" });
-      if (out.length > 1) rows.push({ src: T.resolved + 0.1, out: out.slice(1).join("\n"), kind: "json" });
+      const doneAt = c.src >= firstProposal.src ? Math.max(c.src, T.resolved) : c.src;
+      rows.push({ src: doneAt, out: out[0], kind: "done" });
+      if (out.length > 1) rows.push({ src: doneAt + 0.1, out: out.slice(1).join("\n"), kind: "json" });
     } else if (out[0]) rows.push({ src: c.src, out: out[0], kind: "pending" });
   }
 }
-const summary = log.find((l) => l.startsWith("[SUMMARY]"));
-if (summary) rows.push({ src: T.resolved + 1.2, out: summary, kind: "summary" });
+if (transcript.summary) rows.push({ src: T.resolved + 1.2, out: "[SUMMARY] " + transcript.summary, kind: "summary" });
 
 const rowHtml = rows.map((r, i) => {
   let inner;
@@ -173,7 +184,7 @@ ${coHtml}
 ${cutHtml}
   </div>
   <div id="dlabel" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">Dashboard &middot; screen recording</div>
-  <div id="tlabel" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">Actor transcript, verbatim (actor.log)</div>
+  <div id="tlabel" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">Actor transcript, verbatim (actor.jsonl)</div>
   <div id="term" data-layout-allow-overflow data-layout-allow-occlusion class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">
     <div id="tbar"><i></i><i></i><i></i><span>${esc(cfg.terminalTitle)}</span></div>
     <div id="tbody" data-layout-allow-overflow data-layout-allow-occlusion>

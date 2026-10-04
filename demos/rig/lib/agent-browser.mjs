@@ -40,7 +40,14 @@ export function agentBrowserEnv(base = process.env, chrome = SYSTEM_CHROME) {
   return { ...base, AGENT_BROWSER_EXECUTABLE_PATH: chrome };
 }
 
-/** The exact Bash allow pattern the actor is restricted to. */
-export function allowedBashPattern(bin, cdpPort, session) {
-  return `Bash(${bin} --cdp ${cdpPort} --session ${session}:*)`;
+/** Subcommands the actor may run (WebMCP plus read-only snapshot/get url). Mirrors ALLOWED_SUBCOMMANDS in actor-log.mjs. */
+export const ALLOWED_SUBCOMMAND_PATTERNS = ['webmcp list', 'webmcp invoke', 'webmcp result', 'snapshot', 'get url'];
+
+/**
+ * The exact Bash allow patterns the actor is restricted to: one per allowed subcommand, each with the absolute-path
+ * prefix, our CDP port and session. `close`, `eval`, `click`, `fill`, `screenshot`, `state save`, `open` and any
+ * re-targeted --cdp are NOT covered, so headless mode denies them.
+ */
+export function allowedBashPatterns(bin, cdpPort, session) {
+  return ALLOWED_SUBCOMMAND_PATTERNS.map((sub) => `Bash(${bin} --cdp ${cdpPort} --session ${session} ${sub}:*)`);
 }
