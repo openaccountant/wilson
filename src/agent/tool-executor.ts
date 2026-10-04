@@ -15,6 +15,7 @@ import type { RunContext } from './run-context.js';
 import { logger } from '../utils/logger.js';
 import { interactionStore } from '../utils/interaction-store.js';
 import { isMutatingCall, sessionApprovalScope } from '../tools/mutation.js';
+import { compactToolSchema } from '../model/providers/transformers.js';
 
 type ToolExecutionEvent =
   | ToolStartEvent
@@ -42,10 +43,17 @@ export class AgentToolExecutor {
     this.sessionApprovedTools = sessionApprovedTools ?? new Set();
   }
 
+  /**
+   * @param options.shownTools - Local tool selection: the tools whose schema
+   *   the model saw. A call to any other registered tool whose arguments fail
+   *   its schema gets the schema back instead of running (design 2026-10-03
+   *   §5.4); omitted = every tool was shown (cloud models).
+   */
   async *executeAll(
     response: LlmResponse,
     ctx: RunContext,
     parentInteractionId?: number,
+    options: { shownTools?: ReadonlySet<string> } = {},
   ): AsyncGenerator<ToolExecutionEvent, void> {
     for (const toolCall of response.toolCalls) {
       const toolName = toolCall.name;
@@ -57,7 +65,7 @@ export class AgentToolExecutor {
         if (ctx.scratchpad.hasExecutedSkill(skillName)) continue;
       }
 
-      yield* this.executeSingle(toolName, toolArgs, toolCall.id, ctx, parentInteractionId);
+      yield* this.executeSingle(toolName, toolArgs, toolCall.id, ctx, parentInteractionId, options.shownTools);
     }
   }
 
@@ -67,8 +75,24 @@ export class AgentToolExecutor {
     toolCallId: string,
     ctx: RunContext,
     parentInteractionId?: number,
+    shownTools?: ReadonlySet<string>,
   ): AsyncGenerator<ToolExecutionEvent, void> {
     const toolQuery = this.extractQueryFromArgs(toolArgs);
+
+    // A tool called from the names-only index with arguments that do not fit
+    // its schema: answer with the schema so the model can call it again. It
+    // never runs, so there is nothing to approve yet — a corrected call goes
+    // through the approval gate below like any other.
+    const unshown = shownTools && !shownTools.has(toolName) ? this.toolMap.get(toolName) : undefined;
+    if (unshown && !unshown.schema.safeParse(toolArgs).success) {
+      const message = `Tool ${toolName} needs these arguments: ${JSON.stringify(compactToolSchema(unshown).parameters)}. Call it again.`;
+      logger.info(`Tool schema returned: ${toolName}`, { tool: toolName });
+      yield { type: 'tool_start', tool: toolName, args: toolArgs };
+      yield { type: 'tool_error', tool: toolName, error: message };
+      ctx.scratchpad.recordToolCall(toolName, toolQuery);
+      ctx.scratchpad.addToolResult(toolName, toolArgs, message);
+      return;
+    }
 
     // Every call that writes (DB, files, external services) needs the user's
     // approval before it runs (#152). Which calls write is declared next to

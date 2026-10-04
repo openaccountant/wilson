@@ -220,6 +220,81 @@ describe('AgentToolExecutor', () => {
     expect(ctx.scratchpad.getToolResults()).toContain('Invalid arguments');
   });
 
+  describe('tools whose schema the model was not shown (local tool selection)', () => {
+    function mutatingEdit(onRun: () => void): ToolDef {
+      return defineTool({
+        name: 'edit_transaction',
+        description: 'Edit a transaction',
+        schema: z.object({ id: z.number(), category: z.string().optional() }),
+        mutates: true,
+        func: async () => {
+          onRun();
+          return 'edited';
+        },
+      });
+    }
+
+    test('bad args: the schema comes back with "call it again"; no approval asked, nothing runs', async () => {
+      let runs = 0;
+      let approvals = 0;
+      const toolMap = new Map<string, ToolDef>([['edit_transaction', mutatingEdit(() => runs++)]]);
+      const executor = new AgentToolExecutor(toolMap, undefined, async () => {
+        approvals++;
+        return 'allow-once';
+      });
+      const ctx = createRunContext('fix it');
+      const events = await collectEvents(
+        executor.executeAll(makeLlmResponse([{ id: 'tc1', name: 'edit_transaction', args: {} }]), ctx, undefined, {
+          shownTools: new Set(['transaction_search']),
+        }),
+      );
+      expect(runs).toBe(0);
+      expect(approvals).toBe(0);
+      const err = events.find((e) => e.type === 'tool_error') as any;
+      expect(err.error).toContain('Tool edit_transaction needs these arguments:');
+      expect(err.error).toContain('"id"');
+      expect(err.error).toContain('Call it again.');
+      expect(ctx.scratchpad.getToolResults()).toContain('needs these arguments');
+      expect(ctx.scratchpad.getToolCallRecords().map((r) => r.tool)).toEqual(['edit_transaction']);
+    });
+
+    test('valid args: approval (#152) is still asked before it runs', async () => {
+      let runs = 0;
+      const decisions: string[] = [];
+      const toolMap = new Map<string, ToolDef>([['edit_transaction', mutatingEdit(() => runs++)]]);
+      const executor = new AgentToolExecutor(toolMap, undefined, async (req) => {
+        decisions.push(req.tool);
+        return 'deny';
+      });
+      const ctx = createRunContext('fix it');
+      const events = await collectEvents(
+        executor.executeAll(makeLlmResponse([{ id: 'tc1', name: 'edit_transaction', args: { id: 3 } }]), ctx, undefined, {
+          shownTools: new Set(['transaction_search']),
+        }),
+      );
+      expect(decisions).toEqual(['edit_transaction']);
+      expect(runs).toBe(0);
+      expect(events.some((e) => e.type === 'tool_denied')).toBe(true);
+    });
+
+    test('a shown tool with bad args keeps today’s path (approval, then the schema guard)', async () => {
+      let approvals = 0;
+      const toolMap = new Map<string, ToolDef>([['edit_transaction', mutatingEdit(() => {})]]);
+      const executor = new AgentToolExecutor(toolMap, undefined, async () => {
+        approvals++;
+        return 'allow-once';
+      });
+      const ctx = createRunContext('fix it');
+      const events = await collectEvents(
+        executor.executeAll(makeLlmResponse([{ id: 'tc1', name: 'edit_transaction', args: {} }]), ctx, undefined, {
+          shownTools: new Set(['edit_transaction']),
+        }),
+      );
+      expect(approvals).toBe(1);
+      expect((events.find((e) => e.type === 'tool_error') as any).error).toContain("Invalid arguments for tool 'edit_transaction'");
+    });
+  });
+
   test('valid args execute normally through the schema guard', async () => {
     let funcCalls = 0;
     const tool = defineTool({

@@ -301,6 +301,34 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     }
   });
 
+  test('local model: an indexed tool called with bad args gets its schema back, unapproved and unrun', async () => {
+    const restore = stubLocalModel();
+    try {
+      adapterResponses = [
+        makeResponse('', [{ id: 'tc1', name: 'mortgage_manage', args: {} }]),
+        makeResponse('done'),
+      ];
+      let approvals = 0;
+      const agent = await Agent.create({
+        model: LOCAL_MODEL,
+        maxIterations: 3,
+        requestToolApproval: async () => {
+          approvals++;
+          return 'allow-once';
+        },
+      });
+      const events = await collectEvents(agent.run('import my bank statement from statement.csv'));
+      expect(adapterCalls()[0].toolIndex).toContain('mortgage_manage');
+      const err = events.find((e) => e.type === 'tool_error') as any;
+      expect(err.error).toContain('Tool mortgage_manage needs these arguments:');
+      expect(err.error).toContain('"action"');
+      expect(approvals).toBe(0);
+      expect((events.find((e) => e.type === 'done') as any).answer).toBe('done');
+    } finally {
+      restore();
+    }
+  });
+
   test('local model: long chat history is trimmed to the budget instead of failing', async () => {
     const restore = stubLocalModel();
     try {

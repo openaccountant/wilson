@@ -197,12 +197,15 @@ export class Agent {
       let response: LlmResponse;
       let usage: TokenUsage | undefined;
       let lastInteractionId: number | null | undefined;
+      // Local models: the tools whose schema this call showed (undefined = all).
+      let shownTools: ReadonlySet<string> | undefined;
 
       while (true) {
         try {
           // Local models: the planner assembles every call under the token
           // budget (history or tool results, selected tools, index).
           const localCall = local ? this.planLocalCall(local, ctx, query, inMemoryHistory) : undefined;
+          shownTools = localCall ? new Set(localCall.tools.map((t) => t.name)) : undefined;
           const result = await this.callModel(localCall?.prompt ?? currentPrompt, ctx, true, localCall);
           response = result.response;
           usage = result.usage;
@@ -268,7 +271,7 @@ export class Agent {
       }
 
       // Execute tools and add results to scratchpad
-      for await (const event of this.toolExecutor.executeAll(response, ctx, lastInteractionId ?? undefined)) {
+      for await (const event of this.toolExecutor.executeAll(response, ctx, lastInteractionId ?? undefined, { shownTools })) {
         yield event;
         if (event.type === 'tool_denied') {
           const totalTime = Date.now() - ctx.startTime;
