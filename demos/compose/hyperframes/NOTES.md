@@ -13,6 +13,31 @@ cd <out> && HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.8.123 render --qui
 The take's `video.mp4` is hard-linked (copied if that fails) into `<out>/assets/take.mp4`. Tests: `bun test src/__tests__/demo-cut-plan.test.ts
 src/__tests__/demo-cut-b10.test.ts` (the b10 test uses a hand-made fixture in `../fixtures/`, a config-parsing test only; it is never rendered).
 
+## Stage profile (footage only, for a live talk)
+
+```
+demos/compose/hyperframes/stage.sh --take <take dir> [--config <beat json>] [--publish <dir> --name <name>]
+```
+
+`build.mjs --profile stage` applies the beat's `profiles.stage` block (its keys replace the top-level ones), then renders footage only:
+no title card, transcript, captions, callouts or CUT/ZOOM badges. The 16:10 recording fills the 1080 px height of the 1920x1080 frame and
+zooms crop to the full 16:9 frame (`stageCrop` in plan.mjs), so a zoom shows footage edge to edge. A zoom that runs to the end of the cut
+stays in. One corner tag, `sourceTag` (default `real agent · take {take} · recorded {recordedOn}`): the take number comes from the take
+folder name and the date from `events.json` `recordingStartedAt`; while a ramp plays it adds `· <rate>× speed`. The default (web) profile
+renders exactly as before.
+
+`stage.sh` builds into `<take>/hf-stage`, renders, clones the last frame for `endHoldSeconds` (default 2; the deck freezes on it) into
+`<take>/cut-stage.mp4`, and grabs `<take>/cut-stage-poster.png` at the `poster` anchor. Both times come from the build's `hf-stage/stage.json`.
+
+| Profile field | What it does |
+|---|---|
+| `ramps[]` | `{id?, from, to, rate}` (anchors as above, rate in (1, 10]): kept footage between the anchors plays faster (`data-playback-rate`). Ramps never reorder or drop footage; they must not overlap. Use them for dead time (the agent working, a human scrolling). Works in the web profile too. |
+| `poster` | Anchor of the poster frame; it must be inside kept footage. |
+| `endHoldSeconds` | Last-frame hold added by stage.sh. |
+| `sourceTag` | Tag text; `{take}`, `{recordedOn}` and the usual tokens. |
+
+All other checks still run in the stage profile: audit vs stream, card binding, required events, `holds`, `noCardAfter`.
+
 ## Rules the template enforces
 
 - Nothing is staged. Every cut, caption and transcript row is derived from `events.json`, `ab-audit.jsonl` or `actor.log`; the config only

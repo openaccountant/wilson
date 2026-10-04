@@ -1,6 +1,8 @@
 // Generates a HyperFrames composition (index.html + assets) from a take's REAL event log + audited agent commands + video,
 // driven entirely by a per-beat config. One shared template for every beat; see NOTES.md for the config fields.
-//   node build.mjs --take /private/tmp/claude-501/wilson-demos/<beat>/take<N> --config ../beats/<beat>.json [--out <dir>]
+//   node build.mjs --take /private/tmp/claude-501/wilson-demos/<beat>/take<N> --config ../beats/<beat>.json [--out <dir>] [--profile stage]
+// --profile stage: the config's profiles.stage keys replace the top-level ones; footage only (no title, transcript, captions,
+// callouts or badges), 16:9 crops, speed ramps and a corner source tag. Default output <take>/hf-stage. See stage.sh.
 // Output goes to <take>/hf by default (never into this template dir), so beats and takes cannot collide.
 // Timing is derived from events.json (host clock) and ab-audit.jsonl (the wrapper's record of every command and output,
 // the source of truth for the terminal pane); copy and callouts come from the config.
@@ -16,7 +18,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { parseJsonl, summaryFromStream } from "../../rig/lib/actor-log.mjs";
 import { parseAudit, checkStreamAgainstAudit, auditProblems, transcriptFromAudit } from "../../rig/lib/ab-audit.mjs";
-import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping, findEvent, fillTokens, MissingValue, cardZoomWindows, zoomTweens, normRect, firstAppearance, lastJump } from "./plan.mjs";
+import { joinCards, bindProposals, perCardItems, scheduleOverlays, nonOverlapping, findEvent, fillTokens, MissingValue, cardZoomWindows, zoomTweens, normRect, firstAppearance, lastJump, stageCrop } from "./plan.mjs";
 const arg = (k) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : undefined; };
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const takeDir = arg("take");
@@ -25,7 +27,11 @@ const ev = JSON.parse(fs.readFileSync(path.join(takeDir, "events.json"), "utf8")
 const cfgPath = arg("config") ?? path.join(HERE, "..", "beats", ev.beat + ".json");
 const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
 if (ev.beat && cfg.id && ev.beat !== cfg.id) throw new Error(`config ${cfgPath} is for ${cfg.id} but ${takeDir}/events.json is from ${ev.beat}`);
-const OUT = path.resolve(arg("out") ?? path.join(takeDir, "hf"));
+const PROFILE = arg("profile") ?? "web";
+if (PROFILE !== "web") { const p = cfg.profiles?.[PROFILE]; if (!p) throw new Error(`config ${cfgPath} has no profiles.${PROFILE}`); Object.assign(cfg, p); }
+if (PROFILE !== "web" && PROFILE !== "stage") throw new Error(`unknown profile "${PROFILE}" (web | stage)`);
+const STAGE = PROFILE === "stage";
+const OUT = path.resolve(arg("out") ?? path.join(takeDir, STAGE ? "hf-stage" : "hf"));
 if (OUT === HERE) throw new Error("refusing to build into the template dir; pass --out elsewhere");
 class MissingAnchor extends Error {}
 const evHas = (spec) => { const s = typeof spec === "string" ? { event: spec } : spec; return !!findEvent(ev.events, s.event, s.where ?? null, s.nth ?? 0); };
@@ -190,11 +196,23 @@ for (const h of [...(cfg.endHold ? [cfg.endHold] : []), ...(cfg.holds ?? [])]) {
   const need = h.minSeconds ?? 2.5;
   if (g.e - t < need) throw new Error(`${h.event} hold is ${(g.e - t).toFixed(2)}s, need >= ${need}s`);
 }
-const TITLE = cfg.titleSeconds ?? 4;
-let acc = TITLE; for (const g of segs) { g.c = acc; g.d = g.e - g.s; acc += g.d; }
+const TITLE = STAGE ? 0 : cfg.titleSeconds ?? 4;
+// ramps: [{id?, from, to, rate}] -- dead time (e.g. waiting for the model) plays faster. Each kept segment is split into pieces at the
+// ramp edges; a piece plays at the rate of the ramp covering it (1 elsewhere). Footage is never reordered or dropped by a ramp.
+const ramps = (cfg.ramps ?? []).map((r, i) => attempt(r, `ramp ${r.id ?? i}`, () => {
+  if (!(r.rate > 1 && r.rate <= 10)) throw new Error(`ramp ${r.id ?? i}: rate must be in (1, 10], got ${r.rate}`);
+  return { s: at(r.from, segRaw), e: at(r.to, segRaw), rate: r.rate, id: r.id ?? i };
+})).filter(Boolean).sort((a, b) => a.s - b.s);
+for (let i = 1; i < ramps.length; i++) if (ramps[i].s < ramps[i - 1].e) throw new Error(`ramps ${ramps[i - 1].id} and ${ramps[i].id} overlap`);
+const pieces = segs.flatMap((g) => {
+  const cutsAt = [...new Set([g.s, g.e, ...ramps.flatMap((r) => [r.s, r.e]).filter((t) => t > g.s && t < g.e)])].sort((a, b) => a - b);
+  return cutsAt.slice(1).map((e, k) => { const s = cutsAt[k]; const r = ramps.find((x) => (s + e) / 2 >= x.s && (s + e) / 2 <= x.e); return { s, e, rate: r?.rate ?? 1 }; }).filter((p) => p.e - p.s > 0.05);
+});
+let acc = TITLE; for (const p of pieces) { p.c = acc; p.d = (p.e - p.s) / p.rate; acc += p.d; }
+for (const g of segs) { g.c = pieces.find((p) => p.s >= g.s - 1e-6).c; g.d = g.e - g.s; }
 const TOTAL = +acc.toFixed(2);
-const toComp = (src) => { for (const g of segs) if (src >= g.s - 1e-6 && src <= g.e + 1e-6) return g.c + (src - g.s); return null; };
-const toCompOrCut = (src) => { for (const g of segs) if (src <= g.e) return Math.max(g.c, toComp(src) ?? g.c); return TOTAL; };
+const toComp = (src) => { for (const p of pieces) if (src >= p.s - 1e-6 && src <= p.e + 1e-6) return p.c + (src - p.s) / p.rate; return null; };
+const toCompOrCut = (src) => { for (const p of pieces) if (src <= p.e) return Math.max(p.c, toComp(src) ?? p.c); return TOTAL; };
 
 // ---- transcript rows (from the audit, verbatim) ----
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -243,19 +261,19 @@ const expandEach = (list, what) => list.flatMap((c, i) => {
   if (!hits.length) skipped.push(`${what} ${i} (no ${c.each} events)`);
   return hits.map((h, n) => ({ c: { ...c, at: { event: c.each, where: c.where, nth: n, offset: c.atOffset ?? 0 }, end: { event: c.each, where: c.where, nth: n, offset: c.endOffset ?? 3 }, optional: true }, i, ctx: { this: h }, what: `${what} ${i}[${n}]` }));
 });
-const capItems = [
+const capItems = STAGE ? [] : [
   ...expandEach(cfg.captions ?? [], "caption").map(({ c, what, ctx }) => attempt(c, what, () => { if (ctx && toComp(ctx.this.t_ms / 1000) === null) throw new MissingAnchor("its event is in cut footage"); return { start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), t: fillTokens(c.t, ev.events, vars, ctx), optional: !!c.optional }; })).filter(Boolean),
   ...pc.caps.map((c) => ({ start: mapT(c.start), end: mapT(c.end), t: c.t, optional: !!c.optional, card: c.card })),
 ].filter((c) => c.end > c.start);
 const DASH_W = 1304, DASH_H = 815, K = DASH_W / 1200; // config callout x/y are in a 1200x750 design space
-const coItems = [
+const coItems = STAGE ? [] : [
   ...(cfg.callouts ?? []).map((c, i) => attempt(c, `callout ${c.id ?? i}`, () => ({ id: c.id ?? `co${i}`, start: mapT(at(c.at, segRaw)), end: mapT(at(c.end, segRaw)), x: c.x, y: c.y, w: c.w, txt: fill(c.txt), sub: fill(c.sub ?? ""), src: c.src ? fill(c.src) : "" }))).filter(Boolean),
   ...pc.cos.map((c) => ({ ...c, start: mapT(c.start), end: mapT(c.end) })),
 ].filter((c) => c.end > c.start);
 const caps = scheduleOverlays(capItems);
 const callouts = scheduleOverlays(coItems, { minDur: 0.4 });
 if (!nonOverlapping(caps) || !nonOverlapping(callouts)) throw new Error("overlay scheduling left overlapping lower-thirds");
-const cuts = segs.slice(1).map((g, i) => ({ c: g.c, gap: g.s - segs[i].e })).filter((c) => c.gap >= 1); // contiguous footage is not a cut
+const cuts = pieces.slice(1).map((g, i) => ({ c: g.c, gap: g.s - pieces[i].e })).filter((c) => c.gap >= 1); // contiguous footage is not a cut
 
 // ---- zoom: honest crop (uniform scale + pan of the same recording), eased ----
 const zoomCfg = cfg.zoom ?? {};
@@ -279,16 +297,68 @@ const zwins = [
     });
   }) ?? []),
 ].filter((w) => w.end - w.start > 0.8);
-const ztw = zoomTweens(zwins, { ease: zoomCfg.ease ?? 0.6, pad: zoomCfg.card?.pad, maxScale: zoomCfg.card?.maxScale });
+// stage: a zoom that runs to the end of the cut stays in (the deck holds the last frame); no ease-out in the final half second.
+if (STAGE) for (const w of zwins) if (w.end >= TOTAL - 0.05) w.end = TOTAL + 60;
+// stage: the 16:10 recording fills the 1080 px height of a 1920x1080 frame; crops may use the full 16:9 frame.
+const SG = { cw: 1920, ch: 1080, vh: 1080, vw: Math.round(1080 * viewport.width / viewport.height), vy: 0 }; SG.vx = (SG.cw - SG.vw) / 2;
+const ztw = zoomTweens(zwins, { ease: zoomCfg.ease ?? 0.6, pad: zoomCfg.card?.pad, maxScale: zoomCfg.card?.maxScale,
+  ...(STAGE ? { crop: (r, o) => stageCrop(r, o, SG), identity: { s: 1, x: 0, y: 0 } } : {}) });
 const zbadges = []; { let on = null; for (const z of ztw) { if (z.s > 1 && on === null) on = z.t; if (z.s === 1 && on !== null) { zbadges.push({ a: on, b: z.t + z.d }); on = null; } } }
 
-const segVideo = segs.map((g, i) => `      <video id="seg${i}" class="vid" src="${VIDEO}" data-start="${g.c.toFixed(3)}" data-duration="${g.d.toFixed(3)}" data-media-start="${g.s.toFixed(3)}" data-track-index="1" muted playsinline></video>`).join("\n");
+const segVideo = pieces.map((g, i) => `      <video id="seg${i}" class="vid" src="${VIDEO}" data-start="${g.c.toFixed(3)}" data-duration="${g.d.toFixed(3)}" data-media-start="${g.s.toFixed(3)}"${g.rate !== 1 ? ` data-playback-rate="${g.rate}"` : ""} data-track-index="1" muted playsinline></video>`).join("\n");
 const capHtml = caps.map((c, i) => `<div class="cap" id="cap${i}"${c.card !== undefined ? ` data-card="${c.card}"` : ""}${c.t.length > 190 ? ' style="font-size:30px"' : c.t.length > 150 ? ' style="font-size:34px"' : ""}>${esc(c.t)}</div>`).join("\n");
 const coHtml = callouts.map((c) => `<div class="co" id="${c.id}"${c.card !== undefined ? ` data-card="${c.card}"` : ""} style="left:${Math.round(c.x * K)}px;top:${Math.round(c.y * K)}px${c.w ? `;max-width:${c.w}px` : ""}"><div class="cot">${esc(c.txt)}</div>${c.sub ? `<div class="cos">${esc(c.sub)}</div>` : ""}${c.src ? `<div class="cos src">${esc(c.src)}</div>` : ""}</div>`).join("\n");
 const cutHtml = cuts.map((c, i) => `<div class="cutbadge" id="cut${i}">CUT – ${Math.round(c.gap)} s of dead time removed</div>`).join("\n");
 const zoomHtml = zbadges.map((z, i) => `<div class="cutbadge zoombadge" id="zb${i}">ZOOM – crop of the same recording</div>`).join("\n");
 
-const html = `<!doctype html>
+// ---- stage profile: footage only, filling the frame; one small corner tag (take + recording date from the take, never typed in) ----
+const takeNo = path.basename(path.resolve(takeDir)).match(/take(\d+)/)?.[1];
+if (STAGE && !takeNo) throw new Error(`stage tag: cannot read a take number from ${takeDir}`);
+const recordedOn = new Date(rec0).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).replace(",", "");
+const stageTag = fillTokens(cfg.sourceTag ?? "real agent \u00b7 take {take} \u00b7 recorded {recordedOn}", ev.events, { ...vars, take: takeNo ?? "?", recordedOn });
+const stageHtml = () => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+:root{--ledger:#e5e7eb;--ink:#9ca3af;--deep:#0a0f1a;--caution:#f59e0b}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
+#root{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
+#zw{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+#zw .vid{position:absolute;left:${SG.vx}px;top:${SG.vy}px;width:${SG.vw}px;height:${SG.vh}px;object-fit:fill}
+#tag{position:absolute;right:18px;top:16px;z-index:5;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:17px;color:var(--ink);background:rgba(10,15,26,.82);border:1px solid rgba(156,163,175,.35);border-radius:6px;padding:5px 11px}
+#tag .sp{display:none;color:var(--caution)}
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="${TOTAL}" data-width="1920" data-height="1080">
+  <div id="zw" data-track-index="1">
+${segVideo}
+  </div>
+  <div id="tag" class="clip" data-start="0" data-duration="${TOTAL}" data-track-index="2">${esc(stageTag)}${pieces.some((p) => p.rate !== 1) ? [...new Set(pieces.map((p) => p.rate).filter((r) => r !== 1))].map((r) => `<span class="sp" data-rate="${r}"> \u00b7 ${r}\u00d7 speed</span>`).join("") : ""}</div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+// speed ramps are labelled while they play
+const sp = ${JSON.stringify(pieces.filter((p) => p.rate !== 1).map((p) => ({ r: p.rate, a: +p.c.toFixed(3), b: +(p.c + p.d).toFixed(3) })))};
+sp.forEach(p=>{ const el = document.querySelector('#tag .sp[data-rate="'+p.r+'"]'); tl.set(el,{display:"inline"},p.a).set(el,{display:"none"},p.b); });
+// zoom: uniform scale + pan of the footage wrapper only (an honest crop); origin top-left, so point p maps to s*p + (x,y)
+tl.set("#zw",{transformOrigin:"0 0",scale:1,x:0,y:0},0);
+const zt = ${JSON.stringify(ztw.map((z) => ({ t: +z.t.toFixed(3), d: z.d, s: +z.s.toFixed(4), x: +z.x.toFixed(2), y: +z.y.toFixed(2) })))};
+let zc = {s:1,x:0,y:0};
+zt.forEach(z=>{ tl.fromTo("#zw",{scale:zc.s,x:zc.x,y:zc.y},{scale:z.s,x:z.x,y:z.y,duration:z.d,ease:"power2.inOut",immediateRender:false},z.t); zc = {s:z.s,x:z.x,y:z.y}; });
+window.__timelines["main"] = tl;
+tl.seek(0);
+</script>
+</body>
+</html>`;
+let html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -405,11 +475,21 @@ tl.seek(0);
 </script>
 </body>
 </html>`;
+if (STAGE) {
+  html = stageHtml();
+  // poster: the most representative frame, anchored like everything else; stage.sh grabs it from the render.
+  const posterSrc = cfg.poster ? at(cfg.poster, segRaw) : null;
+  const poster = posterSrc == null ? null : toComp(posterSrc);
+  if (cfg.poster && poster == null) throw new Error(`poster anchor ${JSON.stringify(cfg.poster)} (source ${posterSrc.toFixed(2)}s) is in cut footage`);
+  fs.writeFileSync(path.join(OUT, "stage.json"), JSON.stringify({ total: TOTAL, poster, posterSrc, tag: stageTag, endHoldSeconds: cfg.endHoldSeconds ?? 2,
+    pieces: pieces.map((p) => ({ s: +p.s.toFixed(3), e: +p.e.toFixed(3), rate: p.rate, c: +p.c.toFixed(3) })) }, null, 2));
+}
 fs.writeFileSync(path.join(OUT, "index.html"), html);
 console.error("out", OUT);
 console.error("segs", segs.map((g) => [g.s.toFixed(1), g.e.toFixed(1), g.c.toFixed(1)]), "TOTAL", TOTAL);
+if (ramps.length) console.error("pieces", pieces.map((p) => `${p.s.toFixed(1)}-${p.e.toFixed(1)}@${p.rate}x->${p.c.toFixed(1)}`).join(" "));
 console.error("rows", rows.length, "cards", cards.map((c) => `${c.index}:${c.kind}:${c.decision}:#${c.txId}`).join(" "), "captions", caps.length, "callouts", callouts.length, "zooms", zwins.map((w) => `${w.source}@${w.start.toFixed(1)}-${w.end.toFixed(1)}`).join(","));
-{ // diagnostics: footage kept with no caption for more than half a second (an empty caption bar)
+if (!STAGE) { // diagnostics: footage kept with no caption for more than half a second (an empty caption bar)
   const sorted = [...caps].sort((x, y) => x.start - y.start); const gaps = []; let cur = TITLE;
   for (const c of sorted) { if (c.start - cur > 0.5) gaps.push([cur, c.start]); cur = Math.max(cur, c.end); }
   if (TOTAL - cur > 0.5) gaps.push([cur, TOTAL]);

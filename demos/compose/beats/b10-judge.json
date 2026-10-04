@@ -853,5 +853,325 @@
         "offset": -3
       }
     }
+  },
+  "profiles": {
+    "stage": {
+      "segments": [
+        {
+          "id": "grant",
+          "from": {
+            "event": "grants-applied",
+            "offset": -9.8
+          },
+          "to": {
+            "event": "grants-applied",
+            "offset": 1.0
+          }
+        },
+        {
+          "id": "card",
+          "from": {
+            "event": "first-card-shown",
+            "offset": -0.3
+          },
+          "to": {
+            "event": "card-resolved",
+            "nth": "last",
+            "offset": 0.5
+          }
+        },
+        {
+          "id": "queue",
+          "from": {
+            "event": "queue-shown",
+            "offset": -3.3
+          },
+          "to": {
+            "event": "catch-score",
+            "offset": 1.8
+          }
+        },
+        {
+          "id": "rejects",
+          "each": "verdict-rejected",
+          "atOffset": -1.8,
+          "endOffset": 0.8
+        },
+        {
+          "id": "human-annotation",
+          "from": {
+            "anchor": "dialogClosed",
+            "offset": -4
+          },
+          "to": {
+            "anchor": "dialogClosed",
+            "offset": 2
+          }
+        },
+        {
+          "id": "export-default",
+          "from": {
+            "event": "export-done",
+            "where": {
+              "variant": "default"
+            },
+            "offset": -1.2
+          },
+          "to": {
+            "event": "export-done",
+            "where": {
+              "variant": "default"
+            },
+            "offset": 3.0
+          }
+        },
+        {
+          "id": "export-with-judge",
+          "from": {
+            "event": "export-done",
+            "where": {
+              "variant": "with-judge"
+            },
+            "offset": -6.3
+          },
+          "to": {
+            "event": "export-done",
+            "where": {
+              "variant": "with-judge"
+            },
+            "offset": 3.0
+          }
+        }
+      ],
+      "ramps": [
+        {
+          "id": "grant-scroll",
+          "from": {
+            "event": "grants-applied",
+            "offset": -9.8
+          },
+          "to": {
+            "event": "grants-applied",
+            "offset": -1.6
+          },
+          "rate": 2.5
+        },
+        {
+          "id": "export-hold",
+          "from": {
+            "event": "export-done",
+            "where": {
+              "variant": "with-judge"
+            },
+            "offset": -6.3
+          },
+          "to": {
+            "event": "export-done",
+            "where": {
+              "variant": "with-judge"
+            },
+            "offset": -1.0
+          },
+          "rate": 2.5
+        }
+      ],
+      "holds": [
+        {
+          "event": "export-done",
+          "where": {
+            "variant": "default"
+          },
+          "minSeconds": 3
+        },
+        {
+          "event": "export-done",
+          "where": {
+            "variant": "with-judge"
+          },
+          "minSeconds": 3
+        }
+      ],
+      "zoom": {
+        "ease": 0.5,
+        "card": {
+          "kinds": [
+            "change",
+            "read"
+          ],
+          "rect": {
+            "x": 0.75,
+            "y": 0.6,
+            "w": 0.236,
+            "h": 0.38
+          },
+          "pad": 0.02,
+          "maxScale": 3.0,
+          "holdAfter": 0.3
+        },
+        "windows": [
+          {
+            "id": "grant-panel",
+            "from": {
+              "event": "grants-applied",
+              "offset": -7.0
+            },
+            "to": {
+              "event": "grants-applied",
+              "offset": 1.0
+            },
+            "rect": {
+              "x": 0.01,
+              "y": 0.6,
+              "w": 0.21,
+              "h": 0.25
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "queue-catch",
+            "from": {
+              "event": "queue-shown",
+              "offset": -2.9
+            },
+            "to": {
+              "event": "catch-score",
+              "offset": 1.8
+            },
+            "rect": {
+              "x": 0.01,
+              "y": 0.63,
+              "w": 0.6,
+              "h": 0.15
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "reject-row",
+            "each": "verdict-rejected",
+            "phases": [
+              {
+                "from": -1.8,
+                "to": -0.75,
+                "rect": {
+                  "x": 0.01,
+                  "y": 0.28,
+                  "w": 0.55,
+                  "h": 0.13
+                },
+                "pad": 0.01,
+                "maxScale": 2.6
+              },
+              {
+                "from": -0.55,
+                "to": 0.8,
+                "rect": {
+                  "x": 0.44,
+                  "y": 0.28,
+                  "w": 0.55,
+                  "h": 0.13
+                },
+                "pad": 0.01,
+                "maxScale": 2.6
+              }
+            ]
+          },
+          {
+            "id": "annotation-dialog",
+            "from": {
+              "anchor": "dialogClosed",
+              "offset": -4
+            },
+            "to": {
+              "anchor": "dialogClosed",
+              "offset": -0.3
+            },
+            "rect": {
+              "x": 0.23,
+              "y": 0.45,
+              "w": 0.54,
+              "h": 0.3
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "annotation-row",
+            "from": {
+              "anchor": "dialogClosed",
+              "offset": 0.2
+            },
+            "to": {
+              "anchor": "dialogClosed",
+              "offset": 2
+            },
+            "rect": {
+              "x": 0.01,
+              "y": 0.78,
+              "w": 0.79,
+              "h": 0.06
+            },
+            "pad": 0.01,
+            "maxScale": 2.6
+          },
+          {
+            "id": "export-default",
+            "from": {
+              "event": "export-done",
+              "where": {
+                "variant": "default"
+              },
+              "offset": -1.2
+            },
+            "to": {
+              "event": "export-done",
+              "where": {
+                "variant": "default"
+              },
+              "offset": 3.0
+            },
+            "rect": {
+              "x": 0.01,
+              "y": 0.13,
+              "w": 0.5,
+              "h": 0.08
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "export-with-judge",
+            "from": {
+              "event": "export-done",
+              "where": {
+                "variant": "with-judge"
+              },
+              "offset": -6.3
+            },
+            "to": {
+              "event": "export-done",
+              "where": {
+                "variant": "with-judge"
+              },
+              "offset": 3.0
+            },
+            "rect": {
+              "x": 0.01,
+              "y": 0.13,
+              "w": 0.5,
+              "h": 0.08
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          }
+        ]
+      },
+      "poster": {
+        "event": "catch-score",
+        "offset": 1.0
+      },
+      "endHoldSeconds": 2
+    }
   }
 }

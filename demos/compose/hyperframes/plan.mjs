@@ -207,6 +207,22 @@ export function zoomCrop(rect, { pad = 0.04, maxScale = 2.2 } = {}) {
 }
 
 /**
+ * Stage crop: the footage (vw x vh, at vx,vy) sits inside a cw x ch frame of another aspect (16:10 recording in a 16:9 frame). Scale
+ * so the padded rect fits the frame, centre it, then clamp the pan so the frame shows footage instead of the side bars wherever the
+ * scaled footage is big enough. Returns {s, x, y}: the uniform scale and px translation of a top-left-origin wrapper (p -> s*p + (x,y)).
+ */
+export function stageCrop(rect, { pad = 0.04, maxScale = 2.2 } = {}, g) {
+  const pw = Math.min(1, rect.w + 2 * pad) * g.vw; const ph = Math.min(1, rect.h + 2 * pad) * g.vh;
+  const s = Math.max(1, Math.min(maxScale, g.cw / pw, g.ch / ph));
+  const cx = g.vx + (rect.x + rect.w / 2) * g.vw; const cy = g.vy + (rect.y + rect.h / 2) * g.vh;
+  const axis = (c, v0, v, frame) => {
+    if (s * v < frame) return (frame - s * v) / 2 - s * v0; // footage narrower than the frame: centre it
+    return Math.min(-s * v0, Math.max(frame - s * (v0 + v), frame / 2 - s * c));
+  };
+  return { s, x: axis(cx, g.vx, g.vw, g.cw), y: axis(cy, g.vy, g.vh, g.ch) };
+}
+
+/**
  * Zoom windows (source seconds) while a card is on screen: card.shown .. card.resolved + holdAfter. The rect is the card's own
  * `box` from card-shown when the host recorded one, else cfg.rect (fractions). cfg: {kinds?, rect, pad?, maxScale?, holdAfter?, ease?}.
  */
@@ -229,18 +245,19 @@ export function cardZoomWindows(cfg, cards, viewport) {
 /**
  * Keyframes for the zoom wrapper on the composition clock. `wins` = [{start, end, rect}] (comp seconds). Ease in over `ease`
  * seconds from start, ease out ending at `end`. Windows closer than 2*ease stay zoomed and glide straight to the next rect.
- * Returns [{t, d, s, ox, oy}] tweens in time order (identity = s 1, ox 0, oy 0).
+ * Returns [{t, d, s, ox, oy}] tweens in time order (identity = s 1, ox 0, oy 0). `crop` / `identity` swap in another crop
+ * (e.g. stageCrop, whose tweens carry {s, x, y} instead).
  */
-export function zoomTweens(wins, { ease = 0.6, pad, maxScale } = {}) {
+export function zoomTweens(wins, { ease = 0.6, pad, maxScale, crop = zoomCrop, identity = { s: 1, ox: 0, oy: 0 } } = {}) {
   const w = [...wins].sort((a, b) => a.start - b.start);
   const tw = [];
   const lastEnd = () => (tw.length ? tw.at(-1).t + tw.at(-1).d : 0);
   for (let i = 0; i < w.length; i++) {
-    const z = zoomCrop(w[i].rect, { pad: w[i].pad ?? pad, maxScale: w[i].maxScale ?? maxScale });
+    const z = crop(w[i].rect, { pad: w[i].pad ?? pad, maxScale: w[i].maxScale ?? maxScale });
     const glide = i > 0 && w[i].start - w[i - 1].end < 2 * ease;
     tw.push({ t: Math.max(lastEnd(), glide ? w[i].start - ease : w[i].start), d: ease, ...z });
     const next = w[i + 1];
-    if (!next || next.start - w[i].end >= 2 * ease) tw.push({ t: Math.max(lastEnd(), w[i].end - ease), d: ease, s: 1, ox: 0, oy: 0 });
+    if (!next || next.start - w[i].end >= 2 * ease) tw.push({ t: Math.max(lastEnd(), w[i].end - ease), d: ease, ...identity });
   }
   return tw;
 }
