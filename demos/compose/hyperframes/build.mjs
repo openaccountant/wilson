@@ -316,6 +316,25 @@ const takeNo = path.basename(path.resolve(takeDir)).match(/take(\d+)/)?.[1];
 if (STAGE && !takeNo) throw new Error(`stage tag: cannot read a take number from ${takeDir}`);
 const recordedOn = new Date(rec0).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }).replace(",", "");
 const stageTag = fillTokens(cfg.sourceTag ?? "real agent \u00b7 take {take} \u00b7 recorded {recordedOn}", ev.events, { ...vars, take: takeNo ?? "?", recordedOn });
+// auditLabel (stage only, the one exception to footage only): the first audited `webmcp <verb>` that failed (exit code != 0) after
+// an anchor, quoted from ab-audit.jsonl: "webmcp invoke <tool> → ✗ <error code>". It appears when the call returned (the audit end
+// time) and stays to the end of that kept segment. A failure that happens in the agent is not in the browser footage.
+let auditLabel = null;
+if (STAGE && cfg.auditLabel) {
+  const L = cfg.auditLabel; const after = at(L.after, segRaw);
+  const e = entries.find((x) => x.accepted && x.argv[0] === "webmcp" && x.argv[1] === (L.verb ?? "invoke") && x.exitCode !== 0 && x.exitCode != null && x.src >= after);
+  if (!e) throw new Error(`auditLabel: no failed webmcp ${L.verb ?? "invoke"} after ${JSON.stringify(L.after)} in ab-audit.jsonl`);
+  const errLine = e.out.find((l) => /^\(stderr\) /.test(l))?.replace(/^\(stderr\) /, "") ?? "";
+  const code = errLine.match(/^(\u2717\s*[\w.-]+)/)?.[1];
+  if (!code) throw new Error(`auditLabel: cannot read an error code from the audit stderr ${JSON.stringify(errLine)}`);
+  const start = toComp(e.endSrc);
+  if (start == null) throw new Error(`auditLabel: the failure (source ${e.endSrc.toFixed(2)}s) is in cut footage`);
+  let i = pieces.findIndex((p) => e.endSrc >= p.s - 1e-6 && e.endSrc <= p.e + 1e-6);
+  while (pieces[i + 1] && Math.abs(pieces[i + 1].s - pieces[i].e) < 1e-3) i++; // pieces split only by a ramp are one segment
+  const end = pieces[i].c + pieces[i].d;
+  const clock = e.endDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  auditLabel = { start, end, cmd: e.argv.slice(0, 3).join(" "), code, src: `from ab-audit.jsonl \u00b7 ${clock}`, srcT: e.endSrc };
+}
 const stageHtml = () => `<!doctype html>
 <html lang="en">
 <head>
@@ -333,6 +352,9 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
 #zw .vid{position:absolute;left:${SG.vx}px;top:${SG.vy}px;width:${SG.vw}px;height:${SG.vh}px;object-fit:fill}
 #tag{position:absolute;right:18px;top:16px;z-index:5;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:17px;color:var(--ink);background:rgba(10,15,26,.82);border:1px solid rgba(156,163,175,.35);border-radius:6px;padding:5px 11px}
 #tag .sp{display:none;color:var(--caution)}
+#alab{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:6;opacity:0;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;background:rgba(10,15,26,.95);border:2px solid #ef4444;border-radius:10px;padding:16px 26px;white-space:nowrap}
+#alab .c{font-size:34px;color:var(--ledger)}#alab .c b{color:#ef4444;font-weight:700}
+#alab .s{font-size:16px;color:var(--ink);margin-top:6px}
 </style>
 </head>
 <body>
@@ -340,7 +362,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
   <div id="zw" data-track-index="1">
 ${segVideo}
   </div>
-  <div id="tag" class="clip" data-start="0" data-duration="${TOTAL}" data-track-index="2">${esc(stageTag)}${pieces.some((p) => p.rate !== 1) ? [...new Set(pieces.map((p) => p.rate).filter((r) => r !== 1))].map((r) => `<span class="sp" data-rate="${r}"> \u00b7 ${r}\u00d7 speed</span>`).join("") : ""}</div>
+${auditLabel ? `  <div id="alab" class="clip" data-start="0" data-duration="${TOTAL}" data-track-index="3"><div class="c">${esc(auditLabel.cmd)} \u2192 <b>${esc(auditLabel.code)}</b></div><div class="s">${esc(auditLabel.src)}</div></div>\n` : ""}  <div id="tag" class="clip" data-start="0" data-duration="${TOTAL}" data-track-index="2">${esc(stageTag)}${pieces.some((p) => p.rate !== 1) ? [...new Set(pieces.map((p) => p.rate).filter((r) => r !== 1))].map((r) => `<span class="sp" data-rate="${r}"> \u00b7 ${r}\u00d7 speed</span>`).join("") : ""}</div>
 </div>
 <script>
 window.__timelines = window.__timelines || {};
@@ -348,6 +370,7 @@ const tl = gsap.timeline({ paused: true });
 // speed ramps are labelled while they play
 const sp = ${JSON.stringify(pieces.filter((p) => p.rate !== 1).map((p) => ({ r: p.rate, a: +p.c.toFixed(3), b: +(p.c + p.d).toFixed(3) })))};
 sp.forEach(p=>{ const el = document.querySelector('#tag .sp[data-rate="'+p.r+'"]'); tl.set(el,{display:"inline"},p.a).set(el,{display:"none"},p.b); });
+${auditLabel ? `tl.fromTo("#alab",{opacity:0},{opacity:1,duration:.2},${auditLabel.start.toFixed(3)}).to("#alab",{opacity:0,duration:.01},${(auditLabel.end - 0.01).toFixed(3)});` : ""}
 // zoom: uniform scale + pan of the footage wrapper only (an honest crop); origin top-left, so point p maps to s*p + (x,y)
 tl.set("#zw",{transformOrigin:"0 0",scale:1,x:0,y:0},0);
 const zt = ${JSON.stringify(ztw.map((z) => ({ t: +z.t.toFixed(3), d: z.d, s: +z.s.toFixed(4), x: +z.x.toFixed(2), y: +z.y.toFixed(2) })))};
@@ -482,7 +505,7 @@ if (STAGE) {
   const poster = posterSrc == null ? null : toComp(posterSrc);
   if (cfg.poster && poster == null) throw new Error(`poster anchor ${JSON.stringify(cfg.poster)} (source ${posterSrc.toFixed(2)}s) is in cut footage`);
   fs.writeFileSync(path.join(OUT, "stage.json"), JSON.stringify({ total: TOTAL, poster, posterSrc, tag: stageTag, endHoldSeconds: cfg.endHoldSeconds ?? 2,
-    pieces: pieces.map((p) => ({ s: +p.s.toFixed(3), e: +p.e.toFixed(3), rate: p.rate, c: +p.c.toFixed(3) })) }, null, 2));
+    auditLabel, pieces: pieces.map((p) => ({ s: +p.s.toFixed(3), e: +p.e.toFixed(3), rate: p.rate, c: +p.c.toFixed(3) })) }, null, 2));
 }
 fs.writeFileSync(path.join(OUT, "index.html"), html);
 console.error("out", OUT);

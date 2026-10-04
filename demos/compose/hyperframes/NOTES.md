@@ -35,6 +35,7 @@ renders exactly as before.
 | `poster` | Anchor of the poster frame; it must be inside kept footage. |
 | `endHoldSeconds` | Last-frame hold added by stage.sh. |
 | `sourceTag` | Tag text; `{take}`, `{recordedOn}` and the usual tokens. |
+| `auditLabel` | `{after, verb?}`: the one exception to footage only, for a failure that happens in the agent, not in the browser. The first audited `webmcp <verb>` (default invoke) with a non-zero exit after the `after` anchor is quoted from ab-audit.jsonl as `webmcp invoke <tool> → ✗ <error code>`, with "from ab-audit.jsonl · <time it returned>". It appears at the audit end time and lasts to the end of that kept segment; the build fails if there is no such call or it is in cut footage. Beat 9 uses it. |
 
 All other checks still run in the stage profile: audit vs stream, card binding, required events, `holds`, `noCardAfter`.
 

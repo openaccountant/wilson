@@ -199,5 +199,164 @@
       },
       "t": "Activity, as the server recorded it: {@activity-after.beforeKill} agent calls before the switch, {@activity-after.afterKill} after."
     }
-  ]
+  ],
+  "profiles": {
+    "stage": {
+      "segments": [
+        {
+          "id": "grant-to-failure",
+          "from": {
+            "event": "grants-applied",
+            "offset": -1.5
+          },
+          "to": {
+            "tool": "transaction_search",
+            "which": "last",
+            "edge": "end",
+            "offset": 1.7
+          }
+        },
+        {
+          "id": "activity",
+          "from": {
+            "event": "activity-after",
+            "offset": -0.3
+          },
+          "to": {
+            "event": "beat-end",
+            "offset": -0.5
+          }
+        }
+      ],
+      "ramps": [
+        {
+          "id": "agent-reading",
+          "from": {
+            "event": "grants-applied",
+            "offset": 0.6
+          },
+          "to": {
+            "event": "kill-confirm",
+            "offset": -0.8
+          },
+          "rate": 4
+        }
+      ],
+      "zoom": {
+        "ease": 0.5,
+        "windows": [
+          {
+            "id": "grant-rows",
+            "from": {
+              "event": "grants-applied",
+              "offset": -1.5
+            },
+            "to": {
+              "event": "grants-applied",
+              "offset": 0.6
+            },
+            "rect": {
+              "x": 0.02,
+              "y": 0.5,
+              "w": 0.74,
+              "h": 0.18
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "switch-on",
+            "from": {
+              "event": "kill-confirm",
+              "offset": -0.8
+            },
+            "to": {
+              "event": "kill-confirm",
+              "offset": -0.15
+            },
+            "rect": {
+              "x": 0.02,
+              "y": 0.37,
+              "w": 0.96,
+              "h": 0.26
+            },
+            "pad": 0.01,
+            "maxScale": 2.6
+          },
+          {
+            "id": "dialog",
+            "from": {
+              "event": "kill-confirm",
+              "offset": 0.1
+            },
+            "to": {
+              "event": "kill-clicked",
+              "offset": -0.05
+            },
+            "rect": {
+              "x": 0.31,
+              "y": 0.38,
+              "w": 0.38,
+              "h": 0.24
+            },
+            "pad": 0.02,
+            "maxScale": 2.6
+          },
+          {
+            "id": "switch-off",
+            "from": {
+              "event": "kill-clicked",
+              "offset": 0.1
+            },
+            "to": {
+              "tool": "transaction_search",
+              "which": "last",
+              "edge": "end",
+              "offset": 1.7
+            },
+            "rect": {
+              "x": 0.02,
+              "y": 0.37,
+              "w": 0.96,
+              "h": 0.26
+            },
+            "pad": 0.01,
+            "maxScale": 2.6
+          },
+          {
+            "id": "activity",
+            "from": {
+              "event": "activity-after",
+              "offset": -0.3
+            },
+            "to": {
+              "event": "beat-end",
+              "offset": -0.5
+            },
+            "rect": {
+              "x": 0.02,
+              "y": 0.53,
+              "w": 0.96,
+              "h": 0.24
+            },
+            "pad": 0.01,
+            "maxScale": 2.6
+          }
+        ]
+      },
+      "auditLabel": {
+        "after": {
+          "event": "kill-switch-off"
+        },
+        "verb": "invoke"
+      },
+      "poster": {
+        "tool": "transaction_search",
+        "which": "last",
+        "edge": "end",
+        "offset": 0.9
+      },
+      "endHoldSeconds": 2
+    }
+  }
 }
