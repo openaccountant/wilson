@@ -28,7 +28,14 @@ export function parseArgs(argv) {
 }
 
 /** One workspace per demo run: <MEDIA_ROOT>/<name>/{home,out,run,chrome-udd,<beat>/}. */
+export function safeSegment(v, what) {
+  const s = String(v);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s) || s.includes('..') || s.includes('/')) throw new Error(`invalid ${what} ${JSON.stringify(s)}: use letters, digits, . _ - only (no '/', no '..')`);
+  return s;
+}
+
 export function workspace(name = 'p1') {
+  safeSegment(name, '--name');
   const work = path.join(MEDIA_ROOT, name);
   return {
     name,
@@ -37,14 +44,35 @@ export function workspace(name = 'p1') {
     out: path.join(work, 'out'),
     run: path.join(work, 'run'),
     chromeUdd: path.join(work, 'chrome-udd'),
-    beatDir: (beat) => path.join(work, beat),
+    beatDir: (beat) => path.join(work, safeSegment(beat, '--beat')),
   };
 }
 
+const SCRATCH_ROOT = '/private/tmp/claude-501/';
+
+/** Resolve symlinks on the nearest existing ancestor, so a link inside the scratch tree cannot lead outside it. */
 export function assertScratch(p) {
-  const real = path.resolve(p);
-  if (!real.startsWith('/private/tmp/claude-501/')) throw new Error(`refusing to touch ${real}: not under /private/tmp/claude-501/`);
+  const abs = path.resolve(p);
+  let probe = abs;
+  const tail = [];
+  while (!fs.existsSync(probe)) { tail.unshift(path.basename(probe)); const up = path.dirname(probe); if (up === probe) break; probe = up; }
+  const real = path.join(fs.realpathSync(probe), ...tail);
+  if (!real.startsWith(SCRATCH_ROOT) || real === SCRATCH_ROOT.slice(0, -1)) throw new Error(`refusing to touch ${abs} (resolves to ${real}): not under ${SCRATCH_ROOT}`);
   return real;
+}
+
+/** pids LISTENing on a TCP port (lsof). */
+export function listeners(port) {
+  try {
+    return execFileSync('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).map(Number);
+  } catch { return []; } // lsof exits 1 when nothing matches
+}
+
+export function assertPortsFree(ports) {
+  for (const [label, p] of Object.entries(ports)) {
+    const l = listeners(p);
+    if (l.length) throw new Error(`${label} port ${p} is already in use by pid ${l.join(',')} (${pidCommand(l[0]).slice(0, 120)}); refusing to start`);
+  }
 }
 
 export function readCreds(outDir) {
@@ -75,11 +103,44 @@ export function readPid(ws, kind) {
   try { return JSON.parse(fs.readFileSync(path.join(ws.run, `${kind}.pid`), 'utf8')); } catch { return null; }
 }
 
-/** A pid file counts only if the process lives AND its command line still contains the marker we recorded. */
+/** Seconds since a pid started (ps etimes is not on macOS; parse etime [[dd-]hh:]mm:ss). */
+export function pidAgeSec(pid) {
+  try {
+    const t = execFileSync('ps', ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+    const [d, rest] = t.includes('-') ? t.split('-') : [0, t];
+    const parts = rest.split(':').map(Number);
+    while (parts.length < 3) parts.unshift(0);
+    return Number(d) * 86400 + parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } catch { return null; }
+}
+
+export function pidPgid(pid) {
+  try { return Number(execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8' }).trim()); } catch { return null; }
+}
+
+/**
+ * A pid file counts only if the process lives, its command line still contains the specific marker we recorded, AND it
+ * started when we recorded it (a reused pid belongs to a process that started later).
+ */
 export function pidfileLive(ws, kind) {
   const rec = readPid(ws, kind);
   if (!rec || !pidAlive(rec.pid)) return null;
-  return pidCommand(rec.pid).includes(rec.expect) ? rec : null;
+  if (!pidCommand(rec.pid).includes(rec.expect)) return null;
+  const age = pidAgeSec(rec.pid);
+  const recordedAge = (Date.now() - Date.parse(rec.startedAt)) / 1000;
+  // process age should be >= time since the pid file was written (minus a little slack for spawn-then-write)
+  if (age === null || age + 8 < recordedAge) return null;
+  return rec;
+}
+
+/** SIGTERM then SIGKILL; the whole process group when the pid leads one (so orphaned children cannot keep ports busy). */
+export async function killVerified(pid) {
+  const group = pidPgid(pid) === pid;
+  const sig = (s) => { try { process.kill(group ? -pid : pid, s); } catch {} };
+  sig('SIGTERM');
+  for (let i = 0; i < 12 && pidAlive(pid); i++) await sleep(250);
+  if (pidAlive(pid) || group) sig('SIGKILL');
+  return group;
 }
 
 export async function waitForHttp(url, { timeoutMs = 60000, ok = (r) => r.status < 500 } = {}) {

@@ -19,7 +19,8 @@ export const CURSOR_INIT_SCRIPT = `(() => {
   const home = () => {
     const d = document.querySelectorAll('dialog[open]');
     const host = d.length ? d[d.length - 1] : (document.body || document.documentElement);
-    if (host && el.parentNode !== host) host.appendChild(el);
+    // last child of its host, so later-added overlays (the confirmation card column) cannot cover the pointer
+    if (host && (el.parentNode !== host || host.lastElementChild !== el)) host.appendChild(el);
     requestAnimationFrame(home);
   };
   requestAnimationFrame(home);

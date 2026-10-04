@@ -18,7 +18,7 @@ import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import {
-  parseArgs, workspace, assertScratch, readCreds, sleep, waitForHttp, writePid, pidfileLive, fail, REPO, RIG_DIR,
+  parseArgs, workspace, assertScratch, assertPortsFree, listeners, pidCommand, readCreds, sleep, waitForHttp, writePid, pidfileLive, fail, REPO, RIG_DIR,
 } from './lib/common.mjs';
 import { CURSOR_INIT_SCRIPT, humanFor } from './lib/human.mjs';
 
@@ -33,9 +33,12 @@ const VIEW = { width: 1440, height: 900 };
 const baseUrl = `http://localhost:${port}`;
 const beatDir = ws.beatDir(beatId);
 
-assertScratch(ws.home); assertScratch(ws.out);
+for (const p of [ws.work, ws.home, ws.out, ws.run, ws.chromeUdd, beatDir]) assertScratch(p);
 if (!fs.existsSync(path.join(ws.out, 'CREDENTIALS.txt'))) fail(`no seeded workspace at ${ws.work}; run reset.mjs first`);
 if (pidfileLive(ws, 'host')) fail(`a host for workspace ${ws.name} is already running`);
+
+try { assertPortsFree({ dashboard: port, cdp: cdpPort, control: controlPort }); } catch (e) { fail(e.message); }
+if (new Set([port, cdpPort, controlPort]).size !== 3) fail('--port, --cdp-port and --control-port must differ');
 
 const beat = await import(pathToFileURL(path.join(RIG_DIR, 'beats', `${beatId}.mjs`)).href);
 if (typeof beat.humanScript !== 'function') fail(`beat ${beatId} must export humanScript`);
@@ -88,17 +91,9 @@ async function startDashboard() {
     detached: true, // own process group so shutdown can take down bun's children too
   });
   started.dashboardPid = dashboard.pid;
-  writePid(ws, 'dashboard', dashboard.pid, 'src/index.tsx');
+  writePid(ws, 'dashboard', dashboard.pid, `--dashboard --port ${port}`);
   dashboard.on('exit', (code) => { if (!shuttingDown) { console.error(`dashboard exited early (${code}); see ${path.join(ws.run, 'dashboard.log')}`); void shutdown(1); } });
   await waitForHttp(baseUrl + '/', { timeoutMs: 90000 });
-}
-
-function chromePidFor(udd) {
-  try {
-    const out = execFileSync('pgrep', ['-f', `--user-data-dir=${udd}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).map(Number);
-    // the browser (main) process is the one whose parent is not another chrome with the same udd
-    return out.sort((a, b) => a - b)[0] ?? null;
-  } catch { return null; }
 }
 
 async function launchChrome() {
@@ -113,8 +108,12 @@ async function launchChrome() {
     recordVideo: { dir: path.join(beatDir, 'raw'), size: { width: VIEW.width * dsf, height: VIEW.height * dsf } },
   });
   await context.addInitScript(CURSOR_INIT_SCRIPT);
-  const pid = chromePidFor(ws.chromeUdd);
-  if (pid) { started.chromePid = pid; writePid(ws, 'chrome', pid, ws.chromeUdd); }
+  // Prove the CDP endpoint is OUR Chrome: whoever listens on cdpPort must be a chrome launched with our user-data-dir.
+  const owners = listeners(cdpPort);
+  const mine = owners.filter((p) => { const c = pidCommand(p); return /chrome/i.test(c) && c.includes(`--user-data-dir=${ws.chromeUdd}`) && c.includes(`--remote-debugging-port=${cdpPort}`); });
+  if (!owners.length || mine.length !== owners.length) throw new Error(`CDP port ${cdpPort} is not owned by our Chrome (listeners: ${owners.map((p) => `${p}: ${pidCommand(p).slice(0, 100)}`).join(' | ') || 'none'})`);
+  const pid = mine[0];
+  started.chromePid = pid; writePid(ws, 'chrome', pid, `--user-data-dir=${ws.chromeUdd}`);
   const ver = await (await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).json();
   log('chrome-launched', { browser: ver.Browser, cdpPort, dsf, pid });
 }
