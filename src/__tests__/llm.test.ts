@@ -114,6 +114,18 @@ describe('callLlm', () => {
     expect(seen).toBe(1234);
   });
 
+  test('toolIndex reaches the adapter only when given (cloud calls are unchanged)', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    mockAdapterFn = async (opts: Record<string, unknown>) => {
+      seen.push(opts);
+      return makeLlmResponse();
+    };
+    await callLlm('test', { model: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', toolIndex: ['plaid_sync'] });
+    await callLlm('test', { model: 'gpt-5.2' });
+    expect(seen[0].toolIndex).toEqual(['plaid_sync']);
+    expect('toolIndex' in seen[1]).toBe(false);
+  });
+
   test('max retries exceeded throws', async () => {
     mockAdapterFn = async () => {
       throw new Error('service unavailable');

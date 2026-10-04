@@ -70,6 +70,11 @@ export interface ProviderCallOptions {
   systemPrompt: string;
   userPrompt: string;
   tools?: ToolDef[];
+  /**
+   * Registered tools whose schemas are not in `tools` (local tool selection):
+   * listed by name and still callable. Only the Transformers adapter reads it.
+   */
+  toolIndex?: string[];
   outputSchema?: z.ZodType;
   signal?: AbortSignal;
   /** Generation cap. Honored by the Transformers adapter; other adapters ignore it in this slice. */

@@ -370,18 +370,35 @@ export function explainGenerationError(
   return new Error(`Local model ${modelName.replace(/^transformers:/, '')} failed${size} (${device}): ${reason}.${hint}`);
 }
 
+/** One tool as the local tool prompt shows it: compact JSON-Schema parameters, boilerplate stripped. */
+export function compactToolSchema(t: ToolDef): { name: string; description: string; parameters: Record<string, unknown> } {
+  const { $schema: _s, additionalProperties: _a, ...parameters } = z.toJSONSchema(t.schema) as Record<string, unknown>;
+  return { name: t.name, description: t.description, parameters };
+}
+
+/** Names listed in the "Other tools" line before it is cut short (user MCP servers can add many). */
+export const TOOL_INDEX_MAX_NAMES = 60;
+
 /**
  * System prompt plus tool schemas for prompt-injected tool calling. Compact
  * JSON with the JSON-Schema boilerplate stripped: every token counts against a
  * small local model's prompt budget (pretty-printing alone added ~45%).
+ *
+ * `toolIndex` names the registered tools whose schemas were left out (local
+ * tool selection): they stay callable, and the executor answers a call with
+ * bad arguments with the schema.
  */
-export function buildToolSystemPrompt(systemPrompt: string, tools?: ToolDef[]): string {
+export function buildToolSystemPrompt(systemPrompt: string, tools?: ToolDef[], toolIndex?: readonly string[]): string {
   if (!tools || tools.length === 0) return systemPrompt;
 
-  const toolSchemas = tools.map((t) => {
-    const { $schema: _s, additionalProperties: _a, ...parameters } = z.toJSONSchema(t.schema) as Record<string, unknown>;
-    return { name: t.name, description: t.description, parameters };
-  });
+  const toolSchemas = tools.map(compactToolSchema);
+
+  let indexLine = '';
+  if (toolIndex && toolIndex.length > 0) {
+    const shown = toolIndex.slice(0, TOOL_INDEX_MAX_NAMES).join(', ');
+    const more = toolIndex.length - TOOL_INDEX_MAX_NAMES;
+    indexLine = `\n\nOther tools (not shown; call by name and the schema is returned): ${shown}${more > 0 ? ` … and ${more} more (ask for them by topic)` : ''}`;
+  }
 
   return `${systemPrompt}
 
@@ -389,9 +406,42 @@ You have access to tools. To call a tool, output ONLY this exact format and noth
 <tool_call>{"name": "TOOL_NAME", "arguments": {ARGS_JSON}}</tool_call>
 
 Available tools:
-${JSON.stringify(toolSchemas)}
+${JSON.stringify(toolSchemas)}${indexLine}
 
 If no tool is needed, respond normally in plain text.`;
+}
+
+/** Tool names a local model's output may call: the schemas sent plus the names-only index. */
+export function callableToolNames(tools: ToolDef[], toolIndex?: readonly string[]): string[] {
+  const names = tools.map((t) => t.name);
+  for (const name of toolIndex ?? []) if (!names.includes(name)) names.push(name);
+  return names;
+}
+
+/** Token estimate before a tokenizer is available: ~chars/3.2, within ~10% for compact JSON (measured on granite). */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 3.2);
+}
+
+/**
+ * A token counter for `modelName`'s own tokenizer (plain text, no chat
+ * template), for planning local prompts against the budget. Loads the same
+ * pipeline the call is about to use; falls back to `estimateTokens` when the
+ * pipeline cannot load (the call itself will then report why).
+ */
+export async function getLocalTokenCounter(modelName: string): Promise<(text: string) => number> {
+  try {
+    const pipe = await getOrCreatePipeline(modelName.replace(/^transformers:/, ''));
+    return (text: string) => {
+      try {
+        return pipe.tokenizer.encode(text).length as number;
+      } catch {
+        return estimateTokens(text);
+      }
+    };
+  } catch {
+    return estimateTokens;
+  }
 }
 
 /**
@@ -502,13 +552,13 @@ export function parseToolCall(
 
 export class TransformersAdapter implements ProviderAdapter {
   async call(options: ProviderCallOptions): Promise<LlmResponse> {
-    const { model, systemPrompt, userPrompt, tools, outputSchema } = options;
+    const { model, systemPrompt, userPrompt, tools, toolIndex, outputSchema } = options;
 
     let finalSystemPrompt = systemPrompt;
     if (outputSchema) {
       finalSystemPrompt = buildStructuredSystemPrompt(systemPrompt, outputSchema);
     } else if (tools && tools.length > 0) {
-      finalSystemPrompt = buildToolSystemPrompt(systemPrompt, tools);
+      finalSystemPrompt = buildToolSystemPrompt(systemPrompt, tools, toolIndex);
     }
 
     const messages = [
@@ -548,7 +598,7 @@ export class TransformersAdapter implements ProviderAdapter {
 
     // Handle tool calls
     if (tools && tools.length > 0) {
-      const names = tools.map((t) => t.name);
+      const names = callableToolNames(tools, toolIndex);
       const skillNames = names.includes('skill') ? discoverSkills().map((s) => s.name) : undefined;
       const toolCall = parseToolCall(rawOutput, names, skillNames);
       if (toolCall) {

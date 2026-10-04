@@ -6,7 +6,11 @@ import {
   localPromptBudget,
   LocalPromptTooLargeError,
   assertWithinPromptBudget,
+  callableToolNames,
+  compactToolSchema,
+  estimateTokens as estimateLocalTokens,
   parseToolCall,
+  TOOL_INDEX_MAX_NAMES,
 } from '../model/providers/transformers.js';
 import { formatUserFacingError } from '../utils/errors.js';
 import type { ToolDef } from '../model/types.js';
@@ -68,6 +72,40 @@ describe('tool prompt for local models', () => {
   test('no tools leaves the system prompt untouched', () => {
     expect(buildToolSystemPrompt('SYS', [])).toBe('SYS');
   });
+
+  test('without an index the prompt is unchanged (no index line)', () => {
+    expect(buildToolSystemPrompt('SYS', [tool], [])).toBe(buildToolSystemPrompt('SYS', [tool]));
+    expect(buildToolSystemPrompt('SYS', [tool])).not.toContain('Other tools');
+  });
+
+  test('tools left out of the subset are listed by name after the schemas', () => {
+    const prompt = buildToolSystemPrompt('SYS', [tool], ['plaid_sync', 'goal_manage']);
+    expect(prompt).toContain(
+      'Other tools (not shown; call by name and the schema is returned): plaid_sync, goal_manage',
+    );
+    expect(prompt.indexOf('Other tools')).toBeGreaterThan(prompt.indexOf('"name":"categorize"'));
+    expect(prompt).not.toContain('"name":"plaid_sync"');
+  });
+
+  test('a long index is capped', () => {
+    const many = Array.from({ length: TOOL_INDEX_MAX_NAMES + 5 }, (_, i) => `mcp_tool_${i}`);
+    const prompt = buildToolSystemPrompt('SYS', [tool], many);
+    expect(prompt).toContain(`mcp_tool_${TOOL_INDEX_MAX_NAMES - 1}`);
+    expect(prompt).not.toContain(`mcp_tool_${TOOL_INDEX_MAX_NAMES},`);
+    expect(prompt).toContain('… and 5 more');
+  });
+
+  test('compactToolSchema is the per-tool JSON the prompt injects', () => {
+    const compact = compactToolSchema(tool);
+    expect(compact.name).toBe('categorize');
+    expect(JSON.stringify(compact)).not.toContain('$schema');
+    expect(buildToolSystemPrompt('SYS', [tool])).toContain(JSON.stringify([compact]));
+  });
+
+  test('the char-based token estimate is ~chars/3.2', () => {
+    expect(estimateLocalTokens('x'.repeat(320))).toBe(100);
+    expect(estimateLocalTokens('')).toBe(0);
+  });
 });
 
 describe('tool-call parsing for local models', () => {
@@ -125,6 +163,13 @@ describe('tool-call parsing for local models', () => {
   test('a real tool wins over a same-named skill; unknown names stay rejected', () => {
     expect(parseToolCall('{"name": "categorize", "arguments": {}}', names, ['categorize'])?.name).toBe('categorize');
     expect(parseToolCall('{"name": "nope", "arguments": {}}', names, ['month-end-close'])).toBeNull();
+  });
+
+  test('a bare call to an indexed (schema not shown) tool parses', () => {
+    const callable = callableToolNames([tool], ['plaid_sync']);
+    expect(callable).toEqual(['categorize', 'plaid_sync']);
+    expect(parseToolCall('{"name": "plaid_sync", "arguments": {}}', callable)?.name).toBe('plaid_sync');
+    expect(callableToolNames([tool])).toEqual(['categorize']);
   });
 
   test('plain answers and JSON naming an unknown tool stay text', () => {

@@ -48,6 +48,8 @@ export interface CallLlmOptions {
   systemPrompt?: string;
   outputSchema?: z.ZodType<unknown>;
   tools?: ToolDef[];
+  /** Names-only tool index for local tool selection (see ProviderCallOptions.toolIndex). */
+  toolIndex?: string[];
   signal?: AbortSignal;
   runId?: string;
   sequenceNum?: number;
@@ -72,7 +74,7 @@ export interface LlmResult {
  * Always returns LlmResponse — no string | AIMessage branching downstream.
  */
 export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<LlmResult> {
-  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal, runId, sequenceNum, callType, maxTokens } = options;
+  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, toolIndex, signal, runId, sequenceNum, callType, maxTokens } = options;
   const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   const provider = resolveProvider(model);
@@ -108,6 +110,7 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
           systemPrompt: finalSystemPrompt,
           userPrompt: prompt,
           tools,
+          ...(toolIndex ? { toolIndex } : {}),
           outputSchema,
           signal,
           maxTokens,
