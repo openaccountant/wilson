@@ -8,14 +8,12 @@ export class VercelAiAdapter implements ProviderAdapter {
   async call(options: ProviderCallOptions): Promise<LlmResponse> {
     const { model, systemPrompt, userPrompt, tools, outputSchema, signal } = options;
     const llmModel = this.modelFactory(model);
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      { role: 'user' as const, content: userPrompt },
-    ];
+    // AI SDK 7 rejects role:'system' inside messages; system text goes through `instructions`.
+    const messages = [{ role: 'user' as const, content: userPrompt }];
 
     // Structured output path
     if (outputSchema) {
-      const result = await generateObject({ model: llmModel, messages, schema: outputSchema });
+      const result = await generateObject({ model: llmModel, instructions: systemPrompt, messages, schema: outputSchema });
       return {
         content: JSON.stringify(result.object),
         toolCalls: [],
@@ -37,6 +35,7 @@ export class VercelAiAdapter implements ProviderAdapter {
 
     const result = await generateText({
       model: llmModel,
+      instructions: systemPrompt,
       messages,
       tools: vercelTools,
       abortSignal: signal,
