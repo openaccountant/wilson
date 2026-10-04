@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { parseArgs, workspace, fail } from './lib/common.mjs';
+import { parseArgs, workspace, assertScratch, fail } from './lib/common.mjs';
 const { flags } = parseArgs(process.argv.slice(2));
 const ws = workspace(flags.name ?? 'p1');
 const beat = flags.beat ?? fail('--beat required');
@@ -12,7 +12,7 @@ const dir = ws.beatDir(beat);
 const log = JSON.parse(fs.readFileSync(path.join(dir, 'events.json'), 'utf8'));
 const mp4 = path.join(dir, 'video.mp4');
 if (!fs.existsSync(mp4)) fail('no video.mp4 in ' + dir);
-const out = flags.out ?? path.join(ws.work, `keyframes-${beat}`);
+const out = assertScratch(flags.out ?? path.join(ws.work, `keyframes-${beat}`));
 fs.mkdirSync(out, { recursive: true });
 const paths = [];
 for (const ev of log.events.filter((e) => e.keyframe && e.t_ms !== null)) {

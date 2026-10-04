@@ -1,15 +1,17 @@
-// Beat w9-tour: "Agent access center tour". Human-only, no agent. Everything on screen is the real Settings -> Agent
-// access center and the real bridge panel; nothing is toggled (the kill switch is only pointed at).
+// Beat w9-tour (beat 1, "It's my data"): the story is "nothing has happened yet". Zero tools are exposed, the kill switch
+// is present and ready (ON), and the audit log is EMPTY - that emptiness is the correct, intended state, not a gap. Human-only,
+// no agent. Everything on screen is the real Settings -> Agent access center and the real bridge panel. The human only
+// HOVERS the kill switch to point at it; it is never toggled.
 export const meta = {
   id: 'w9-tour',
-  title: 'Agent access: zero tools, kill switch, audit log',
+  title: "It's my data: zero tools, a kill switch, an empty audit log",
   needsAgent: false,
   expectedStates: [
-    'overview-start: the real Overview tab, signed in as the admin, before any agent access',
-    'bridge-zero-tools: bridge panel "Agent access for this tab" reads "0 tools live in this tab · 0 pending"',
-    'kill-switch: Settings -> Agent access, kill switch ON, "0 tools live in this tab"',
-    'tool-table: every tool row shows "Grant to this tab" (none granted)',
-    'audit-log: Activity expanded, "No agent activity yet."',
+    'overview-start: the real Overview tab, signed in as the admin; nothing has happened yet',
+    'bridge-zero-tools: bridge panel "Agent access for this tab" reads "0 tools live in this tab · 0 pending"; document.modelContext exposes zero tools',
+    'kill-switch: Settings -> Agent access shows the kill switch present and ON-ready (aria-checked=true), the pointer hovering it, NOT toggled (still on afterwards)',
+    'tool-table: every tool row shows "Grant to this tab"; none is granted',
+    'audit-log: Activity expanded and EMPTY ("No agent activity yet.") - correct, because nothing has happened yet',
   ],
 };
 
@@ -54,10 +56,11 @@ export async function humanScript(page, ctx) {
   await h.moveTo(kill, { dx: -120 });
   await kill.getByText(/0 tools live in this tab/).waitFor({ timeout: 10000 });
   must(await kill.getByRole('switch').getAttribute('aria-checked') === 'true', 'kill switch expected ON (agent access enabled)');
-  await h.pause(900);
-  log('kill-switch', { on: true }, { keyframe: true });
-  await h.pause(2000);
-  await h.moveTo(kill.getByRole('switch'), { settle: 1400 }); // point at it; do not press
+  await h.moveTo(kill.getByRole('switch'), { settle: 1600 }); // hover/point at the switch; never press it
+  await kill.getByRole('switch').hover({ trial: true }).catch(() => {});
+  must(await kill.getByRole('switch').getAttribute('aria-checked') === 'true', 'kill switch must still be ON after hovering (it is never toggled)');
+  log('kill-switch', { on: true, hovered: true, toggled: false }, { keyframe: true });
+  await h.pause(2200);
 
   // 3. The per-tool policy table: nothing granted.
   const table = page.getByTestId('agent-tool-policies');

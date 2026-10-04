@@ -1344,13 +1344,19 @@ function requireCategory(db: Database, raw: string): CategoryLookup {
   throw new PrepareError(`unknown category "${sanitizeUntrustedText(raw, 40)}". Use an existing category such as: ${examples}`);
 }
 
-/** How a summary names a transaction: by id and date, never by its bank text. */
 /** `-$240.00`, `$1,234.50`: the signed amount as the ledger shows it. */
 function formatCardAmount(amount: number): string {
   const abs = Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${amount < 0 ? '-' : ''}$${abs}`;
 }
 
+/** The category as a card shows a "before" value: an empty or missing category reads "Uncategorized", not a bare dash. */
+function beforeCategoryLabel(db: Database, stored: unknown): unknown {
+  if (stored === null || stored === undefined || (typeof stored === 'string' && stored.trim() === '')) return 'Uncategorized';
+  return storedCategoryLabel(db, stored);
+}
+
+/** How a summary names a transaction: by id and date, never by its bank text. */
 function describeTransaction(txn: TransactionRow): string {
   return `transaction #${txn.id} (${txn.date})`;
 }
@@ -1376,13 +1382,15 @@ export function prepareMutation(db: Database, toolName: string, args: Record<str
     if (args.entityId !== undefined && !db.prepare('SELECT 1 AS ok FROM entities WHERE id = @id').get({ id: args.entityId })) {
       throw new PrepareError(`entity #${args.entityId} does not exist`);
     }
+    const entityChanged = (entityId ?? null) !== (txn.entity_id ?? null);
     return {
       transactionId: id,
       revision: txn.revision,
       // An empty category reads "Uncategorized" on the card, not a bare dash, and the amount sits in the
       // server-written summary so the human sees exactly which row (date, amount, bank text) is changing.
-      before: { category: storedCategoryLabel(db, txn.category) ?? 'Uncategorized', entity_id: txn.entity_id },
-      after: { category: category.label, entity_id: entityId ?? null },
+      // The entity row appears only when the entity actually changes; an unchanged "entity_id — —" row is noise.
+      before: { category: beforeCategoryLabel(db, txn.category), ...(entityChanged ? { entity_id: txn.entity_id } : {}) },
+      after: { category: category.label, ...(entityChanged ? { entity_id: entityId ?? null } : {}) },
       summary: `Categorize transaction #${txn.id} (${txn.date}, ${formatCardAmount(txn.amount)}) as "${category.label}"`,
       bankData: bankDataFor(txn),
       // The resolved entity is persisted so commit writes exactly what the card showed
@@ -1405,7 +1413,7 @@ export function prepareMutation(db: Database, toolName: string, args: Record<str
         before[field] = (txn as unknown as Record<string, unknown>)[field];
         after[field] = canonical[field];
         if (field === 'category') {
-          before[field] = storedCategoryLabel(db, before[field]);
+          before[field] = beforeCategoryLabel(db, before[field]);
           after[field] = storedCategoryLabel(db, after[field]);
         }
       }

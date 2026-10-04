@@ -56,7 +56,7 @@ to DOM state (wait for the card, then press-and-hold); they never fabricate it. 
 - `w9-tour`: human only. Overview, bridge panel (0 tools), Settings -> Agent access (kill switch ON, 25 Grant buttons, none
   granted), Activity ("No agent activity yet").
 - `b5-propose`: preState imports both September CSVs through Transactions -> Import statement, runs `/categorize` in Chat with
-  the local model, and requires Brightwell Pharmacy to still be Uncategorized. humanScript grants `categorize_transaction`,
+  the local model, and requires `SQ *KILN & CO STUDIO` to still be Uncategorized. humanScript grants `categorize_transaction`,
   `transaction_search`, `spending_summary` in the bridge panel on camera, waits for a card (reads cards are handled too),
   holds Approve 1.2 s (or Reject with `--opts '{"decision":"deny"}'`), then shows the ledger row.
 
@@ -73,18 +73,19 @@ WebGPU model pre-warm: none needed for b5. A beat can add a `prewarm(ctx)` expor
   So `--cdp <port>` can only ever reach the rig's own Chrome.
 - Pid files carry a specific marker (`--dashboard --port <p>`, `--user-data-dir=<udd>`) and a start time. `stop.mjs` kills
   a pid only if both still match, signals the whole process group when the pid leads one, and reaps orphaned members of
-  our dashboard group. A stale or reused pid is reported and left alone.
+  our dashboard group only when the pid record AND every member's command line (absolute `src/index.tsx --dashboard
+  --port <p>`) check out; otherwise it logs the members and kills nothing. The dashboard runs with cwd = the scratch HOME. A stale or reused pid is reported and left alone.
 
 ## b5-propose: what the human script refuses to do
 
-It never approves blindly. Before holding Approve on a change card it reads the card: the merchant text and signed
-amount of the target row, and a Category row going from Uncategorized to a real category. Anything else: it clicks Reject,
-logs the card text and exits with an error. Reads ("Hold to allow") are allowed. The target is the first leftover row that is
-REALLY uncategorized after `/categorize` (Brightwell Pharmacy, else Kiln & Co Studio, else Amazon); preState also fails
-if `/categorize` reports "batch errors occurred".
+It never approves blindly. The target is explicit: `opts.target`, default `SQ *KILN & CO STUDIO` (-$240.00, Sep 22), the
+row left uncategorized because it is ambiguous (business or personal). There is no fallback to another merchant: preState
+FAILS if `/categorize` reports "batch errors occurred" or if the target row is not Uncategorized afterwards.
 
-With the local `gemma4:12b`, `/categorize` confidently files Brightwell Pharmacy under Health (100%), so on this seed the
-target is **SQ *KILN & CO STUDIO (-$240.00)**. `--opts '{"target":"amzn"}'` forces another candidate.
+Before acting on a card it reads it. A change card must be tool `categorize_transaction`, contain the target description and
+`-$240.00`, and carry a Category row going from Uncategorized to a real category (the agent's own choice). Read cards must
+be for `transaction_search` / `spending_summary`. Anything else: log the card text, click Reject, exit with an error.
+`opts.decision` is `approve` (default, hold Approve) or `deny` (click Reject, expect "Rejected. Nothing was changed.").
 
 A test driver for the agent side (plain `agent-browser ... webmcp invoke transaction_search` then
 `categorize_transaction {id, category}`, real calls) verified approve and reject end to end.

@@ -326,6 +326,35 @@ describe('prepareMutation / commitMutation', () => {
     expect(delta.summary).toContain('as "Entertainment"');
   });
 
+  test('categorize_transaction: an empty-string category reads "Uncategorized" and an unchanged entity adds no entity_id row', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const id = firstTxnId(db);
+    db.prepare("UPDATE transactions SET category = '' WHERE id = @id").run({ id });
+    const delta = prepareMutation(db, 'categorize_transaction', { id, category: 'Entertainment' });
+    expect(delta.before).toEqual({ category: 'Uncategorized' });
+    expect(delta.after).toEqual({ category: 'Entertainment' });
+  });
+
+  test('categorize_transaction: an entity change still shows the entity_id row', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const id = firstTxnId(db);
+    const ent = db.prepare("INSERT INTO entities (name, slug) VALUES ('Studio', 'studio')").run().lastInsertRowid as number;
+    const delta = prepareMutation(db, 'categorize_transaction', { id, category: 'Entertainment', entityId: ent });
+    expect(delta.after).toMatchObject({ entity_id: ent });
+    expect(delta.before).toHaveProperty('entity_id');
+  });
+
+  test('edit_transaction: an empty or null category before-value reads "Uncategorized"', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const id = firstTxnId(db);
+    db.prepare("UPDATE transactions SET category = NULL WHERE id = @id").run({ id });
+    const delta = prepareMutation(db, 'edit_transaction', { id, category: 'Entertainment' });
+    expect(delta.before).toMatchObject({ category: 'Uncategorized' });
+  });
+
   test('prepare on a missing transaction throws NotFoundError (no card for a row that does not exist)', () => {
     const db = createTestDb();
     seedTestData(db);

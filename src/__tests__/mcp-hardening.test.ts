@@ -322,7 +322,10 @@ describe('categorize_transaction entity round trip', () => {
     updateTransaction(db, id, { entity_id: entityId });
     const txn = getTransactionById(db, id)!;
     const prepared = prepareMutation(db, 'categorize_transaction', { id, category: 'Dining' });
-    expect((prepared.after as { entity_id: number }).entity_id).toBe(entityId);
+    // The entity is unchanged, so the card carries no entity_id row; the stored args still pin the current entity.
+    expect(prepared.after).not.toHaveProperty('entity_id');
+    expect(prepared.before).not.toHaveProperty('entity_id');
+    expect(prepared.args.entityId).toBe(entityId);
     const result = commitMutation(db, 'categorize_transaction', prepared.args, txn.revision);
     expect(result.outcome).toBe('committed');
     expect(getTransactionById(db, id)!.entity_id).toBe(entityId);

@@ -1,40 +1,50 @@
 // Beat b5-propose: "It proposes, you decide".
 //
+//  The target is EXPLICIT: opts.target (default "SQ *KILN & CO STUDIO", -$240.00 on Sep 22), the row that genuinely stays
+//  uncategorized after Wilson's own /categorize because it is ambiguous (business or personal?). There is no fallback to
+//  some other merchant: if /categorize crashed with batch errors, or the target is not uncategorized afterwards, the
+//  preState FAILS and nothing is recorded.
+//
 //  preState (unrecorded): import the two September statements through the REAL Transactions -> Import statement
-//    dialog, then run /categorize in Chat with the local Ollama model and wait for it to finish. Then check, from the
-//    real Transactions tab, that a leftover target (Brightwell Pharmacy, else Kiln & Co Studio, else Amazon) is still uncategorized. If it is not, the beat stops: we do not
-//    fake the starting state.
+//    dialog, then run /categorize in Chat with the local Ollama model and wait for it to finish.
 //  humanScript (recorded): grant three tools to THIS tab through the real Agent access panel, wait for the agent's
-//    confirmation card, read it, hold Approve (or click Reject with opts.decision = "deny"), then show the ledger row.
+//    confirmation card, READ it, and only then act. A change card must be categorize_transaction, name the target
+//    description and show -$240.00; anything else is logged and Rejected (never blind-approved). opts.decision
+//    'approve' (default) holds Approve; 'deny' clicks Reject and shows "Rejected. Nothing was changed.".
 //
 // The AGENT side (an external client calling transaction_search / categorize_transaction through WebMCP) is not part
-// of this file. The human script only REACTS to what appears in the DOM.
+// of this file. The human script only REACTS to what appears in the DOM. The agent chooses the category itself.
 export const meta = {
   id: 'b5-propose',
   title: 'It proposes, you decide',
   needsAgent: true,
   agentTools: ['transaction_search', 'spending_summary', 'categorize_transaction'],
+  opts: { target: 'SQ *KILN & CO STUDIO (default)', decision: 'approve | deny' },
   expectedStates: [
-    'ledger-before: Transactions, search for the target merchant, row shows Uncategorized',
+    'ledger-before: Transactions, September, search for the target; the SQ *KILN & CO STUDIO -$240.00 row shows Uncategorized',
     'grants-applied: bridge panel shows 3 tools live in this tab (granted on camera)',
-    'card-shown: confirmation card with the exact bank row and before/after (Uncategorized -> category)',
-    'approve-held: Hold to approve in progress (fill)',
-    'card-resolved: outcome text on the card',
-    'ledger-after: the target row now carries the new category',
+    'card-shown: confirmation card "Confirm: Categorize Transaction" naming SQ *KILN & CO STUDIO and -$240.00, Category Uncategorized -> the agent\'s chosen category, no unchanged entity_id row',
+    'card-read-checked: the human script verified tool, description and amount before acting (events card-checked)',
+    'approve-held (decision=approve): Hold to approve in progress',
+    'card-resolved: approve -> "Done. The change was applied."; deny -> "Rejected. Nothing was changed."',
+    'ledger-after: approve -> the target row carries the agent\'s category; deny -> the target row is still Uncategorized',
   ],
 };
 
 const TOOLS = ['categorize_transaction', 'transaction_search', 'spending_summary'];
-// Leftover merchants, in order of preference. The target is whichever is REALLY still uncategorized after /categorize
-// on the real ledger (a local model may confidently categorize Brightwell; then the beat honestly uses the next one).
-const CANDIDATES = [
-  { id: 'brightwell', search: 'Brightwell', card: 'BRIGHTWELL PHARMACY', amount: '38.47' },
-  { id: 'kiln', search: 'Kiln', card: 'KILN & CO STUDIO', amount: '240.00' },
-  { id: 'amzn', search: 'AMZN', card: 'AMZN MKTP', amount: '73.22' },
-];
+const READ_TOOLS = new Set(['transaction_search', 'spending_summary']);
+const DEFAULT_TARGET = 'SQ *KILN & CO STUDIO';
+const AMOUNT = '-$240.00';
 let TARGET = null;
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const rowRe = () => new RegExp(esc(TARGET.card.split(' ')[0]), 'i');
+const norm = (x) => x.replace(/\s+/g, ' ').trim().toUpperCase();
+function targetFrom(opts) {
+  const description = String(opts.target ?? DEFAULT_TARGET);
+  // Search on the merchant words after any "SQ *" style processor prefix; the row is still matched on the full text.
+  const search = description.replace(/^[^*]*\*/, '').trim() || description;
+  return { description, search, amount: AMOUNT };
+}
+const rowRe = () => new RegExp(esc(TARGET.description).replace(/\s+/g, '\\s+'), 'i');
 const CARD = '[data-card-id], [data-testid="agent-approval-card"]';
 
 async function importStatement(page, file, label, log) {
@@ -54,17 +64,18 @@ async function importStatement(page, file, label, log) {
   log('imported', { statement: label, parsedRows: rows, banner: banner.slice(0, 200) });
 }
 
-async function targetRow(page, cand) {
+async function targetRow(page) {
   const search = page.getByPlaceholder('Search by merchant or description...');
   await search.fill('');
-  await search.fill(cand.search);
-  const row = page.locator('tr[data-tx-id]', { hasText: new RegExp(esc(cand.card.split(' ')[0]), 'i') }).first();
+  await search.fill(TARGET.search);
+  const row = page.locator('tr[data-tx-id]', { hasText: rowRe() }).first();
   await row.waitFor({ timeout: 20000 });
   return row;
 }
 
 export async function preState(page, ctx) {
   const { log, paths } = ctx;
+  TARGET = targetFrom(ctx.opts);
   await ctx.gotoTab('Transactions');
   await page.getByRole('heading', { name: 'Transactions' }).waitFor();
   await importStatement(page, paths.csv.checking, 'checking-2026-09.csv', log);
@@ -82,56 +93,61 @@ export async function preState(page, ctx) {
   const reply = (await page.locator('main, body').first().innerText()).slice(-1500);
   const tail = reply.replace(/\s+/g, ' ').slice(-600);
   log('categorize-done', { tail: tail.slice(-400) });
-  if (/batch errors? occurred/i.test(reply)) throw new Error(`precondition failed: /categorize reported batch errors, so the target would be left over by a crash, not by Review: ${tail}`);
+  if (/batch errors? occurred/i.test(reply)) throw new Error(`precondition failed: /categorize reported "batch errors occurred", so the target could be left over by a crash rather than by Review: ${tail}`);
 
-  // Precondition, from the real ledger: pick the first candidate that is still uncategorized.
+  // Precondition, from the real ledger: THE target (no fallback) must be uncategorized.
   await ctx.gotoTab('Transactions');
-  const wanted = ctx.opts.target ? CANDIDATES.filter((c) => c.id === ctx.opts.target) : CANDIDATES;
-  const seen = [];
-  for (const cand of wanted) {
-    const row = await targetRow(page, cand);
-    const text = (await row.innerText()).replace(/\s+/g, ' ');
-    seen.push(text);
-    if (/Uncategorized/.test(text)) { TARGET = cand; log('target-before', { target: cand.id, row: text, considered: seen }); break; }
-  }
-  if (!TARGET) throw new Error(`precondition failed: none of the candidate rows is left uncategorized: ${JSON.stringify(seen)}`);
+  const row = await targetRow(page).catch((e) => { throw new Error(`precondition failed: target row ${TARGET.description} not found in the ledger: ${e.message}`); });
+  const text = (await row.innerText()).replace(/\s+/g, ' ');
+  if (!/Uncategorized/.test(text)) throw new Error(`precondition failed: ${TARGET.description} is not uncategorized after /categorize: ${text}`);
+  if (!text.includes('240.00')) throw new Error(`precondition failed: target row is not the $240.00 charge: ${text}`);
+  log('target-before', { target: TARGET.description, row: text });
 }
 
 async function readCard(card) {
   return (await card.innerText()).replace(/\s+/g, ' ').trim();
 }
 
+/** The card's heading, read from its own text ("Confirm: Categorize Transaction" / "Allow read: Transaction Search"), before the close button or the requester line. */
+export function headingOf(text) {
+  return /^((?:Confirm|Allow read):\s*.+?)\s*(?:×|Requested by:)/i.exec(text)?.[1] ?? '';
+}
+
+/** "Confirm: Categorize Transaction" -> categorize_transaction; "Allow read: Transaction Search" -> transaction_search. */
+export function toolFromHeading(heading) {
+  const title = heading.replace(/^(Confirm|Allow read):\s*/i, '').trim();
+  return title.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
 /**
- * What a careful human checks before holding Approve on a CHANGE card: it must be about the target row (merchant and
- * amount on the card), and move Category from Uncategorized to a real category. Returns a list of problems.
+ * What a careful human checks before holding Approve on a CHANGE card. Returns {tool, text, rows, problems}:
+ * the tool must be categorize_transaction, the card must name the target description and show -$240.00, and Category
+ * must move from Uncategorized to some real category (the agent's own choice).
  */
 export async function checkChangeCard(card) {
   const text = await readCard(card);
+  const heading = headingOf(text);
+  const tool = toolFromHeading(heading);
   const problems = [];
-  if (!text.toUpperCase().includes(TARGET.card)) problems.push(`card does not name ${TARGET.card}`);
-  const amtRe = new RegExp('\\$\\s?' + esc(TARGET.amount).replace(/\\\.00$/, '(\\.00)?') + '(?![0-9])');
-  if (!amtRe.test(text)) problems.push(`card does not show the $${TARGET.amount} amount`);
+  if (tool !== 'categorize_transaction') problems.push(`card is for tool ${JSON.stringify(tool)} (heading ${JSON.stringify(heading)}), expected categorize_transaction`);
+  if (!norm(text).includes(norm(TARGET.description))) problems.push(`card text does not contain ${TARGET.description}`);
+  if (!text.includes(TARGET.amount)) problems.push(`card text does not contain ${TARGET.amount}`);
   const rows = await card.locator('table tr').evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim())));
-  const cat = rows.find((r) => /categor/i.test(r[0] ?? ''));
+  const cat = rows.find((r) => /^categor/i.test(r[0] ?? ''));
   if (!cat) problems.push(`card has no Category change row (rows: ${JSON.stringify(rows)})`);
   else {
     if (!/^uncategorized$/i.test(cat[1] ?? '')) problems.push(`Category "before" is ${JSON.stringify(cat[1])}, expected Uncategorized`);
-    if (!cat[2] || /^uncategorized$/i.test(cat[2])) problems.push(`Category "after" is ${JSON.stringify(cat[2])}, expected a real category`);
+    if (!cat[2] || /^(uncategorized|—)$/i.test(cat[2])) problems.push(`Category "after" is ${JSON.stringify(cat[2])}, expected a real category`);
   }
-  return { text, rows, problems };
+  return { tool, heading, text, rows, problems };
 }
 
 export async function humanScript(page, ctx) {
   const { h, log } = ctx;
-  if (!TARGET) {
-    // humanScript run without this process's preState: find the target from the real ledger, same rule.
-    await ctx.gotoTab('Transactions');
-    for (const cand of ctx.opts.target ? CANDIDATES.filter((c) => c.id === ctx.opts.target) : CANDIDATES) {
-      if (/Uncategorized/.test(await (await targetRow(page, cand)).innerText())) { TARGET = cand; break; }
-    }
-    if (!TARGET) throw new Error('no uncategorized candidate row in the ledger');
-  }
-  const decision = ctx.opts.decision === 'deny' ? 'deny' : 'approve';
+  TARGET = targetFrom(ctx.opts);
+  const decision = ctx.opts.decision === 'deny' ? 'deny' : ctx.opts.decision === undefined || ctx.opts.decision === 'approve' ? 'approve' : null;
+  if (!decision) throw new Error(`opts.decision must be "approve" or "deny", got ${JSON.stringify(ctx.opts.decision)}`);
+  let chosenCategory = null;
 
   // 1. The ledger before.
   await h.pause(1200);
@@ -144,10 +160,11 @@ export async function humanScript(page, ctx) {
     await h.click(page.getByRole('button', { name: '←' }), { pause: 900 });
   }
   await row.waitFor({ timeout: 20000 });
-  if (!/Uncategorized/.test(await row.innerText())) throw new Error(`beat precondition failed: ${TARGET.card} is not uncategorized`);
+  const rowBefore = (await row.innerText()).replace(/\s+/g, ' ');
+  if (!/Uncategorized/.test(rowBefore) || !rowBefore.includes('240.00')) throw new Error(`beat precondition failed: ${TARGET.description} (240.00) is not uncategorized: ${rowBefore}`);
   await h.moveTo(row, { dx: 60 });
   await h.pause(900);
-  log('ledger-before', { row: (await row.innerText()).replace(/\s+/g, ' ') }, { keyframe: true });
+  log('ledger-before', { row: rowBefore }, { keyframe: true });
   await h.pause(1500);
 
   // 2. Grant three tools to this tab through the real Agent access panel.
@@ -167,43 +184,63 @@ export async function humanScript(page, ctx) {
   await h.pause(1600);
   await h.click(launcher, { pause: 700 }); // close the panel so the card has the room
 
-  // 3. Wait for the agent's confirmation card(s). Read cards are Ask-able too, so react to each in turn.
+  // 3. Wait for the agent's confirmation card(s). Read each BEFORE acting; never blind-approve.
+  const reject = async (card, i, reason, extra = {}) => {
+    log('card-unexpected', { index: i, reason, ...extra });
+    const btn = card.getByRole('button', { name: /Reject|Don't allow/ });
+    await h.click(btn, { pause: 300 });
+    log('reject-clicked', { index: i, reason });
+    throw new Error(`refusing to approve an unexpected card: ${reason} | card text: ${String(extra.text ?? '').slice(0, 500)}`);
+  };
   for (let i = 0; i < 8; i++) {
     const card = page.locator(CARD).first();
     await card.waitFor({ timeout: 10 * 60_000 });
     await h.pause(1800); // the card arms after 800 ms; give a viewer time to read it
     const text = await readCard(card);
-    // A read card's button says "Hold to allow"; anything else is a change card and must pass the content check.
+    const heading = headingOf(text);
     const isRead = (await card.getByRole('button', { name: /Hold to allow/ }).count()) > 0;
-    const isChange = !isRead;
-    log('card-shown', { index: i, change: isChange, text: text.slice(0, 700) }, { keyframe: isChange });
+    const tool = toolFromHeading(heading);
+    log('card-shown', { index: i, tool, change: !isRead, text: text.slice(0, 700) }, { keyframe: !isRead });
     await h.moveTo(card, { settle: 2200 });
-    if (isChange) {
-      const check = await checkChangeCard(card);
-      log('card-checked', { index: i, rows: check.rows, problems: check.problems });
-      if (check.problems.length) {
-        await h.click(card.getByRole('button', { name: /Reject/ }), { pause: 300 });
-        log('reject-clicked', { index: i, reason: 'card content did not match the beat' });
-        throw new Error(`refusing to approve an unexpected card: ${check.problems.join('; ')} | card text: ${check.text.slice(0, 500)}`);
-      }
+    if (isRead) {
+      // A read card is allowed only for a tool we granted that is read-only.
+      if (!READ_TOOLS.has(tool)) await reject(card, i, `read card for unexpected tool ${JSON.stringify(tool)}`, { text });
+      log('card-checked', { index: i, tool, kind: 'read', problems: [] });
+      const allow = card.getByRole('button', { name: /Hold to allow/ });
+      await allow.waitFor({ timeout: 10000 });
+      await h.hold(allow, 1200, { onDown: async () => { log('allow-pressed', { index: i }); }, onUp: async () => { log('allow-released', { index: i }); } });
+      await h.pause(900);
+      log('card-resolved', { index: i, kind: 'read', tool });
+      await h.pause(2800); // a read card clears itself; the agent's next call may bring the change card
+      continue;
     }
-    if (decision === 'deny' && isChange) {
-      await h.click(card.getByRole('button', { name: /Reject/ }), { pause: 300 });
+    const check = await checkChangeCard(card);
+    log('card-checked', { index: i, tool: check.tool, kind: 'change', rows: check.rows, problems: check.problems });
+    if (check.problems.length) await reject(card, i, check.problems.join('; '), { text: check.text });
+    chosenCategory = check.rows.find((r) => /^categor/i.test(r[0] ?? ''))?.[2] ?? null;
+
+    if (decision === 'deny') {
+      await h.click(card.getByRole('button', { name: /Reject/ }), { pause: 100 });
       log('reject-clicked', { index: i, reason: 'opts.decision=deny' });
+      await page.getByText('Rejected. Nothing was changed.').first().waitFor({ timeout: 8000 });
+      await h.pause(400);
+      log('card-resolved', { index: i, decision, outcome: 'Rejected. Nothing was changed.' }, { keyframe: true });
+      await h.pause(1200);
     } else {
-      const approve = card.getByRole('button', { name: /Hold to (approve|allow)/ });
+      const approve = card.getByRole('button', { name: /Hold to approve/ });
       await approve.waitFor({ timeout: 10000 });
       await h.hold(approve, 1200, {
-        onDown: async () => { log('approve-pressed', { index: i }); await h.pause(500); log('approve-held', { index: i }, { keyframe: isChange }); },
+        onDown: async () => { log('approve-pressed', { index: i }); await h.pause(500); log('approve-held', { index: i }, { keyframe: true }); },
         onUp: async () => { log('approve-released', { index: i }); },
       });
+      await page.getByText('Done. The change was applied.').first().waitFor({ timeout: 8000 });
+      await h.pause(300);
+      log('card-resolved', { index: i, decision, outcome: 'Done. The change was applied.' }, { keyframe: true });
+      await h.pause(1200);
     }
-    await h.pause(900);
-    const outcome = await card.innerText().catch(() => '(card gone)');
-    log('card-resolved', { index: i, outcome: outcome.replace(/\s+/g, ' ').slice(0, 200) }, { keyframe: isChange });
-    if (isChange) break;
-    await h.pause(2800); // a read card clears itself; the agent's next call may bring the change card
+    break;
   }
+  if (chosenCategory === null) throw new Error('no change card was resolved');
 
   // 4. The ledger after: switch away and back so the Transactions tab refetches, then show the row.
   await h.pause(2600);
@@ -223,7 +260,10 @@ export async function humanScript(page, ctx) {
   }
   await h.moveTo(after, { dx: 60 });
   await h.pause(900);
-  log('ledger-after', { decision, row: (await after.innerText()).replace(/\s+/g, ' ') }, { keyframe: true });
+  const rowAfter = (await after.innerText()).replace(/\s+/g, ' ');
+  if (decision === 'deny' && !/Uncategorized/.test(rowAfter)) throw new Error(`deny must leave the row uncategorized, got: ${rowAfter}`);
+  if (decision === 'approve' && !rowAfter.toLowerCase().includes(String(chosenCategory).toLowerCase())) throw new Error(`row does not carry the approved category ${chosenCategory}: ${rowAfter}`);
+  log('ledger-after', { decision, category: chosenCategory, row: rowAfter }, { keyframe: true });
   await h.pause(2800);
   log('beat-end');
 }

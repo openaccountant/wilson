@@ -43,7 +43,7 @@ if (new Set([port, cdpPort, controlPort]).size !== 3) fail('--port, --cdp-port a
 const beat = await import(pathToFileURL(path.join(RIG_DIR, 'beats', `${beatId}.mjs`)).href);
 if (typeof beat.humanScript !== 'function') fail(`beat ${beatId} must export humanScript`);
 
-fs.rmSync(beatDir, { recursive: true, force: true });
+fs.rmSync(assertScratch(beatDir), { recursive: true, force: true });
 fs.mkdirSync(beatDir, { recursive: true });
 fs.mkdirSync(ws.run, { recursive: true });
 writePid(ws, 'host', process.pid, 'host.mjs');
@@ -84,20 +84,23 @@ async function startDashboard() {
   const shim = path.join(ws.home, '.webmcp-live-bin');
   if (!fs.existsSync(path.join(shim, 'security'))) throw new Error('keychain shim missing; re-run reset.mjs');
   const logFd = fs.openSync(path.join(ws.run, 'dashboard.log'), 'w');
-  dashboard = spawn('bun', ['run', 'src/index.tsx', '--dashboard', '--port', String(port)], {
-    cwd: REPO,
+  // cwd is the scratch HOME (never the repo), so nothing the app writes relative to cwd can land in the worktree.
+  const entry = path.join(REPO, 'src/index.tsx');
+  assertScratch(ws.home);
+  dashboard = spawn('bun', ['run', entry, '--dashboard', '--port', String(port)], {
+    cwd: ws.home,
     env: { ...process.env, HOME: ws.home, PATH: `${shim}:${process.env.PATH}` },
     stdio: ['ignore', logFd, logFd],
     detached: true, // own process group so shutdown can take down bun's children too
   });
   started.dashboardPid = dashboard.pid;
-  writePid(ws, 'dashboard', dashboard.pid, `--dashboard --port ${port}`);
+  writePid(ws, 'dashboard', dashboard.pid, `${entry} --dashboard --port ${port}`);
   dashboard.on('exit', (code) => { if (!shuttingDown) { console.error(`dashboard exited early (${code}); see ${path.join(ws.run, 'dashboard.log')}`); void shutdown(1); } });
   await waitForHttp(baseUrl + '/', { timeoutMs: 90000 });
 }
 
 async function launchChrome() {
-  fs.rmSync(ws.chromeUdd, { recursive: true, force: true });
+  fs.rmSync(assertScratch(ws.chromeUdd), { recursive: true, force: true });
   fs.mkdirSync(ws.chromeUdd, { recursive: true });
   context = await chromium.launchPersistentContext(ws.chromeUdd, {
     channel: 'chrome',
@@ -174,7 +177,7 @@ async function startRecording() {
   // The scratch tab (login + preState) goes away so only the recorded tab exists for an attached agent.
   const rawScratch = scratchPage.video();
   await scratchPage.close();
-  try { fs.rmSync(await rawScratch.path(), { force: true }); } catch {}
+  try { fs.rmSync(assertScratch(await rawScratch.path()), { force: true }); } catch {}
   scratchPage = null;
   await recPage.goto(baseUrl + '/', { waitUntil: 'domcontentloaded' });
   await recPage.getByRole('button', { name: 'Overview', exact: true }).waitFor({ timeout: 30000 });
@@ -246,9 +249,9 @@ async function shutdown(code = 0) {
     const g = (sig) => { try { process.kill(-dashboard.pid, sig); } catch { try { dashboard.kill(sig); } catch {} } };
     g('SIGTERM'); await sleep(800); if (dashboard.exitCode === null) g('SIGKILL');
   }
-  if (!flags['keep-udd']) fs.rmSync(ws.chromeUdd, { recursive: true, force: true });
-  for (const k of ['host', 'dashboard', 'chrome']) fs.rmSync(path.join(ws.run, `${k}.pid`), { force: true });
-  fs.rmSync(path.join(ws.run, 'host.json'), { force: true });
+  if (!flags['keep-udd']) fs.rmSync(assertScratch(ws.chromeUdd), { recursive: true, force: true });
+  for (const k of ['host', 'dashboard', 'chrome']) fs.rmSync(assertScratch(path.join(ws.run, `${k}.pid`)), { force: true });
+  fs.rmSync(assertScratch(path.join(ws.run, 'host.json')), { force: true });
   control?.close();
   process.exit(code);
 }
