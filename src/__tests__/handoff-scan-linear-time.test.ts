@@ -233,7 +233,7 @@ describe('source guard: no built-in normalisation of untrusted text in the hando
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((f) => {
       const p = join(dir, f);
-      if (f === 'node_modules' || f === 'dist' || f === '.output') return [];
+      if (f === 'node_modules' || f === '.output' || f === 'spike' || f.startsWith('dist')) return []; // build output and spikes are not shipped server code
       return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx|js|mjs)$/.test(f) ? [p] : [];
     });
   // The scan surface: training, mcp and server-side dashboard code, plus the replay path in utils/ and agent/.
