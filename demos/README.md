@@ -117,3 +117,51 @@ is on. The harness now holds Approve with `page.mouse.down()`/`up()`.
 TODO: the demo profile has auth off, so `categorize_transaction` cannot be
 granted to the token as the script expects; enable auth on the profile (and log
 the page in as its admin) before recording.
+
+## Re-run a beat (real dashboard, real agent, real footage)
+
+`rig/` + `seed/` + `compose/` record the real dashboard with synthetic data and cut it with HyperFrames. Nothing is
+staged: a real LLM (Claude Code, headless) chooses its own actions over WebMCP; the compositor only annotates footage.
+
+One command, from anywhere:
+
+```bash
+demos/run-beat.sh b5-propose [--take N] [--with-injection] [--short-history] [--no-render]
+```
+
+Prerequisites (checked up front; the script stops with a message if one is missing):
+
+- System Chrome 154.x at `/Applications/Google Chrome.app` (WebMCPTesting flag). Chrome for Testing is never downloaded.
+- Ollama serving `gemma4:12b` on 127.0.0.1:11434 (Wilson `/categorize` runs on it, locally).
+- `claude` CLI on PATH and logged in (the agent; default model `sonnet`).
+- `bun`, `node` (22), `ffmpeg`/`ffprobe`, `lsof`, network once for the `hyperframes@0.8.123` npx download and Google Fonts.
+- Vendored agent-browser: `(cd demos/rig && npm install)`. It is pinned to exactly 0.38.2 in `demos/rig/package.json`
+  (not in the product package.json); the rig refuses any other version and never uses a global install.
+- Free ports 3141 (dashboard), 9333 (CDP), 9400 (control).
+
+What it does: preflight, reset the scratch HOME under `/private/tmp/claude-501/`, start the host detached and wait for
+READY (import September, `/categorize` on gemma), start recording, play the human in the background, wait for the human
+to grant tools on camera (sync point only), run `rig/actor.mjs`, wait for `beat-end`, stop (constant 30 fps MP4),
+cut keyframe stills, copy everything into the take dir, then build and render the HyperFrames cut. A trap always stops
+the host (verified pid-file kill) on any failure.
+
+Output, never committed: `/private/tmp/claude-501/wilson-demos/<beat>/take<N>/` with `video.mp4`, `events.json`,
+`actor.log`, `actor.jsonl` (raw stream-json), `host.log`, `frames/`, `cut.mp4`. Existing takes are never overwritten.
+
+The agent: `rig/actor.mjs` runs `claude -p --output-format stream-json --verbose` with `--tools Bash` and
+`--allowedTools` limited to the exact absolute path of the vendored agent-browser with `--cdp <port> --session s`;
+no `--dangerously-skip-permissions`, cwd is an empty directory inside the take. The brief is
+`rig/beats/<beat>.brief.md`. The harness (not the model) writes `actor.log` and a final `[SUMMARY]` line from the
+stream. Compose copy lives in `compose/beats/<beat>.json`; `compose/hyperframes-b5/build.mjs --take <dir>` derives all
+timing from `events.json` and the actor log.
+
+What varies between takes: which reads the agent runs, which row it proposes and the category it picks (the Kiln row
+is the human script's explicit target, so a take where the agent proposes anything else fails by design rather than being
+approved), how long gemma takes to categorize, and the Approve timing. The cut's captions are filled from the take's
+own data (`{category}`, `{id}`).
+
+How failures surface (non-zero exit, a `[run-beat] FAILED: ...` line, files left in the take dir):
+preflight problems name the missing piece; host failure shows `host.log`; the actor exits 2 (setup), 3 (timeout,
+default 600 s) or 4 (claude error); the beat not ending means the human script rejected what the agent proposed or hit a
+precondition (see `human-script-error` in `events.json` and `host.log`); a take where the agent never proposes a change
+fails in the HyperFrames build with "no mutating proposal". Re-run with the next `--take`.

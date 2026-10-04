@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# One command to record and cut a beat: real dashboard, real LLM agent (Claude Code headless), real footage.
+#   demos/run-beat.sh <beat> [--take N] [--with-injection] [--short-history] [--no-render]
+# Output: /private/tmp/claude-501/wilson-demos/<beat>/take<N>/{video.mp4,events.json,actor.log,actor.jsonl,frames/,cut.mp4}
+set -uo pipefail
+
+BEAT="${1:-}"; [[ -z "$BEAT" || "$BEAT" == --* ]] && { sed -n '2,4p' "$0"; exit 2; }
+shift
+TAKE=""; RESET_FLAGS=(); RENDER=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --take) TAKE="${2:-}"; shift 2;;
+    --with-injection|--short-history) RESET_FLAGS+=("$1"); shift;;
+    --no-render) RENDER=0; shift;;
+    *) echo "unknown option $1" >&2; exit 2;;
+  esac
+done
+[[ "$BEAT" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "bad beat name" >&2; exit 2; }
+
+DEMOS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$DEMOS/.." && pwd)"
+RIG="$DEMOS/rig"
+MEDIA=/private/tmp/claude-501/wilson-demos
+NAME="run-$BEAT"                       # rig workspace (home, chrome profile, pid files)
+DASH_PORT=3141; CDP_PORT=9333; CTL_PORT=9400
+CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+MODEL="ollama:gemma4:12b"
+cd "$REPO"
+
+say() { printf '[run-beat] %s\n' "$*"; }
+die() { printf '[run-beat] FAILED: %s\n' "$*" >&2; exit 1; }
+
+# ---------- preflight ----------
+for t in node bun ffmpeg ffprobe curl lsof; do command -v "$t" >/dev/null || die "$t not found on PATH"; done
+command -v claude >/dev/null || die "claude CLI not found on PATH (needs a logged-in Claude Code)"
+[[ -x "$CHROME" ]] || die "system Chrome not found at $CHROME"
+CV="$("$CHROME" --version 2>/dev/null)"; [[ "$CV" == *"Chrome 154."* ]] || die "need Chrome 154.x, found: $CV"
+curl -sf --max-time 5 http://127.0.0.1:11434/api/tags | grep -q '"gemma4:12b"' || die "ollama is not serving gemma4:12b on 127.0.0.1:11434 (ollama serve; ollama pull gemma4:12b)"
+[[ -f "$RIG/beats/$BEAT.mjs" ]] || die "no beat $RIG/beats/$BEAT.mjs"
+[[ -f "$RIG/beats/$BEAT.brief.md" ]] || die "no agent brief $RIG/beats/$BEAT.brief.md"
+for p in $DASH_PORT $CDP_PORT $CTL_PORT; do
+  lsof -nP -iTCP:$p -sTCP:LISTEN -t >/dev/null 2>&1 && die "port $p is in use (leftover host? node demos/rig/stop.mjs --name $NAME)"
+done
+node -e "import('$RIG/lib/agent-browser.mjs').then(m=>{const r=m.resolveAgentBrowser();console.log('[run-beat] agent-browser '+r.version+' '+r.bin)}).catch(e=>{console.error(e.message);process.exit(1)})" \
+  || die "vendored agent-browser check failed"
+[[ $RENDER -eq 0 || -f "$DEMOS/compose/beats/$BEAT.json" ]] || die "no compose config $DEMOS/compose/beats/$BEAT.json (use --no-render)"
+
+# ---------- take dir ----------
+BEAT_ROOT="$MEDIA/$BEAT"; mkdir -p "$BEAT_ROOT"
+if [[ -z "$TAKE" ]]; then
+  TAKE=1; while [[ -e "$BEAT_ROOT/take$TAKE" ]]; do TAKE=$((TAKE+1)); done
+fi
+[[ "$TAKE" =~ ^[0-9]+$ ]] || die "--take must be a number"
+TAKE_DIR="$BEAT_ROOT/take$TAKE"
+[[ -e "$TAKE_DIR" ]] && die "$TAKE_DIR already exists (pick another --take; takes are never overwritten)"
+mkdir -p "$TAKE_DIR"
+say "beat $BEAT take $TAKE -> $TAKE_DIR"
+
+# ---------- always stop the host ----------
+STOPPED=0
+cleanup() {
+  local rc=$?
+  if [[ $STOPPED -eq 0 ]]; then
+    say "stopping host (cleanup)"
+    node "$RIG/stop.mjs" --name "$NAME" || say "WARNING: stop.mjs reported a problem; check: lsof -iTCP:$DASH_PORT,$CDP_PORT,$CTL_PORT -sTCP:LISTEN"
+  fi
+  [[ $rc -ne 0 ]] && say "FAILED (exit $rc). Partial files, if any: $TAKE_DIR  host log: $TAKE_DIR/host.log"
+  exit $rc
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+CTL=(node "$RIG/ctl.mjs" --name "$NAME")
+
+# ---------- reset -> host -> READY ----------
+node "$RIG/reset.mjs" --name "$NAME" --model "$MODEL" ${RESET_FLAGS[@]+"${RESET_FLAGS[@]}"} || die "reset failed"
+nohup node "$RIG/host.mjs" --beat "$BEAT" --name "$NAME" --port $DASH_PORT --cdp-port $CDP_PORT --control-port $CTL_PORT \
+  >"$TAKE_DIR/host.log" 2>&1 </dev/null &
+HOST_PID=$!
+say "host pid $HOST_PID, waiting for READY (preState imports statements and runs /categorize on $MODEL; can take minutes)"
+DEADLINE=$((SECONDS + 1800))
+until grep -q '^READY ' "$TAKE_DIR/host.log" 2>/dev/null; do
+  kill -0 $HOST_PID 2>/dev/null || { tail -20 "$TAKE_DIR/host.log" >&2; die "host exited before READY"; }
+  [[ $SECONDS -lt $DEADLINE ]] || die "timed out waiting for READY"
+  sleep 2
+done
+say "$(grep '^READY ' "$TAKE_DIR/host.log")"
+
+# ---------- record: human in the background, real agent in the foreground ----------
+"${CTL[@]}" start-recording >/dev/null || die "start-recording failed"
+"${CTL[@]}" run-human >/dev/null || die "run-human failed"
+# Sync only: the agent is started once the human has granted tools on camera (a tab with zero grants has nothing to list).
+"${CTL[@]}" wait grants-applied 180000 >/dev/null || die "human never reached grants-applied (see $TAKE_DIR/host.log)"
+say "grants applied; starting the agent"
+node "$RIG/actor.mjs" --beat "$BEAT" --take-dir "$TAKE_DIR" --cdp-port $CDP_PORT --session s
+ACTOR_RC=$?
+if [[ $ACTOR_RC -ne 0 ]]; then
+  case $ACTOR_RC in 2) W="actor setup problem";; 3) W="actor timed out";; *) W="claude failed or reported an error";; esac
+  die "$W (exit $ACTOR_RC). See $TAKE_DIR/actor.log and actor.jsonl"
+fi
+"${CTL[@]}" wait beat-end 180000 >/dev/null || {
+  "${CTL[@]}" events 2>/dev/null | grep -A3 'human-script-error' | head -8 >&2
+  die "beat did not end (human script stuck or errored; agent may not have proposed anything the human script accepts)"
+}
+
+# ---------- stop (CFR mp4), copy artifacts, keyframes ----------
+node "$RIG/stop.mjs" --name "$NAME"; STOPRC=$?
+STOPPED=1
+[[ $STOPRC -eq 0 ]] || die "stop.mjs failed"
+SRC="$MEDIA/$NAME/$BEAT"
+for f in video.mp4 events.json; do [[ -s "$SRC/$f" ]] || die "missing $SRC/$f after stop"; cp "$SRC/$f" "$TAKE_DIR/$f"; done
+node "$RIG/keyframes.mjs" --beat "$BEAT" --name "$NAME" --out "$TAKE_DIR/frames" >/dev/null || die "keyframes failed"
+FRAMES=$(ls "$TAKE_DIR/frames" | wc -l | tr -d ' ')
+
+# ---------- compose ----------
+CUT=""
+if [[ $RENDER -eq 1 ]]; then
+  HF="$DEMOS/compose/hyperframes-b5"
+  ( cd "$HF" && node build.mjs --take "$TAKE_DIR" --config "$DEMOS/compose/beats/$BEAT.json" ) || die "HyperFrames build failed"
+  ( cd "$HF" && HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.8.123 telemetry disable >/dev/null 2>&1 || true
+    HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.8.123 render --quiet -o "$TAKE_DIR/cut.mp4" ) || die "HyperFrames render failed"
+  CUT="$TAKE_DIR/cut.mp4"
+fi
+
+say "done."
+echo "  take dir  : $TAKE_DIR"
+echo "  footage   : $TAKE_DIR/video.mp4"
+echo "  events    : $TAKE_DIR/events.json"
+echo "  transcript: $TAKE_DIR/actor.log  (raw stream: $TAKE_DIR/actor.jsonl)"
+echo "  keyframes : $TAKE_DIR/frames ($FRAMES stills)"
+[[ -n "$CUT" ]] && echo "  cut       : $CUT"
+exit 0

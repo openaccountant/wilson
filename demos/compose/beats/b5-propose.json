@@ -1,0 +1,199 @@
+{
+  "id": "b5-propose",
+  "kicker": "OPEN ACCOUNTANT / BEAT 5",
+  "titleLead": "It proposes.",
+  "titleAccent": "You decide.",
+  "subtitle": "A real recording: an AI agent over WebMCP, a confirmation card, a human who holds Approve.",
+  "headerTitle": "It proposes. You decide.",
+  "terminalTitle": "Agent (Claude Code, headless) — via WebMCP",
+  "target": "SQ *KILN & CO STUDIO",
+  "titleSeconds": 4,
+  "segments": [
+    {
+      "from": {
+        "event": "ledger-before",
+        "offset": -2
+      },
+      "to": {
+        "event": "grants-applied",
+        "offset": 5
+      }
+    },
+    {
+      "from": {
+        "cmd": "lastBeforeFirstProposal",
+        "offset": -1
+      },
+      "to": {
+        "event": "card-resolved",
+        "offset": 3
+      }
+    },
+    {
+      "from": {
+        "event": "ledger-after",
+        "offset": -1.2
+      },
+      "to": {
+        "event": "ledger-after",
+        "offset": 3.5
+      }
+    }
+  ],
+  "callouts": [
+    {
+      "id": "co1",
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "event": "grants-applied",
+        "offset": 4.6
+      },
+      "x": 400,
+      "y": 300,
+      "txt": "Agent sees only the tools you granted",
+      "sub": "{tools}"
+    },
+    {
+      "id": "co2",
+      "at": {
+        "event": "card-shown",
+        "offset": 0.2
+      },
+      "end": {
+        "event": "approve-pressed",
+        "offset": -0.1
+      },
+      "x": 80,
+      "y": 520,
+      "txt": "Exact row + before/after, shown on the card",
+      "sub": "#{id} · Uncategorized → {category}",
+      "when": "approve"
+    },
+    {
+      "id": "co3",
+      "at": {
+        "event": "approve-pressed"
+      },
+      "end": {
+        "event": "card-resolved",
+        "offset": 1.6
+      },
+      "x": 80,
+      "y": 520,
+      "txt": "Nothing changes until you hold Approve",
+      "sub": "Hold to approve / Reject",
+      "when": "approve"
+    }
+  ],
+  "captions": [
+    {
+      "at": {
+        "event": "ledger-before",
+        "offset": -2
+      },
+      "end": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "t": "Real recording. The row {target}, -$240.00 is still Uncategorized."
+    },
+    {
+      "at": {
+        "event": "grants-applied",
+        "offset": -0.4
+      },
+      "end": {
+        "seg": 0,
+        "edge": "e"
+      },
+      "t": "Access grants applied in the dashboard: {tools}."
+    },
+    {
+      "at": {
+        "seg": 1,
+        "edge": "s"
+      },
+      "end": {
+        "cmd": "firstProposal"
+      },
+      "t": "The agent reads before it proposes: read-only tool calls, then a lookup."
+    },
+    {
+      "at": {
+        "cmd": "firstProposal"
+      },
+      "end": {
+        "event": "card-shown"
+      },
+      "t": "The agent proposes categorize_transaction {proposalArgs}. It chose {category} itself."
+    },
+    {
+      "at": {
+        "event": "card-shown"
+      },
+      "end": {
+        "event": "approve-pressed"
+      },
+      "t": "A confirmation card appears in the dashboard. Nothing has changed yet.",
+      "when": "approve"
+    },
+    {
+      "at": {
+        "event": "approve-pressed"
+      },
+      "end": {
+        "event": "approve-released"
+      },
+      "t": "The human presses and holds Approve.",
+      "when": "approve"
+    },
+    {
+      "at": {
+        "event": "approve-released"
+      },
+      "end": {
+        "seg": 1,
+        "edge": "e"
+      },
+      "t": "“Done. The change was applied.”",
+      "when": "approve"
+    },
+    {
+      "at": {
+        "seg": 2,
+        "edge": "s"
+      },
+      "end": {
+        "seg": 2,
+        "edge": "e"
+      },
+      "t": "Ledger afterwards: {target} is now {category}.",
+      "when": "approve"
+    },
+    {
+      "at": {
+        "event": "card-shown"
+      },
+      "end": {
+        "event": "card-resolved"
+      },
+      "t": "A confirmation card appears. The human rejects it.",
+      "when": "deny"
+    },
+    {
+      "at": {
+        "seg": 2,
+        "edge": "s"
+      },
+      "end": {
+        "seg": 2,
+        "edge": "e"
+      },
+      "t": "Ledger afterwards: {target} is unchanged.",
+      "when": "deny"
+    }
+  ]
+}

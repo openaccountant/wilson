@@ -1,0 +1,9 @@
+{
+  "name": "wilson-demo-rig",
+  "private": true,
+  "type": "module",
+  "description": "Recording rig tooling. Kept out of the product package.json.",
+  "dependencies": {
+    "agent-browser": "0.38.2"
+  }
+}

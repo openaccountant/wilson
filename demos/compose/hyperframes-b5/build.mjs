@@ -1,23 +1,59 @@
-// Generates index.html from the REAL event log + actor transcript. Run: node build.mjs
+// Generates index.html from a take's REAL event log + actor transcript + video, and a per-beat config.
+//   node build.mjs --take /private/tmp/claude-501/wilson-demos/<beat>/take<N> [--config ../beats/<beat>.json]
+// Timing is derived from events.json keys and actor.log wall clocks; copy and callouts come from the config.
 import fs from "node:fs";
-const ev = JSON.parse(fs.readFileSync("assets/events.json", "utf8"));
-const log = fs.readFileSync("assets/actor.log", "utf8").split("\n");
-const E = (n) => ev.events.find((e) => e.name === n).t_ms / 1000;
-const rec0 = Date.parse(ev.recordingStartedAt);
-const logT = (hms) => (Date.parse("2026-10-04T" + hms + "Z") - rec0) / 1000; // 1s resolution
+import path from "node:path";
+const arg = (k) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : undefined; };
+const takeDir = arg("take");
+if (!takeDir) { console.error("usage: node build.mjs --take <take dir> [--config <beat json>]"); process.exit(2); }
+const ev = JSON.parse(fs.readFileSync(path.join(takeDir, "events.json"), "utf8"));
+const cfgPath = arg("config") ?? path.join(path.dirname(new URL(import.meta.url).pathname), "..", "beats", ev.beat + ".json");
+const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+const log = fs.readFileSync(path.join(takeDir, "actor.log"), "utf8").split("\n");
+fs.mkdirSync("assets", { recursive: true });
+fs.copyFileSync(path.join(takeDir, "video.mp4"), "assets/take.mp4");
+const VIDEO = "assets/take.mp4";
 
-// ---- data-driven cut list (source seconds), anchored to event-log keyframes ----
-const T = {
-  ledgerBefore: E("ledger-before"), grants: E("grants-applied"), cardShown: E("card-shown"),
-  press: E("approve-pressed"), held: E("approve-held"), released: E("approve-released"),
-  resolved: E("card-resolved"), ledgerAfter: E("ledger-after"),
+const hasE = (n) => ev.events.some((e) => e.name === n && e.t_ms != null);
+// card-shown / card-resolved also fire for read cards; the beat's anchors mean the CHANGE card.
+const pick = { "card-shown": (x) => x.change, "card-resolved": (x) => x.decision };
+const E = (n) => { const e = ev.events.find((x) => x.name === n && x.t_ms != null && (!pick[n] || pick[n](x))); if (!e) throw new Error(`event ${n} missing from ${takeDir}/events.json`); return e.t_ms / 1000; };
+const rec0 = Date.parse(ev.recordingStartedAt);
+const day = ev.recordingStartedAt.slice(0, 10);
+const logT = (hms) => (Date.parse(day + "T" + hms + "Z") - rec0) / 1000; // 1s resolution
+const decision = ev.events.find((e) => e.name === "card-resolved" && e.decision)?.decision ?? (hasE("approve-pressed") ? "approve" : "deny");
+
+// ---- agent commands from the transcript ----
+const cmdRe = /^\[(\d\d:\d\d:\d\d)\] \$ (.*)$/;
+const cmds = []; // {i, ts, src, cmd}
+log.forEach((l, i) => { const m = l.match(cmdRe); if (m) cmds.push({ i, ts: m[1], src: logT(m[1]), cmd: m[2] }); });
+const proposals = cmds.filter((c) => /webmcp invoke \w+ .*--detach/.test(c.cmd));
+const firstProposal = proposals[0];
+if (!firstProposal) throw new Error("no mutating (--detach) proposal in actor.log; the agent did not propose a change in this take");
+const propJson = /--params\s+'?(\{.*\})'?/.exec(firstProposal.cmd)?.[1];
+let propArgs = {}; try { propArgs = JSON.parse(propJson); } catch {}
+const beforeProp = cmds.filter((c) => c.src < firstProposal.src && /webmcp (list|invoke)/.test(c.cmd));
+const cmdAnchor = { firstProposal: firstProposal.src, lastBeforeFirstProposal: (beforeProp.at(-1) ?? firstProposal).src };
+
+const grantEv = ev.events.find((e) => e.name === "grants-applied");
+const afterEv = ev.events.find((e) => e.name === "ledger-after");
+const vars = {
+  target: cfg.target, id: propArgs.id ?? "?", category: propArgs.category ?? afterEv?.category ?? "?",
+  tools: (grantEv?.tools ?? []).join(" \u00b7 "), proposalArgs: JSON.stringify(propArgs).replace(/"/g, "\u201c").replace(/\u201c(\w+)\u201c:/g, "$1:"),
 };
-const segs = [
-  { s: T.ledgerBefore - 2, e: T.grants + 5 },        // before row + grants panel
-  { s: logT("15:46:49") - 1, e: T.resolved + 3 },    // last search -> proposal -> card -> approve -> done
-  { s: T.ledgerAfter - 1.2, e: T.ledgerAfter + 3.5 },  // row now reads Shopping
-];
-const TITLE = 4;
+const fill = (s) => s.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`));
+const keepWhen = (x) => !x.when || x.when === decision;
+
+// ---- anchors -> source seconds ----
+const at = (a, segs) => {
+  if (a.event) return E(a.event) + (a.offset ?? 0);
+  if (a.cmd) return cmdAnchor[a.cmd] + (a.offset ?? 0);
+  if (a.seg !== undefined) return segs[a.seg][a.edge] + (a.offset ?? 0);
+  throw new Error("bad anchor " + JSON.stringify(a));
+};
+const segs = cfg.segments.map((g) => ({ s: at(g.from), e: at(g.to) }));
+const T = { cardShown: E("card-shown"), resolved: E("card-resolved"), released: hasE("approve-released") ? E("approve-released") : E("card-resolved") };
+const TITLE = cfg.titleSeconds ?? 4;
 let acc = TITLE; for (const g of segs) { g.c = acc; g.d = g.e - g.s; acc += g.d; }
 const TOTAL = +acc.toFixed(2);
 const toComp = (src) => { for (const g of segs) if (src >= g.s - 1e-6 && src <= g.e + 1e-6) return g.c + (src - g.s); return null; };
@@ -26,31 +62,23 @@ const toCompOrCut = (src) => { // source time in a cut -> the start of the segme
 
 // ---- transcript rows (verbatim) ----
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const rows = []; // {src, html, cls}
-const cmdRe = /^\[(\d\d:\d\d:\d\d)\] \$ (.*)$/;
+const rows = []; // {src, ...}
 const keep = (cmd) => /webmcp (list|invoke|result)/.test(cmd);
-let idCmd = null;
-for (let i = 0; i < log.length; i++) {
-  const m = log[i].match(cmdRe);
-  if (m && keep(m[2])) {
-    // skip the first "webmcp list --json" (bare, failed to run) - shown verbatim only if it is the agent's own command
-    rows.push({ src: logT(m[1]), ts: m[1], cmd: m[2] });
-    if (/--detach/.test(m[2])) {
-      const nxt = log[i + 1]; // "<id>: pending"
-      if (/: pending$/.test(nxt)) rows.push({ src: logT(m[1]), out: nxt, kind: "pending" });
-    }
-    if (/webmcp result /.test(m[2])) {
-      // output printed only when the operation resolved (card-resolved)
-      const o = [log[i + 1]];
-      const j = log.findIndex((l, k) => k > i && l.startsWith("{"));
-      const blk = []; for (let k = j; k < log.length && !log[k].startsWith("[SUMMARY]"); k++) blk.push(log[k]);
-      rows.push({ src: T.resolved, out: o[0], kind: "done" });
-      rows.push({ src: T.resolved + 0.1, out: blk.join("\n"), kind: "json" });
-    }
+const isHead = (l) => cmdRe.test(l) || l.startsWith("[SUMMARY]");
+for (const c of cmds) {
+  if (!keep(c.cmd)) continue;
+  rows.push({ src: c.src, ts: c.ts, cmd: c.cmd });
+  const out = []; for (let k = c.i + 1; k < log.length && !isHead(log[k]); k++) out.push(log[k]);
+  if (/--detach/.test(c.cmd) && /: pending$/.test(out[0] ?? "")) rows.push({ src: c.src, out: out[0], kind: "pending" });
+  if (/webmcp result /.test(c.cmd)) {
+    if (/: completed$/.test(out[0] ?? "")) { // result blocks until the card resolves
+      rows.push({ src: T.resolved, out: out[0], kind: "done" });
+      if (out.length > 1) rows.push({ src: T.resolved + 0.1, out: out.slice(1).join("\n"), kind: "json" });
+    } else if (out[0]) rows.push({ src: c.src, out: out[0], kind: "pending" });
   }
 }
 const summary = log.find((l) => l.startsWith("[SUMMARY]"));
-rows.push({ src: T.resolved + 1.2, out: summary, kind: "summary" });
+if (summary) rows.push({ src: T.resolved + 1.2, out: summary, kind: "summary" });
 
 const rowHtml = rows.map((r, i) => {
   let inner;
@@ -68,25 +96,12 @@ const rowTimes = rows.map((r) => {
   return { c: +c.toFixed(3), cut };
 });
 
-// ---- annotations, anchored to events ----
-const callouts = [
-  { id: "co1", at: T.grants - 0.4, end: T.grants + 4.6, x: 400, y: 300, txt: "Agent sees only the 3 tools you granted", sub: "categorize_transaction · transaction_search · spending_summary" },
-  { id: "co2", at: T.cardShown + 0.2, end: T.press - 0.1, x: 80, y: 520, txt: "Exact row + before/after, computed by the server", sub: "#279 · Uncategorized \u2192 Shopping" },
-  { id: "co3", at: T.press, end: T.resolved + 1.6, x: 80, y: 520, txt: "Nothing changes until you hold Approve", sub: "Hold to approve / Reject" },
-];
-const caps = [
-  { at: T.ledgerBefore - 2, end: T.grants - 0.4, t: "Real recording. The row SQ *KILN & CO STUDIO, -$240.00 is still Uncategorized." },
-  { at: T.grants - 0.4, end: segs[0].e, t: "Access grants applied in the dashboard: categorize_transaction, transaction_search, spending_summary." },
-  { at: segs[1].s, end: logT("15:46:54"), t: "After several read-only searches, the agent looks up \u201cstudio\u201d." },
-  { at: logT("15:46:54"), end: T.cardShown, t: "The agent proposes categorize_transaction { id: 279, category: \u201cShopping\u201d }. It chose Shopping itself." },
-  { at: T.cardShown, end: T.press, t: "A confirmation card appears in the dashboard. Nothing has changed yet." },
-  { at: T.press, end: T.released, t: "The human presses and holds Approve." },
-  { at: T.released, end: segs[1].e, t: "\u201cDone. The change was applied.\u201d" },
-  { at: segs[2].s, end: segs[2].e, t: "Ledger afterwards: SQ *KILN & CO STUDIO is now Shopping." },
-];
+// ---- annotations: config copy, event-anchored ----
+const callouts = cfg.callouts.filter(keepWhen).map((c) => ({ id: c.id, at: at(c.at, segs), end: at(c.end, segs), x: c.x, y: c.y, txt: fill(c.txt), sub: fill(c.sub) }));
+const caps = cfg.captions.filter(keepWhen).map((c) => ({ at: at(c.at, segs), end: at(c.end, segs), t: fill(c.t) }));
 const cuts = segs.slice(1).map((g, i) => ({ c: g.c, gap: g.s - segs[i].e }));
 
-const segVideo = segs.map((g, i) => `      <video id="seg${i}" class="vid" src="assets/b5-take1.mp4" data-start="${g.c.toFixed(3)}" data-duration="${g.d.toFixed(3)}" data-media-start="${g.s.toFixed(3)}" data-track-index="1" muted playsinline></video>`).join("\n");
+const segVideo = segs.map((g, i) => `      <video id="seg${i}" class="vid" src="${VIDEO}" data-start="${g.c.toFixed(3)}" data-duration="${g.d.toFixed(3)}" data-media-start="${g.s.toFixed(3)}" data-track-index="1" muted playsinline></video>`).join("\n");
 const capHtml = caps.map((c, i) => `<div class="cap" id="cap${i}">${esc(c.t)}</div>`).join("\n");
 const coHtml = callouts.map((c) => `<div class="co" id="${c.id}" style="left:${c.x}px;top:${c.y}px"><div class="cot">${esc(c.txt)}</div><div class="cos">${esc(c.sub)}</div></div>`).join("\n");
 const cutHtml = cuts.map((c, i) => `<div class="cutbadge" id="cut${i}">CUT \u2013 ${Math.round(c.gap)} s of dead time removed</div>`).join("\n");
@@ -141,13 +156,13 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--deep)}
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="${TOTAL}" data-width="1920" data-height="1080">
   <div id="title" class="clip" data-start="0" data-duration="${TITLE}" data-track-index="9">
-    <div class="k"><b>$</b> OPEN ACCOUNTANT &nbsp;/&nbsp; BEAT 5</div>
-    <h1 id="h1">It proposes. <span>You decide.</span></h1>
+    <div class="k"><b>$</b> ${esc(cfg.kicker)}</div>
+    <h1 id="h1">${esc(cfg.titleLead)} <span>${esc(cfg.titleAccent)}</span></h1>
     <div class="rule" id="rule"></div>
-    <div class="s" id="sub">A real recording: an AI agent over WebMCP, a confirmation card, a human who holds Approve.</div>
+    <div class="s" id="sub">${esc(cfg.subtitle)}</div>
   </div>
   <div id="hdr" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">
-    <div class="brand"><b>$</b> Open Accountant &nbsp;<span style="color:var(--ink);font-weight:600">It proposes. You decide.</span></div>
+    <div class="brand"><b>$</b> Open Accountant &nbsp;<span style="color:var(--ink);font-weight:600">${esc(cfg.headerTitle)}</span></div>
     <div class="tag">real footage &middot; <em>annotations only</em> &middot; cuts marked</div>
   </div>
   <div id="dash" data-track-index="1">
@@ -160,7 +175,7 @@ ${cutHtml}
   <div id="dlabel" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">Dashboard &middot; screen recording</div>
   <div id="tlabel" class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">Actor transcript, verbatim (actor.log)</div>
   <div id="term" data-layout-allow-overflow data-layout-allow-occlusion class="clip" data-start="${TITLE - 0.4}" data-duration="${(TOTAL - TITLE + 0.4).toFixed(3)}" data-track-index="2">
-    <div id="tbar"><i></i><i></i><i></i><span>Agent (Claude, cloud) \u2014 via WebMCP</span></div>
+    <div id="tbar"><i></i><i></i><i></i><span>${esc(cfg.terminalTitle)}</span></div>
     <div id="tbody" data-layout-allow-overflow data-layout-allow-occlusion>
 <div class="editnote" id="editnote">[clip edit: log lines from the cut section, original timestamps kept]</div>
 ${rowHtml}
@@ -182,10 +197,10 @@ rowT.forEach((r,i)=>{ tl.set("#row"+i,{display:"block"},r.c); });
 const firstCut = rowT.findIndex(r=>r.cut);
 if (firstCut>=0) tl.set("#editnote",{display:"block"},rowT[firstCut].c - 0.001);
 // captions
-const caps = ${JSON.stringify(caps.map((c) => ({ a: toComp(c.at), b: toComp(c.end) })))};
+const caps = ${JSON.stringify(caps.map((c) => ({ a: toCompOrCut(c.at), b: toCompOrCut(c.end) })))};
 caps.forEach((c,i)=>{ tl.to("#cap"+i,{opacity:1,duration:.2},c.a).to("#cap"+i,{opacity:0,duration:.15},c.b-.15); });
 // callouts
-const cos = ${JSON.stringify(callouts.map((c) => ({ id: c.id, a: toComp(c.at), b: toComp(c.end) })))};
+const cos = ${JSON.stringify(callouts.map((c) => ({ id: c.id, a: toCompOrCut(c.at), b: toCompOrCut(c.end) })))};
 cos.forEach(c=>{ tl.fromTo("#"+c.id,{opacity:0,y:14},{opacity:1,y:0,duration:.35,ease:"power2.out"},c.a).to("#"+c.id,{opacity:0,duration:.25},c.b-.25); });
 // cut badges
 const cutT = ${JSON.stringify(cuts.map((c) => c.c))};
