@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MCP_TOOL_CATALOG } from '../mcp/tool-catalog.js';
+import { HANDOFF_TO_CATALOG } from '../dashboard/local-handoff-format.js';
 import { OPEN_JEV_ROUTE_OPTIONS } from '../dashboard/ui/src/hybrid/openjev-route.js';
 import { READ_TOOL_NAMES } from '../dashboard/ui/src/store/mirror-tools.js';
 
@@ -28,7 +29,9 @@ const MEASURED_CATALOG_DESCRIPTIONS: Readonly<Record<string, string>> = {
 describe('open-jev route options snapshot', () => {
   test('every option is a read tool of the catalog, described as it was when the router was measured', () => {
     for (const [name, description] of Object.entries(OPEN_JEV_ROUTE_OPTIONS)) {
-      const def = MCP_TOOL_CATALOG.find((t) => t.name === name);
+      // The router's vocabulary is the measured mirror one; the catalog tool behind it comes from the boundary map.
+      const catalogName = HANDOFF_TO_CATALOG[name as keyof typeof HANDOFF_TO_CATALOG];
+      const def = MCP_TOOL_CATALOG.find((t) => t.name === catalogName);
       expect(def, name).toBeDefined();
       expect(def!.classification).toBe('read');
       expect(description).toBe(MEASURED_CATALOG_DESCRIPTIONS[name]);

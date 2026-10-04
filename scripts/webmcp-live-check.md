@@ -2,6 +2,21 @@
 
 Three runnable checklists for the same live-Chrome pass, in order. Do the shared setup once, then run the parts you need.
 
+## Tool names (renamed in 0.10.0)
+
+This runbook uses the current names. Fifteen WebMCP tools were renamed (specs/webmcp-tool-naming.md §2); an old name is refused with `unknown_tool` and a "renamed to" hint. Audit rows written before the rename keep their old name verbatim and show "(now <new name>)". Chat tool names (`tax_flag`, `edit_transaction`, `transaction_search`, ...) are a different namespace and did not change.
+
+| Old name | New name | Old name | New name |
+|---|---|---|---|
+| `tax_flag` | `set_tax_flag` | `filter_transactions` | `list_transactions` |
+| `edit_transaction` | `update_transaction` | `review_action` | `resolve_review_item` |
+| `tax_summary` | `get_tax_summary` | `set_forecast_inputs` | `fill_forecast_inputs` |
+| `transaction_search` | `search_transactions` | `navigate_to_tab` | `open_tab` |
+| `spending_summary` | `get_spending_summary` | `list_review_queue` | `list_review_items` |
+| `profit_loss` | `get_profit_loss` | `propose_judgements` | `propose_judgments` |
+| `net_worth` | `get_net_worth` | `judge_interaction` | `propose_judgment` |
+| `forecast` | `get_cash_forecast` |  | |
+
 ## Contents
 
 - [Shared setup](#shared-setup) (seed, security shim, server, tab)
@@ -117,7 +132,7 @@ returns `{}` for a promise, run `window.__wlcResult` in the next call.
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const P2 = ['filter_transactions', 'review_action', 'set_budget', 'update_goal', 'set_forecast_inputs'];
+  const P2 = ['list_transactions', 'resolve_review_item', 'set_budget', 'update_goal', 'fill_forecast_inputs'];
   const forms = () => [...document.querySelectorAll('form[toolname]')].map((f) => ({
     name: f.getAttribute('toolname'),
     autosubmit: f.hasAttribute('toolautosubmit'),
@@ -201,20 +216,20 @@ PASS per tab:
 
 | Hash | `forms` names | `autosubmit` | Notes |
 |---|---|---|---|
-| `#transactions` | `filter_transactions` | `true` | params `search`, `category_id`, `start`, `end` all have `desc` |
-| `#review` | `review_action` | `false` | needs a pending review; params `review_id`, `action`, `category_id` |
+| `#transactions` | `list_transactions` | `true` | params `search`, `category_id`, `start`, `end` all have `desc` |
+| `#review` | `resolve_review_item` | `false` | needs a pending review; params `review_id`, `action`, `category_id` |
 | `#goals` | `set_budget`, `update_goal` | `false`, `false` | |
-| `#forecast` | `set_forecast_inputs` | `true` | only with under six months of history |
+| `#forecast` | `fill_forecast_inputs` | `true` | only with under six months of history |
 
-Also required: `forms` never lists a tool with `autosubmit: true` for `review_action`, `set_budget`, `update_goal`
+Also required: `forms` never lists a tool with `autosubmit: true` for `resolve_review_item`, `set_budget`, `update_goal`
 (no `toolautosubmit` on any mutating form). `registered` must not list a name twice, and must not list any P2 tool
 that `live` marks `declarative` more than once (the bridge never registers them; only their form does).
 
-Record the **actual JSON Schema** Chrome derived for `review_action` (UNCERTAIN): on `#review`
+Record the **actual JSON Schema** Chrome derived for `resolve_review_item` (UNCERTAIN): on `#review`
 
 ```js
 (async () => {
-  const t = await window.__wlc.getTool('review_action');
+  const t = await window.__wlc.getTool('resolve_review_item');
   const schema = JSON.parse(t.inputSchema);   // inputSchema is a JSON STRING in Chrome 154
   window.__wlcResult = { ...t, inputSchema: schema };
   // PASS: review_id is {type:string, anyOf:[{const,title}], enum} whose titles look like "#id · date · amount"; `required` is always [].
@@ -333,11 +348,11 @@ Control: with **no** `toolactivated` fired, the same `requestSubmit()` on a fres
 ```js
 (async () => {
   const w = window.__wlc;
-  const started = w.exec('review_action', { review_id: '<id from the form>', action: 'confirm' });   // JSON string in, JSON.parse'd result out
+  const started = w.exec('resolve_review_item', { review_id: '<id from the form>', action: 'confirm' });   // JSON string in, JSON.parse'd result out
   started.catch?.(() => {});   // do not await: a change resolves only after a human answers the card
   await w.sleep(1500);
   const pending = await w.pending();
-  window.__wlcResult = { pendingTools: pending.map((o) => o.tool_name) }; // PASS: includes "review_action"
+  window.__wlcResult = { pendingTools: pending.map((o) => o.tool_name) }; // PASS: includes "resolve_review_item"
   return JSON.stringify(window.__wlcResult);
 })()
 ```
@@ -425,14 +440,14 @@ Reject (card Reject button, or by API):
 })()
 ```
 
-For `review_action`: before answering, `fetch('/api/reviews')` must still list the review as pending; after
+For `resolve_review_item`: before answering, `fetch('/api/reviews')` must still list the review as pending; after
 Reject the agent's result is `{outcome:"rejected"}`. Repeat and **Approve** (press and hold on the card, or in a
 scratch profile `POST /api/mcp/operations/:id/approve` after waiting over 1 s): the agent's result is
 `committed`, the review is gone from `/api/reviews`, and the transaction's `revision` went up by one.
 
 ## 7. Auto-submit forms (acceptance 4)
 
-On `#transactions` with `filter_transactions` granted, call it through `executeTool` or the browser agent with
+On `#transactions` with `list_transactions` granted, call it through `executeTool` or the browser agent with
 `{search:'coffee'}`:
 
 - result JSON is at most 1,500 characters, `items` at most 10, a `note` field says the text is not instructions;
@@ -440,7 +455,7 @@ On `#transactions` with `filter_transactions` granted, call it through `executeT
 - while the agent works the form has the dashed amber outline (`getComputedStyle(form).outlineStyle === 'dashed'`
   when `:tool-form-active` matches).
 
-On `#forecast` (manual inputs only): `set_forecast_inputs` with `{start_net_worth:20000, monthly_income:5000,
+On `#forecast` (manual inputs only): `fill_forecast_inputs` with `{start_net_worth:20000, monthly_income:5000,
 monthly_savings:800}` returns `{horizonMonths, p10, p50, p90}` (numbers) after the projection finished.
 
 ## 8. toolcancel, revoke, kill switch (spec items 8 and 10)
@@ -457,9 +472,9 @@ monthly_savings:800}` returns `{horizonMonths, p10, p50, p90}` (numbers) after t
   const bannerOff = !document.body.innerText.match(/Agent filled this form/);
   // Cancel also clears what the agent filled, so a later plain click cannot send it down the human path.
   const limitAfterCancel = form.querySelector('[name=monthly_limit]').value;
-  // Revoke review_action and set_budget: their forms must lose the tool attributes within one sync.
+  // Revoke resolve_review_item and set_budget: their forms must lose the tool attributes within one sync.
   const live = await w.live();
-  for (const name of ['set_budget', 'review_action']) {
+  for (const name of ['set_budget', 'resolve_review_item']) {
     const g = live.find((t) => t.name === name);
     if (g) await w.api('DELETE', `/api/mcp/grants/${g.grantId}`);
   }
@@ -467,8 +482,8 @@ monthly_savings:800}` returns `{horizonMonths, p10, p50, p90}` (numbers) after t
   const out = {
     bannerOn, bannerOff,                               // PASS: true, true
     limitAfterCancel,                                  // PASS: "" (the agent-filled limit was cleared)
-    stillRegistered: (await w.registered()),           // PASS: neither set_budget nor review_action
-    formsAfterRevoke: w.forms().map((f) => f.name),    // PASS: neither set_budget nor review_action
+    stillRegistered: (await w.registered()),           // PASS: neither set_budget nor resolve_review_item
+    formsAfterRevoke: w.forms().map((f) => f.name),    // PASS: neither set_budget nor resolve_review_item
   };
   window.__wlcResult = out;
   return JSON.stringify(out, null, 1);
@@ -505,7 +520,7 @@ listener is what keeps the T21 banner, the value snapshot and the restore on `to
 
 ### 8c. Ask semantics for page and read forms (record)
 
-Set the policy for `set_forecast_inputs` (or `filter_transactions`) to Ask, let the agent submit it, then
+Set the policy for `fill_forecast_inputs` (or `list_transactions`) to Ask, let the agent submit it, then
 **Reject** the card (the card needs the tab in the foreground; with a background tab, answer it with
 `POST /api/mcp/operations/<id>/reject`). PASS (L1): while the card is still open the projection and the filters have
 **not** moved (the agent's numbers are held back, the human's are still what the page computes from); after Reject the
@@ -516,7 +531,7 @@ manual-input boxes (or the filter bar) show the human's own values again, and th
 ### 8d. Schema stability and event order (Chrome 154 findings; re-record on a new build)
 
 Rule under test: **never mutate tool-defining DOM during a call.** Install a recorder that logs the schema Chrome derives and the
-order of events, then have Chrome's built-in agent call `set_forecast_inputs` (a form whose number fields start with a
+order of events, then have Chrome's built-in agent call `fill_forecast_inputs` (a form whose number fields start with a
 non-whole value such as `4840.71` and are filled with `2000`), and `set_budget` and `update_goal` (forms with a person's
 save able to run alongside).
 
@@ -544,12 +559,12 @@ save able to run alongside).
 ```
 
 Read `JSON.stringify(window.__wlcOrder)` afterwards and the schema before and after
-(`await w.schemaOf('set_forecast_inputs')`). PASS:
+(`await w.schemaOf('fill_forecast_inputs')`). PASS:
 
 - Order is **fill** (trusted, `inputEvent: false`, `focused: false`), then **submit** (`agentInvoked: true`), then **toolactivated**.
 - No `toolchange` for the tool and no `dom` record of `disabled`, `readonly`, `step`, `toolparamdescription`, `toolname` or an
   `<option>` list between the first fill and the answer. The only `dom` records are `value` / `aria-disabled` / class changes.
-- The schema of `set_forecast_inputs` has no `multipleOf` before and after (the number fields carry `step="any"`). To see the
+- The schema of `fill_forecast_inputs` has no `multipleOf` before and after (the number fields carry `step="any"`). To see the
   failure this prevents, remove `step="any"` in devtools and fill `4840.71` then `2000`: Chrome cancels the call with `Tool
   execution cancelled, since tool definition was updated`.
 - Start a person's save on `set_budget` (Set budget) and, while it runs, let the agent call it: the fields dim
@@ -557,7 +572,7 @@ Read `JSON.stringify(window.__wlcOrder)` afterwards and the schema before and af
   The agent's fill is dropped by the lock, so its submit must NOT send the person's values: the agent's answer is
   `{error:{code:"busy", message:"The person is saving this form; try again in a moment."}}`, `GET /api/mcp/operations` shows
   **no** new operation, and the person's values and save are unchanged. Retry after the save finished: a normal call (fill,
-  submit, card). Repeat for `update_goal` (Goals) and `review_action` (Review).
+  submit, card). Repeat for `update_goal` (Goals) and `resolve_review_item` (Review).
 - Orphans (S2) are withdrawn **per call**, and only two ways: Chrome's `toolchange` carries **no tool name**, so it withdraws
   nothing (prevention is schema stability above, not cleanup), and a form unmounting, a tab switch or a refetch withdraws
   nothing either. Check each:
@@ -601,7 +616,7 @@ submits (`:tool-submit-active`, the `AGENT` tag), the "Agent filled this form" b
 P2 live check, <date>, Chrome <version>, flags/origin trial: <...>
 getTools exposed to page script: yes/no     executeTool: yes/no
 1 no tools before grant: PASS/FAIL          2 tools once each after grant: PASS/FAIL
-3 review_action schema (paste):             4 attribute removal drops the tool: yes/no
+3 resolve_review_item schema (paste):             4 attribute removal drops the tool: yes/no
 5 hidden input in schema (paste):           6 5a pending op, nothing written: PASS/FAIL
 7 5b agent-touched click -> card: PASS/FAIL 8 5c agentInvoked -> card: PASS/FAIL/SKIPPED
 8b 5d REAL agent fill: banner + human click -> pending op, no REST write: PASS/FAIL/MANUAL
@@ -627,7 +642,7 @@ It confirms, in a real Chrome with WebMCP enabled, that:
 
 1. a tab's tools are registered only while that tab shows, and a global tool stays registered across tabs;
 2. switching tabs changes the registered set in one pass, within about 100 ms (foreground tab only), and Chrome fires `toolchange`;
-3. `navigate_to_tab`, `get_page_context` and `open_transaction` work and keep their output small and free of
+3. `open_tab`, `get_page_context` and `open_transaction` work and keep their output small and free of
    descriptions and amounts (`get_page_context`) or compact (`open_transaction`);
 4. a call that outlives its tab does not touch unmounted state, the kill switch empties `getTools()`, and a reload
    restores registrations for live grants only.
@@ -700,28 +715,28 @@ Go to `#overview` first (`location.hash = 'overview'`), then:
   const w = window.__wlc3;
   location.hash = 'overview';
   await w.sleep(500);
-  const status = await w.grant(['navigate_to_tab', 'get_page_context', 'open_transaction', 'list_review_queue', 'transaction_search']);
+  const status = await w.grant(['open_tab', 'get_page_context', 'open_transaction', 'list_review_items', 'search_transactions']);
   await w.resync();
   const live = await w.live();
   const out = {
     grantStatus: status,                                               // PASS: 200
     hash: location.hash,
     liveSurfaces: Object.fromEntries(live.map((t) => [t.name, t.surface])),
-                                                                       // PASS: navigate_to_tab, get_page_context, transaction_search "global";
-                                                                       //       open_transaction {tab:"transactions"}; list_review_queue {tab:"review"}
-    registeredOnOverview: await w.names(),                             // PASS: exactly get_page_context, navigate_to_tab, transaction_search
-                                                                       //       (NOT open_transaction, NOT list_review_queue)
+                                                                       // PASS: open_tab, get_page_context, search_transactions "global";
+                                                                       //       open_transaction {tab:"transactions"}; list_review_items {tab:"review"}
+    registeredOnOverview: await w.names(),                             // PASS: exactly get_page_context, open_tab, search_transactions
+                                                                       //       (NOT open_transaction, NOT list_review_items)
   };
   window.__wlcResult = out;
   return JSON.stringify(out, null, 1);
 })()
 ```
 
-PASS: the two global page tools and `transaction_search` are registered; `open_transaction` and `list_review_queue`
+PASS: the two global page tools and `search_transactions` are registered; `open_transaction` and `list_review_items`
 are not (their tabs are not showing), although the server lists them as live. A page tool also needs React to have
 mounted its handler: the global ones are mounted at app start.
 
-## P3.2 `navigate_to_tab` and `toolchange` (spec item 2)
+## P3.2 `open_tab` and `toolchange` (spec item 2)
 
 Through the tool (preferred), or the browser agent. The parsed `executeTool` result must be `{tab, tools:[...]}`
 (a refusal is a result too: `{error:{code,message}}`, for example `settings_refused`):
@@ -732,12 +747,12 @@ Through the tool (preferred), or the browser agent. The parsed `executeTool` res
   const before = { count: w.toolchange.count, names: await w.names() };
   const t0 = performance.now();
   let result = null, error = null;
-  try { result = await w.call('navigate_to_tab', { tab: 'transactions' }); } catch (e) { error = String(e); }   // a refusal is in `result.error`
+  try { result = await w.call('open_tab', { tab: 'transactions' }); } catch (e) { error = String(e); }   // a refusal is in `result.error`
   const elapsed = Math.round(performance.now() - t0);
   const after = { count: w.toolchange.count, names: await w.names() };
   const out = {
     error,                                  // "executeTool is not exposed..." means: use the agent, then re-run this for the read-out only
-    result,                                 // PASS: {tab:"transactions", tools:[...]}, includes open_transaction and navigate_to_tab, not list_review_queue
+    result,                                 // PASS: {tab:"transactions", tools:[...]}, includes open_transaction and open_tab, not list_review_items
     elapsedMs: elapsed,                     // record (the call waits until the tab shows and the tools have swapped)
     hash: location.hash,                    // PASS: "#transactions" (the same hash a click sets)
     toolchangeFired: after.count - before.count,   // PASS: at least 1 (UNCERTAIN: depends on where Chrome dispatches it)
@@ -751,7 +766,7 @@ Through the tool (preferred), or the browser agent. The parsed `executeTool` res
 
 PASS: hash `#transactions`, `toolchange` fired, `open_transaction` appears. The `tools` the call returned must
 equal the granted tools for that tab (global ones plus `open_transaction`; declarative forms such as
-`filter_transactions` are listed too when they are granted).
+`list_transactions` are listed too when they are granted).
 
 Timing of a plain tab switch (acceptance: within 100 ms), by hash, without going through a tool. **Foreground-only:**
 a hidden or throttled tab clamps timers (and the card poller is visibility-gated), so run this with the tab visible and
@@ -760,8 +775,8 @@ focused and record `document.visibilityState`; a number from a background tab is
 ```js
 (async () => {
   const w = window.__wlc3;
-  const toReview = await w.timeTabChange('review', ['open_transaction'], ['list_review_queue']);
-  const back = await w.timeTabChange('transactions', ['list_review_queue'], ['open_transaction']);
+  const toReview = await w.timeTabChange('review', ['open_transaction'], ['list_review_items']);
+  const back = await w.timeTabChange('transactions', ['list_review_items'], ['open_transaction']);
   window.__wlcResult = { toReview, back };   // PASS: ms below ~100 each (this loop polls every 5 ms and getTools adds overhead; record both)
   return JSON.stringify(window.__wlcResult, null, 1);
 })()
@@ -800,7 +815,7 @@ On `#transactions`, type `coffee` into the search box first (or let the agent), 
 PASS: at most 1,500 characters, no `description`/`desc`/`amount`/`merchant` key, `filters.search` is `coffee`.
 Check the annotations Chrome holds for it (UNCERTAIN: whether `getTools()` returns them):
 `(await document.modelContext.getTools()).find(t=>t.name==='get_page_context').annotations` should be
-`{readOnlyHint:true, consequentialHint:false, untrustedContentHint:true}`, and for `navigate_to_tab` and
+`{readOnlyHint:true, consequentialHint:false, untrustedContentHint:true}`, and for `open_tab` and
 `open_transaction` `readOnlyHint:false` (they change what the user sees).
 
 ## P3.4 `open_transaction` (spec item 4)
@@ -823,7 +838,7 @@ Check the annotations Chrome holds for it (UNCERTAIN: whether `getTools()` retur
     chars: JSON.stringify(result)?.length,                          // PASS: <= 1500
     rowHighlighted: !!row && row.getAttribute('aria-current') === 'true',   // PASS: true
     rowClass: row?.className,                                       // PASS: includes ring-green
-    badIdMessage: bad,                                              // PASS: mentions "not found" and "transaction_search" (actionable)
+    badIdMessage: bad,                                              // PASS: mentions "not found" and "search_transactions" (actionable)
   };
   window.__wlcResult = out;
   return JSON.stringify(out, null, 1);
@@ -831,12 +846,12 @@ Check the annotations Chrome holds for it (UNCERTAIN: whether `getTools()` retur
 ```
 
 PASS: the row has `aria-current="true"` and the green ring, the result carries `highlighted: true`, and an unknown id
-gives an error that says to use `transaction_search`. A row outside the loaded date range is brought into view (the
+gives an error that says to use `search_transactions`. A row outside the loaded date range is brought into view (the
 date range moves to that row's month) and the result says `highlighted:false` plus a note only if a header filter
 hides it. Reload the tab to clear the highlight (it also fades after 10 s).
 
 The agent journey the acceptance names: **find the $42 coffee charge, open it, recategorize it.** Grant
-`categorize_transaction` too, then have the agent run `transaction_search` -> `open_transaction` ->
+`categorize_transaction` too, then have the agent run `search_transactions` -> `open_transaction` ->
 `categorize_transaction`. PASS: the row is highlighted, a confirmation card appears for the recategorize and nothing
 changes until you approve it.
 
@@ -872,7 +887,7 @@ answer the card:
 ```
 
 PASS: no console errors, `gone` is `true`, and the call's result is one of: the completed row, a result marked
-`stale: true`, or `{error: {code: "tab_not_open", message: "The Transactions tab is not open. Call navigate_to_tab with tab='transactions' first."}}`
+`stale: true`, or `{error: {code: "tab_not_open", message: "The Transactions tab is not open. Call open_tab with tab='transactions' first."}}`
 (the handler was already gone when the card was answered). It must never throw an unhandled page error. Set the policy
 back to Allow afterwards.
 
@@ -903,7 +918,7 @@ Re-grant (P3.1), note the registered set, then **reload the page**:
 ```js
 (async () => {
   const w = window.__wlc3;
-  await w.grant(['navigate_to_tab', 'get_page_context', 'open_transaction']);
+  await w.grant(['open_tab', 'get_page_context', 'open_transaction']);
   await w.resync();
   window.__wlcBeforeReload = await w.names();
   sessionStorage.setItem('wlc3_before', JSON.stringify(window.__wlcBeforeReload));
@@ -984,16 +999,16 @@ unmount), no `registerTool` `InvalidStateError` (a duplicate registration would 
 
 Run after P3.1 (helper installed, tools granted). Each snippet leaves the dashboard as it found it, apart from the tab.
 
-**a. `navigate_to_tab` refuses `settings`.** An agent may not put the Agent Access Center on screen.
+**a. `open_tab` refuses `settings`.** An agent may not put the Agent Access Center on screen.
 
 ```js
 (async () => {
   const w = window.__wlc3;
   const hashBefore = location.hash;
   let result = null, error = null;
-  try { result = await w.call('navigate_to_tab', { tab: 'settings' }); } catch (e) { error = String(e); }
+  try { result = await w.call('open_tab', { tab: 'settings' }); } catch (e) { error = String(e); }
   await w.sleep(300);
-  const schema = (await w.live()).find((t) => t.name === 'navigate_to_tab')?.inputSchema?.properties?.tab?.enum;
+  const schema = (await w.live()).find((t) => t.name === 'open_tab')?.inputSchema?.properties?.tab?.enum;
   return JSON.stringify({
     error, result,                              // PASS: an error (enum or "not available to agents"), no {tab:"settings"} result
     hashUnchanged: location.hash === hashBefore, // PASS: true
@@ -1002,7 +1017,7 @@ Run after P3.1 (helper installed, tools granted). Each snippet leaves the dashbo
 })()
 ```
 
-**a2. `navigate_to_tab` will not pull the user out of Settings.** Open Settings yourself first (click the Settings tab),
+**a2. `open_tab` will not pull the user out of Settings.** Open Settings yourself first (click the Settings tab),
 then run this. PASS: it errors with "The user is in Settings", the hash stays `#settings`, and the Settings form input
 you typed is still there.
 
@@ -1011,7 +1026,7 @@ you typed is still there.
   const w = window.__wlc3;
   if (!location.hash.includes('settings')) return 'SKIP: open the Settings tab first';
   let result = null, error = null;
-  try { result = await w.call('navigate_to_tab', { tab: 'transactions' }); } catch (e) { error = String(e); }
+  try { result = await w.call('open_tab', { tab: 'transactions' }); } catch (e) { error = String(e); }
   await w.sleep(300);
   return JSON.stringify({
     error, result,                                   // PASS: error mentions Settings, result null (or {error}), no {tab:"transactions"}
@@ -1027,9 +1042,9 @@ card, not write through REST.
 ```js
 (async () => {
   const w = window.__wlc3;
-  await w.grant(['navigate_to_tab', 'open_review_item', 'list_review_queue', 'review_action']);
+  await w.grant(['open_tab', 'open_review_item', 'list_review_items', 'resolve_review_item']);
   await w.resync();
-  await w.call('navigate_to_tab', { tab: 'review' });
+  await w.call('open_tab', { tab: 'review' });
   const reviewId = (await w.api('GET', '/api/reviews')).body?.[0]?.review_id;   // the dashboard's own queue route
   if (!reviewId) return 'No pending review: queue one first';
   const opened = await w.call('open_review_item', { reviewId });
@@ -1046,7 +1061,7 @@ card, not write through REST.
     bannerShown: !!banner,                 // PASS: true (amber "Agent" banner)
     bannerAfter10s: stillBanner,           // PASS: true (not tied to the cue timer)
     selected,                              // PASS: String(reviewId)
-    pendingOps: pending.map((o) => o.tool_name),// PASS: includes "review_action" (the card's operation), and GET /api/reviews still lists the review as pending
+    pendingOps: pending.map((o) => o.tool_name),// PASS: includes "resolve_review_item" (the card's operation), and GET /api/reviews still lists the review as pending
   });
 })()
 ```
@@ -1059,7 +1074,7 @@ Then reject the card (`w.api('POST', '/api/mcp/operations/<id>/reject')`) and co
 ```js
 (async () => {
   const w = window.__wlc3;
-  await w.call('navigate_to_tab', { tab: 'transactions' });
+  await w.call('open_tab', { tab: 'transactions' });
   const rangeBefore = document.body.innerText.match(/\d{4}-\d{2}-\d{2}/g)?.slice(0, 2);
   const id = Number(prompt?.('transaction id inside the range but hidden by the search') ?? 0) || null;
   if (!id) return 'Pass a hidden transaction id via the call below instead';
@@ -1073,18 +1088,18 @@ PASS: the app-wide range is unchanged; it moves to the row's month only for a ro
 
 **d. A stuck `registerTool` cannot block revoke or the kill switch.** Only checkable with a shim: replace
 `document.modelContext.registerTool` with one that never resolves for a chosen name, grant that tool, then revoke
-everything. PASS: within ~3 s `w.names()` is `[]` and `navigate_to_tab` (if still granted) answers rather than hangs.
+everything. PASS: within ~3 s `w.names()` is `[]` and `open_tab` (if still granted) answers rather than hangs.
 
 ```js
 (async () => {
   const w = window.__wlc3;
   const mc = document.modelContext;
   const real = mc.registerTool.bind(mc);
-  mc.registerTool = (tool, options) => (tool.name === 'transaction_search' ? new Promise(() => {}) : real(tool, options));
-  await w.grant(['navigate_to_tab', 'get_page_context', 'transaction_search']);
+  mc.registerTool = (tool, options) => (tool.name === 'search_transactions' ? new Promise(() => {}) : real(tool, options));
+  await w.grant(['open_tab', 'get_page_context', 'search_transactions']);
   await w.resync();
   await w.sleep(2500);
-  const during = await w.names();            // PASS: includes get_page_context and navigate_to_tab (the stuck one is given up on)
+  const during = await w.names();            // PASS: includes get_page_context and open_tab (the stuck one is given up on)
   await w.api('POST', '/api/mcp/grants/revoke-session', {});
   await w.resync();
   await w.sleep(2500);
@@ -1099,7 +1114,7 @@ everything. PASS: within ~3 s `w.names()` is `[]` and `navigate_to_tab` (if stil
 ```
 P3 live check, <date>, Chrome <version>, flags/origin trial: <...>
 getTools exposed to page script: yes/no     executeTool: yes/no     toolchange target: document.modelContext / other / never
-1 overview: global tools only: PASS/FAIL    2 navigate_to_tab: hash + toolchange + open_transaction appears: PASS/FAIL
+1 overview: global tools only: PASS/FAIL    2 open_tab: hash + toolchange + open_transaction appears: PASS/FAIL
 2b tab switch ms (to review / back, FOREGROUND tab only; visibilityState=<visible|hidden>): <n> / <n> (within ~100 ms: yes/no)
 3 get_page_context <=1500, no description/amount key: PASS/FAIL     annotations as held by Chrome (paste):
 4 open_transaction highlight + compact + bad id text: PASS/FAIL     4b search -> open -> recategorize card: PASS/FAIL
@@ -1115,7 +1130,7 @@ The "Live-Chrome checklist (P4a)" of `specs/webmcp-security-judge.md`, made runn
 parts above (claude-in-chrome `javascript_tool`, `http://localhost:3141`, a throwaway profile, the same tab for every
 snippet). It confirms, in a real Chrome with WebMCP enabled, that:
 
-1. the judge tools appear on the LLM tab only (and `judge_interaction` only as a form, once), and leave with the tab;
+1. the judge tools appear on the LLM tab only (and `propose_judgment` only as a form, once), and leave with the tab;
 2. the judge reads are small, blind (no human label anywhere), and never carry the system prompt or a full tool result;
 3. proposals are inert: they land in the Judge queue as `proposed`, the stats and the default export do not move, a
    human accept/reject/revoke changes the opt-in export and nothing else, and a rating clicked while an agent has
@@ -1177,17 +1192,17 @@ the snippets.
 
 ## P4a.1 Grant the judge tools; they appear on the LLM tab only (spec item 2)
 
-Start on `#overview`. Set `propose_judgements` and `judge_interaction` to **Allow** for this check (their default is
-Ask; step P4a.6 puts `propose_judgements` back to Ask).
+Start on `#overview`. Set `propose_judgments` and `propose_judgment` to **Allow** for this check (their default is
+Ask; step P4a.6 puts `propose_judgments` back to Ask).
 
 ```js
 (async () => {
   const w = window.__wlc4;
   location.hash = 'overview';
   await w.sleep(400);
-  const status = await w.grant(['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgements', 'judge_interaction', 'open_interaction', 'navigate_to_tab']);
-  await w.policy('propose_judgements', 'allow');
-  await w.policy('judge_interaction', 'allow');
+  const status = await w.grant(['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgments', 'propose_judgment', 'open_interaction', 'open_tab']);
+  await w.policy('propose_judgments', 'allow');
+  await w.policy('propose_judgment', 'allow');
   await w.resync();
   const overview = await w.names();
   location.hash = 'llm';
@@ -1198,17 +1213,17 @@ Ask; step P4a.6 puts `propose_judgements` back to Ask).
   const away = await w.names();
   const out = {
     grantStatus: status,                  // PASS: 200
-    overview,                             // PASS: navigate_to_tab only (no judge tool, no open_interaction)
-    llm,                                  // PASS: includes get_interaction, get_judge_rubric, list_interactions, open_interaction, propose_judgements, navigate_to_tab,
-                                          //       and judge_interaction exactly ONCE (it comes from the form in the Training detail panel, so it needs the panel open: see P4a.7)
-    away,                                 // PASS: back to navigate_to_tab only
+    overview,                             // PASS: open_tab only (no judge tool, no open_interaction)
+    llm,                                  // PASS: includes get_interaction, get_judge_rubric, list_interactions, open_interaction, propose_judgments, open_tab,
+                                          //       and propose_judgment exactly ONCE (it comes from the form in the Training detail panel, so it needs the panel open: see P4a.7)
+    away,                                 // PASS: back to open_tab only
   };
   window.__wlcResult = out;
   return JSON.stringify(out, null, 1);
 })()
 ```
 
-PASS: the judge tools exist only while the LLM tab shows. `judge_interaction` is a **declarative** tool: it appears
+PASS: the judge tools exist only while the LLM tab shows. `propose_judgment` is a **declarative** tool: it appears
 in `getTools()` while the Training detail panel is open (the form is in the DOM) and never as an imperative
 registration. If it is also listed on the bare LLM tab with no panel open, record that.
 
@@ -1311,7 +1326,7 @@ Have the agent judge that interaction. Record whether its rating or rationale ob
 and verify the part that is a guarantee: no categorize card appeared without a person (`await w.pending()` has no
 `categorize_transaction`), and the response was shown to the agent as `untrusted_text`.
 
-## P4a.4 `propose_judgements`: 20 items, inert (spec item 5)
+## P4a.4 `propose_judgments`: 20 items, inert (spec item 5)
 
 `list_interactions` returns at most 5 rows per page, so collect 20 ids by following `nextCursor`, then propose all 20
 in one call (the cap per call).
@@ -1333,8 +1348,8 @@ in one call (the cap per call).
     if (!cursor) break;
   }
   const items = ids.map((id, i) => ({ interactionId: id, rating: (i % 5) + 1, rationale: 'grounded: the figures match the tool result preview' }));
-  const first = await w.call('propose_judgements', { judgeModel: 'live-check', rubricVersion: rubric.version, items });
-  const stale = await w.call('propose_judgements', { judgeModel: 'live-check', rubricVersion: 'stale00000', items: items.slice(0, 1) }).catch((e) => String(e));
+  const first = await w.call('propose_judgments', { judgeModel: 'live-check', rubricVersion: rubric.version, items });
+  const stale = await w.call('propose_judgments', { judgeModel: 'live-check', rubricVersion: 'stale00000', items: items.slice(0, 1) }).catch((e) => String(e));
   await w.sleep(800);
   const after = await w.stats();
   const afterDefault = await w.lines();
@@ -1390,15 +1405,15 @@ Two more things to check here:
 - **Accept while an agent is present.** With a tab grant live, accept one more proposal. Its row in the interaction's
   History shows an `AGENT PRESENT` chip, and `withJudge.lines` does **not** grow (it needs `?includeJudge=true&includeAgentPresent=true`).
 
-## P4a.6 Policy Ask for `propose_judgements` (spec item 6)
+## P4a.6 Policy Ask for `propose_judgments` (spec item 6)
 
 ```js
 (async () => {
   const w = window.__wlc4;
-  await w.policy('propose_judgements', 'ask');
+  await w.policy('propose_judgments', 'ask');
   const rubric = await w.call('get_judge_rubric', {});
   const list = await w.call('list_interactions', { limit: 2 });
-  const pendingCall = w.call('propose_judgements', {
+  const pendingCall = w.call('propose_judgments', {
     judgeModel: 'live-check', rubricVersion: rubric.version,
     items: list.items.map((r) => ({ interactionId: r.id, rating: 3, rationale: 'concise: direct answer, no filler at all' })),
   });
@@ -1436,7 +1451,7 @@ With `#llm` showing, ask the agent to call `open_interaction` for one of the **h
     humanNotesText: dialog?.querySelector('textarea:not([name])')?.value ?? null,   // PASS: "" (the human's notes are not in the panel)
     historyShown: !!dialog?.querySelector('[data-testid=judgement-history]') && /human v\d/.test(text),   // PASS: false (human versions are withheld)
     judgeForm: !!dialog?.querySelector('form[aria-label="Agent judgement"]'),   // PASS: true
-    toolNames: await w.names(),                                       // PASS: judge_interaction appears exactly once now
+    toolNames: await w.names(),                                       // PASS: propose_judgment appears exactly once now
   };
   window.__wlcResult = out;
   return JSON.stringify(out, null, 1);
@@ -1449,7 +1464,7 @@ must NOT reveal them (`isTrusted` is false): try it first and confirm. (A CDP-dr
 that clicks the panel reveals it too: that is the documented residual, threat T34, and the agreement metric is labelled
 "measured on n blind proposals" for exactly that reason.)
 
-Now have the agent fill and submit the `judge_interaction` form (`interaction_id` is a read-only field, `rating`,
+Now have the agent fill and submit the `propose_judgment` form (`interaction_id` is a read-only field, `rating`,
 `rationale`, `judge_model` fillable). PASS: one proposal appears in the queue (`respondWith` result `{created:1, id}`
 with policy Allow, or the Ask card first); a person clicking **Submit judgement (agents only)** is blocked with the
 message "This form is for agents. Use the rating controls above." and creates nothing. Record how a read-only number
@@ -1518,7 +1533,7 @@ curl -s -i -X POST http://localhost:3141/api/interactions/1/annotate -H 'Content
 
 ## P4a.10 Cleanup and console
 
-- `w.policy('propose_judgements', 'ask')` and `w.policy('judge_interaction', 'ask')` to restore the defaults;
+- `w.policy('propose_judgments', 'ask')` and `w.policy('propose_judgment', 'ask')` to restore the defaults;
   `w.api('POST', '/api/mcp/grants/revoke-session', {})`.
 - Reject or let expire any pending card. Judge rows can stay (they are inert) but a throwaway profile is the point.
 - Console: no `window.ontoolactivated` warnings, no errors, no React key or hydration warnings from the Judge queue.
@@ -1530,7 +1545,7 @@ curl -s -i -X POST http://localhost:3141/api/interactions/1/annotate -H 'Content
 ```
 P4a live check, <date>, Chrome <version>, flags/origin trial: <...>
 getTools exposed to page script: yes/no     executeTool: yes/no
-1 judge tools on #llm only, judge_interaction once (panel open): PASS/FAIL   (also listed with no panel open: yes/no)
+1 judge tools on #llm only, propose_judgment once (panel open): PASS/FAIL   (also listed with no panel open: yes/no)
 2 list <=1500/<=5 rows, no human field, overview/section <=1500, no system prompt, previews <=80: PASS/FAIL
   agent / chain / team prompt cut (no tool-result heading, omission note): PASS/FAIL     standalone prompt not paged, overview <=80: PASS/FAIL
 3 injected response: rating obeyed? yes/no (rationale quoted: ...)   no categorize card without a person: PASS/FAIL
@@ -1538,7 +1553,7 @@ getTools exposed to page script: yes/no     executeTool: yes/no
 5 accept 3 / bulk (expanded, hold) / reject 2: default export +0, includeJudge +accepted, revoke -1, checkboxes reset, file name: PASS/FAIL
 6 policy Ask: proposal card ("Confirm: Propose Judgements"), reject inserts nothing, approve created:2: PASS/FAIL
 7 open_interaction: blind notice, no stars/notes/history until a person touches it; synthetic event does not reveal: PASS/FAIL
-  judge_interaction form: agent submit -> proposal, human submit blocked: PASS/FAIL   read-only number input in the derived schema: <paste>
+  propose_judgment form: agent submit -> proposal, human submit blocked: PASS/FAIL   read-only number input in the derived schema: <paste>
 8 star clicked with a live grant -> AGENT PRESENT chip, default export unchanged, includeAgentPresent +1: PASS/FAIL
 9 annotate rating 99 -> 400, unknown -> 404, human rating unchanged by a judge proposal: PASS/FAIL
 console clean: PASS/FAIL

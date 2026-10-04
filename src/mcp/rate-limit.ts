@@ -31,7 +31,7 @@ export const LIMIT_USER_READS = { limit: 120, windowMs: 60_000 };
 /** User, prepares across all principals: 20 per 60 s. */
 export const LIMIT_USER_PREPARES = { limit: 20, windowMs: 60_000 };
 /**
- * `propose_judgements` and `judge_interaction` together, per user (so rotating a session id gains nothing):
+ * `propose_judgments` and `propose_judgment` together, per user (so rotating a session id gains nothing):
  * 6 calls per 60 s. Each call carries at most 20 items; the daily item cap is `judgeDailyLimit` (Settings).
  */
 export const LIMIT_USER_JUDGE_CALLS = { limit: 6, windowMs: 60_000 };

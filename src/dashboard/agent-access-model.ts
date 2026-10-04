@@ -53,6 +53,8 @@ export interface AgentAuditEntry {
   decision: string;
   count: number;
   args_preview: string | null;
+  /** Set when `tool_name` is a retired catalog name: its current name (history is shown verbatim, plus this). */
+  toolCurrent?: string;
 }
 
 export interface AgentState {
@@ -271,7 +273,8 @@ export function formatAuditRow(entry: AgentAuditEntry): AuditRowView {
     kind: sentinel ? 'notice' : 'call',
     id: entry.id,
     timeIso: entry.ts,
-    tool: entry.tool_name,
+    // History is verbatim: a retired name keeps showing, with its current name beside it.
+    tool: entry.toolCurrent ? `${entry.tool_name} (now ${entry.toolCurrent})` : entry.tool_name,
     decision: entry.decision,
     decisionLabel: entry.decision.replace(/_/g, ' '),
     chip: auditChip(entry.decision),

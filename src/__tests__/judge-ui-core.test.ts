@@ -221,7 +221,7 @@ describe('judge components', () => {
 
   test('the judge form carries its own tool name, no autosubmit, and the human controls never do', () => {
     const form = read('components/judge/JudgeInteractionForm.tsx');
-    expect(form).toContain("tool: 'judge_interaction'");
+    expect(form).toContain("tool: 'propose_judgment'");
     expect(form).not.toContain('toolautosubmit');
     const tab = read('tabs/LlmTab.tsx');
     expect(tab).not.toMatch(/toolname/);

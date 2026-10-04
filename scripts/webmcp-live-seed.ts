@@ -138,6 +138,9 @@ const insertToolResult = db.prepare(
 const addRow = (row: { run: string; seq: number; type: string; prompt: string; response: string; calls?: unknown[] }) =>
   Number(insertRow.run({ ...row, calls: row.calls ? JSON.stringify(row.calls) : null }).lastInsertRowid);
 
+// NOTE: the tool names in the recorded traces below (`spending_summary`, `transaction_search`) are the dashboard CHAT agent's
+// tool names, as llm_tool_results stores them. They are a different namespace from the WebMCP catalog and were not renamed
+// (specs/webmcp-tool-naming.md §3).
 // 1. A multi-iteration AGENT run. Iteration 1 is the bare query; iterations 2 and 3 are `buildIterationPrompt` output, so
 //    they embed every raw tool result under "Data retrieved from tool calls:" exactly as the agent records them
 //    (`### tool(arg=value)` blocks, as `Scratchpad.getToolResults` formats them).

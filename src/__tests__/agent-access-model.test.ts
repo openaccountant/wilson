@@ -144,6 +144,11 @@ describe('audit rows', () => {
     for (const d of ['stale', 'expired', 'cancelled', 'rest_export']) expect(auditChip(d)).toBe('muted');
   });
 
+  test('a retired tool name keeps showing as stored, with its current name beside it', () => {
+    expect(formatAuditRow(entry({ tool_name: 'transaction_search', toolCurrent: 'search_transactions' })).tool).toBe('transaction_search (now search_transactions)');
+    expect(formatAuditRow(entry({ tool_name: 'search_transactions' })).tool).toBe('search_transactions');
+  });
+
   test('a client-reported transport is flagged with a tooltip; a server-derived one is not', () => {
     for (const t of ['imperative', 'declarative', 'page']) {
       const row = formatAuditRow(entry({ transport: t }));

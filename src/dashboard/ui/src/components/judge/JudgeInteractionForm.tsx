@@ -3,7 +3,7 @@ import { useDeclarativeTool } from '@/agent/useDeclarativeTool';
 import { AgentFilledBanner } from '@/components/agent/AgentFilledBanner';
 
 /**
- * "Agent judgement": the declarative WebMCP tool `judge_interaction`, below the human rating controls. Only an
+ * "Agent judgement": the declarative WebMCP tool `propose_judgment`, below the human rating controls. Only an
  * agent can submit it: a person's submit is always blocked with a message (the routing table says a proposal form
  * is for agents), so a human label can never come from here. The agent's submit becomes a proposal, which waits for
  * its approval card unless the user allowed proposals; either way it only lands in the Judge queue as `proposed`.
@@ -16,7 +16,7 @@ export function JudgeInteractionForm({ interactionId, onSettled }: { interaction
   const [judgeModel, setJudgeModel] = useState('');
 
   const declarative = useDeclarativeTool({
-    tool: 'judge_interaction',
+    tool: 'propose_judgment',
     onAgentCleared: () => {
       setRating('');
       setPreference('');

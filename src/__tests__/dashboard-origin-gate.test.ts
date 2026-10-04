@@ -240,7 +240,7 @@ describe('state-changing requests (T04)', () => {
     const res = await fetch(base + '/api/mcp/grants', {
       method: 'POST',
       headers: { Origin: 'https://evil.example', 'Content-Type': 'text/plain', 'Sec-Fetch-Site': 'cross-site', 'X-Wilson-Agent-Session': SESSION },
-      body: JSON.stringify({ tools: ['transaction_search'] }),
+      body: JSON.stringify({ tools: ['search_transactions'] }),
     });
     expect(res.status).toBe(403);
     expect((sdb.prepare('SELECT COUNT(*) AS n FROM mcp_grants').get() as { n: number }).n).toBe(0);
@@ -261,7 +261,7 @@ describe('state-changing requests (T04)', () => {
     const res = await fetch(base + '/api/mcp/grants', {
       method: 'POST',
       headers: { 'Sec-Fetch-Site': 'same-site', 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': SESSION },
-      body: JSON.stringify({ tools: ['transaction_search'] }),
+      body: JSON.stringify({ tools: ['search_transactions'] }),
     });
     expect(res.status).toBe(403);
   });
@@ -271,7 +271,7 @@ describe('state-changing requests (T04)', () => {
     const res = await fetch(base + '/api/mcp/grants', {
       method: 'POST',
       headers: { Origin: 'null', 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': SESSION },
-      body: JSON.stringify({ tools: ['transaction_search'] }),
+      body: JSON.stringify({ tools: ['search_transactions'] }),
     });
     expect(res.status).toBe(403);
   });
@@ -463,7 +463,7 @@ describe('dev UI through the vite proxy (WILSON_DASHBOARD_DEV=1)', () => {
         'Content-Type': 'application/json',
         'X-Wilson-Agent-Session': SESSION,
       },
-      body: JSON.stringify({ tools: ['transaction_search'] }),
+      body: JSON.stringify({ tools: ['search_transactions'] }),
     });
   }
 
@@ -477,7 +477,7 @@ describe('dev UI through the vite proxy (WILSON_DASHBOARD_DEV=1)', () => {
 
     // The same tab's later GET: no Origin, Sec-Fetch-Site same-origin, Host :3141 after changeOrigin.
     const grants = await fetch(base + '/api/mcp/grants', { headers: { 'Sec-Fetch-Site': 'same-origin', 'X-Wilson-Agent-Session': SESSION } });
-    expect(((await grants.json()) as any).grants.map((g: any) => g.tool_name)).toEqual(['transaction_search']);
+    expect(((await grants.json()) as any).grants.map((g: any) => g.tool_name)).toEqual(['search_transactions']);
   });
 
   test('D1: a GET from the vite origin (same-site) gets no Access-Control-Allow-Origin, so another app on :5173 cannot read the ledger', async () => {

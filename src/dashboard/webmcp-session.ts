@@ -71,7 +71,7 @@ export const TAB_IDS = ['overview', 'transactions', 'review', 'accounts', 'goals
 export type TabId = (typeof TAB_IDS)[number];
 
 /**
- * The tabs an agent may open with `navigate_to_tab`. Not `settings`: that is the Agent Access Center (grants,
+ * The tabs an agent may open with `open_tab`. Not `settings`: that is the Agent Access Center (grants,
  * policies, the kill switch, client tokens, pending approvals), and no agent task needs its own control surface on
  * screen (least privilege). The user opens it themselves.
  */

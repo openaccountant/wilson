@@ -112,7 +112,7 @@ async function bootBridge(options: BootOptions = {}) {
 
   const post = (path: string, body: unknown) =>
     bfetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', [SESSION_HEADER]: session }, body: JSON.stringify(body) });
-  const toolNames = options.tools ?? ['transaction_search', 'edit_transaction'];
+  const toolNames = options.tools ?? ['search_transactions', 'update_transaction'];
   const granted = await (await post('/api/mcp/grants', { tools: toolNames })).json() as any;
   expect(granted.grants).toHaveLength(toolNames.length);
 
@@ -209,7 +209,7 @@ describe('the served bridge bundle', () => {
       const { registered, win, failTools, resync } = await bootBridge();
       const registry = (win as any).__wilsonPageTools;
       expect(registry).toBeDefined();
-      const tool = registered.get('transaction_search')!;
+      const tool = registered.get('search_transactions')!;
       expect([...registry.liveTools()].length).toBeGreaterThan(0);
 
       failTools.status = status;
@@ -238,7 +238,7 @@ describe('the served bridge bundle', () => {
 
     expect(toolsFetches()).toBeGreaterThan(before.tools);
     expect(stateFetches()).toBeGreaterThan(before.state);
-    expect([...registered.keys()].sort()).toEqual(['edit_transaction', 'transaction_search']); // nothing lost by the resync
+    expect([...registered.keys()].sort()).toEqual(['search_transactions', 'update_transaction']); // nothing lost by the resync
 
     // A message on some other channel is ignored.
     const quiet = toolsFetches();
@@ -249,9 +249,9 @@ describe('the served bridge bundle', () => {
 
   test('registers exactly the granted tools, with the spec annotations and the session in a header', async () => {
     const { registered, seen, session } = await bootBridge();
-    expect([...registered.keys()].sort()).toEqual(['edit_transaction', 'transaction_search']);
-    expect(registered.get('transaction_search')!.annotations).toEqual({ readOnlyHint: true, consequentialHint: false, untrustedContentHint: true });
-    expect(registered.get('edit_transaction')!.annotations).toEqual({ readOnlyHint: false, consequentialHint: true, untrustedContentHint: false });
+    expect([...registered.keys()].sort()).toEqual(['search_transactions', 'update_transaction']);
+    expect(registered.get('search_transactions')!.annotations).toEqual({ readOnlyHint: true, consequentialHint: false, untrustedContentHint: true });
+    expect(registered.get('update_transaction')!.annotations).toEqual({ readOnlyHint: false, consequentialHint: true, untrustedContentHint: false });
     const toolsCall = seen.find((c) => c.url === '/api/mcp/tools');
     expect(toolsCall).toBeDefined();
     expect(toolsCall!.headers[SESSION_HEADER]).toBe(session);
@@ -260,7 +260,7 @@ describe('the served bridge bundle', () => {
 
   test('a read tool goes through /api/mcp/call and returns data', async () => {
     const { registered, seen } = await bootBridge();
-    const out = (await registered.get('transaction_search')!.execute({ query: 'groceries' }, { signal: new AbortController().signal })) as any;
+    const out = (await registered.get('search_transactions')!.execute({ query: 'groceries' }, { signal: new AbortController().signal })) as any;
     expect(out.total).toBe(2);
     expect(seen.filter((c) => c.url === '/api/mcp/call')).toHaveLength(1);
     // The two retired wrapper routes are never called (spelled in pieces so this file stays out of the source grep).
@@ -270,7 +270,7 @@ describe('the served bridge bundle', () => {
   test('a change waits for the approval card, then returns the committed outcome', async () => {
     const { db, base, registered } = await bootBridge();
     const txn = db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number };
-    const pending = registered.get('edit_transaction')!.execute({ id: txn.id, notes: 'from the bundle' }, { signal: new AbortController().signal });
+    const pending = registered.get('update_transaction')!.execute({ id: txn.id, notes: 'from the bundle' }, { signal: new AbortController().signal });
 
     let opId: string | undefined;
     for (let i = 0; i < 100 && !opId; i++) {
@@ -293,7 +293,7 @@ describe('the served bridge bundle', () => {
     const { db, base, registered } = await bootBridge();
     const txn = db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number };
     const controller = new AbortController();
-    const pending = registered.get('edit_transaction')!.execute({ id: txn.id, notes: 'abandoned' }, { signal: controller.signal });
+    const pending = registered.get('update_transaction')!.execute({ id: txn.id, notes: 'abandoned' }, { signal: controller.signal });
     pending.catch(() => {});
 
     let opId: string | undefined;
@@ -312,7 +312,7 @@ describe('the served bridge bundle', () => {
 
   test('a validation failure comes back as an {error:{code,message}} RESULT with the actionable message (Chrome hides a thrown one)', async () => {
     const { registered } = await bootBridge();
-    const out = (await registered.get('edit_transaction')!.execute({ id: 1, amount: '12abc' }, { signal: new AbortController().signal })) as { error: { code: string; message: string } };
+    const out = (await registered.get('update_transaction')!.execute({ id: 1, amount: '12abc' }, { signal: new AbortController().signal })) as { error: { code: string; message: string } };
     expect(out.error.code).toBe('invalid_args');
     expect(out.error.message).toContain('amount must be a number');
   });
@@ -331,25 +331,25 @@ async function until(predicate: () => boolean, ms = 1000) {
 }
 
 describe('page tools through the served bridge bundle', () => {
-  const GRANT = ['navigate_to_tab', 'open_transaction', 'list_review_queue', 'transaction_search'];
+  const GRANT = ['open_tab', 'open_transaction', 'list_review_items', 'search_transactions'];
 
   test('a tab tool is registered only while its tab shows and its handler is mounted; a global tool needs just its handler', async () => {
     const { registered, win } = await bootBridge({ tools: GRANT, expectRegistered: 1 });
     const registry = (win as any).__wilsonPageTools;
     // The server read is global-surface: registered at once. The page tools wait for React.
-    expect([...registered.keys()].sort()).toEqual(['transaction_search']);
+    expect([...registered.keys()].sort()).toEqual(['search_transactions']);
 
     registry.setActiveTab('overview');
-    mountHandler(registry, 'navigate_to_tab', 'global', async () => ({ tab: 'x' }));
-    await until(() => registered.has('navigate_to_tab'));
-    expect([...registered.keys()].sort()).toEqual(['navigate_to_tab', 'transaction_search']);
+    mountHandler(registry, 'open_tab', 'global', async () => ({ tab: 'x' }));
+    await until(() => registered.has('open_tab'));
+    expect([...registered.keys()].sort()).toEqual(['open_tab', 'search_transactions']);
 
     // open_transaction belongs to the Transactions tab: no handler, wrong tab, nothing.
     registry.setActiveTab('transactions');
     const txn = mountHandler(registry, 'open_transaction', 'transactions', async () => ({ highlighted: true }));
     await until(() => registered.has('open_transaction'));
-    // list_review_queue is a server read of the Review tab: not registered while Transactions shows.
-    expect([...registered.keys()].sort()).toEqual(['navigate_to_tab', 'open_transaction', 'transaction_search']);
+    // list_review_items is a server read of the Review tab: not registered while Transactions shows.
+    expect([...registered.keys()].sort()).toEqual(['open_tab', 'open_transaction', 'search_transactions']);
     txn.abort();
   });
 
@@ -360,20 +360,20 @@ describe('page tools through the served bridge bundle', () => {
     const mount = mountHandler(registry, 'open_transaction', 'transactions', async () => ({}));
     await until(() => registered.has('open_transaction'));
     expect(registered.has('open_transaction')).toBe(true);
-    expect(registered.has('list_review_queue')).toBe(false);
+    expect(registered.has('list_review_items')).toBe(false);
 
     // The tab changes: the old tab's component unmounts, then the provider says which tab shows.
     const started = performance.now();
     mount.abort();
     registry.setActiveTab('review');
-    await until(() => registered.has('list_review_queue') && !registered.has('open_transaction'));
+    await until(() => registered.has('list_review_items') && !registered.has('open_transaction'));
     const settled = changeLog.filter((c) => c.at >= started);
     expect(registered.has('open_transaction')).toBe(false);
-    expect(registered.has('list_review_queue')).toBe(true);
+    expect(registered.has('list_review_items')).toBe(true);
     const lastChange = Math.max(...settled.map((c) => c.at));
     expect(lastChange - started).toBeLessThan(100);
     // One pass: the old tool left and the new one arrived, nothing else moved.
-    expect(settled.map((c) => `${c.change}:${c.name}`).sort()).toEqual(['registered:list_review_queue', 'unregistered:open_transaction']);
+    expect(settled.map((c) => `${c.change}:${c.name}`).sort()).toEqual(['registered:list_review_items', 'unregistered:open_transaction']);
   });
 
   test('executing a page tool authorizes on the server (audited as page), then runs the handler with the server row', async () => {
@@ -406,7 +406,7 @@ describe('page tools through the served bridge bundle', () => {
     await until(() => registered.has('open_transaction'));
     const out = (await registered.get('open_transaction')!.execute({ id: 987654 }, { signal: new AbortController().signal })) as { error: { code: string; message: string } };
     expect(out.error.code).toBe('not_found'); // the REST status stays 404; the agent is handed the result
-    expect(out.error.message).toContain('not found — use transaction_search');
+    expect(out.error.message).toContain('not found — use search_transactions');
     expect(ran).toBe(false);
   });
 
@@ -421,7 +421,7 @@ describe('page tools through the served bridge bundle', () => {
     mount.abort();
     registry.setActiveTab('review');
     const out = await tool.execute({ id: 1 }, { signal: new AbortController().signal });
-    expect(out).toEqual({ error: { code: 'tab_not_open', message: "The Transactions tab is not open. Call navigate_to_tab with tab='transactions' first." } });
+    expect(out).toEqual({ error: { code: 'tab_not_open', message: "The Transactions tab is not open. Call open_tab with tab='transactions' first." } });
     expect(ran).toBe(false);
   });
 
@@ -431,7 +431,7 @@ describe('page tools through the served bridge bundle', () => {
     registry.setActiveTab('transactions');
     mountHandler(registry, 'open_transaction', 'transactions', async () => ({}));
     await until(() => registered.has('open_transaction'));
-    const infoBefore = registry.toolInfo('transaction_search');
+    const infoBefore = registry.toolInfo('search_transactions');
     expect(infoBefore).toBeDefined();
     expect(['allow', 'ask']).toContain(infoBefore.policy); // the policy rides on the live info
     let notified = 0;
@@ -439,7 +439,7 @@ describe('page tools through the served bridge bundle', () => {
     const changes = changeLog.length;
     for (let i = 0; i < 3; i++) await resync();
     expect(changeLog.length).toBe(changes);
-    expect(registry.toolInfo('transaction_search')).toBe(infoBefore);
+    expect(registry.toolInfo('search_transactions')).toBe(infoBefore);
     expect(notified).toBe(0);
   });
 
@@ -467,7 +467,7 @@ describe('page tools through the served bridge bundle', () => {
     const registry = (win as any).__wilsonPageTools;
     registry.setActiveTab('transactions');
     mountHandler(registry, 'open_transaction', 'transactions', async () => ({}));
-    mountHandler(registry, 'navigate_to_tab', 'global', async () => ({}));
+    mountHandler(registry, 'open_tab', 'global', async () => ({}));
     await until(() => registered.size === 3);
     expect(registered.size).toBe(3);
     const { setKillSwitch } = await import('../mcp/engine.js');
@@ -589,14 +589,14 @@ describe('the bridge sync scheduler', () => {
 });
 
 /**
- * Live finding (Chrome 154, hidden tab): after the kill switch or revoke-session, get_page_context, navigate_to_tab and
- * transaction_search stayed in getTools() although the server listed nothing. The tab had granted them twice, and
+ * Live finding (Chrome 154, hidden tab): after the kill switch or revoke-session, get_page_context, open_tab and
+ * search_transactions stayed in getTools() although the server listed nothing. The tab had granted them twice, and
  * /api/mcp/tools lists a tool once per live grant: the bridge registered both rows, the second registerTool was refused,
  * and the first registration was left with no AbortController, so nothing could ever unregister it. Unregistration never
  * waits for visibility: every event-driven sync runs the full tool sync, hidden or not.
  */
 describe('a shrinking live set unregisters at once, hidden or visible (tools granted twice)', () => {
-  const GRANT = ['navigate_to_tab', 'get_page_context', 'transaction_search'];
+  const GRANT = ['open_tab', 'get_page_context', 'search_transactions'];
 
   async function bootGrantedTwice(hidden: boolean, extra: Partial<BootOptions> = {}) {
     // Boot with nothing granted, then grant the tools twice (two live rows per tool) while the tab is in its final state.
@@ -606,7 +606,7 @@ describe('a shrinking live set unregisters at once, hidden or visible (tools gra
     await post('/api/mcp/grants', { tools: GRANT });
     const registry = (boot.win as any).__wilsonPageTools;
     registry.setActiveTab('forecast');
-    mountHandler(registry, 'navigate_to_tab', 'global', async () => ({}));
+    mountHandler(registry, 'open_tab', 'global', async () => ({}));
     mountHandler(registry, 'get_page_context', 'global', async () => ({}));
     await boot.resync();
     await until(() => boot.registered.size === 3);
@@ -713,13 +713,13 @@ describe('event-driven syncs run the full tool sync while the tab is hidden', ()
   });
 
   test('a grant made by the raw API in a hidden tab is registered by the next event, not by a timer', async () => {
-    const b = await bootBridge({ hidden: true, tools: ['edit_transaction'], expectRegistered: 1 });
+    const b = await bootBridge({ hidden: true, tools: ['update_transaction'], expectRegistered: 1 });
     expect(b.sync.pending()).toEqual([]);
-    await bfetch(b.base + '/api/mcp/grants', { method: 'POST', headers: { 'Content-Type': 'application/json', [SESSION_HEADER]: b.session }, body: JSON.stringify({ tools: ['transaction_search'] }) });
+    await bfetch(b.base + '/api/mcp/grants', { method: 'POST', headers: { 'Content-Type': 'application/json', [SESSION_HEADER]: b.session }, body: JSON.stringify({ tools: ['search_transactions'] }) });
     await new Promise((r) => setTimeout(r, 100));
-    expect([...b.registered.keys()]).toEqual(['edit_transaction']); // paused by design while hidden
+    expect([...b.registered.keys()]).toEqual(['update_transaction']); // paused by design while hidden
     await b.resync();
     await until(() => b.registered.size === 2);
-    expect([...b.registered.keys()].sort()).toEqual(['edit_transaction', 'transaction_search']);
+    expect([...b.registered.keys()].sort()).toEqual(['search_transactions', 'update_transaction']);
   });
 });

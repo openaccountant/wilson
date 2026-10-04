@@ -22,6 +22,7 @@ import { isAgentAccessEnabled } from './global-state.js';
 import { lockFor } from '../dashboard/agent-access-model.js';
 import { markOperationStatus, type McpOperation, type Role } from './store.js';
 import { appendAudit } from './audit.js';
+import { mostRestrictivePolicy, retiredNameHint, retiredNamesFor } from './tool-names.js';
 
 export type Policy = ToolPolicy;
 export const POLICIES: readonly Policy[] = ['off', 'ask', 'allow'];
@@ -54,11 +55,22 @@ function clamp(def: McpToolDef, policy: Policy): Policy {
   return policy === 'allow' ? 'ask' : 'allow';
 }
 
+/**
+ * One user key's stored policy for a tool. Also consults the tool's retired names and returns the MOST
+ * RESTRICTIVE value found, permanently: a fix-up that failed (or never ran), or an older build on the same
+ * database writing an old-name row, can then only make a policy stricter, never fall back to the default.
+ */
 function storedRow(db: Database, userKey: number, tool: string): Policy | null {
-  const row = db
-    .prepare('SELECT policy FROM mcp_tool_policies WHERE user_key = @userKey AND tool_name = @tool')
-    .get({ userKey, tool }) as { policy: Policy } | undefined;
-  return row && POLICIES.includes(row.policy) ? row.policy : null;
+  const names = [tool, ...retiredNamesFor(tool)];
+  const rows = db
+    .prepare(`SELECT policy FROM mcp_tool_policies WHERE user_key = @userKey AND tool_name IN (${names.map((_, i) => `@n${i}`).join(', ')})`)
+    .all({ userKey, ...Object.fromEntries(names.map((n, i) => [`n${i}`, n])) }) as Array<{ policy: Policy }>;
+  let out: Policy | null = null;
+  for (const r of rows) {
+    if (!POLICIES.includes(r.policy)) continue;
+    out = out === null ? r.policy : mostRestrictivePolicy(out, r.policy);
+  }
+  return out;
 }
 
 /**
@@ -87,7 +99,10 @@ export function getEffectivePolicy(db: Database, userId: number | null, tool: st
 
 export function setPolicy(db: Database, actor: PolicyActor, tool: string, policy: string): PolicyResult {
   const def = getToolDef(tool);
-  if (!def) return { ok: false, status: 404, code: 'unknown_tool', error: `Unknown tool "${tool.slice(0, 30)}"` };
+  if (!def) {
+    const hint = retiredNameHint(tool);
+    return { ok: false, status: 404, code: 'unknown_tool', error: `Unknown tool "${tool.slice(0, 30)}"${hint ? `: ${hint}` : ''}` };
+  }
   if (!(POLICIES as readonly string[]).includes(policy)) {
     return { ok: false, status: 400, code: 'invalid_args', error: 'policy must be one of: off, ask, allow' };
   }
@@ -98,13 +113,19 @@ export function setPolicy(db: Database, actor: PolicyActor, tool: string, policy
     const error = isChangeTool(def) ? CHANGES_NEED_APPROVAL : `${def.name} cannot ask: choose Off or Allow.`;
     return { ok: false, status: 400, code: 'invalid_args', error };
   }
-  db.prepare(`
+  // Write the current name and every retired name as a mirror, in one transaction, so a stale old-name row can never
+  // out-vote a deliberate change (the read takes the most restrictive) and a build that still uses old names keeps
+  // enforcing an Off set here.
+  const upsert = db.prepare(`
     INSERT INTO mcp_tool_policies (user_key, tool_name, policy, updated_at) VALUES (@userKey, @tool, @policy, datetime('now'))
     ON CONFLICT(user_key, tool_name) DO UPDATE SET policy = excluded.policy, updated_at = excluded.updated_at
-  `).run({ userKey: userKeyOf(actor.userId), tool, policy: wanted });
+  `);
+  db.transaction(() => {
+    for (const name of [def.name, ...retiredNamesFor(def.name)]) upsert.run({ userKey: userKeyOf(actor.userId), tool: name, policy: wanted });
+  })();
   // Off beats a card that is already waiting: approving it later would run a tool the user has since turned off.
   if (wanted === 'off') rejectPendingForTool(db, actor.userId, def.name, def.classification);
-  return { ok: true, tool, policy: wanted, effective: getEffectivePolicy(db, actor.userId, tool) };
+  return { ok: true, tool: def.name, policy: wanted, effective: getEffectivePolicy(db, actor.userId, def.name) };
 }
 
 /**
@@ -113,9 +134,12 @@ export function setPolicy(db: Database, actor: PolicyActor, tool: string, policy
  * path refuses such an operation too (`commitWebMcpOperation`), for a row this sweep never saw.
  */
 function rejectPendingForTool(db: Database, userId: number | null, tool: string, classification: McpToolDef['classification']): string[] {
+  const names = [tool, ...retiredNamesFor(tool)];
   const rows = db
-    .prepare("SELECT * FROM mcp_operations WHERE status = 'pending' AND source != 'chat' AND tool_name = @tool AND user_id IS @userId")
-    .all({ tool, userId }) as McpOperation[];
+    .prepare(
+      `SELECT * FROM mcp_operations WHERE status = 'pending' AND source != 'chat' AND tool_name IN (${names.map((_, i) => `@n${i}`).join(', ')}) AND user_id IS @userId`,
+    )
+    .all({ userId, ...Object.fromEntries(names.map((n, i) => [`n${i}`, n])) }) as McpOperation[];
   for (const op of rows) {
     markOperationStatus(db, op.id, 'rejected', { reason: 'policy_off' });
     try {

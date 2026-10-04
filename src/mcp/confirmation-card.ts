@@ -1,7 +1,7 @@
 /**
  * Pure content model for the WebMCP confirmation card — the single visible
  * confirmation surface for every mutating call (WebMCP tool call, HTTP-MCP
- * fallback, dashboard chat). Zero imports, browser-safe: the in-page bridge
+ * fallback, dashboard chat). Imports only the pure tool-names.ts, browser-safe: the in-page bridge
  * (src/dashboard/webmcp-bridge.ts) assembles DOM from this model, and the
  * root test-suite pins the content without a browser.
  *
@@ -11,6 +11,8 @@
  * never renders agent-provided prose: the summary is the server's own
  * prepareMutation output, persisted on the operation row.
  */
+
+import { currentNameFor } from './tool-names.js';
 
 export interface ConfirmationCardOperation {
   source: string;
@@ -72,36 +74,56 @@ export interface ConfirmationCardRowSet {
   rows: ConfirmationCardDeltaRow[];
 }
 
-/** Human label per catalog tool — mirrors src/mcp/tool-catalog.ts names. */
+/** Human label per catalog tool, keyed by the CURRENT catalog name (specs/webmcp-tool-naming.md §2.1). */
 const TOOL_LABELS: Record<string, string> = {
   categorize_transaction: 'Categorize Transaction',
-  edit_transaction: 'Edit Transaction',
-  tax_flag: 'Tax Flag',
-  review_action: 'Resolve Review',
+  update_transaction: 'Update Transaction',
+  set_tax_flag: 'Set Tax Flag',
+  resolve_review_item: 'Resolve Review',
   set_budget: 'Set Budget',
   update_goal: 'Update Goal',
   // Reads raise a card only when their policy is Ask ("Allow read: ...").
-  tax_summary: 'Tax Summary',
+  get_tax_summary: 'Tax Summary',
+  search_transactions: 'Search Transactions',
+  get_spending_summary: 'Spending Summary',
+  get_profit_loss: 'Profit & Loss',
+  get_net_worth: 'Net Worth',
+  get_cash_forecast: 'Cash Forecast',
+  list_transactions: 'List Transactions',
+  fill_forecast_inputs: 'Fill Forecast Inputs',
+  open_tab: 'Open Tab',
+  get_page_context: 'Get Page Context',
+  open_transaction: 'Open Transaction',
+  list_review_items: 'List Review Items',
+  open_review_item: 'Open Review Item',
+  open_interaction: 'Open Interaction',
+  // The judge: reads raise a card only under Ask; a proposal card says how many inert judgments it would add.
+  list_interactions: 'List Interactions',
+  get_interaction: 'Get Interaction',
+  get_judge_rubric: 'Get Judge Rubric',
+  propose_judgments: 'Propose Judgments',
+  propose_judgment: 'Propose Judgment',
+};
+
+/**
+ * Chat cards share `mcp_operations` with the chat tool's own name. Five of those names equal retired catalog
+ * names, so chat cards keep reading exactly as they did before the rename. Other chat names fall back to the raw name.
+ */
+const CHAT_TOOL_LABELS: Record<string, string> = {
+  edit_transaction: 'Edit Transaction',
+  tax_flag: 'Tax Flag',
   transaction_search: 'Transaction Search',
   spending_summary: 'Spending Summary',
   profit_loss: 'Profit & Loss',
   net_worth: 'Net Worth',
-  forecast: 'Forecast',
-  filter_transactions: 'Filter Transactions',
-  set_forecast_inputs: 'Set Forecast Inputs',
-  navigate_to_tab: 'Navigate to Tab',
-  get_page_context: 'Get Page Context',
-  open_transaction: 'Open Transaction',
-  list_review_queue: 'List Review Queue',
-  open_review_item: 'Open Review Item',
-  open_interaction: 'Open Interaction',
-  // The judge: reads raise a card only under Ask; a proposal card says how many inert judgements it would add.
-  list_interactions: 'List Interactions',
-  get_interaction: 'Get Interaction',
-  get_judge_rubric: 'Get Judge Rubric',
-  propose_judgements: 'Propose Judgements',
-  judge_interaction: 'Judge Interaction',
 };
+
+/** The title for an operation. Chat rows only ever use CHAT_TOOL_LABELS; other rows resolve a retired name (history) first. */
+function labelFor(source: string, toolName: string): string {
+  if (source === 'chat') return CHAT_TOOL_LABELS[toolName] ?? toolName;
+  const canonical = currentNameFor(toolName) ?? toolName;
+  return TOOL_LABELS[canonical] ?? toolName;
+}
 
 /** One line of plain copy for how an operation ended. Shown on the card after the user acts. */
 export function outcomeCopy(outcome: string): string {
@@ -163,7 +185,7 @@ function sourceLabelFor(source: string): string {
 }
 
 export function confirmationCardModel(op: ConfirmationCardOperation): ConfirmationCardModel {
-  const title = TOOL_LABELS[op.tool_name] ?? op.tool_name;
+  const title = labelFor(op.source, op.tool_name);
   const isRead = op.kind === 'read';
 
   let deltaRows: ConfirmationCardRowSet | null = null;

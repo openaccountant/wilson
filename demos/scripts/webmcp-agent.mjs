@@ -92,7 +92,7 @@ try {
 
   // 1. Read: context — how much is still uncategorized?
   emit('think', 'Checking this month against last month…');
-  const summary = await call(client, 'spending_summary', { period: 'month', compareWithPrevious: true });
+  const summary = await call(client, 'get_spending_summary', { period: 'month', compareWithPrevious: true });
   const prev = summary?.previousPeriod;
   const prevUncat = prev?.categories?.find((c) => c.category === 'Uncategorized');
   emit(
@@ -106,7 +106,7 @@ try {
 
   // 2. Read: find the charge and how this merchant is usually categorized.
   emit('think', `Looking up "${QUERY}"…`);
-  const search = await call(client, 'transaction_search', { query: QUERY });
+  const search = await call(client, 'search_transactions', { query: QUERY });
   // /mcp returns {items:[{id,date,desc,amount,category}]}; older builds returned {transactions:[{description}]}.
   const rows = (search?.items ?? search?.transactions ?? []).map((r) => ({ ...r, description: r.description ?? r.desc }));
   const target = rows.filter((r) => !r.category).sort((a, b) => b.date.localeCompare(a.date))[0];

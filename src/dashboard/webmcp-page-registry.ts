@@ -93,7 +93,7 @@ export interface PageRegistry {
   getHandler(name: string): PageHandlerEntry | undefined;
   /**
    * Set by the bridge: flush any pending registration change now and resolve once the tools match the live set.
-   * `navigate_to_tab` waits on it so its answer is true by the time the agent reads it.
+   * `open_tab` waits on it so its answer is true by the time the agent reads it.
    */
   whenSettled?: () => Promise<void>;
 }

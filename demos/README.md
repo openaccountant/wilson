@@ -138,7 +138,7 @@ nothing). The recorder holds Approve with `page.mouse.down()` -> wait 0.8 s ->
 `:5173` also set `WILSON_DASHBOARD_DEV=1`, or point `WILSON_DEMO_BASE` at
 `http://localhost:3141` to use the built UI), then
 `bun demos/scripts/record-webmcp-agent.mjs`. It logs in as the demo admin,
-grants `spending_summary`, `transaction_search` and `categorize_transaction`
+grants `get_spending_summary`, `search_transactions` and `categorize_transaction`
 to a fresh token in the UI (Settings -> Agent access -> External MCP clients ->
 Mint token), the separate agent process uses that token, and at the end the
 token is revoked so the same agent is refused. Minting is limited to 5 per

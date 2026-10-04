@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { MCP_TOOL_CATALOG } from '../mcp/tool-catalog.js';
 import { confirmationCardModel, formatValue, holdProgress, outcomeCopy } from '../mcp/confirmation-card.js';
 
 /**
@@ -21,9 +22,31 @@ describe('confirmationCardModel — tool label', () => {
   test('human labels for the mutating catalog tools', () => {
     expect(confirmationCardModel(webmcpCategorize).title).toBe('Categorize Transaction');
     expect(
-      confirmationCardModel({ ...webmcpCategorize, tool_name: 'edit_transaction' }).title,
-    ).toBe('Edit Transaction');
-    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'tax_flag' }).title).toBe('Tax Flag');
+      confirmationCardModel({ ...webmcpCategorize, tool_name: 'update_transaction' }).title,
+    ).toBe('Update Transaction');
+    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'set_tax_flag' }).title).toBe('Set Tax Flag');
+  });
+
+  test('I4: chat cards read exactly as they did before the rename (chat names are chat tools, not catalog names)', () => {
+    const chat = { ...webmcpCategorize, source: 'chat' };
+    expect(confirmationCardModel({ ...chat, tool_name: 'tax_flag' }).title).toBe('Tax Flag');
+    expect(confirmationCardModel({ ...chat, tool_name: 'edit_transaction' }).title).toBe('Edit Transaction');
+    // A chat tool the labels never knew keeps falling back to its raw name, and a chat row never resolves a catalog label.
+    expect(confirmationCardModel({ ...chat, tool_name: 'categorize' }).title).toBe('categorize');
+    expect(confirmationCardModel({ ...chat, tool_name: 'set_tax_flag' }).title).toBe('set_tax_flag');
+  });
+
+  test('I4: a history row with a retired name gets the label of its current name (non-chat only)', () => {
+    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'tax_flag' }).title).toBe('Set Tax Flag');
+    expect(confirmationCardModel({ ...webmcpCategorize, source: 'http-mcp', tool_name: 'edit_transaction' }).title).toBe('Update Transaction');
+    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'judge_interaction' }).title).toBe('Propose Judgment');
+  });
+
+  test('every catalog tool has a label keyed by its current name', () => {
+    // get_operation_result never raised a card and never had a label (it is /mcp-only); every other tool has one.
+    for (const def of MCP_TOOL_CATALOG.filter((d) => d.name !== 'get_operation_result')) {
+      expect(confirmationCardModel({ ...webmcpCategorize, tool_name: def.name }).title).not.toBe(def.name);
+    }
   });
 
   test('unknown tools fall back to their raw name (never blank, never a JSON blob)', () => {
@@ -73,7 +96,7 @@ describe('confirmationCardModel — delta rows', () => {
   test('a tax-flag shape renders its before/after objects as JSON strings', () => {
     const model = confirmationCardModel({
       source: 'webmcp',
-      tool_name: 'tax_flag',
+      tool_name: 'set_tax_flag',
       summary: 'Flag "X" (2026-08-01) as tax-deductible: Meals',
       before_json: null,
       after_json: JSON.stringify({ irs_category: 'Meals', tax_year: 2026, notes: null }),
@@ -88,7 +111,7 @@ describe('confirmationCardModel — delta rows', () => {
   test('a delta with no changed fields yields an empty row set (→ "No fields changed.")', () => {
     const model = confirmationCardModel({
       source: 'webmcp',
-      tool_name: 'edit_transaction',
+      tool_name: 'update_transaction',
       before_json: '{}',
       after_json: '{}',
       summary: 'Edit transaction #7: X',
@@ -128,8 +151,8 @@ describe('confirmationCardModel — requested by (server-derived)', () => {
     expect(confirmationCardModel({ ...webmcpCategorize, requestedBy: null }).sourceLabel).toBe('this page (WebMCP)');
   });
 
-  test('tax_summary has a label, though a read never raises a card', () => {
-    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'tax_summary' }).title).toBe('Tax Summary');
+  test('get_tax_summary has a label, though a read never raises a card', () => {
+    expect(confirmationCardModel({ ...webmcpCategorize, tool_name: 'get_tax_summary' }).title).toBe('Tax Summary');
   });
 });
 
@@ -148,7 +171,7 @@ describe('outcomeCopy', () => {
 describe('P1 card hardening', () => {
   const readOp = {
     source: 'webmcp',
-    tool_name: 'transaction_search',
+    tool_name: 'search_transactions',
     kind: 'read',
     summary: null,
     before_json: null,
@@ -161,14 +184,14 @@ describe('P1 card hardening', () => {
 
   test('a read-ask card is titled "Allow read: ..." in the amber variant; a change is "Confirm: ..." in the default one', () => {
     const read = confirmationCardModel(readOp);
-    expect(read.heading).toBe('Allow read: Transaction Search');
+    expect(read.heading).toBe('Allow read: Search Transactions');
     expect(read.variant).toBe('read');
     expect(read.tone).toBe('amber');
     const change = confirmationCardModel(webmcpCategorize);
     expect(change.heading).toBe('Confirm: Categorize Transaction');
     expect(change.variant).toBe('change');
     expect(change.tone).toBe('default');
-    expect(read.title).toBe('Transaction Search'); // title stays the bare label
+    expect(read.title).toBe('Search Transactions'); // title stays the bare label
   });
 
   test('a read card shows the parsed filter rows and the full canonical args, never a truncated prefix', () => {
@@ -181,7 +204,7 @@ describe('P1 card hardening', () => {
   });
 
   test('every read tool has a label', () => {
-    for (const [tool, label] of [['spending_summary', 'Spending Summary'], ['profit_loss', 'Profit & Loss'], ['net_worth', 'Net Worth'], ['forecast', 'Forecast']]) {
+    for (const [tool, label] of [['get_spending_summary', 'Spending Summary'], ['get_profit_loss', 'Profit & Loss'], ['get_net_worth', 'Net Worth'], ['get_cash_forecast', 'Cash Forecast']]) {
       expect(confirmationCardModel({ ...readOp, tool_name: tool }).title).toBe(label);
     }
   });
@@ -229,16 +252,16 @@ describe('P1 card hardening', () => {
 describe('P4a judge proposal card', () => {
   const proposal = {
     source: 'webmcp',
-    tool_name: 'propose_judgements',
+    tool_name: 'propose_judgments',
     kind: 'proposal',
     summary: 'Add 3 proposed judgements (not used for training until you accept)',
     before_json: null,
     after_json: JSON.stringify({ judgements: 3, interactions: '#12, #13, #14', ratings: '4, 2, 5', 'judge model (declared by agent)': 'claude-test', rubric: 'a1b2c3d4e5f6' }),
   };
 
-  test('is a change card ("Confirm: Propose Judgements") with the server sentence and the declared model as a delta row', () => {
+  test('is a change card ("Confirm: Propose Judgments") with the server sentence and the declared model as a delta row', () => {
     const model = confirmationCardModel(proposal);
-    expect(model.heading).toBe('Confirm: Propose Judgements');
+    expect(model.heading).toBe('Confirm: Propose Judgments');
     expect(model.variant).toBe('change');
     expect(model.summary).toBe('Add 3 proposed judgements (not used for training until you accept)');
     const fields = model.deltaRows!.rows.map((r) => r.field);
@@ -251,8 +274,8 @@ describe('P4a judge proposal card', () => {
       ['list_interactions', 'List Interactions'],
       ['get_interaction', 'Get Interaction'],
       ['get_judge_rubric', 'Get Judge Rubric'],
-      ['propose_judgements', 'Propose Judgements'],
-      ['judge_interaction', 'Judge Interaction'],
+      ['propose_judgments', 'Propose Judgments'],
+      ['propose_judgment', 'Propose Judgment'],
     ]) {
       expect(confirmationCardModel({ ...proposal, tool_name: tool }).title).toBe(label);
     }

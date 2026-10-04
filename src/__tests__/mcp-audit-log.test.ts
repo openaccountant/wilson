@@ -33,7 +33,7 @@ function base(overrides: Partial<AuditInput> = {}): AuditInput {
     userId: null,
     role: 'admin',
     origin: 'http://localhost:3141',
-    toolName: 'transaction_search',
+    toolName: 'search_transactions',
     classification: 'read',
     decision: 'allowed',
     ...overrides,
@@ -45,18 +45,18 @@ describe('what callTool writes', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['transaction_search', 'edit_transaction']);
+    const grants = grantTools(db, scope, ['search_transactions', 'update_transaction']);
     return { db, scope, grants };
   }
 
   test('an allowed read writes one signal row with result_chars and page_index', async () => {
     const { db, scope, grants } = await setup();
-    const res = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
+    const res = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
     expect(res.ok).toBe(true);
     const log = rows(db);
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({
-      tier: 'signal', decision: 'allowed', tool_name: 'transaction_search', classification: 'read',
+      tier: 'signal', decision: 'allowed', tool_name: 'search_transactions', classification: 'read',
       transport: 'imperative', principal_kind: 'tab', page_index: 0, count: 1,
     });
     expect(log[0].result_chars).toBe(JSON.stringify((res as any).data).length);
@@ -67,13 +67,13 @@ describe('what callTool writes', () => {
   test('invalid_args, denied_grant and rate_limited each aggregate into one noise row per minute with a count', async () => {
     const { db, scope, grants } = await setup();
     for (let i = 0; i < 4; i++) {
-      await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: 'x' }, 'imperative'); // invalid_args
+      await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: 'x' }, 'imperative'); // invalid_args
     }
     for (let i = 0; i < 3; i++) {
-      await callTool(db, scope, crypto.randomUUID(), 'transaction_search', { query: 'a' }, 'imperative'); // denied_grant
+      await callTool(db, scope, crypto.randomUUID(), 'search_transactions', { query: 'a' }, 'imperative'); // denied_grant
     }
     for (let i = 0; i < 25; i++) {
-      await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'a' }, 'imperative'); // 5 ok (burst), then rate_limited
+      await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'a' }, 'imperative'); // 5 ok (burst), then rate_limited
     }
     const noise = rows(db, "tier = 'noise'");
     const byDecision = Object.fromEntries(noise.map((r) => [r.decision, r.count]));
@@ -96,8 +96,8 @@ describe('what callTool writes', () => {
     for (let i = 0; i < 300; i++) {
       const rotating = testScope(); // a fresh, never-granted session every time
       await callTool(db, rotating, crypto.randomUUID(), `invented_tool_${i}`, {}, 'imperative'); // unknown_tool
-      await callTool(db, rotating, crypto.randomUUID(), 'transaction_search', { query: 'a' }, 'imperative'); // denied_grant
-      await callTool(db, rotating, null, 'edit_transaction', { id: 'x' }, 'imperative'); // invalid_args
+      await callTool(db, rotating, crypto.randomUUID(), 'search_transactions', { query: 'a' }, 'imperative'); // denied_grant
+      await callTool(db, rotating, null, 'update_transaction', { id: 'x' }, 'imperative'); // invalid_args
     }
     const noise = rows(db, "tier = 'noise'");
     expect(noise.length).toBeLessThanOrEqual(4); // unknown tool, denied_grant, invalid_args (a minute boundary may split them)
@@ -114,15 +114,15 @@ describe('what callTool writes', () => {
 
     const { db } = await setup();
     const scope = testScope({ sessionGeneration: 'dashboard-chat' }); // as if a legacy client had smuggled it in
-    const g = grantTools(db, scope, ['transaction_search']);
-    await callTool(db, scope, g.transaction_search, 'transaction_search', { query: 'a' }, 'imperative');
+    const g = grantTools(db, scope, ['search_transactions']);
+    await callTool(db, scope, g.search_transactions, 'search_transactions', { query: 'a' }, 'imperative');
     expect(rows(db).every((r) => r.principal_kind !== 'chat' && r.principal_kind !== 'client_token')).toBe(true);
     expect(rows(db, "principal_id = 'chat'")).toHaveLength(0);
   });
 
   test('a pending operation that lapses is audited as expired by the sweep, once', async () => {
     const { db, scope, grants } = await setup();
-    const res = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'n' }, 'imperative');
+    const res = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'n' }, 'imperative');
     if (!res.ok || res.kind !== 'operation') throw new Error('expected an operation');
     db.prepare("UPDATE mcp_operations SET expires_at = @t WHERE id = @id").run({ t: new Date(Date.now() - 1000).toISOString(), id: res.operation.id });
     expect(getPendingOperations(db)).toHaveLength(0); // the sweep that the queue read runs
@@ -137,9 +137,9 @@ describe('what callTool writes', () => {
     const db = createTestDb();
     seedTestData(db);
     const admin = testScope({ role: 'admin' });
-    const grants = grantTools(db, admin, ['edit_transaction']);
+    const grants = grantTools(db, admin, ['update_transaction']);
     // Same grant id, but the live role is viewer: the grant's scope check refuses it.
-    const res = await callTool(db, { ...admin, role: 'viewer' }, grants.edit_transaction, 'edit_transaction', { id: 1, notes: 'x' }, 'imperative');
+    const res = await callTool(db, { ...admin, role: 'viewer' }, grants.update_transaction, 'update_transaction', { id: 1, notes: 'x' }, 'imperative');
     expect(res.ok).toBe(false);
     expect(rows(db, "tier = 'noise'")).toHaveLength(1);
     expect(rows(db)[0].decision).toBe('denied_grant');
@@ -153,10 +153,10 @@ describe('what callTool writes', () => {
     const { createGrants } = await import('../mcp/store.js');
     const { schemaDigest } = await import('../mcp/tool-catalog.js');
     const [grant] = createGrants(db, {
-      tools: [{ name: 'edit_transaction', schemaDigest: schemaDigest('edit_transaction') }],
+      tools: [{ name: 'update_transaction', schemaDigest: schemaDigest('update_transaction') }],
       userId: viewer.userId, role: 'viewer', profile: viewer.profile, origin: viewer.origin, sessionGeneration: viewer.sessionGeneration,
     });
-    const res = await callTool(db, viewer, grant.id, 'edit_transaction', { id: firstTxnId(db), notes: 'x' }, 'imperative');
+    const res = await callTool(db, viewer, grant.id, 'update_transaction', { id: firstTxnId(db), notes: 'x' }, 'imperative');
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.status).toBe(403);
@@ -168,7 +168,7 @@ describe('what callTool writes', () => {
 
   test('mutation lifecycle logs operation_created -> approved -> committed with the same operation_id', async () => {
     const { db, scope, grants } = await setup();
-    const res = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'audit me' }, 'imperative');
+    const res = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'audit me' }, 'imperative');
     if (!res.ok || res.kind !== 'operation') throw new Error('expected an operation');
     approveWebMcpOperation(db, res.operation.id, 'test');
     const lifecycle = rows(db, 'operation_id = @id', { id: res.operation.id });
@@ -181,7 +181,7 @@ describe('what callTool writes', () => {
     const { db, scope, grants } = await setup();
     const { rejectOperation, cancelOperation } = await import('../mcp/engine.js');
     const make = async (notes: string) => {
-      const res = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes }, 'imperative');
+      const res = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes }, 'imperative');
       if (!res.ok || res.kind !== 'operation') throw new Error('expected an operation');
       return res.operation;
     };
@@ -199,7 +199,7 @@ describe('what callTool writes', () => {
 
   test('a prepare that fails validation or hits a missing transaction creates no operation and is audited', async () => {
     const { db, scope, grants } = await setup();
-    const missing = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: 987654, notes: 'x' }, 'imperative');
+    const missing = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: 987654, notes: 'x' }, 'imperative');
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.code).toBe('not_found');
     expect(count(db, 'mcp_operations')).toBe(0);
@@ -208,8 +208,8 @@ describe('what callTool writes', () => {
 
   test('the raw sessionGeneration is never stored, in any column', async () => {
     const { db, scope, grants } = await setup();
-    await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
-    await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'n' }, 'imperative');
+    await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
+    await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'n' }, 'imperative');
     const dump = JSON.stringify(rows(db));
     expect(dump).not.toContain(scope.sessionGeneration);
     expect(rows(db)[0].principal_id).toBe(principalFor(scope.sessionGeneration).id);
@@ -218,7 +218,7 @@ describe('what callTool writes', () => {
 
   test('args_preview is PII-masked, sanitized and at most 512 characters', async () => {
     const { db, scope, grants } = await setup();
-    await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'acct 123456789012 for jane@example.com' }, 'imperative');
+    await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'acct 123456789012 for jane@example.com' }, 'imperative');
     const preview = rows(db)[0].args_preview as string;
     expect(preview).toContain('•••9012');
     expect(preview).toContain('[email]');
@@ -235,7 +235,7 @@ describe('what callTool writes', () => {
     const original = console.error;
     console.error = () => {};
     try {
-      const res = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
+      const res = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
       expect(res.ok).toBe(true);
     } finally {
       console.error = original;

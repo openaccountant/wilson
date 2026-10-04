@@ -74,11 +74,13 @@ import {
   NotFoundError,
   PrepareError,
   RubricChangedError,
+  type McpToolDef,
   type ToolTransport,
 } from './tool-catalog.js';
 import { appendAudit, previewArgs, principalFor, userPrincipal, type AuditDecision, type Principal } from './audit.js';
 import { isAuthEnabled } from '../dashboard/auth.js';
 import type { TabId } from '../dashboard/webmcp-session.js';
+import { retiredNameHint } from './tool-names.js';
 import { CursorError, DEFAULT_OUTPUT_CAP, argsHash, sanitizeUntrustedText } from './output.js';
 import { sanitizeStoredOutcomeForAgent } from './operation-view.js';
 import { getEffectivePolicy } from './policies.js';
@@ -215,7 +217,7 @@ export function grantLocalAccess(
   if (unauthenticated) return unauthenticated;
   const unknown = toolNames.filter((name) => !getToolDef(name));
   if (unknown.length > 0) {
-    return fail(400, 'unknown_tool', `Unknown tool(s): ${unknown.map((n) => sanitizeUntrustedText(n, 30)).join(', ')}`);
+    return fail(unknown.some((n) => retiredNameHint(n)) ? 404 : 400, 'unknown_tool', `Unknown tool(s): ${unknown.map((n) => unknownToolLabel(n)).join(', ')}`);
   }
   // A tab can only use what its transport offers; `get_operation_result`, for one, belongs to /mcp tokens.
   const notForTabs = toolNames.filter((name) => !getToolDef(name)!.transports.includes('webmcp'));
@@ -446,7 +448,7 @@ export async function callTool(
     if (!isAgentAccessEnabled()) return deny('denied_kill_switch', fail(403, 'kill_switch', KILL_SWITCH_MESSAGE));
 
     if (!def || !def.transports.includes(toolTransportFor(transport))) {
-      return deny('invalid_args', fail(404, 'unknown_tool', `Unknown tool "${sanitizeUntrustedText(toolName, 30)}"`));
+      return deny('invalid_args', fail(404, 'unknown_tool', `Unknown tool "${sanitizeUntrustedText(toolName, 30)}"${retiredHintSuffix(toolName)}`));
     }
 
     const parsed = parseToolArgs(toolName, args);
@@ -559,14 +561,14 @@ export async function callTool(
 
       const inserted = insertProposals(db, {
         principalId: principal.id,
-        createdVia: proposalCreatedVia(toolName, transport === 'http-mcp' ? 'http-mcp' : 'webmcp'),
+        createdVia: proposalCreatedVia(def, transport === 'http-mcp' ? 'http-mcp' : 'webmcp'),
         judgeModel: prepared.judgeModel,
         rubricVersion: prepared.rubricVersion,
         items: prepared.items,
         dailyLimit,
       });
       if (!inserted.ok) return deny('rate_limited', fail(429, 'rate_limited', judgeLimitMessage(inserted.limit), { retryAfterSec: secondsToUtcMidnight() }));
-      const data = proposalAnswer(toolName, inserted);
+      const data = proposalAnswer(def, inserted);
       note.decision = 'allowed';
       note.resultChars = JSON.stringify(data).length;
       return { ok: true, kind: 'read', data };
@@ -756,9 +758,24 @@ function liveCallerCheck(db: Database, userId: number | null, minRole: Role): En
   return null;
 }
 
+/** `: renamed to "x" in 0.10.0` for a retired tool name, else empty. Grants nothing: it only tells the caller the new name. */
+function retiredHintSuffix(name: string): string {
+  const hint = retiredNameHint(name);
+  return hint ? `: ${hint}` : '';
+}
+
+function unknownToolLabel(name: string): string {
+  return `${sanitizeUntrustedText(name, 30)}${retiredHintSuffix(name)}`;
+}
+
 /** `created_via` for a proposal row. Derived from the TOOL, never from the client-reported transport: only `/mcp` is server-derived. */
-function proposalCreatedVia(toolName: string, via: 'webmcp' | 'http-mcp'): 'webmcp' | 'declarative' | 'http-mcp' {
-  return toolName === 'judge_interaction' ? 'declarative' : via;
+function proposalCreatedVia(def: Pick<McpToolDef, 'classification' | 'exposure'> | undefined, via: 'webmcp' | 'http-mcp'): 'webmcp' | 'declarative' | 'http-mcp' {
+  return isDeclarativeProposal(def) ? 'declarative' : via;
+}
+
+/** The form's one-item proposal. Derived from the def, never a name literal: a one-letter slip between the twins must not move rows in or out of the blind-agreement metric. */
+function isDeclarativeProposal(def: Pick<McpToolDef, 'classification' | 'exposure'> | undefined): boolean {
+  return def?.classification === 'proposal' && def.exposure === 'declarative';
 }
 
 function judgeLimitMessage(limit: number): string {
@@ -771,8 +788,8 @@ function secondsToUtcMidnight(now: Date = new Date()): number {
 }
 
 /** What the agent is told after proposals were inserted: counts and ids only, never any label or text. */
-function proposalAnswer(toolName: string, inserted: Extract<InsertProposalsResult, { ok: true }>): unknown {
-  if (toolName === 'judge_interaction') return { created: inserted.created, ...(inserted.ids[0] === undefined ? {} : { id: inserted.ids[0] }) };
+function proposalAnswer(def: Pick<McpToolDef, 'classification' | 'exposure'> | undefined, inserted: Extract<InsertProposalsResult, { ok: true }>): unknown {
+  if (isDeclarativeProposal(def)) return { created: inserted.created, ...(inserted.ids[0] === undefined ? {} : { id: inserted.ids[0] }) };
   return { created: inserted.created, ids: inserted.ids, skipped: inserted.skipped };
 }
 
@@ -1099,7 +1116,7 @@ function commitProposalOperation(db: Database, operation: McpOperation, args: Re
   }
   const inserted = insertProposals(db, {
     principalId: principalOfOperation(operation).id,
-    createdVia: proposalCreatedVia(operation.tool_name, operation.source === 'http-mcp' ? 'http-mcp' : 'webmcp'),
+    createdVia: proposalCreatedVia(def, operation.source === 'http-mcp' ? 'http-mcp' : 'webmcp'),
     judgeModel: args.judgeModel as string,
     rubricVersion: args.rubricVersion as string,
     items: args.items as Parameters<typeof insertProposals>[1]['items'],
@@ -1110,7 +1127,7 @@ function commitProposalOperation(db: Database, operation: McpOperation, args: Re
     lifecycleAudit(db, operation, 'stale', actor, 'daily_limit');
     return { outcome: 'stale', reason: 'daily_limit' };
   }
-  const data = proposalAnswer(operation.tool_name, inserted);
+  const data = proposalAnswer(def, inserted);
   markOperationStatus(db, operation.id, 'committed', data);
   lifecycleAudit(db, operation, 'committed', actor, `${inserted.created} proposed`);
   return { outcome: 'committed', after: data };

@@ -33,6 +33,7 @@ import { appendAudit, previewArgs, ANONYMOUS_PRINCIPAL, type Principal } from '.
 import { limiterFor, LIMIT_MCP_FAILED_BEARER, LIMIT_MCP_REFUSED_CALLS } from './rate-limit.js';
 import { sanitizeStoredOutcomeForAgent } from './operation-view.js';
 import { CLIENT_TOKEN_PREFIX, HTTP_MCP_ORIGIN, resolveClientToken, type ResolvedClientToken } from './client-tokens.js';
+import { retiredNameHint } from './tool-names.js';
 import { isAuthEnabled } from '../dashboard/auth.js';
 
 export { HTTP_MCP_ORIGIN };
@@ -410,6 +411,20 @@ export async function handleMcpHttpRequest(
         // Not JSON: the transport will answer with its own protocol error.
       }
     }
+  }
+
+  // A retired tool name gets a hint, never a registration: when the body is a single (not batched) tools/call for a
+  // retired name, answer it here so the client learns the new name. The SDK would only say the tool is unknown.
+  // This grants nothing: no handler runs, and the refusal is audited exactly as the SDK's refusal is.
+  const single = !Array.isArray(parsedBody) ? (parsedBody as { id?: unknown; method?: unknown; params?: { name?: unknown } } | null) : null;
+  if (single && single.method === 'tools/call' && typeof single.params?.name === 'string' && retiredNameHint(single.params.name)) {
+    auditRefusedCalls(db, resolved, calls);
+    limiter.take(refusedKey, LIMIT_MCP_REFUSED_CALLS);
+    return Response.json({
+      jsonrpc: '2.0',
+      id: single.id ?? null,
+      result: { isError: true, content: [{ type: 'text', text: `unknown_tool: "${single.params.name}" was ${retiredNameHint(single.params.name)}` }] },
+    });
   }
 
   const state: CallState = { reached: new Map() };

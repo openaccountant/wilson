@@ -21,12 +21,12 @@ export type FormClass = 'read' | 'mutating' | 'proposal' | 'page';
 
 /** The one thing the page needs to know about each declarative form that the catalog also knows. A test pins them together. */
 export const DECLARATIVE_FORMS: Readonly<Record<string, { classification: FormClass; autosubmit: boolean }>> = {
-  filter_transactions: { classification: 'read', autosubmit: true },
-  review_action: { classification: 'mutating', autosubmit: false },
+  list_transactions: { classification: 'read', autosubmit: true },
+  resolve_review_item: { classification: 'mutating', autosubmit: false },
   set_budget: { classification: 'mutating', autosubmit: false },
   update_goal: { classification: 'mutating', autosubmit: false },
-  judge_interaction: { classification: 'proposal', autosubmit: false },
-  set_forecast_inputs: { classification: 'page', autosubmit: true },
+  propose_judgment: { classification: 'proposal', autosubmit: false },
+  fill_forecast_inputs: { classification: 'page', autosubmit: true },
 };
 
 /**
@@ -38,11 +38,11 @@ export const ALLOWED_HIDDEN_INPUTS: Readonly<Record<string, readonly string[]>> 
 
 /**
  * Read-only inputs. Chrome leaves a `readonly` input out of the schema it derives, so the agent cannot set it, but the
- * browser still submits its value, so the server treats it as untrusted input like any other. `judge_interaction`'s
+ * browser still submits its value, so the server treats it as untrusted input like any other. `propose_judgment`'s
  * `interaction_id` is the interaction the panel is open on.
  */
 export const ALLOWED_READONLY_INPUTS: Readonly<Record<string, readonly string[]>> = {
-  judge_interaction: ['interaction_id'],
+  propose_judgment: ['interaction_id'],
 };
 
 export const AGENT_BANNER_TEXT = 'Agent filled this form — review before submitting.';

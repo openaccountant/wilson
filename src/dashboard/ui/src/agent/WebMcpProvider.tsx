@@ -8,7 +8,7 @@ import { armPageGuard } from '@/agent/agentGuard';
 import type { CategoryRow } from '@/types';
 
 /**
- * Registers the dashboard's global page tools (`navigate_to_tab`, `get_page_context`) for the life of the app, and tells
+ * Registers the dashboard's global page tools (`open_tab`, `get_page_context`) for the life of the app, and tells
  * the page registry which tab is showing. The in-page bridge owns `registerTool` and the authorization (grant, policy,
  * kill switch, rate limit, audit all happen on the server before a handler runs); this component only owns what the
  * tools DO to the page, and the intent behind them.
@@ -51,7 +51,7 @@ export function WebMcpProvider({ activeTab, onNavigate, children }: { activeTab:
 
   const handlers = useMemo<Record<string, PageToolHandler>>(
     () => ({
-      navigate_to_tab: async (args, { signal }) => {
+      open_tab: async (args, { signal }) => {
         // Refusals are RESULTS ({ error: { code, message } }), never thrown: Chrome 154 hides a thrown message from the agent.
         const tab = parseTab(args.tab);
         if (!tab) return tabRefusalResult(args.tab);

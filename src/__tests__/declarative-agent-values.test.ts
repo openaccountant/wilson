@@ -115,7 +115,7 @@ describe('handleDeclarativeSubmit reports whether the server authorized the agen
       nativeEvent: ev,
       classification: 'page',
       agentTouched: true,
-      toolName: 'set_forecast_inputs',
+      toolName: 'fill_forecast_inputs',
       getArgs: () => ({ monthly_income: 4000 }),
       callServerTool: answer,
       afterServer: async () => { log.push('afterServer'); return 'applied'; },
@@ -186,7 +186,7 @@ describe('L7: hidden and read-only inputs of declarative forms', () => {
 
   test('every read-only input of a declarative form is listed with the reason the agent cannot be handed it', () => {
     // Chrome omits a readonly input from the derived schema, so the agent cannot set it; the server validates it anyway.
-    expect(ALLOWED_READONLY_INPUTS).toEqual({ judge_interaction: ['interaction_id'] });
+    expect(ALLOWED_READONLY_INPUTS).toEqual({ propose_judgment: ['interaction_id'] });
     for (const tool of Object.keys(ALLOWED_READONLY_INPUTS)) expect(DECLARATIVE_FORMS[tool], tool).toBeDefined();
   });
 
@@ -260,7 +260,7 @@ describe('source guards: the hook and the forms use the guard (L1), stay still m
     const files = ['tabs/TransactionsTab.tsx', 'components/ManualInputsForm.tsx'];
     const sources = files.map((f) => strip(read(f))).join('\n');
     const readOrPage = Object.entries(DECLARATIVE_FORMS).filter(([, f]) => f.classification === 'read' || f.classification === 'page');
-    expect(readOrPage.map(([n]) => n).sort()).toEqual(['filter_transactions', 'set_forecast_inputs']);
+    expect(readOrPage.map(([n]) => n).sort()).toEqual(['fill_forecast_inputs', 'list_transactions']);
     for (const [tool] of readOrPage) {
       const at = sources.indexOf(`tool: '${tool}'`);
       expect(at, tool).toBeGreaterThan(-1);
@@ -285,7 +285,7 @@ describe('source guards: the hook and the forms use the guard (L1), stay still m
     expect(code).toMatch(/afterServer: \(args, server\) => \{\s*setDraft\(null\);/);
   });
 
-  test('L2: review_action advertises itself only once its option lists exist, and the category options never depend on the chosen review or action', () => {
+  test('L2: resolve_review_item advertises itself only once its option lists exist, and the category options never depend on the chosen review or action', () => {
     const code = strip(read('tabs/ReviewTab.tsx'));
     expect(code).toContain('ready: reviewOptions.length > 0 && categoryOptions.length > 0');
     expect(code).toContain('const categoryOptions = useMemo(() => buildCategoryOptions(categoryRows), [categoryRows]);');
@@ -302,23 +302,23 @@ describe('G2: the hold is read at event time, not from render state', () => {
   const read = (rel: string) => strip(readFileSync(join(ui, rel), 'utf8'));
 
   test('pure: the live flag is true the instant toolactivated is handled and false the instant the hold lifts (no render needed)', () => {
-    const s = new AgentFormSession<string>('filter_transactions');
+    const s = new AgentFormSession<string>('list_transactions');
     const flag = liveHeldFlag(s.guard);
     expect(flag.current).toBe(false);
-    s.apply({ type: 'toolactivated', toolName: 'filter_transactions' }, { policy: 'ask', take: () => 'human' });
+    s.apply({ type: 'toolactivated', toolName: 'list_transactions' }, { policy: 'ask', take: () => 'human' });
     expect(flag.current).toBe(true); // same tick as the event: the agent's first input events already see it
     s.guard.authorize(s.guard.generation);
     expect(flag.current).toBe(false);
-    s.apply({ type: 'toolactivated', toolName: 'filter_transactions' }, { policy: 'allow', take: () => 'human' });
+    s.apply({ type: 'toolactivated', toolName: 'list_transactions' }, { policy: 'allow', take: () => 'human' });
     expect(flag.current).toBe(false); // Allow never holds
   });
 
   test('pure: the flag follows a discard (toolcancel) as well', () => {
-    const s = new AgentFormSession<string>('set_forecast_inputs');
+    const s = new AgentFormSession<string>('fill_forecast_inputs');
     const flag = liveHeldFlag(s.guard);
-    s.apply({ type: 'toolactivated', toolName: 'set_forecast_inputs' }, { policy: undefined, take: () => 'h' });
+    s.apply({ type: 'toolactivated', toolName: 'fill_forecast_inputs' }, { policy: undefined, take: () => 'h' });
     expect(flag.current).toBe(true); // unknown policy fails closed
-    s.apply({ type: 'toolcancel', toolName: 'set_forecast_inputs' });
+    s.apply({ type: 'toolcancel', toolName: 'fill_forecast_inputs' });
     expect(flag.current).toBe(false);
   });
 

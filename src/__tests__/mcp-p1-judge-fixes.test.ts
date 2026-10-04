@@ -33,10 +33,10 @@ afterEach(() => {
 
 const adminActor = (scope: RequestScope): PolicyActor => ({ userId: scope.userId, role: scope.role, authEnabled: scope.userId !== null });
 
-async function askRead(db: Database, scope: RequestScope, tool = 'transaction_search'): Promise<McpOperation> {
+async function askRead(db: Database, scope: RequestScope, tool = 'search_transactions'): Promise<McpOperation> {
   setPolicy(db, adminActor(scope), tool, 'ask');
   const grants = grantTools(db, scope, [tool]);
-  const out = await callTool(db, scope, grants[tool], tool, tool === 'transaction_search' ? { query: 'groceries' } : {}, 'imperative');
+  const out = await callTool(db, scope, grants[tool], tool, tool === 'search_transactions' ? { query: 'groceries' } : {}, 'imperative');
   if (!out.ok || out.kind !== 'operation') throw new Error(`expected a read-ask operation, got ${JSON.stringify(out)}`);
   return out.operation;
 }
@@ -46,10 +46,10 @@ async function httpAskRead() {
   seedTestData(db);
   const admin = await makeUser(db, 'admin1', 'admin');
   enableAuth(db);
-  setPolicy(db, { userId: admin.id, role: 'admin', authEnabled: true }, 'transaction_search', 'ask');
-  const { token } = mintTestToken(db, ['transaction_search', 'get_operation_result'], { userId: admin.id, authEnabled: true });
+  setPolicy(db, { userId: admin.id, role: 'admin', authEnabled: true }, 'search_transactions', 'ask');
+  const { token } = mintTestToken(db, ['search_transactions', 'get_operation_result'], { userId: admin.id, authEnabled: true });
   const resolved = resolveClientToken(db, token, 'test')!;
-  const created = await callTool(db, resolved.scope, resolved.grantByTool.get('transaction_search')!, 'transaction_search', { query: 'groceries' }, 'http-mcp');
+  const created = await callTool(db, resolved.scope, resolved.grantByTool.get('search_transactions')!, 'search_transactions', { query: 'groceries' }, 'http-mcp');
   if (!created.ok || created.kind !== 'operation') throw new Error('expected a read-ask operation');
   return { db, resolved, op: created.operation };
 }
@@ -165,7 +165,7 @@ describe('K2: Off beats a pending card', () => {
     seedTestData(db);
     const scope = testScope();
     const op = await askRead(db, scope);
-    setPolicy(db, adminActor(scope), 'transaction_search', 'off');
+    setPolicy(db, adminActor(scope), 'search_transactions', 'off');
     const row = getOperation(db, op.id)!;
     expect(row.status).toBe('rejected');
     expect(JSON.parse(row.outcome_json!)).toEqual({ reason: 'policy_off' });
@@ -179,11 +179,11 @@ describe('K2: Off beats a pending card', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    setPolicy(db, adminActor(scope), 'edit_transaction', 'ask');
-    const grants = grantTools(db, scope, ['edit_transaction']);
-    const out = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'sneaky' }, 'imperative');
+    setPolicy(db, adminActor(scope), 'update_transaction', 'ask');
+    const grants = grantTools(db, scope, ['update_transaction']);
+    const out = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'sneaky' }, 'imperative');
     if (!out.ok || out.kind !== 'operation') throw new Error('expected an operation');
-    setPolicy(db, adminActor(scope), 'edit_transaction', 'off');
+    setPolicy(db, adminActor(scope), 'update_transaction', 'off');
     expect(approveWebMcpOperation(db, out.operation.id, 'test').outcome).not.toBe('committed');
     expect((db.prepare('SELECT notes FROM transactions WHERE id = @id').get({ id: firstTxnId(db) }) as { notes: string | null }).notes).toBeNull();
     expect(count(db, 'mcp_audit_log', "decision = 'rejected'")).toBeGreaterThanOrEqual(1);
@@ -193,9 +193,9 @@ describe('K2: Off beats a pending card', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const read = await askRead(db, scope, 'transaction_search');
-    const other = await askRead(db, scope, 'spending_summary');
-    setPolicy(db, adminActor(scope), 'transaction_search', 'off');
+    const read = await askRead(db, scope, 'search_transactions');
+    const other = await askRead(db, scope, 'get_spending_summary');
+    setPolicy(db, adminActor(scope), 'search_transactions', 'off');
     expect(getOperation(db, read.id)!.status).toBe('rejected');
     expect(getOperation(db, other.id)!.status).toBe('pending');
   });
@@ -206,7 +206,7 @@ describe('K2: Off beats a pending card', () => {
     const scope = testScope();
     const op = await askRead(db, scope);
     // Policy flipped by a path that did not sweep (direct row write).
-    db.prepare("INSERT INTO mcp_tool_policies (user_key, tool_name, policy, updated_at) VALUES (0, 'transaction_search', 'off', datetime('now')) ON CONFLICT(user_key, tool_name) DO UPDATE SET policy = 'off'").run();
+    db.prepare("INSERT INTO mcp_tool_policies (user_key, tool_name, policy, updated_at) VALUES (0, 'search_transactions', 'off', datetime('now')) ON CONFLICT(user_key, tool_name) DO UPDATE SET policy = 'off'").run();
     const out = approveWebMcpOperation(db, op.id, 'test');
     expect(out).toMatchObject({ outcome: 'stale', reason: 'policy_off' });
     expect(out.after).toBeUndefined();

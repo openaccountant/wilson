@@ -18,6 +18,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { Database } from '../db/compat-sqlite.js';
+import { currentNameFor, retiredNamesFor } from './tool-names.js';
 import { canonicalArgs, maskPii, sanitizeUntrustedText } from './output.js';
 
 export type SignalDecision =
@@ -291,6 +292,8 @@ export interface AuditEntry {
   error_code: string | null;
   count: number;
   bucket: string | null;
+  /** Set when the stored `tool_name` is a retired catalog name: its current name. Never set for REST route rows or chat-expiry rows. */
+  toolCurrent?: string;
 }
 
 export interface ListAuditOptions {
@@ -305,6 +308,14 @@ export interface ListAuditOptions {
   /** ISO timestamp lower bound. */
   since?: string;
 }
+
+/**
+ * A row that provably belongs to the WebMCP catalog (not a REST route label and not a chat card): a tool-call
+ * transport, or a REST lifecycle row whose operation came from a tab or /mcp. The expiry sweep also writes
+ * `transport='rest'` rows for expired CHAT cards named tax_flag / edit_transaction, which must never be mapped.
+ * A REST row whose operation was purged is ambiguous, so it is not mapped.
+ */
+const CATALOG_ROW_SQL = `(transport IN ('imperative','declarative','page','http-mcp') OR (transport = 'rest' AND operation_id IN (SELECT id FROM mcp_operations WHERE source IN ('webmcp','http-mcp'))))`;
 
 const AUDIT_COLUMNS =
   'id, ts, tier, transport, principal_kind, principal_id, user_id, role, origin, tool_name, classification, decision, operation_id, args_preview, result_chars, page_index, duration_ms, error_code, count, bucket';
@@ -323,7 +334,14 @@ export function listAudit(db: Database, opts: ListAuditOptions = {}): { entries:
     params.cursor = opts.cursor;
   }
   if (opts.tool) {
-    where.push('tool_name = @tool');
+    // A current name also matches its retired names, but only on rows that are provably catalog rows.
+    const retired = retiredNamesFor(opts.tool);
+    if (retired.length > 0) {
+      where.push(`(tool_name = @tool OR (tool_name IN (${retired.map((_, i) => `@retired${i}`).join(', ')}) AND ${CATALOG_ROW_SQL}))`);
+      retired.forEach((n, i) => { params[`retired${i}`] = n; });
+    } else {
+      where.push('tool_name = @tool');
+    }
     params.tool = opts.tool;
   }
   if (opts.decision) {
@@ -339,11 +357,14 @@ export function listAudit(db: Database, opts: ListAuditOptions = {}): { entries:
     params.since = opts.since;
   }
   const rows = db.prepare(`
-    SELECT ${AUDIT_COLUMNS} FROM mcp_audit_log
+    SELECT ${AUDIT_COLUMNS}, ${CATALOG_ROW_SQL} AS catalog_row FROM mcp_audit_log
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT @fetch
-  `).all({ ...params, fetch: limit + 1 }) as AuditEntry[];
-  const entries = rows.slice(0, limit);
+  `).all({ ...params, fetch: limit + 1 }) as Array<AuditEntry & { catalog_row?: number }>;
+  const entries: AuditEntry[] = rows.slice(0, limit).map(({ catalog_row, ...entry }) => {
+    const current = catalog_row ? currentNameFor(entry.tool_name) : undefined;
+    return current ? { ...entry, toolCurrent: current } : entry;
+  });
   return {
     entries,
     ...(rows.length > limit ? { nextCursor: entries[entries.length - 1].id } : {}),

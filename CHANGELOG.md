@@ -2,13 +2,39 @@
 
 ## Unreleased
 
+### WebMCP tool names, one convention (BREAKING for `/mcp` clients)
+
+**Fifteen of the 26 dashboard WebMCP tools were renamed to one `verb_object` convention.** Seven of them were in v0.9.x: `tax_flag` is now `set_tax_flag`, `edit_transaction` is `update_transaction`, `transaction_search` is `search_transactions`, `spending_summary` is `get_spending_summary`, `profit_loss` is `get_profit_loss`, `net_worth` is `get_net_worth` and `forecast` is `get_cash_forecast`. There is no alias: a call to an old name is refused with `unknown_tool` and a "renamed to" hint, and the hint grants nothing. 0.10.0 already requires every `/mcp` client to mint a new `wmcp_` client token, so mint one in Settings -> Agent access and use the new tool names in the same step. The other eight (`tax_summary`, `filter_transactions`, `review_action`, `set_forecast_inputs`, `navigate_to_tab`, `list_review_queue`, `propose_judgements`, `judge_interaction`) never shipped; the entries below use the new names.
+
+- Nothing else about the tools changed: classification, roles, policy defaults, transports and schemas are the same (the schema digest is identical for every tool a client token can hold).
+- Your settings carry over without a migration. At startup Wilson copies each Off/Ask/Allow choice to the new name (the stricter value wins) and keeps the old-name row as a mirror, so another build on the same data folder still enforces an Off. Live grants and client-token grants, and pending approval cards, move to the new names. The Activity log is never rewritten: old rows keep their name and show "(now <new name>)".
+- Dashboard chat tools keep their names (`tax_flag`, `edit_transaction`, `transaction_search`, `spending_summary`, `profit_loss`, `net_worth`); no WebMCP name equals a chat tool name any more.
+
+| Old name | New name |
+|---|---|
+| `tax_flag` | `set_tax_flag` |
+| `edit_transaction` | `update_transaction` |
+| `tax_summary` | `get_tax_summary` |
+| `transaction_search` | `search_transactions` |
+| `spending_summary` | `get_spending_summary` |
+| `profit_loss` | `get_profit_loss` |
+| `net_worth` | `get_net_worth` |
+| `forecast` | `get_cash_forecast` |
+| `filter_transactions` | `list_transactions` |
+| `review_action` | `resolve_review_item` |
+| `set_forecast_inputs` | `fill_forecast_inputs` |
+| `navigate_to_tab` | `open_tab` |
+| `list_review_queue` | `list_review_items` |
+| `propose_judgements` | `propose_judgments` |
+| `judge_interaction` | `propose_judgment` |
+
 ### WebMCP judge for LLM traces and training data (P4a)
 
 **An agent can now propose ratings for your recorded model calls, and nothing it proposes is used until you accept it.** Grant the judge tools in Settings -> Agent access like the others; with no grant none is registered. They live on the LLM tab and the reads also work on `/mcp`.
 
 - `list_interactions`, `get_interaction`, `get_judge_rubric` (read): list the calls to judge, read one in sections (an overview, or its prompt, response or tool calls in pages of up to 1,200 characters), and fetch the rubric and its version. The judge is blind: no output ever carries your rating, preference, notes or tags, or whether you rated the call. It never sees the system prompt (your memories and custom prompt), and tool results show only as an 80-character preview with their size. Text comes wrapped as `untrusted_text` with hidden characters stripped and digits, emails and phone numbers masked. The grant row says "Includes your chat history and financial data", and every page counts against the daily read budget.
-- `propose_judgements` (proposal, Ask by default, admin only): up to 20 ratings per call with a 20-600 character rationale, a model name the agent declares, and the rubric version it judged by (an old version is a 409 `rubric_changed`). It writes only inert `proposed` rows. Limits: 6 calls a minute (shared with the form) and `judgeDailyLimit` items a day (default 300, set only in Settings -> admin, never by a tool).
-- `judge_interaction` (proposal, a form in the Training detail panel, "Agent judgement"): the single-item version. An agent submits it; a person cannot, whatever the form was filled with.
+- `propose_judgments` (proposal, Ask by default, admin only): up to 20 ratings per call with a 20-600 character rationale, a model name the agent declares, and the rubric version it judged by (an old version is a 409 `rubric_changed`). It writes only inert `proposed` rows. Limits: 6 calls a minute (shared with the form) and `judgeDailyLimit` items a day (default 300, set only in Settings -> admin, never by a tool).
+- `propose_judgment` (proposal, a form in the Training detail panel, "Agent judgement"): the single-item version. An agent submits it; a person cannot, whatever the form was filled with.
 
 **Judge queue** (LLM -> Judge queue): each proposal shows the declared model, the agent-written rationale as plain text with links removed, criteria and tags, and your own rating beside it (red border when it is two stars or more apart). Accept needs a real click after the row has been on screen for 0.8 s; Reject is one click; Revoke undoes an accepted one. Bulk Accept takes at most 10 rows you expanded, behind a confirm and a 0.6 s press-and-hold. The server refuses to accept a proposal younger than 1 s. The header shows agreement with your ratings and the number of **blind** proposals it is measured on (not counting the form, nor a call made after the agent opened that interaction's panel). Stats now read "SFT-ready runs", "Complete DPO pairs" and "Judge: proposed / accepted".
 
@@ -33,16 +59,16 @@ New routes: `GET /api/judgements`, `POST /api/judgements/:id/accept|reject|revok
 
 ### WebMCP imperative journeys (P3)
 
-**Six new agent tools to find your way around the dashboard.** Grant them in Settings -> Agent access like the others; with no grant none is registered. All but `list_review_queue` work inside the dashboard tab only (not on `/mcp`).
+**Six new agent tools to find your way around the dashboard.** Grant them in Settings -> Agent access like the others; with no grant none is registered. All but `list_review_items` work inside the dashboard tab only (not on `/mcp`).
 
-- `navigate_to_tab` (any tab): switch the dashboard to another tab, by the same route as a click. Not Settings: an agent cannot open the Agent Access Center, ask the user to. It also refuses while you are in Settings, so an agent cannot pull you away from unsaved edits there. It answers once the tab shows, with the tools available there.
+- `open_tab` (any tab): switch the dashboard to another tab, by the same route as a click. Not Settings: an agent cannot open the Agent Access Center, ask the user to. It also refuses while you are in Settings, so an agent cannot pull you away from unsaved edits there. It answers once the tab shows, with the tools available there.
 - `get_page_context` (any tab): where you are: tab, date range, filters, the selected row and how many rows are listed. Ids, counts and filter values only, never a description or an amount.
 - `open_transaction` (Transactions): scroll to and highlight one transaction by id and return its compact row. If a filter hides it, the tab drops its own filters (and says so); if the date range excludes it, the range moves to that month (a row inside the range never changes it); the answer says whether the row is really on screen.
-- `list_review_queue` (Review, also offered on `/mcp`): the pending review queue, compact and paged.
+- `list_review_items` (Review, also offered on `/mcp`): the pending review queue, compact and paged.
 - `open_review_item` (Review): pre-select one pending review in the "Resolve a review" form. It resolves nothing.
 - `open_interaction` (LLM): open one model call in the Training detail panel. The agent gets its model, call type and status, never prompts or ratings.
 
-A tab's tools exist only while that tab shows. The bridge unregisters them when you switch tabs and registers the next tab's in one pass (about 50 ms), and a page tool is registered only while the dashboard has a handler mounted for it. A call that outlives its tab answers "The Transactions tab is not open. Call navigate_to_tab with tab='transactions' first." instead of acting on a screen that is gone. Grants, Off/Ask/Allow, the kill switch, rate limits, the daily read budget and the Activity log (transport `page`) all apply as for every other tool; `open_transaction` reads a row for the page, so it counts against the read budget. Tools that change what you see are not advertised as read-only.
+A tab's tools exist only while that tab shows. The bridge unregisters them when you switch tabs and registers the next tab's in one pass (about 50 ms), and a page tool is registered only while the dashboard has a handler mounted for it. A call that outlives its tab answers "The Transactions tab is not open. Call open_tab with tab='transactions' first." instead of acting on a screen that is gone. Grants, Off/Ask/Allow, the kill switch, rate limits, the daily read budget and the Activity log (transport `page`) all apply as for every other tool; `open_transaction` reads a row for the page, so it counts against the read budget. Tools that change what you see are not advertised as read-only.
 
 **BREAKING (for callers of the old routes): `POST /api/mcp/read` and `POST /api/mcp/prepare` are removed** (404). Use `POST /api/mcp/call`, with the tab session in the `X-Wilson-Agent-Session` header and the grant id as a UUID; the server answers `{kind:'read'|'operation'|'page'}`. The dashboard's own callers (the Demo auto-book request) are moved.
 
@@ -52,13 +78,13 @@ Under the hood: the page tools' pure logic lives in `webmcp-page-tools-core.ts` 
 
 **Five dashboard forms are now agent tools.** A browser agent can fill and submit them like any form, but only after you grant the tool; with no grant a form carries no `toolname` and is invisible to agents. Grant them in Settings -> Agent access like the other tools. They work inside the dashboard tab only: none of them is offered on `/mcp`, and a client token cannot carry one.
 
-- `filter_transactions` (Transactions): filter by text, category and date range. The filter bar is now a form with a category picker (every category, by id) and From/To dates; people keep filtering live as they type. An agent gets up to 10 compact rows, and the table shows the same filter.
-- `review_action` (Review): a new "Resolve a review" form above the table, confirm or correct one pending review.
+- `list_transactions` (Transactions): filter by text, category and date range. The filter bar is now a form with a category picker (every category, by id) and From/To dates; people keep filtering live as they type. An agent gets up to 10 compact rows, and the table shows the same filter.
+- `resolve_review_item` (Review): a new "Resolve a review" form above the table, confirm or correct one pending review.
 - `set_budget` (Goals): a new Budgets section that lists the limits and sets one category's monthly limit.
 - `update_goal` (Goals): a new "Edit a goal" form for target amount, target date and status (every goal is pickable, including paused and completed ones). The goal cards get an Edit button.
-- `set_forecast_inputs` (Forecast, when there is under six months of history): the manual inputs are a form; the agent is told the projected 10th, 50th and 90th percentile once the forecast has run.
+- `fill_forecast_inputs` (Forecast, when there is under six months of history): the manual inputs are a form; the agent is told the projected 10th, 50th and 90th percentile once the forecast has run.
 
-Changes still wait for you. A submit by an agent on `review_action`, `set_budget` or `update_goal` goes through the same approval card as every other change, and the agent hears the outcome only after you answered it. If an agent fills a change form and something else clicks Submit, the form is treated as the agent's and still goes through the card, with the result shown under the form and an amber "Agent filled this form" banner. No change form auto-submits; only the filter and forecast forms do. A form that an agent is working gets a dashed amber outline.
+Changes still wait for you. A submit by an agent on `resolve_review_item`, `set_budget` or `update_goal` goes through the same approval card as every other change, and the agent hears the outcome only after you answered it. If an agent fills a change form and something else clicks Submit, the form is treated as the agent's and still goes through the card, with the result shown under the form and an amber "Agent filled this form" banner. No change form auto-submits; only the filter and forecast forms do. A form that an agent is working gets a dashed amber outline.
 
 Forms that people use directly
 - New admin-only routes: `PUT /api/budgets/:category` with `{monthlyLimit}` (0 to 10,000,000) and `PATCH /api/goals/:id` with `{targetAmount?, targetDate?, status?}`. Viewers get 403. `GET /api/goals?status=all` lists every goal.
@@ -66,7 +92,7 @@ Forms that people use directly
 - Resolving a review now bumps the transaction's revision, so a categorize or edit card prepared before it goes stale instead of overwriting your decision.
 - Option labels in these forms hold only ids, dates, amounts and safe category names: never a merchant, description or goal title. A custom category with an unusual name shows as `#12 (custom)`.
 
-The `judge_interaction` form shell is not part of P2: it ships with its catalog entry in P4a, and the forms table here lists only the five tools that exist.
+The `propose_judgment` form shell is not part of P2: it ships with its catalog entry in P4a, and the forms table here lists only the five tools that exist.
 
 Under the hood: tools have `surface`, `exposure` (imperative or declarative) and `autosubmit`, and a new `page` class for tools whose work happens in the page; the dashboard's tab ids are one list (`TAB_IDS`) shared by the tab bar, the router and the server. No migration.
 
@@ -132,7 +158,7 @@ Network boundary hardening
 Agent tool calls
 - One server path for every tool call, `POST /api/mcp/call` (the older `/api/mcp/read` and `/api/mcp/prepare` wrappers were removed again in P3). The server, not the client, decides read versus change.
 - Arguments are validated on the server: unknown arguments, bad types and invisible, control or bidi characters get an actionable 400.
-- `tax_flag` only flags and unflags; reading tax data moved to the new `tax_summary` tool. The MCP `forecast` tool allows horizons up to 60 months; every other caller stays at 24.
+- `set_tax_flag` only flags and unflags; reading tax data moved to the new `get_tax_summary` tool. The MCP `get_cash_forecast` tool allows horizons up to 60 months; every other caller stays at 24.
 
 Reads and privacy
 - Read tools return compact, paged, PII-masked output (at most 1,500 characters per call, `limit` 1-25, `nextCursor`) from the request's own database.

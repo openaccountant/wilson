@@ -174,7 +174,7 @@ function ReviewRow({
 }
 
 /**
- * Resolve one pending review from a form. The form is also a declarative WebMCP tool (`review_action`): a person
+ * Resolve one pending review from a form. The form is also a declarative WebMCP tool (`resolve_review_item`): a person
  * submits it like any form (the same REST routes as the row buttons), while an agent's submit becomes a proposal
  * that waits for the approval card. Option labels are ids, dates and amounts only (no merchant text).
  */
@@ -229,7 +229,7 @@ function ReviewActionForm({
   }
 
   const declarative = useDeclarativeTool({
-    tool: 'review_action',
+    tool: 'resolve_review_item',
     // The form advertises itself only once BOTH option lists exist. Chrome derives the tool's schema from the DOM it sees,
     // and a `category_id` select that offered only its empty option made `action=correct` unusable by an agent (L2).
     ready: reviewOptions.length > 0 && categoryOptions.length > 0,
@@ -380,7 +380,7 @@ export function ReviewTab() {
       const { pending: queue, canAct: mayAct } = latest.current;
       // Refusals are RESULTS ({ error: { code, message } }): Chrome 154 hides the text of a thrown error from the agent.
       if (!queue.some((r) => r.review_id === reviewId)) {
-        return { reviewId, prefilled: false, ...pageError('not_found', 'That review is not in the queue shown. Call list_review_queue for the current ids.') };
+        return { reviewId, prefilled: false, ...pageError('not_found', 'That review is not in the queue shown. Call list_review_items for the current ids.') };
       }
       if (!mayAct) return { reviewId, prefilled: false, ...pageError('read_only', 'The review form is read-only for this role.') };
       armGuard();

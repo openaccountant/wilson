@@ -35,6 +35,7 @@ import {
   HANDOFF_BLOCK_END,
   HANDOFF_BLOCK_HEADER,
   HANDOFF_CAPS,
+  HANDOFF_TO_CATALOG,
   type HandoffReadToolName,
   type LocalHandoffV1,
 } from './local-handoff-format.js';
@@ -100,7 +101,9 @@ const HandoffSchema = z.strictObject({
  * PARSED args (nested unknown keys stripped) or null.
  */
 function parseReadArgs(tool: string, args: Record<string, unknown>): Record<string, unknown> | null {
-  const def = getToolDef(tool);
+  // Mirror vocabulary -> catalog name through the one boundary map; never through the retired-name map.
+  const catalogName = Object.prototype.hasOwnProperty.call(HANDOFF_TO_CATALOG, tool) ? HANDOFF_TO_CATALOG[tool as HandoffReadToolName] : undefined;
+  const def = catalogName ? getToolDef(catalogName) : undefined;
   if (!def || def.classification !== 'read') return null;
   const parsed = z.object(def.zodShape).strict().safeParse(args);
   return parsed.success ? (parsed.data as Record<string, unknown>) : null;
@@ -366,7 +369,7 @@ export interface VerifiedStep {
 
 /** The production executor: the same tool functions the dashboard agent runs. */
 export function serverReadExecutor(db: Database): ReadExecutor {
-  return (tool, args) => executeRead(db, tool, args);
+  return (tool, args) => executeRead(db, HANDOFF_TO_CATALOG[tool], args);
 }
 
 async function runWithTimeout(exec: ReadExecutor, tool: HandoffReadToolName, args: Record<string, unknown>): Promise<unknown> {

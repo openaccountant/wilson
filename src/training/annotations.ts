@@ -15,6 +15,7 @@
  *
  * Server-only. Nothing here imports from src/mcp except the pure audit-preview helper.
  */
+import { retiredNamesFor } from '../mcp/tool-names.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { previewArgs } from '../mcp/audit.js';
 import { HANDOFF_BLOCK_HEADER_PREFIX } from './handoff-block.js';
@@ -541,7 +542,8 @@ export function agreement(db: Database): AgreementResult {
 
   // Every open_interaction call, keyed by the (masked) argument preview that audit stored, with who made it.
   const opened = new Map<string, Array<{ principal: string; user: string; at: number }>>();
-  for (const row of db.prepare("SELECT principal_id, user_id, args_preview, ts FROM mcp_audit_log WHERE tool_name = 'open_interaction'").all() as Array<{
+  const openNames = ['open_interaction', ...retiredNamesFor('open_interaction')];
+  for (const row of db.prepare(`SELECT principal_id, user_id, args_preview, ts FROM mcp_audit_log WHERE tool_name IN (${openNames.map((n) => `'${n}'`).join(', ')})`).all() as Array<{
     principal_id: string; user_id: number | null; args_preview: string | null; ts: string;
   }>) {
     const key = row.args_preview ?? '';

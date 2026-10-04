@@ -18,6 +18,7 @@
  *    profile switch makes them unknown (401).
  *  - Revoke and rotate take effect immediately.
  */
+import { retiredNameHint } from './tool-names.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Database } from '../db/compat-sqlite.js';
 import { isAuthEnabled } from '../dashboard/auth.js';
@@ -105,7 +106,15 @@ export function checkTokenTools(
   lookup: (name: string) => Pick<McpToolDef, 'classification' | 'transports'> | undefined = getToolDef
 ): TokenFailure | null {
   const unknown = tools.filter((name) => !lookup(name));
-  if (unknown.length > 0) return failure(400, 'unknown_tool', `Unknown tool(s): ${unknown.map((n) => n.slice(0, 30)).join(', ')}`);
+  if (unknown.length > 0) {
+    // A retired name grants nothing: 404, with the new name in the message so the caller can fix the list.
+    const hinted = unknown.filter((n) => retiredNameHint(n));
+    return failure(
+      hinted.length > 0 ? 404 : 400,
+      'unknown_tool',
+      `Unknown tool(s): ${unknown.map((n) => `${n.slice(0, 30)}${retiredNameHint(n) ? `: ${retiredNameHint(n)}` : ''}`).join(', ')}`
+    );
+  }
 
   const tabOnly = tools.filter((name) => !lookup(name)!.transports.includes('http-mcp'));
   if (tabOnly.length > 0) {

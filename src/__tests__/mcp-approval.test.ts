@@ -58,8 +58,8 @@ async function login(base: string, username: string): Promise<string> {
 
 /** Prepare an edit through callTool and return the pending operation. */
 async function prepareEdit(db: Database, scope: RequestScope, notes = 'approval test'): Promise<McpOperation> {
-  const grants = grantTools(db, scope, ['edit_transaction']);
-  const res = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes }, 'imperative');
+  const grants = grantTools(db, scope, ['update_transaction']);
+  const res = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes }, 'imperative');
   if (!res.ok || res.kind !== 'operation') throw new Error(`prepare failed: ${JSON.stringify(res)}`);
   return res.operation;
 }
@@ -268,7 +268,7 @@ describe('operations API projection', () => {
 });
 
 describe('requestedBy (server-derived)', () => {
-  const baseOp = { id: 'op', tool_name: 'edit_transaction', summary: null, before_json: null, after_json: null, transaction_id: 1, status: 'pending', outcome_json: null, created_at: '', expires_at: '', resolved_at: null, grant_id: 'g', user_id: null };
+  const baseOp = { id: 'op', tool_name: 'update_transaction', summary: null, before_json: null, after_json: null, transaction_id: 1, status: 'pending', outcome_json: null, created_at: '', expires_at: '', resolved_at: null, grant_id: 'g', user_id: null };
 
   test('requestedBy is this_tab only for the requesting session', () => {
     const op = { ...baseOp, source: 'webmcp', session_generation: 'tab-a-session' } as unknown as McpOperation;

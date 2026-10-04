@@ -50,12 +50,12 @@ describe('handleDeclarativeSubmit', () => {
       agentTouched: false,
       getArgs: () => ({ review_id: 1, action: 'confirm' }),
       callServerTool: (name, args, opts) => { calls.push([name, args, opts]); return promise; },
-      toolName: 'review_action',
+      toolName: 'resolve_review_item',
     });
     expect(out.route).toBe('operation');
     expect(await responded()).toEqual(result);
     // An agentInvoked submit is an AGENT call: the bridge tracks it (and the operation it creates) under its own identity.
-    expect(calls).toEqual([['review_action', { review_id: 1, action: 'confirm' }, { transport: 'declarative', agentCall: true }]]);
+    expect(calls).toEqual([['resolve_review_item', { review_id: 1, action: 'confirm' }, { transport: 'declarative', agentCall: true }]]);
   });
 
   test('a page or read tool can post-process the server answer (the page applies the filters, computes the forecast)', async () => {
@@ -68,7 +68,7 @@ describe('handleDeclarativeSubmit', () => {
       getArgs: () => ({ monthly_income: 4000 }),
       callServerTool: async () => ({ authorized: true }),
       afterServer: async (args, server) => { applied.push([args, server]); return { horizonMonths: 36, p10: 1, p50: 2, p90: 3 }; },
-      toolName: 'set_forecast_inputs',
+      toolName: 'fill_forecast_inputs',
     });
     expect(await responded()).toEqual({ horizonMonths: 36, p10: 1, p50: 2, p90: 3 });
     expect(applied).toEqual([[{ monthly_income: 4000 }, { authorized: true }]]);
@@ -87,7 +87,7 @@ describe('handleDeclarativeSubmit', () => {
           getArgs: () => ({ monthly_income: 4000 }),
           callServerTool: async () => denial,
           afterServer: async () => { applied += 1; return { horizonMonths: 36, p10: 1, p50: 2, p90: 3 }; },
-          toolName: 'set_forecast_inputs',
+          toolName: 'fill_forecast_inputs',
         });
         expect(await responded()).toEqual(denial);
         expect(applied).toBe(0);
@@ -106,7 +106,7 @@ describe('handleDeclarativeSubmit', () => {
         getArgs: () => ({}),
         callServerTool: async () => approved,
         afterServer: async () => { applied += 1; return 'ok'; },
-        toolName: 'filter_transactions',
+        toolName: 'list_transactions',
       });
       expect(await responded()).toBe('ok');
       expect(applied).toBe(1);
@@ -120,9 +120,9 @@ describe('handleDeclarativeSubmit', () => {
       classification: 'mutating',
       agentTouched: false,
       getArgs: () => ({}),
-      callServerTool: async () => { throw new Error('review_action: review_id is required'); },
+      callServerTool: async () => { throw new Error('resolve_review_item: review_id is required'); },
     });
-    expect(await responded()).toEqual({ error: { code: 'tool_failed', message: 'review_action: review_id is required' } });
+    expect(await responded()).toEqual({ error: { code: 'tool_failed', message: 'resolve_review_item: review_id is required' } });
   });
 
   test('an abort (the agent gave up) still rejects the promise handed to respondWith', async () => {
@@ -247,11 +247,11 @@ describe('nextAgentTouched', () => {
     expect(nextAgentTouched(false, { type: 'toolactivated', toolName: 'update_goal' }, 'set_budget')).toBe(false);
     expect(nextAgentTouched(true, { type: 'toolcancel', toolName: 'update_goal' }, 'set_budget')).toBe(true);
     // A read or page form is never agent-touched by an anonymous event (only mutating forms fail closed).
-    expect(nextAgentTouched(false, { type: 'toolactivated' }, 'filter_transactions')).toBe(false);
+    expect(nextAgentTouched(false, { type: 'toolactivated' }, 'list_transactions')).toBe(false);
   });
 
   test('fail closed: a toolactivated with no recognizable toolName touches every mutating form', () => {
-    for (const tool of ['review_action', 'set_budget', 'update_goal']) {
+    for (const tool of ['resolve_review_item', 'set_budget', 'update_goal']) {
       expect(nextAgentTouched(false, { type: 'toolactivated' }, tool), tool).toBe(true);
       expect(nextAgentTouched(false, { type: 'toolactivated', toolName: '' }, tool), tool).toBe(true);
       expect(nextAgentTouched(false, { type: 'toolactivated', toolName: 42 as unknown as string }, tool), tool).toBe(true);
@@ -310,7 +310,7 @@ describe('AgentTouchTracker, anonymous activation', () => {
   });
 
   test('a read form tracker ignores it', () => {
-    const t = new AgentTouchTracker('filter_transactions');
+    const t = new AgentTouchTracker('list_transactions');
     t.apply({ type: 'toolactivated' });
     expect(t.touched).toBe(false);
   });
@@ -318,7 +318,7 @@ describe('AgentTouchTracker, anonymous activation', () => {
 
 describe('prefilled (an agent page tool chose what a mutating form acts on, T21)', () => {
   test('marks a mutating form touched, and a human submit afterwards routes to the card, not REST', () => {
-    const t = new AgentTouchTracker('review_action');
+    const t = new AgentTouchTracker('resolve_review_item');
     expect(t.apply({ type: 'prefilled' })).toEqual({ touched: true, cleared: false });
     const { ev } = fakeEvent({ agentInvoked: false });
     const calls: unknown[] = [];
@@ -327,7 +327,7 @@ describe('prefilled (an agent page tool chose what a mutating form acts on, T21)
       nativeEvent: ev,
       classification: 'mutating',
       agentTouched: t.touched,
-      toolName: 'review_action',
+      toolName: 'resolve_review_item',
       getArgs: () => ({ review_id: 7, action: 'confirm' }),
       callServerTool: async (name, args) => {
         calls.push([name, args]);
@@ -343,7 +343,7 @@ describe('prefilled (an agent page tool chose what a mutating form acts on, T21)
   });
 
   test('stays touched until a submit settles or the form is reset (not on a timer), then asks to clear the values', () => {
-    const t = new AgentTouchTracker('review_action');
+    const t = new AgentTouchTracker('resolve_review_item');
     t.apply({ type: 'prefilled' });
     expect(t.touched).toBe(true);
     expect(t.settle(t.beginSubmit())).toEqual({ touched: false, cleared: true });
@@ -352,7 +352,7 @@ describe('prefilled (an agent page tool chose what a mutating form acts on, T21)
   });
 
   test('a second prefill bumps the generation so an earlier pending submit settling does not clear it', () => {
-    const t = new AgentTouchTracker('review_action');
+    const t = new AgentTouchTracker('resolve_review_item');
     t.apply({ type: 'prefilled' });
     const first = t.beginSubmit();
     t.apply({ type: 'prefilled' });
@@ -360,7 +360,7 @@ describe('prefilled (an agent page tool chose what a mutating form acts on, T21)
   });
 
   test('a read form is never touched by it', () => {
-    const t = new AgentTouchTracker('filter_transactions');
+    const t = new AgentTouchTracker('list_transactions');
     t.apply({ type: 'prefilled' });
     expect(t.touched).toBe(false);
   });

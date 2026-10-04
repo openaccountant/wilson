@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { jsonSchemaFor } from '../mcp/tool-catalog.js';
+import { HANDOFF_TO_CATALOG } from '../dashboard/local-handoff-format.js';
 import { READ_TOOL_SCHEMAS, validateReadToolArgs } from '../dashboard/ui/src/hybrid/read-tool-schemas.js';
 
 /**
@@ -14,7 +15,8 @@ describe('read-tool-schemas snapshot', () => {
     '%s equals jsonSchemaFor',
     (name) => {
       // As plain JSON: zod attaches a non-JSON `~standard` member to the schema object it returns.
-      expect(READ_TOOL_SCHEMAS[name] as unknown).toEqual(JSON.parse(JSON.stringify(jsonSchemaFor(name))));
+      // The mirror vocabulary is not the catalog's (specs/webmcp-tool-naming.md §4.9): resolve through the one boundary map.
+      expect(READ_TOOL_SCHEMAS[name] as unknown).toEqual(JSON.parse(JSON.stringify(jsonSchemaFor(HANDOFF_TO_CATALOG[name]))));
     }
   );
 

@@ -22,9 +22,9 @@ async function pendingOperation() {
   seedTestData(db);
   const admin = await makeUser(db, 'admin1', 'admin');
   enableAuth(db);
-  const { token } = mintTestToken(db, ['edit_transaction', 'get_operation_result'], { userId: admin.id, authEnabled: true });
+  const { token } = mintTestToken(db, ['update_transaction', 'get_operation_result'], { userId: admin.id, authEnabled: true });
   const resolved = resolveClientToken(db, token, 'test')!;
-  const created = await callTool(db, resolved.scope, resolved.grantByTool.get('edit_transaction')!, 'edit_transaction', { id: firstTxnId(db), notes: 'wait' }, 'http-mcp');
+  const created = await callTool(db, resolved.scope, resolved.grantByTool.get('update_transaction')!, 'update_transaction', { id: firstTxnId(db), notes: 'wait' }, 'http-mcp');
   if (!created.ok || created.kind !== 'operation') throw new Error('expected a pending operation');
   return { db, operationId: created.operation.id };
 }

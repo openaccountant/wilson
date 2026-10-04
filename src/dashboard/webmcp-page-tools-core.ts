@@ -1,6 +1,6 @@
 /**
- * The pure half of the page tools the React dashboard registers (`navigate_to_tab`, `get_page_context`): what
- * `get_page_context` says and which tools `navigate_to_tab` reports. Browser-safe (no DOM, no node), bundled by
+ * The pure half of the page tools the React dashboard registers (`open_tab`, `get_page_context`): what
+ * `get_page_context` says and which tools `open_tab` reports. Browser-safe (no DOM, no node), bundled by
  * vite for React (alias `@webmcp-page-tools`) and imported directly by root tests.
  *
  * Everything an agent reads here is ids, counts and filter values: never a description or an amount (threat T23).
@@ -15,7 +15,7 @@ export { AGENT_TAB_IDS, UNTRUSTED_NOTE };
 import type { PageRegistry } from './webmcp-page-registry.js';
 import type { ToolErrorResult } from './webmcp-tool-error.js';
 
-/** `navigate_to_tab` lists at most this many tool names, so its answer cannot outgrow the 1,500-character bound. */
+/** `open_tab` lists at most this many tool names, so its answer cannot outgrow the 1,500-character bound. */
 export const MAX_PAGE_CONTEXT_TOOLS = 30;
 
 const SEARCH_MAX = 60;
@@ -28,7 +28,7 @@ export const SETTINGS_TAB_REFUSAL = 'The Settings tab is not available to agents
 export const SETTINGS_LEAVE_REFUSAL = 'The user is in Settings. Ask them to leave it first.';
 
 /**
- * Why `navigate_to_tab` must refuse to move from `current` to `target`, or undefined when it may. Settings is off
+ * Why `open_tab` must refuse to move from `current` to `target`, or undefined when it may. Settings is off
  * limits both ways: an agent cannot open it, and cannot navigate the user away from it (unsaved input, grant edits).
  */
 export function navigateRefusal(current: string | undefined, target: string): string | undefined {
@@ -52,7 +52,7 @@ export function navigateRefusalResult(current: string | undefined, target: strin
   return pageError(target === 'settings' ? 'settings_refused' : 'user_in_settings', message);
 }
 
-/** Why `navigate_to_tab` cannot use `value` as a tab (Settings, or not a tab at all), or undefined when it is one an agent may open. */
+/** Why `open_tab` cannot use `value` as a tab (Settings, or not a tab at all), or undefined when it is one an agent may open. */
 export function tabRefusalResult(value: unknown): ToolErrorResult | undefined {
   if (parseTab(value)) return undefined;
   if (value === 'settings') return pageError('settings_refused', SETTINGS_TAB_REFUSAL);

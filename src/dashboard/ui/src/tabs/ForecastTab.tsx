@@ -58,7 +58,7 @@ function partialHistoryMedians(history: MonthlyCashflowRow[] | null): {
   };
 }
 
-/** What an agent is told after `set_forecast_inputs`: the horizon and the 10th, 50th and 90th percentile net worth there. */
+/** What an agent is told after `fill_forecast_inputs`: the horizon and the 10th, 50th and 90th percentile net worth there. */
 function projectionAnswer(point: { p10: number; p50: number; p90: number } | undefined, horizonMonths: number) {
   if (!point) return { outcome: 'unknown', reason: 'The projection produced no result.' };
   return { horizonMonths, p10: Math.round(point.p10), p50: Math.round(point.p50), p90: Math.round(point.p90) };
@@ -151,7 +151,7 @@ export function ForecastTab() {
 
   const handleSettled = () => onInputSettled(simInput);
 
-  // An agent filled the manual inputs (`set_forecast_inputs`): the page computes, so the call resolves only when the
+  // An agent filled the manual inputs (`fill_forecast_inputs`): the page computes, so the call resolves only when the
   // projection for exactly those numbers has finished (a 'final' run posted with the current input), never from
   // the chart that was on screen before.
   const pendingAgentRef = useRef<{ values: ManualInputValues; resolve: (answer: unknown) => void; timer: ReturnType<typeof setTimeout> } | null>(null);

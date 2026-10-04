@@ -44,8 +44,8 @@ afterEach(() => {
 });
 
 async function pendingEdit(db: ReturnType<typeof createTestDb>, scope = testScope()) {
-  const grants = grantTools(db, scope, ['edit_transaction', 'transaction_search']);
-  const out = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'ks' }, 'imperative');
+  const grants = grantTools(db, scope, ['update_transaction', 'search_transactions']);
+  const out = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'ks' }, 'imperative');
   if (!out.ok || out.kind !== 'operation') throw new Error('expected a pending operation');
   return { scope, grants, op: out.operation };
 }
@@ -55,12 +55,12 @@ describe('switching agent access off', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['transaction_search']);
+    const grants = grantTools(db, scope, ['search_transactions']);
     expect(exposedTools(db, scope)).toHaveLength(1);
 
     setKillSwitch(db, false);
     expect(exposedTools(db, scope)).toEqual([]);
-    const out = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'x' }, 'imperative');
+    const out = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'x' }, 'imperative');
     expect(out).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
     expect(count(db, 'mcp_audit_log', "decision = 'denied_kill_switch'")).toBe(1);
   });
@@ -68,7 +68,7 @@ describe('switching agent access off', () => {
   test('a grant POST is refused while it is off', () => {
     const db = createTestDb();
     setKillSwitch(db, false);
-    expect(grantLocalAccess(db, testScope(), ['transaction_search'])).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
+    expect(grantLocalAccess(db, testScope(), ['search_transactions'])).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
     expect(count(db, 'mcp_grants')).toBe(0);
   });
 
@@ -79,7 +79,7 @@ describe('switching agent access off', () => {
     const result = setKillSwitch(db, false);
     expect(result.revokedGrants).toBeGreaterThanOrEqual(2);
     expect(result.rejectedOperations).toBe(1);
-    expect(getGrant(db, grants.transaction_search)!.revoked_at).not.toBeNull();
+    expect(getGrant(db, grants.search_transactions)!.revoked_at).not.toBeNull();
     const row = getOperation(db, op.id)!;
     expect(row.status).toBe('rejected');
     expect(JSON.parse(row.outcome_json!)).toEqual({ reason: 'kill_switch' });
@@ -94,9 +94,9 @@ describe('switching agent access off', () => {
     servers.push(server);
     const base = `http://localhost:${server.port}`;
     const scope = testScope();
-    setPolicy(db, { userId: null, role: 'admin', authEnabled: false }, 'transaction_search', 'ask');
-    const grants = grantTools(db, scope, ['transaction_search']);
-    const out = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
+    setPolicy(db, { userId: null, role: 'admin', authEnabled: false }, 'search_transactions', 'ask');
+    const grants = grantTools(db, scope, ['search_transactions']);
+    const out = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
     if (!out.ok || out.kind !== 'operation') throw new Error('expected a read-ask operation');
     expect(approveWebMcpOperation(db, out.operation.id, 'test').outcome).toBe('committed');
     expect(getOperation(db, out.operation.id)!.outcome_json).not.toBeNull();
@@ -113,9 +113,9 @@ describe('switching agent access off', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    setPolicy(db, { userId: null, role: 'admin', authEnabled: false }, 'transaction_search', 'ask');
-    const grants = grantTools(db, scope, ['transaction_search']);
-    const out = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
+    setPolicy(db, { userId: null, role: 'admin', authEnabled: false }, 'search_transactions', 'ask');
+    const grants = grantTools(db, scope, ['search_transactions']);
+    const out = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
     if (!out.ok || out.kind !== 'operation') throw new Error('expected a read-ask operation');
     approveWebMcpOperation(db, out.operation.id, 'test');
     // The switch flipped from another process (agent-access.json), so this db's rows were not cleaned.
@@ -127,37 +127,37 @@ describe('switching agent access off', () => {
 
   test('a client token cannot be minted or edited while it is off: kill_switch, not a policy message', () => {
     const db = createTestDb();
-    const { id } = mintTestToken(db, ['transaction_search']);
+    const { id } = mintTestToken(db, ['search_transactions']);
     const viewer = { userId: null, role: 'admin' as const, authEnabled: false };
     setKillSwitch(db, false);
-    expect(mintClientToken(db, { userId: null, role: 'admin', authEnabled: false, profile: 'test' } as any, { name: 'x', tools: ['transaction_search'] })).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
-    expect(updateClientTokenTools(db, id, viewer, ['transaction_search'], 'test')).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
+    expect(mintClientToken(db, { userId: null, role: 'admin', authEnabled: false, profile: 'test' } as any, { name: 'x', tools: ['search_transactions'] })).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
+    expect(updateClientTokenTools(db, id, viewer, ['search_transactions'], 'test')).toMatchObject({ ok: false, status: 403, code: 'kill_switch' });
   });
 
   test('it also revokes the grants behind client tokens', () => {
     const db = createTestDb();
-    const { id } = mintTestToken(db, ['transaction_search']);
+    const { id } = mintTestToken(db, ['search_transactions']);
     setKillSwitch(db, false);
     expect(count(db, 'mcp_grants', `session_generation = 'tok:${id}' AND revoked_at IS NULL`)).toBe(0);
   });
 
   test('it revokes the client tokens themselves: nothing comes back when it is turned on', () => {
     const db = createTestDb();
-    const { token, id } = mintTestToken(db, ['transaction_search']);
+    const { token, id } = mintTestToken(db, ['search_transactions']);
     const viewer = { userId: null, role: 'admin' as const, authEnabled: false };
     setKillSwitch(db, false);
     setKillSwitch(db, true);
     expect(resolveClientToken(db, token, 'test')).toBeNull();
     expect(listClientTokens(db, viewer).find((t) => t.id === id)!.revoked_at).not.toBeNull();
     // The same bearer cannot be handed fresh grants through the tools editor.
-    expect(updateClientTokenTools(db, id, viewer, ['transaction_search', 'category_summary'], 'test')).toBeNull();
+    expect(updateClientTokenTools(db, id, viewer, ['search_transactions', 'category_summary'], 'test')).toBeNull();
     expect(count(db, 'mcp_grants', `session_generation = 'tok:${id}' AND revoked_at IS NULL`)).toBe(0);
   });
 
   test('/mcp tools/list is [] while it is off, and the token is not locked out of the list call', async () => {
     const db = createTestDb();
     seedTestData(db);
-    const { token } = mintTestToken(db, ['transaction_search']);
+    const { token } = mintTestToken(db, ['search_transactions']);
     const list = async () => {
       const res = await handleMcpHttpRequest(
         db,
@@ -171,7 +171,7 @@ describe('switching agent access off', () => {
       );
       return ((await res.json()) as any).result.tools as Array<{ name: string }>;
     };
-    expect((await list()).map((t) => t.name)).toEqual(['transaction_search']);
+    expect((await list()).map((t) => t.name)).toEqual(['search_transactions']);
     // Turning off the switch revokes the token's grants; even a fresh grant row could not bring a tool back.
     setGlobalAgentState({ enabled: false });
     expect(await list()).toEqual([]);
@@ -289,10 +289,10 @@ describe('a damaged agent-access.json', () => {
       const db = createTestDb();
       seedTestData(db);
       const scope = testScope();
-      const grants = grantTools(db, scope, ['transaction_search']);
+      const grants = grantTools(db, scope, ['search_transactions']);
       writeFileSync(file, '{ not json');
       setGlobalAgentState({ enabled: true });
-      const out = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'x' }, 'imperative');
+      const out = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'x' }, 'imperative');
       expect(out).toMatchObject({ ok: false, code: 'grant_invalid' });
     } finally {
       setGlobalStateFile(testAgentAccessFile());
@@ -307,9 +307,9 @@ describe('across profiles', () => {
     const dbB = createTestDb();
     seedTestData(dbB);
     const scope = testScope();
-    const grants = grantTools(dbB, scope, ['transaction_search']);
+    const grants = grantTools(dbB, scope, ['search_transactions']);
     setKillSwitch(dbA, false);
-    const out = await callTool(dbB, scope, grants.transaction_search, 'transaction_search', { query: 'x' }, 'imperative');
+    const out = await callTool(dbB, scope, grants.search_transactions, 'search_transactions', { query: 'x' }, 'imperative');
     expect(out).toMatchObject({ ok: false, code: 'kill_switch' });
   });
 
@@ -318,20 +318,20 @@ describe('across profiles', () => {
     const dbB = createTestDb();
     seedTestData(dbB);
     const scope = testScope();
-    const grants = grantTools(dbB, scope, ['transaction_search']);
+    const grants = grantTools(dbB, scope, ['search_transactions']);
     setKillSwitch(dbA, false); // only A's grants are revoked; B's row is untouched
     setKillSwitch(dbA, true);
 
-    expect(getGrant(dbB, grants.transaction_search)!.revoked_at).toBeNull();
-    const check = validateGrant(dbB, grants.transaction_search, 'transaction_search', schemaDigest('transaction_search'), scope);
+    expect(getGrant(dbB, grants.search_transactions)!.revoked_at).toBeNull();
+    const check = validateGrant(dbB, grants.search_transactions, 'search_transactions', schemaDigest('search_transactions'), scope);
     expect(check).toEqual({ ok: false, reason: 'kill_switch' });
-    const out = await callTool(dbB, scope, grants.transaction_search, 'transaction_search', { query: 'x' }, 'imperative');
+    const out = await callTool(dbB, scope, grants.search_transactions, 'search_transactions', { query: 'x' }, 'imperative');
     expect(out).toMatchObject({ ok: false, status: 403, code: 'grant_invalid' });
     expect((out as { error: string }).error).toContain('kill_switch');
 
     // A grant made after re-enabling works, even when made immediately.
-    const fresh = grantTools(dbB, scope, ['transaction_search']);
-    const ok = await callTool(dbB, scope, fresh.transaction_search, 'transaction_search', { query: 'groceries' }, 'imperative');
+    const fresh = grantTools(dbB, scope, ['search_transactions']);
+    const ok = await callTool(dbB, scope, fresh.search_transactions, 'search_transactions', { query: 'groceries' }, 'imperative');
     expect(ok).toMatchObject({ ok: true, kind: 'read' });
   });
 
@@ -339,23 +339,23 @@ describe('across profiles', () => {
     const dbA = createTestDb();
     const dbB = createTestDb();
     const scope = testScope();
-    grantTools(dbB, scope, ['transaction_search']);
-    expect(exposedTools(dbB, scope).map((t) => t.name)).toEqual(['transaction_search']);
+    grantTools(dbB, scope, ['search_transactions']);
+    expect(exposedTools(dbB, scope).map((t) => t.name)).toEqual(['search_transactions']);
     setKillSwitch(dbA, false);
     setKillSwitch(dbA, true);
 
     expect(exposedTools(dbB, scope)).toEqual([]);
     expect(listActiveGrants(dbB, scope)).toEqual([]);
 
-    grantTools(dbB, scope, ['transaction_search']);
-    expect(exposedTools(dbB, scope).map((t) => t.name)).toEqual(['transaction_search']);
+    grantTools(dbB, scope, ['search_transactions']);
+    expect(exposedTools(dbB, scope).map((t) => t.name)).toEqual(['search_transactions']);
     expect(listActiveGrants(dbB, scope)).toHaveLength(1);
   });
 
   test('a client token in another profile no longer resolves any tool after a flip it never saw', () => {
     const dbA = createTestDb();
     const dbB = createTestDb();
-    const { token } = mintTestToken(dbB, ['transaction_search']);
+    const { token } = mintTestToken(dbB, ['search_transactions']);
     expect(resolveClientToken(dbB, token, 'test')!.grants).toHaveLength(1);
     setKillSwitch(dbA, false);
     setKillSwitch(dbA, true);
@@ -366,10 +366,10 @@ describe('across profiles', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['transaction_search']);
+    const grants = grantTools(db, scope, ['search_transactions']);
     setKillSwitch(db, false);
     resetActiveProfile();
-    const out = await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'x' }, 'imperative');
+    const out = await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'x' }, 'imperative');
     expect(out).toMatchObject({ ok: false, code: 'kill_switch' });
     expect(exposedTools(db, scope)).toEqual([]);
   });
@@ -377,7 +377,7 @@ describe('across profiles', () => {
   test('turning it back on does not resurrect revoked grants', () => {
     const db = createTestDb();
     const scope = testScope();
-    grantTools(db, scope, ['transaction_search']);
+    grantTools(db, scope, ['search_transactions']);
     setKillSwitch(db, false);
     setKillSwitch(db, true);
     expect(exposedTools(db, scope)).toEqual([]);

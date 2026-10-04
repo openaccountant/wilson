@@ -13,6 +13,7 @@ import { clearReadOutcome, readDeliveryRefusal, type McpOperation, type Operatio
 import { principalFor } from './audit.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { sanitizeUntrustedText } from './output.js';
+import { currentNameFor } from './tool-names.js';
 import { storedCategoryLabel } from './tool-catalog.js';
 import { parseNaturalQuery } from '../tools/query/transaction-search.js';
 
@@ -24,7 +25,7 @@ export interface RequestedBy {
   label: string;
 }
 
-/** What a read-ask card shows: the full arguments, and for transaction_search what the server parsed the query into. */
+/** What a read-ask card shows: the full arguments, and for search_transactions what the server parsed the query into. */
 export interface ReadView {
   args: Record<string, unknown>;
   filter?: Array<{ label: string; value: string }>;
@@ -86,7 +87,7 @@ function money(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
-/** transaction_search's query as the server read it, so the human approves what will actually run. */
+/** search_transactions' query as the server read it, so the human approves what will actually run. */
 function parsedFilter(db: Database, args: Record<string, unknown>): Array<{ label: string; value: string }> | undefined {
   if (typeof args.query !== 'string') return undefined;
   const f = parseNaturalQuery(args.query, db);
@@ -100,6 +101,12 @@ function parsedFilter(db: Database, args: Record<string, unknown>): Array<{ labe
   return rows;
 }
 
+/** The current catalog name of a non-chat operation (a history row may carry a retired one); null for chat, whose names are chat tools. */
+function catalogNameOf(op: Pick<McpOperation, 'source' | 'tool_name'>): string | null {
+  if (op.source === 'chat') return null;
+  return currentNameFor(op.tool_name) ?? op.tool_name;
+}
+
 function readViewOf(op: McpOperation, viewer: OperationViewer): ReadView | null {
   if (op.kind !== 'read') return null;
   let args: Record<string, unknown> = {};
@@ -108,7 +115,7 @@ function readViewOf(op: McpOperation, viewer: OperationViewer): ReadView | null 
   } catch {
     // An unreadable row shows no arguments rather than failing the whole queue.
   }
-  const filter = op.tool_name === 'transaction_search' && viewer.db ? parsedFilter(viewer.db, args) : undefined;
+  const filter = catalogNameOf(op) === 'search_transactions' && viewer.db ? parsedFilter(viewer.db, args) : undefined;
   return { args, ...(filter ? { filter } : {}) };
 }
 

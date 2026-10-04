@@ -1346,7 +1346,7 @@ describe('PUT /api/budgets/:category and PATCH /api/goals/:id over HTTP', () => 
     const reviewId = (db.prepare('SELECT id FROM categorization_reviews WHERE transaction_id = @txn').get({ txn }) as { id: number }).id;
     const json = { 'Content-Type': 'application/json' };
     await fetch(`${base}/api/budgets/Dining`, { method: 'PUT', headers: json, body: JSON.stringify({ monthlyLimit: 120 }) });
-    grantTools(db, testScope(), ['filter_transactions']); // a live tab grant for this user and profile
+    grantTools(db, testScope(), ['list_transactions']); // a live tab grant for this user and profile
     await fetch(`${base}/api/goals/${id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ status: 'paused' }) });
     await fetch(`${base}/api/reviews/${reviewId}/confirm`, { method: 'POST', headers: json });
     const rows = db.prepare("SELECT transport, principal_kind, tool_name, args_preview FROM mcp_audit_log WHERE decision = 'rest_write' ORDER BY id").all() as any[];

@@ -36,7 +36,7 @@ const W = 1440, H = 900, OUT = 'demos/tape-video/talk-video', NAME = 'webmcp-age
 const QUERY = 'PHARMACY PLUS';
 const TARGET_ID = 386; // PHARMACY PLUS #210, 2026-08-30 — uncategorized in the demo profile
 const DEMO_DB = join(homedir(), '.openaccountant/profiles/demo/data.db');
-const GRANT = ['spending_summary', 'transaction_search', 'categorize_transaction'];
+const GRANT = ['get_spending_summary', 'search_transactions', 'categorize_transaction'];
 const TOKEN_NAME = 'talk-demo-agent';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const HOLD_MS = 800; // Approve is hold-to-approve: 0.6 s press-and-hold, so hold with margin

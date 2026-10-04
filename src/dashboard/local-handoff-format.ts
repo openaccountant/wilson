@@ -15,6 +15,19 @@ export const HANDOFF_BLOCK_END = '[End of on-device assistant notes]';
 
 /** The five READ tools of src/mcp/tool-catalog.ts. */
 export type HandoffReadToolName = 'transaction_search' | 'spending_summary' | 'profit_loss' | 'net_worth' | 'forecast';
+/**
+ * The mirror / router vocabulary is NOT the WebMCP catalog vocabulary (specs/webmcp-tool-naming.md §4.9). The five
+ * mirror names stay as measured by the router; this permanent boundary map says which catalog tool each runs.
+ * It is not an alias: nothing but the server-side handoff executor uses it.
+ */
+export const HANDOFF_TO_CATALOG: Readonly<Record<HandoffReadToolName, string>> = {
+  transaction_search: 'search_transactions',
+  spending_summary: 'get_spending_summary',
+  profit_loss: 'get_profit_loss',
+  net_worth: 'get_net_worth',
+  forecast: 'get_cash_forecast',
+};
+
 /** Read tools the dashboard AGENT can run (it has no forecast tool; spec C2). */
 export type HandoffAgentReadToolName = Exclude<HandoffReadToolName, 'forecast'>;
 /** Agent registry names (src/tools/registry.ts), not MCP catalog names (spec C1). */

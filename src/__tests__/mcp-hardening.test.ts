@@ -65,7 +65,7 @@ describe('/mcp audit flood', () => {
     expect(anon.status).toBe(401);
     expect(auditCount(db)).toBeLessThanOrEqual(1);
     const before = auditCount(db);
-    const { token } = mintTestToken(db, ['transaction_search']);
+    const { token } = mintTestToken(db, ['search_transactions']);
     const res = await fetch(base + '/mcp', { method: 'POST', headers: { ...headers, Authorization: `Bearer ${token}` }, body: batch(40_000) });
     expect(res.status).toBe(413);
     expect(auditCount(db)).toBe(before);
@@ -119,7 +119,7 @@ describe('/mcp audit flood', () => {
     const { db } = await startServer();
     const limiter = new RateLimiter();
     setLimiterFor(db, limiter);
-    const { token: session } = mintTestToken(db, ['transaction_search']);
+    const { token: session } = mintTestToken(db, ['search_transactions']);
     // An attacker on the same address (the local host) spends the whole bucket.
     for (let i = 0; i < LIMIT_MCP_FAILED_BEARER.limit + 5; i++) limiter.take('mcpb:127.0.0.1', LIMIT_MCP_FAILED_BEARER);
     expect(limiter.blocked('mcpb:127.0.0.1', LIMIT_MCP_FAILED_BEARER)).toBe(true);
@@ -128,7 +128,7 @@ describe('/mcp audit flood', () => {
       handleMcpHttpRequest(db, new Request('http://localhost/mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries' } } }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries' } } }),
       }), '127.0.0.1', 'test');
 
     const ok = await call(session);
@@ -146,12 +146,12 @@ describe('/mcp audit flood', () => {
     const { db } = await startServer();
     const limiter = new RateLimiter();
     setLimiterFor(db, limiter);
-    const { token: session } = mintTestToken(db, ['transaction_search']);
+    const { token: session } = mintTestToken(db, ['search_transactions']);
     for (let i = 0; i < 40; i++) {
       const res = await handleMcpHttpRequest(db, new Request('http://localhost/mcp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${session}` },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries', limit: 1 } } }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries', limit: 1 } } }),
       }), '127.0.0.1', 'test');
       await res.text();
     }
@@ -160,14 +160,14 @@ describe('/mcp audit flood', () => {
 
   test('in a batch, refused calls are audited even when another call in the batch reached a handler', async () => {
     const { db } = await startServer();
-    const { token: session } = mintTestToken(db, ['transaction_search']);
+    const { token: session } = mintTestToken(db, ['search_transactions']);
     const res = await handleMcpHttpRequest(db, new Request('http://localhost/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${session}` },
       body: JSON.stringify([
-        { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries' } } },
-        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'edit_transaction', arguments: { id: 1, notes: 'x' } } },
-        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'transaction_search', arguments: { surprise: true } } },
+        { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries' } } },
+        { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'update_transaction', arguments: { id: 1, notes: 'x' } } },
+        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'search_transactions', arguments: { surprise: true } } },
       ]),
     }), '127.0.0.1', 'test');
     await res.text();
@@ -181,14 +181,14 @@ describe('/mcp audit flood', () => {
 
   test('tools/list offers only tools callTool would accept on this transport', async () => {
     const { base, db } = await startServer();
-    const { token: session } = mintTestToken(db, ['transaction_search']);
+    const { token: session } = mintTestToken(db, ['search_transactions']);
     const res = await fetch(base + '/mcp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${session}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     });
     const body = (await res.json()) as { result: { tools: Array<{ name: string }> } };
-    expect(body.result.tools.map((t) => t.name)).toEqual(['transaction_search']);
+    expect(body.result.tools.map((t) => t.name)).toEqual(['search_transactions']);
   });
 });
 
@@ -196,10 +196,10 @@ describe('legacy session parameter', () => {
   test('sessionGeneration=dashboard-chat (or tok:<id>) is refused with 400 on every route that accepts a session', async () => {
     const { base } = await startServer();
     for (const forged of ['dashboard-chat', 'tok:victimid', 'not-a-uuid']) {
-      const grants = await bfetch(base + '/api/mcp/grants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionGeneration: forged, tools: ['transaction_search'] }) });
+      const grants = await bfetch(base + '/api/mcp/grants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionGeneration: forged, tools: ['search_transactions'] }) });
       expect(grants.status).toBe(400);
       // The tool path takes the session from a header only; a forged value there is refused the same way.
-      const call = await bfetch(base + '/api/mcp/call', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': forged }, body: JSON.stringify({ grantId: crypto.randomUUID(), tool: 'transaction_search', args: {} }) });
+      const call = await bfetch(base + '/api/mcp/call', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': forged }, body: JSON.stringify({ grantId: crypto.randomUUID(), tool: 'search_transactions', args: {} }) });
       expect(call.status).toBe(400);
       const revoke = await bfetch(base + '/api/mcp/grants/revoke-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionGeneration: forged }) });
       expect(revoke.status).toBe(400);
@@ -212,10 +212,10 @@ describe('legacy session parameter', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['transaction_search', 'edit_transaction']);
-    await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'a' }, 'imperative');
-    await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id: firstTxnId(db), notes: 'n' }, 'declarative');
-    await callTool(db, scope, grants.transaction_search, 'transaction_search', { query: 'a' }, 'http-mcp');
+    const grants = grantTools(db, scope, ['search_transactions', 'update_transaction']);
+    await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'a' }, 'imperative');
+    await callTool(db, scope, grants.update_transaction, 'update_transaction', { id: firstTxnId(db), notes: 'n' }, 'declarative');
+    await callTool(db, scope, grants.search_transactions, 'search_transactions', { query: 'a' }, 'http-mcp');
     const kinds = db.prepare('SELECT DISTINCT principal_kind AS k FROM mcp_audit_log').all() as Array<{ k: string }>;
     expect(kinds.every((r) => r.k !== 'chat' && r.k !== 'client_token')).toBe(true);
   });
@@ -276,13 +276,13 @@ describe('deep paging accounting', () => {
     expect(limiter.trackPage('victim', 'q', 'c20').flagged).toBe(true);
   });
 
-  test('net_worth (15-row pages) and an oversized limit still trip the sentinel after 20 real pages', async () => {
+  test('get_net_worth (15-row pages) and an oversized limit still trip the sentinel after 20 real pages', async () => {
     const db = createTestDb();
     seedTestData(db);
     const limiter = new RateLimiter();
     setLimiterFor(db, limiter);
     // Drive trackPage the way callTool does, with cursors from a walk whose page size is not 10.
-    const flags = Array.from({ length: 22 }, (_, i) => limiter.trackPage('x', 'net_worth', `o${i * 15}`).flagged);
+    const flags = Array.from({ length: 22 }, (_, i) => limiter.trackPage('x', 'get_net_worth', `o${i * 15}`).flagged);
     expect(flags.filter(Boolean)).toHaveLength(1);
   });
 });
@@ -291,7 +291,7 @@ describe('confirmation card hygiene', () => {
   test('stored (before) values lose bidi and zero-width characters', () => {
     expect(formatValue('Pay‮pal​')).toBe('Paypal');
     const card = confirmationCardModel({
-      source: 'webmcp', tool_name: 'edit_transaction',
+      source: 'webmcp', tool_name: 'update_transaction',
       before_json: JSON.stringify({ description: 'RENT‮ 1000' }),
       after_json: JSON.stringify({ description: 'Rent' }),
     });
@@ -365,7 +365,7 @@ describe('D4: an unauthenticated /mcp request does not hold a socket with a slow
 });
 
 describe('D6: a valid token that keeps sending refused calls is bounded on its own bucket', () => {
-  const refusedCall = (id: number) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'transaction_search', arguments: { surprise: true } } });
+  const refusedCall = (id: number) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'search_transactions', arguments: { surprise: true } } });
   const post = (db: Database, bearer: string, body: unknown, remote = '127.0.0.1') =>
     handleMcpHttpRequest(db, new Request('http://localhost/mcp', {
       method: 'POST',
@@ -377,8 +377,8 @@ describe('D6: a valid token that keeps sending refused calls is bounded on its o
     const { db } = await startServer();
     const clock = { now: Date.now() };
     setLimiterFor(db, new RateLimiter({ now: () => clock.now }));
-    const flooder = mintTestToken(db, ['transaction_search'], { name: 'flooder' });
-    const bystander = mintTestToken(db, ['transaction_search'], { name: 'bystander' });
+    const flooder = mintTestToken(db, ['search_transactions'], { name: 'flooder' });
+    const bystander = mintTestToken(db, ['search_transactions'], { name: 'bystander' });
 
     let limited: Response | null = null;
     for (let i = 0; i < 200 && !limited; i++) {
@@ -393,20 +393,20 @@ describe('D6: a valid token that keeps sending refused calls is bounded on its o
     await (await post(db, flooder.token, refusedCall(999))).text();
     expect(auditCount(db)).toBe(rowsAtLimit);
 
-    const ok = await post(db, bystander.token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries' } } });
+    const ok = await post(db, bystander.token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries' } } });
     expect(ok.status).toBe(200);
     // Even the flooder's valid calls wait for the bucket, then recover with time.
     clock.now += 120_000;
-    const again = await post(db, flooder.token, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries' } } });
+    const again = await post(db, flooder.token, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries' } } });
     expect(again.status).toBe(200);
   });
 
   test('successful calls never spend the refused-call bucket', async () => {
     const { db } = await startServer();
     setLimiterFor(db, new RateLimiter());
-    const { token } = mintTestToken(db, ['transaction_search']);
+    const { token } = mintTestToken(db, ['search_transactions']);
     for (let i = 0; i < 40; i++) {
-      const res = await post(db, token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'transaction_search', arguments: { query: 'groceries', limit: 1 } } });
+      const res = await post(db, token, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_transactions', arguments: { query: 'groceries', limit: 1 } } });
       expect(res.status).toBe(200);
       await res.text();
     }

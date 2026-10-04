@@ -224,7 +224,7 @@ describe('callServerTool', () => {
 
   test('a server error becomes an Error carrying the actionable message and hint', async () => {
     const { fetchFn } = fakeServer({
-      'POST /api/mcp/call': jsonResponse({ error: { code: 'invalid_args', message: 'edit_transaction: amount must be a number. Example: {"id":42}', hint: 'Fix the amount.' } }, 400),
+      'POST /api/mcp/call': jsonResponse({ error: { code: 'invalid_args', message: 'update_transaction: amount must be a number. Example: {"id":42}', hint: 'Fix the amount.' } }, 400),
     });
     await expect(callServerTool(deps(fetchFn), call)).rejects.toThrow('amount must be a number');
     await expect(callServerTool(deps(fetchFn), call)).rejects.toThrow('Fix the amount.');
@@ -316,8 +316,8 @@ describe('registerLiveTools (what the bridge hands to registerTool)', () => {
 
   test('a registerTool that never settles cannot block the pass: it is aborted, dropped, and later passes still abort the rest', async () => {
     const tools = [
-      { ...liveFromCatalog(['transaction_search'])[0] },
-      { ...liveFromCatalog(['spending_summary'])[0] },
+      { ...liveFromCatalog(['search_transactions'])[0] },
+      { ...liveFromCatalog(['get_spending_summary'])[0] },
     ];
     const registered = new Map<string, AbortController>();
     const signals = new Map<string, AbortSignal>();
@@ -328,20 +328,20 @@ describe('registerLiveTools (what the bridge hands to registerTool)', () => {
         registerTimeoutMs: 20,
         registerTool: (tool, options) => {
           signals.set(tool.name, options.signal);
-          return tool.name === 'spending_summary' ? new Promise(() => {}) : Promise.resolve(undefined);
+          return tool.name === 'get_spending_summary' ? new Promise(() => {}) : Promise.resolve(undefined);
         },
         makeExecute: () => async () => 'ran',
       });
     const started = Date.now();
     await run(tools); // would hang forever without the timeout
     expect(Date.now() - started).toBeLessThan(2000);
-    expect(registered.has('transaction_search')).toBe(true);
+    expect(registered.has('search_transactions')).toBe(true);
     // The hung one was given up on: aborted (if it ever settles it unregisters) and forgotten, so the next pass retries it.
-    expect(signals.get('spending_summary')!.aborted).toBe(true);
-    expect(registered.has('spending_summary')).toBe(false);
+    expect(signals.get('get_spending_summary')!.aborted).toBe(true);
+    expect(registered.has('get_spending_summary')).toBe(false);
     // The kill switch case: the live set empties, and the next pass aborts what was registered.
     await run([]);
-    expect(signals.get('transaction_search')!.aborted).toBe(true);
+    expect(signals.get('search_transactions')!.aborted).toBe(true);
     expect(registered.size).toBe(0);
   });
 
@@ -371,11 +371,11 @@ describe('registerLiveTools (what the bridge hands to registerTool)', () => {
 
   test('a tool that stops being live is aborted; a declarative one that was never registered is left alone', async () => {
     const registered = new Map<string, AbortController>();
-    const first = harness(liveFromCatalog(['transaction_search', 'review_action']), registered);
+    const first = harness(liveFromCatalog(['search_transactions', 'resolve_review_item']), registered);
     await first.run();
-    expect([...registered.keys()]).toEqual(['transaction_search']);
-    const controller = registered.get('transaction_search')!;
-    const second = harness(liveFromCatalog(['review_action']), registered);
+    expect([...registered.keys()]).toEqual(['search_transactions']);
+    const controller = registered.get('search_transactions')!;
+    const second = harness(liveFromCatalog(['resolve_review_item']), registered);
     await second.run();
     expect(controller.signal.aborted).toBe(true);
     expect(registered.size).toBe(0);
@@ -384,7 +384,7 @@ describe('registerLiveTools (what the bridge hands to registerTool)', () => {
   test('a registerTool that rejects leaves the tool unregistered so the next sync retries', async () => {
     const registered = new Map<string, AbortController>();
     await registerLiveTools({
-      tools: liveFromCatalog(['transaction_search']),
+      tools: liveFromCatalog(['search_transactions']),
       registered,
       registerTool: async () => { throw new Error('NotAllowedError'); },
       makeExecute: () => async () => 'ran',
@@ -393,8 +393,8 @@ describe('registerLiveTools (what the bridge hands to registerTool)', () => {
   });
 
   test('liveToolsSignature changes with the live set or a schema, not with order', () => {
-    const a = liveFromCatalog(['review_action', 'set_budget']);
-    const b = liveFromCatalog(['set_budget', 'review_action']);
+    const a = liveFromCatalog(['resolve_review_item', 'set_budget']);
+    const b = liveFromCatalog(['set_budget', 'resolve_review_item']);
     expect(liveToolsSignature(a)).toBe(liveToolsSignature(b));
     expect(liveToolsSignature(a)).not.toBe(liveToolsSignature(liveFromCatalog(['set_budget'])));
   });
@@ -480,7 +480,7 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
       };
     });
 
-  const GRANTED = ['navigate_to_tab', 'get_page_context', 'open_transaction', 'list_review_queue', 'open_review_item', 'transaction_search'];
+  const GRANTED = ['open_tab', 'get_page_context', 'open_transaction', 'list_review_items', 'open_review_item', 'search_transactions'];
 
   function bridge(granted: string[]) {
     const mc = new FakeModelContext();
@@ -510,11 +510,11 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
 
   test("tab change aborts the old tab's tools and registers the new tab's live tools in one reconcile", async () => {
     const b = bridge(GRANTED);
-    b.mount('navigate_to_tab', 'get_page_context', 'open_transaction', 'open_review_item');
+    b.mount('open_tab', 'get_page_context', 'open_transaction', 'open_review_item');
     b.setTab('transactions');
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['get_page_context', 'navigate_to_tab', 'open_transaction', 'transaction_search']);
-    const globalController = b.registered.get('navigate_to_tab')!;
+    expect(b.mc.names()).toEqual(['get_page_context', 'open_tab', 'open_transaction', 'search_transactions']);
+    const globalController = b.registered.get('open_tab')!;
     const oldTabController = b.registered.get('open_transaction')!;
 
     const before = b.mc.toolchange;
@@ -522,9 +522,9 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
     b.setTab('review'); //            ...and the new one is showing
     await b.reconcileNow(); //        ONE reconcile does both halves
     expect(oldTabController.signal.aborted).toBe(true);
-    expect(b.mc.names()).toEqual(['get_page_context', 'list_review_queue', 'navigate_to_tab', 'open_review_item', 'transaction_search']);
+    expect(b.mc.names()).toEqual(['get_page_context', 'list_review_items', 'open_review_item', 'open_tab', 'search_transactions']);
     // The global tools were not touched: same controllers, never re-registered.
-    expect(b.registered.get('navigate_to_tab')).toBe(globalController);
+    expect(b.registered.get('open_tab')).toBe(globalController);
     expect(globalController.signal.aborted).toBe(false);
     // toolchange: one removal and two additions, nothing else.
     expect(b.mc.toolchange - before).toBe(3);
@@ -532,7 +532,7 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
 
   test('a repeat reconcile with nothing changed registers and aborts nothing (no duplicate-registration errors)', async () => {
     const b = bridge(GRANTED);
-    b.mount('navigate_to_tab', 'get_page_context');
+    b.mount('open_tab', 'get_page_context');
     b.setTab('overview');
     await b.reconcileNow();
     const changes = b.mc.toolchange;
@@ -542,12 +542,12 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
   });
 
   test('an ungranted page tool is never registered, whatever tab shows and whatever handlers are mounted', async () => {
-    const b = bridge(['transaction_search']); // no grant for any page tool
-    b.mount('navigate_to_tab', 'get_page_context', 'open_transaction', 'open_review_item');
+    const b = bridge(['search_transactions']); // no grant for any page tool
+    b.mount('open_tab', 'get_page_context', 'open_transaction', 'open_review_item');
     for (const tab of ['overview', 'transactions', 'review', 'llm']) {
       b.setTab(tab);
       await b.reconcileNow();
-      expect(b.mc.names()).toEqual(['transaction_search']);
+      expect(b.mc.names()).toEqual(['search_transactions']);
     }
   });
 
@@ -555,15 +555,15 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
     const b = bridge(GRANTED);
     b.setTab('transactions');
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['transaction_search']);
+    expect(b.mc.names()).toEqual(['search_transactions']);
     b.mount('open_transaction');
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['open_transaction', 'transaction_search']);
+    expect(b.mc.names()).toEqual(['open_transaction', 'search_transactions']);
   });
 
   test('the kill switch (the server answers no tools) aborts everything, page tools included', async () => {
     const b = bridge(GRANTED);
-    b.mount('navigate_to_tab', 'get_page_context', 'open_transaction');
+    b.mount('open_tab', 'get_page_context', 'open_transaction');
     b.setTab('transactions');
     await b.reconcileNow();
     expect(b.mc.names().length).toBeGreaterThan(3);
@@ -577,12 +577,12 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
 
   test("a revoked grant for one tab tool aborts just that tool", async () => {
     const b = bridge(GRANTED);
-    b.mount('open_transaction', 'navigate_to_tab');
+    b.mount('open_transaction', 'open_tab');
     b.setTab('transactions');
     await b.reconcileNow();
     b.setTools(GRANTED.filter((n) => n !== 'open_transaction'));
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['navigate_to_tab', 'transaction_search']);
+    expect(b.mc.names()).toEqual(['open_tab', 'search_transactions']);
   });
 
   test('an unregistered-then-needed tool is registered fresh (a tab revisited)', async () => {
@@ -592,10 +592,10 @@ describe('tab-scoped registration (the bridge owns registerTool)', () => {
     await b.reconcileNow();
     b.setTab('overview');
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['transaction_search']);
+    expect(b.mc.names()).toEqual(['search_transactions']);
     b.setTab('review');
     await b.reconcileNow();
-    expect(b.mc.names()).toEqual(['list_review_queue', 'open_review_item', 'transaction_search']);
+    expect(b.mc.names()).toEqual(['list_review_items', 'open_review_item', 'search_transactions']);
   });
 });
 
@@ -672,7 +672,7 @@ describe('createReconcileScheduler', () => {
 
 describe('executePageTool (what a registered page tool does when the agent calls it)', () => {
   const tabTool = { name: 'open_transaction', surface: { tab: 'transactions' } as const, openHint: tabOpenHint('transactions') };
-  const globalTool = { name: 'navigate_to_tab', surface: 'global' as const };
+  const globalTool = { name: 'open_tab', surface: 'global' as const };
   const authorized = (pageData?: unknown) => async () => ({ type: 'page' as const, pageData });
 
   function runtimeWith(entries: Record<string, { tab: string; handler: (args: any, ctx: any) => Promise<unknown>; signal?: AbortSignal }>, active = 'transactions') {
@@ -709,7 +709,7 @@ describe('executePageTool (what a registered page tool does when the agent calls
     const { runtime } = runtimeWith({ open_transaction: { tab: 'transactions', signal: handlerController.signal, handler: async () => { ran = true; return 'x'; } } });
     // A real registry returns no handler once its signal aborted; the runtime here hands it over so the core's own check is covered too.
     const out = await executePageTool({ tool: tabTool, args: { id: 7 }, signal: new AbortController().signal, serverCall: authorized(), runtime });
-    expect(out).toEqual({ error: { code: 'tab_not_open', message: "The Transactions tab is not open. Call navigate_to_tab with tab='transactions' first." } });
+    expect(out).toEqual({ error: { code: 'tab_not_open', message: "The Transactions tab is not open. Call open_tab with tab='transactions' first." } });
     expect(ran).toBe(false);
   });
 
@@ -722,7 +722,7 @@ describe('executePageTool (what a registered page tool does when the agent calls
   test('a global tool with no handler says it is not available, naming the tool and no tab', async () => {
     const { runtime } = runtimeWith({});
     const out = (await executePageTool({ tool: globalTool, args: {}, signal: new AbortController().signal, serverCall: authorized(), runtime })) as { error: { message: string } };
-    expect(out.error.message).toContain('navigate_to_tab');
+    expect(out.error.message).toContain('open_tab');
     expect(out.error.message).not.toContain('tab is not open');
   });
 
@@ -741,7 +741,7 @@ describe('executePageTool (what a registered page tool does when the agent calls
   });
 
   test('a global tool that changes the tab on purpose is not stale', async () => {
-    const { runtime, state } = runtimeWith({ navigate_to_tab: { tab: 'global', handler: async () => { state.active = 'goals'; return { tab: 'goals' }; } } });
+    const { runtime, state } = runtimeWith({ open_tab: { tab: 'global', handler: async () => { state.active = 'goals'; return { tab: 'goals' }; } } });
     const out = await executePageTool({ tool: globalTool, args: { tab: 'goals' }, signal: new AbortController().signal, serverCall: authorized(), runtime });
     expect(out).toEqual({ tab: 'goals' });
   });
@@ -767,7 +767,7 @@ describe('executePageTool (what a registered page tool does when the agent calls
   test('a server refusal (grant, policy, rate limit, 404) comes back as an {error} result and the page is never touched', async () => {
     let ran = false;
     const { runtime } = runtimeWith({ open_transaction: { tab: 'transactions', handler: async () => { ran = true; return 'x'; } } });
-    const out = (await executePageTool({ tool: tabTool, args: {}, signal: new AbortController().signal, runtime, serverCall: async () => { throw new Error('Transaction #9 not found — use transaction_search.'); } })) as { error: { message: string } };
+    const out = (await executePageTool({ tool: tabTool, args: {}, signal: new AbortController().signal, runtime, serverCall: async () => { throw new Error('Transaction #9 not found — use search_transactions.'); } })) as { error: { message: string } };
     expect(out.error.message).toContain('not found');
     expect(ran).toBe(false);
   });
@@ -1053,9 +1053,9 @@ describe('L3: registration is identity-stable', () => {
 
   test('a REVOKED tool (no longer in the live set) is aborted at once, even with a call in flight', async () => {
     const registered = new Map<string, AbortController>();
-    const tool = descriptor('transaction_search');
+    const tool = descriptor('search_transactions');
     await registerLiveTools({ tools: [tool], registered, registerTool: async () => {}, makeExecute: () => async () => null });
-    const controller = registered.get('transaction_search')!;
+    const controller = registered.get('search_transactions')!;
     await registerLiveTools({ tools: [], registered, registerTool: async () => {}, makeExecute: () => async () => null, isBusy: () => true });
     expect(controller.signal.aborted).toBe(true);
     expect(registered.size).toBe(0);
@@ -1093,11 +1093,11 @@ describe('registerLiveTools: a shrinking live set always unregisters', () => {
   test('a tool listed twice (granted twice: one row per live grant) is registered once, and the kill switch then removes it', async () => {
     const mc = chromeLikeModelContext();
     const registered = new Map<string, AbortController>();
-    const twice = [d('transaction_search', { grantId: 'g1' }), d('transaction_search', { grantId: 'g2' }), d('navigate_to_tab', { classification: 'page', grantId: 'g3' }), d('navigate_to_tab', { classification: 'page', grantId: 'g4' })];
+    const twice = [d('search_transactions', { grantId: 'g1' }), d('search_transactions', { grantId: 'g2' }), d('open_tab', { classification: 'page', grantId: 'g3' }), d('open_tab', { classification: 'page', grantId: 'g4' })];
     await pass(mc, registered, twice);
     expect(mc.calls()).toBe(2); // one registerTool per name, never a refused duplicate
-    expect([...mc.live.keys()].sort()).toEqual(['navigate_to_tab', 'transaction_search']);
-    expect([...registered.keys()].sort()).toEqual(['navigate_to_tab', 'transaction_search']);
+    expect([...mc.live.keys()].sort()).toEqual(['open_tab', 'search_transactions']);
+    expect([...registered.keys()].sort()).toEqual(['open_tab', 'search_transactions']);
     expect([...registered.values()].every((c) => !c.signal.aborted)).toBe(true);
 
     await pass(mc, registered, []); // kill switch / revoke: the server lists nothing

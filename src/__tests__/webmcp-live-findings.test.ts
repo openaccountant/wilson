@@ -22,16 +22,16 @@ describe('exposedTools carries the effective policy', () => {
   test('allow and ask are reported per tool; an Off tool is not listed at all', () => {
     const db = createTestDb();
     const scope = testScope();
-    grantTools(db, scope, ['transaction_search', 'forecast', 'set_forecast_inputs']);
+    grantTools(db, scope, ['search_transactions', 'get_cash_forecast', 'fill_forecast_inputs']);
     const by = () => Object.fromEntries(exposedTools(db, scope, 'webmcp').map((t) => [t.name, t.policy]));
     // Defaults: whatever the catalog says, but always allow or ask.
     for (const policy of Object.values(by())) expect(['allow', 'ask']).toContain(policy);
-    expect(setPolicy(db, ADMIN, 'set_forecast_inputs', 'ask').ok).toBe(true);
-    expect(by().set_forecast_inputs).toBe('ask');
-    expect(setPolicy(db, ADMIN, 'set_forecast_inputs', 'allow').ok).toBe(true);
-    expect(by().set_forecast_inputs).toBe('allow');
-    expect(setPolicy(db, ADMIN, 'set_forecast_inputs', 'off').ok).toBe(true);
-    expect(by().set_forecast_inputs).toBeUndefined();
+    expect(setPolicy(db, ADMIN, 'fill_forecast_inputs', 'ask').ok).toBe(true);
+    expect(by().fill_forecast_inputs).toBe('ask');
+    expect(setPolicy(db, ADMIN, 'fill_forecast_inputs', 'allow').ok).toBe(true);
+    expect(by().fill_forecast_inputs).toBe('allow');
+    expect(setPolicy(db, ADMIN, 'fill_forecast_inputs', 'off').ok).toBe(true);
+    expect(by().fill_forecast_inputs).toBeUndefined();
   });
 });
 
@@ -39,8 +39,8 @@ describe('L4: rubric_changed names the current rubric version', () => {
   test('the engine error carries currentRubricVersion as data, and the message still names it', async () => {
     const db = createTestDb();
     const scope = testScope();
-    const grants = grantTools(db, scope, ['propose_judgements']);
-    const out = await callTool(db, scope, grants.propose_judgements, 'propose_judgements', {
+    const grants = grantTools(db, scope, ['propose_judgments']);
+    const out = await callTool(db, scope, grants.propose_judgments, 'propose_judgments', {
       judgeModel: 'm', rubricVersion: 'stale000000', items: [{ interactionId: 1, rating: 3, rationale: 'x'.repeat(20) }],
     }, 'imperative');
     expect(out.ok).toBe(false);
@@ -82,7 +82,7 @@ describe('L4/L7 over REST: statuses are unchanged', () => {
       const res = await bfetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': session }, body: JSON.stringify(body) });
       return { status: res.status, body: (await res.json()) as any };
     };
-    const granted = await post('/api/mcp/grants', { tools: ['open_transaction', 'propose_judgements'] });
+    const granted = await post('/api/mcp/grants', { tools: ['open_transaction', 'propose_judgments'] });
     expect(granted.status).toBe(200);
     const grantId = (tool: string) => granted.body.grants.find((g: any) => g.tool_name === tool)?.id;
 
@@ -91,7 +91,7 @@ describe('L4/L7 over REST: statuses are unchanged', () => {
     expect(missing.body.error.code).toBe('not_found');
 
     const stale = await post('/api/mcp/call', {
-      grantId: grantId('propose_judgements'), tool: 'propose_judgements',
+      grantId: grantId('propose_judgments'), tool: 'propose_judgments',
       args: { judgeModel: 'm', rubricVersion: 'stale000000', items: [{ interactionId: 1, rating: 3, rationale: 'x'.repeat(20) }] },
     });
     expect(stale.status).toBe(409);
@@ -116,11 +116,11 @@ describe('L7: a form input the agent could set is validated by the server like a
     }
   });
 
-  test('judge_interaction: a read-only interaction_id that points nowhere is a 404, so the form cannot be aimed at a row that is not there', async () => {
+  test('propose_judgment: a read-only interaction_id that points nowhere is a 404, so the form cannot be aimed at a row that is not there', async () => {
     const db = createTestDb();
     const scope = testScope();
-    const grants = grantTools(db, scope, ['judge_interaction']);
-    const out = await callTool(db, scope, grants.judge_interaction, 'judge_interaction', { interaction_id: 424242, rating: 3, rationale: 'x'.repeat(20), judge_model: 'm' }, 'declarative');
+    const grants = grantTools(db, scope, ['propose_judgment']);
+    const out = await callTool(db, scope, grants.propose_judgment, 'propose_judgment', { interaction_id: 424242, rating: 3, rationale: 'x'.repeat(20), judge_model: 'm' }, 'declarative');
     expect(out.ok).toBe(false);
     if (!out.ok) expect([400, 404]).toContain(out.status);
   });
@@ -142,8 +142,8 @@ describe('L2: the category select offers every category, whatever else the form 
     ]);
   });
 
-  test('the catalog schema for review_action names category_id as an integer an enum of ids can fill', () => {
-    const def = MCP_TOOL_CATALOG.find((d) => d.name === 'review_action')!;
+  test('the catalog schema for resolve_review_item names category_id as an integer an enum of ids can fill', () => {
+    const def = MCP_TOOL_CATALOG.find((d) => d.name === 'resolve_review_item')!;
     expect(def.exposure).toBe('declarative');
   });
 });

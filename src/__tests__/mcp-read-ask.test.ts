@@ -32,10 +32,10 @@ afterEach(() => {
   closeAll();
 });
 
-async function askRead(db: Database, scope: RequestScope, query = 'groceries', tool = 'transaction_search'): Promise<McpOperation> {
+async function askRead(db: Database, scope: RequestScope, query = 'groceries', tool = 'search_transactions'): Promise<McpOperation> {
   setPolicy(db, { userId: scope.userId, role: scope.role, authEnabled: scope.userId !== null }, tool, 'ask');
   const grants = grantTools(db, scope, [tool]);
-  const out = await callTool(db, scope, grants[tool], tool, tool === 'transaction_search' ? { query } : {}, 'imperative');
+  const out = await callTool(db, scope, grants[tool], tool, tool === 'search_transactions' ? { query } : {}, 'imperative');
   if (!out.ok || out.kind !== 'operation') throw new Error(`expected a read-ask operation, got ${JSON.stringify(out)}`);
   return out.operation;
 }
@@ -48,7 +48,7 @@ describe('read with policy ask', () => {
     expect(op.kind).toBe('read');
     expect(op.status).toBe('pending');
     expect(op.outcome_json).toBeNull();
-    expect(op.tool_name).toBe('transaction_search');
+    expect(op.tool_name).toBe('search_transactions');
     // The read itself has not run: nothing was spent from the read budget and nothing was audited as allowed.
     expect(count(db, 'mcp_audit_log', "decision = 'allowed'")).toBe(0);
     expect(count(db, 'mcp_audit_log', "decision = 'operation_created'")).toBe(1);
@@ -257,9 +257,9 @@ describe('who can read the result', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['edit_transaction']);
+    const grants = grantTools(db, scope, ['update_transaction']);
     const id = (db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number }).id;
-    const made = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id, notes: 'keep me' }, 'imperative');
+    const made = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id, notes: 'keep me' }, 'imperative');
     if (!made.ok || made.kind !== 'operation') throw new Error('expected an operation');
     expect(made.operation.kind).toBe('mutation');
     approveWebMcpOperation(db, made.operation.id, 'test');
@@ -273,10 +273,10 @@ describe('/mcp read with ask', () => {
     jest.useFakeTimers();
     const db = createTestDb();
     seedTestData(db);
-    setPolicy(db, admin, 'transaction_search', 'ask');
-    const { token } = mintTestToken(db, ['transaction_search']);
+    setPolicy(db, admin, 'search_transactions', 'ask');
+    const { token } = mintTestToken(db, ['search_transactions']);
     const resolved = resolveClientToken(db, token, 'test')!;
-    const created = await callTool(db, resolved.scope, resolved.grantByTool.get('transaction_search')!, 'transaction_search', { query: 'groceries' }, 'http-mcp');
+    const created = await callTool(db, resolved.scope, resolved.grantByTool.get('search_transactions')!, 'search_transactions', { query: 'groceries' }, 'http-mcp');
     if (!created.ok || created.kind !== 'operation') throw new Error('expected a read-ask operation');
 
     let settled: Record<string, unknown> | null = null;
@@ -295,10 +295,10 @@ describe('/mcp read with ask', () => {
   test('a rejected /mcp read answers with the outcome and no data', async () => {
     const db = createTestDb();
     seedTestData(db);
-    setPolicy(db, admin, 'transaction_search', 'ask');
-    const { token } = mintTestToken(db, ['transaction_search']);
+    setPolicy(db, admin, 'search_transactions', 'ask');
+    const { token } = mintTestToken(db, ['search_transactions']);
     const resolved = resolveClientToken(db, token, 'test')!;
-    const created = await callTool(db, resolved.scope, resolved.grantByTool.get('transaction_search')!, 'transaction_search', { query: 'groceries' }, 'http-mcp');
+    const created = await callTool(db, resolved.scope, resolved.grantByTool.get('search_transactions')!, 'search_transactions', { query: 'groceries' }, 'http-mcp');
     if (!created.ok || created.kind !== 'operation') throw new Error('expected a read-ask operation');
     const waiting = awaitOperationOutcome(db, created.operation.id);
     rejectOperation(db, created.operation.id);
@@ -309,7 +309,7 @@ describe('/mcp read with ask', () => {
 });
 
 describe('the card for a read', () => {
-  test('transaction_search shows the server-parsed filter and the full args, not a truncated query', async () => {
+  test('search_transactions shows the server-parsed filter and the full args, not a truncated query', async () => {
     const db = createTestDb();
     seedTestData(db);
     const long = `dining over $50 ${'x'.repeat(150)}`;
@@ -327,7 +327,7 @@ describe('the card for a read', () => {
   test('other read tools show their full canonical args and no parsed filter', async () => {
     const db = createTestDb();
     seedTestData(db);
-    const op = await askRead(db, testScope(), '', 'forecast');
+    const op = await askRead(db, testScope(), '', 'get_cash_forecast');
     const view = toOperationView(op, { sessionGeneration: op.session_generation, db });
     expect(view.read!.args).toEqual({});
     expect(view.read!.filter).toBeUndefined();
@@ -337,9 +337,9 @@ describe('the card for a read', () => {
     const db = createTestDb();
     seedTestData(db);
     const scope = testScope();
-    const grants = grantTools(db, scope, ['edit_transaction']);
+    const grants = grantTools(db, scope, ['update_transaction']);
     const id = (db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number }).id;
-    const made = await callTool(db, scope, grants.edit_transaction, 'edit_transaction', { id, notes: 'n' }, 'imperative');
+    const made = await callTool(db, scope, grants.update_transaction, 'update_transaction', { id, notes: 'n' }, 'imperative');
     if (!made.ok || made.kind !== 'operation') throw new Error('expected an operation');
     const view = toOperationView(made.operation, { sessionGeneration: scope.sessionGeneration, db });
     expect(view.kind).toBe('mutation');

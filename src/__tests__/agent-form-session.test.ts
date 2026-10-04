@@ -96,7 +96,7 @@ const invariant = (h: Harness, where: string) => {
 };
 
 describe('G1: the verifier repro (human route, then toolcancel)', () => {
-  for (const [classification, tool] of [['read', 'filter_transactions'], ['page', 'set_forecast_inputs']] as const) {
+  for (const [classification, tool] of [['read', 'list_transactions'], ['page', 'fill_forecast_inputs']] as const) {
     test(`${classification} form: activate, human submit, settle, toolcancel leaves held:false and the form takes human edits`, async () => {
       const h = new Harness(classification, tool);
       h.event({ type: 'toolactivated', toolName: tool });
@@ -177,7 +177,7 @@ describe('G1: the verifier repro (human route, then toolcancel)', () => {
       nativeEvent: { agentInvoked: false, preventDefault: () => {} },
       classification: 'mutating',
       agentTouched: true,
-      toolName: 'review_action',
+      toolName: 'resolve_review_item',
       getArgs: () => ({}),
       callServerTool: async () => new Promise(() => {}),
       onAuthorized: () => { log.push('authorized'); },
@@ -190,9 +190,9 @@ describe('G1: the verifier repro (human route, then toolcancel)', () => {
 
 describe('G1 safety net: the tracker flag never drops while the guard is still active', () => {
   test('a reset, a toolcancel, or the tool going not-live after a settle that missed the guard discards and restores', () => {
-    for (const drop of [{ type: 'reset' } as const, { type: 'toolcancel', toolName: 'filter_transactions' } as const]) {
-      const s = new AgentFormSession<string>('filter_transactions');
-      s.apply({ type: 'toolactivated', toolName: 'filter_transactions' }, { policy: 'ask', take: () => 'human' });
+    for (const drop of [{ type: 'reset' } as const, { type: 'toolcancel', toolName: 'list_transactions' } as const]) {
+      const s = new AgentFormSession<string>('list_transactions');
+      s.apply({ type: 'toolactivated', toolName: 'list_transactions' }, { policy: 'ask', take: () => 'human' });
       const r = s.apply(drop);
       expect(r.restore).toEqual({ value: 'human' });
       expect(s.guard.active).toBe(false);
@@ -201,8 +201,8 @@ describe('G1 safety net: the tracker flag never drops while the guard is still a
   });
 
   test('a settle that drops the flag while the guard is unreleased (an outcome never arrived) discards the agent values', () => {
-    const s = new AgentFormSession<string>('set_forecast_inputs');
-    s.apply({ type: 'toolactivated', toolName: 'set_forecast_inputs' }, { policy: 'ask', take: () => 'human' });
+    const s = new AgentFormSession<string>('fill_forecast_inputs');
+    s.apply({ type: 'toolactivated', toolName: 'fill_forecast_inputs' }, { policy: 'ask', take: () => 'human' });
     const token = s.tracker.beginSubmit();
     const r = s.settle(token); // e.g. the human route used to settle without ever authorizing
     expect(r.touched).toBe(false);
@@ -211,18 +211,18 @@ describe('G1 safety net: the tracker flag never drops while the guard is still a
   });
 
   test('a stale settle (a newer activation happened) neither clears the flag nor touches the guard', () => {
-    const s = new AgentFormSession<string>('filter_transactions');
-    s.apply({ type: 'toolactivated', toolName: 'filter_transactions' }, { policy: 'ask', take: () => 'h1' });
+    const s = new AgentFormSession<string>('list_transactions');
+    s.apply({ type: 'toolactivated', toolName: 'list_transactions' }, { policy: 'ask', take: () => 'h1' });
     const old = s.tracker.beginSubmit();
-    s.apply({ type: 'toolactivated', toolName: 'filter_transactions' }, { policy: 'ask', take: () => 'h2' });
+    s.apply({ type: 'toolactivated', toolName: 'list_transactions' }, { policy: 'ask', take: () => 'h2' });
     const r = s.settle(old);
     expect(r).toEqual({ touched: true, cleared: false, restore: null });
     expect(s.guard.active).toBe(true);
   });
 
   test('an activation for a different tool does not touch this session', () => {
-    const s = new AgentFormSession<string>('filter_transactions');
-    const r = s.apply({ type: 'toolactivated', toolName: 'set_forecast_inputs' }, { policy: 'ask', take: () => 'h' });
+    const s = new AgentFormSession<string>('list_transactions');
+    const r = s.apply({ type: 'toolactivated', toolName: 'fill_forecast_inputs' }, { policy: 'ask', take: () => 'h' });
     expect(r).toEqual({ touched: false, cleared: false, restore: null });
     expect(s.guard.active).toBe(false);
   });
@@ -258,7 +258,7 @@ describe('G1 invariant: (tracker.touched === false) implies (guard.active === fa
     while (open.length) { await (open.shift() as () => Promise<void>)(); invariant(h, `draining [${steps.join(',')}]`); }
   }
 
-  for (const [classification, tool] of [['read', 'filter_transactions'], ['page', 'set_forecast_inputs'], ['mutating', 'review_action']] as const) {
+  for (const [classification, tool] of [['read', 'list_transactions'], ['page', 'fill_forecast_inputs'], ['mutating', 'resolve_review_item']] as const) {
     test(`${classification}: every sequence of up to 4 events keeps the invariant`, async () => {
       let n = 0;
       const walk = async (prefix: Step[], depth: number): Promise<void> => {
@@ -281,12 +281,12 @@ describe('G1 invariant: (tracker.touched === false) implies (guard.active === fa
   }
 
   test('after a human submit settles, an agent that activates again is held and discardable again (no stuck state)', async () => {
-    const h = new Harness('read', 'filter_transactions');
-    h.event({ type: 'toolactivated', toolName: 'filter_transactions' });
+    const h = new Harness('read', 'list_transactions');
+    h.event({ type: 'toolactivated', toolName: 'list_transactions' });
     await h.submit('human').finish();
-    h.event({ type: 'toolactivated', toolName: 'filter_transactions' });
+    h.event({ type: 'toolactivated', toolName: 'list_transactions' });
     expect(h.held).toBe(true);
-    h.event({ type: 'toolcancel', toolName: 'filter_transactions' });
+    h.event({ type: 'toolcancel', toolName: 'list_transactions' });
     expect(h.held).toBe(false);
     expect(h.active).toBe(false);
   });
@@ -312,7 +312,7 @@ describe('G1 source guards: the hook runs the session, not a bare tracker next t
  * the activation bumped the generation) are stale, so neither Approve nor Reject can settle the guard.
  */
 describe('Chrome 154 order: fill, agentInvoked submit, then toolactivated', () => {
-  const tool = 'set_forecast_inputs';
+  const tool = 'fill_forecast_inputs';
   /** The hook's input-capture listener: the browser's agent wrote a field, before the page's own onChange. */
   const fill = (h: Harness) => { h.event({ type: 'agentfill' }); h.human = 'agent-filled'; };
 

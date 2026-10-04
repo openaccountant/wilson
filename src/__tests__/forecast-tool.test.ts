@@ -85,7 +85,7 @@ describe('forecast tool', () => {
 
   test('the MCP forecast tool is the one path that allows 60 months', async () => {
     const db = createTestDb();
-    const out = (await executeRead(db, 'forecast', { horizonMonths: 60 })) as { horizonMonths: number };
+    const out = (await executeRead(db, 'get_cash_forecast', { horizonMonths: 60 })) as { horizonMonths: number };
     expect(out.horizonMonths).toBe(60);
   });
 });

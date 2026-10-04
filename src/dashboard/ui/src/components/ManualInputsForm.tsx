@@ -95,7 +95,7 @@ interface ManualInputsFormProps {
   onMonthlyIncomeChange: (value: number) => void;
   onMonthlyContributionChange: (value: number) => void;
   /**
-   * An agent submitted the form (`set_forecast_inputs`): the values are now in the boxes, so the page computes
+   * An agent submitted the form (`fill_forecast_inputs`): the values are now in the boxes, so the page computes
    * the projection and this resolves with what to tell the agent. Without it the agent just gets the server's OK.
    */
   awaitProjection?: (values: ManualInputValues) => Promise<unknown>;
@@ -127,11 +127,11 @@ export function ManualInputsForm({
   const [rawIncome, setRawIncome] = useState(() => String(cents(defaultMonthlyIncome)));
   const [rawSavings, setRawSavings] = useState(() => String(cents(defaultMonthlyContribution)));
 
-  // The form is also a declarative WebMCP tool (`set_forecast_inputs`, a page tool): the server authorizes and
+  // The form is also a declarative WebMCP tool (`fill_forecast_inputs`, a page tool): the server authorizes and
   // audits the call, then the page puts the numbers in the boxes, recomputes, and tells the agent the percentiles.
   // A person's submit needs nothing extra: typing already updates the projection.
   const declarative = useDeclarativeTool({
-    tool: 'set_forecast_inputs',
+    tool: 'fill_forecast_inputs',
     // The human's three boxes, captured when an agent activates the form and put back when its values are not authorized
     // (Reject, expiry, a refusal, the agent cancelling). While the card is open (policy Ask) the projection ignores them.
     snapshot: () => ({ start: rawStart, income: rawIncome, savings: rawSavings }),

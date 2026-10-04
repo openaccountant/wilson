@@ -1,5 +1,7 @@
 # WebMCP hardening, user control, declarative/imperative tools, LLM judge
 
+> Tool names: 15 catalog tools were renamed in 0.10.0 (map in `specs/webmcp-tool-naming.md` §2, for example `tax_flag` is now `set_tax_flag`, `transaction_search` is `search_transactions`). This record keeps the names it was written with; read old names through that map. Chat tool names did not change.
+
 Status: implemented through P4a on feat/webmcp-security-judge (P4b deferred). Design spec, **revision 2** (after the security and fit critiques; changes are listed in §C, and the critiques we did not take are in §D). Branch `feat/webmcp-security-judge` (from `release/0.10.0` @ `1bc5ae4`).
 Binding input: `00-decisions.md` (phases P0–P4, judge policy). Threats referenced as `Txx` are in `specs/webmcp-threat-model.md`.
 Phases ship in this order: **P0a → P0b → P1 → P2 → P3 → P4a → P4b**. Each one is gated: its tests pass, typecheck passes, a UI build is done when UI changed, then a live-Chrome pass for P2–P4. P0b needs Open Question 1 approved. P4b needs Open Question 22 approved.

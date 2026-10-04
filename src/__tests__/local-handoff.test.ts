@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { createTestDb, seedTestData } from './helpers.js';
 import {
   HANDOFF_BLOCK_END,
   HANDOFF_BLOCK_HEADER,
+  HANDOFF_TO_CATALOG,
   type LocalHandoffV1,
 } from '../dashboard/local-handoff-format.js';
 import {
@@ -12,6 +14,7 @@ import {
   parseLocalHandoff,
   reexecuteSteps,
   renderHandoffBlock,
+  serverReadExecutor,
   stripHandoffBlock,
   stripInjectedContext,
   summarizeServerRead,
@@ -559,5 +562,35 @@ describe('buildHandoffContext', () => {
     expect(block.startsWith(HANDOFF_BLOCK_HEADER)).toBe(true);
     expect(block.endsWith(`${HANDOFF_BLOCK_END}\n\n`)).toBe(true);
     expect(block).toContain('No transactions found');
+  });
+});
+
+// ── I11: the mirror boundary (specs/webmcp-tool-naming.md §4.9) ──────────────
+
+describe('I11: handoff step names are mirror names, executed through the one boundary map', () => {
+  test('the handoff keeps the mirror vocabulary: a transaction_search step is accepted', () => {
+    const r = parseLocalHandoff(validHandoff({ steps: [{ tool: 'transaction_search', args: { query: 'x' }, ok: true, summary: '' }] }), { providerIsLocal: false });
+    expect(r.ok).toBe(true);
+  });
+
+  test('a catalog-vocabulary or retired-vocabulary step name is not a mirror tool and is refused', () => {
+    for (const tool of ['search_transactions', 'get_spending_summary', 'get_cash_forecast', 'edit_transaction', 'tax_flag']) {
+      const raw = validHandoff({ steps: [{ tool: tool as never, args: {}, ok: true, summary: '' }] });
+      expect(parseLocalHandoff(raw, { providerIsLocal: false }), tool).toEqual({ ok: false });
+    }
+  });
+
+  test('a transaction_search step executes the catalog tool search_transactions on the server', async () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const data = (await serverReadExecutor(db)('transaction_search', { query: 'a' })) as Record<string, unknown>;
+    expect(Array.isArray(data.items)).toBe(true);
+    const args: Record<keyof typeof HANDOFF_TO_CATALOG, Record<string, unknown>> = {
+      transaction_search: { query: 'a' }, spending_summary: { period: 'month' }, profit_loss: { period: 'year' },
+      net_worth: { action: 'summary' }, forecast: { trailingMonths: 1, horizonMonths: 2 },
+    };
+    for (const mirror of Object.keys(HANDOFF_TO_CATALOG) as Array<keyof typeof HANDOFF_TO_CATALOG>) {
+      expect(await serverReadExecutor(db)(mirror, args[mirror]), mirror).toBeDefined();
+    }
   });
 });

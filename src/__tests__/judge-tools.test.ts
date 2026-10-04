@@ -24,7 +24,7 @@ import type { Database } from '../db/compat-sqlite.js';
 
 const ADMIN = { userId: null, role: 'admin' as const, authEnabled: false };
 const RATIONALE = 'grounded: every figure matches the tool result';
-const JUDGE_TOOLS = ['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgements', 'judge_interaction'] as const;
+const JUDGE_TOOLS = ['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgments', 'propose_judgment'] as const;
 
 afterEach(() => {
   ensureTestProfile();
@@ -71,7 +71,7 @@ function setup(tools: readonly string[] = JUDGE_TOOLS, scopeOverrides: Partial<R
   const scope = testScope(scopeOverrides);
   const grants = grantTools(db, scope, [...tools]);
   if (allowProposals) {
-    for (const tool of ['propose_judgements', 'judge_interaction']) {
+    for (const tool of ['propose_judgments', 'propose_judgment']) {
       if (tools.includes(tool)) expect(setPolicy(db, ADMIN, tool, 'allow').ok).toBe(true);
     }
   }
@@ -91,7 +91,7 @@ async function read(call: Call, tool: string, args: unknown = {}): Promise<any> 
 }
 
 const propose = (call: Call, items: unknown[], extra: Record<string, unknown> = {}) =>
-  call('propose_judgements', { judgeModel: 'claude-test', rubricVersion: JUDGE_RUBRIC_VERSION, items, ...extra });
+  call('propose_judgments', { judgeModel: 'claude-test', rubricVersion: JUDGE_RUBRIC_VERSION, items, ...extra });
 
 const item = (interactionId: number, extra: Record<string, unknown> = {}) => ({ interactionId, rating: 4, rationale: RATIONALE, ...extra });
 
@@ -111,13 +111,13 @@ describe('catalog entries for the judge', () => {
     expect(getToolDef('list_interactions')!.untrustedOutput).toBe(true);
     expect(getToolDef('get_interaction')!.untrustedOutput).toBe(true);
 
-    const propose = getToolDef('propose_judgements')!;
+    const propose = getToolDef('propose_judgments')!;
     expect(propose.classification).toBe('proposal');
     expect(propose.defaultPolicy).toBe('ask');
     expect(propose.minRole).toBe('admin');
     expect([...propose.transports]).toEqual(['webmcp', 'http-mcp']);
 
-    const form = getToolDef('judge_interaction')!;
+    const form = getToolDef('propose_judgment')!;
     expect(form.classification).toBe('proposal');
     expect(form.exposure).toBe('declarative');
     expect([...form.transports]).toEqual(['webmcp']);
@@ -126,22 +126,22 @@ describe('catalog entries for the judge', () => {
   });
 
   test('proposal tools are consequential, not read-only; reads are read-only', () => {
-    for (const name of ['propose_judgements', 'judge_interaction']) {
+    for (const name of ['propose_judgments', 'propose_judgment']) {
       expect(toolAnnotations(name)).toEqual({ readOnlyHint: false, consequentialHint: true, untrustedContentHint: false });
     }
     expect(toolAnnotations('get_interaction')).toEqual({ readOnlyHint: true, consequentialHint: false, untrustedContentHint: true });
   });
 
-  test('propose_judgements has no pair input, no status, no source (the schema is strict)', () => {
-    const schema = jsonSchemaFor('propose_judgements') as { properties: Record<string, unknown> };
+  test('propose_judgments has no pair input, no status, no source (the schema is strict)', () => {
+    const schema = jsonSchemaFor('propose_judgments') as { properties: Record<string, unknown> };
     expect(Object.keys(schema.properties).sort()).toEqual(['items', 'judgeModel', 'rubricVersion']);
     const itemSchema = (schema.properties.items as { items: { properties: Record<string, unknown>; additionalProperties: unknown } }).items;
     expect(Object.keys(itemSchema.properties).sort()).toEqual(['criteria', 'interactionId', 'preference', 'rating', 'rationale', 'tags']);
     expect(itemSchema.additionalProperties).toBe(false);
     for (const key of ['pairs', 'pair_id', 'pairId', 'status', 'source']) {
-      const top = parseToolArgs('propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1)], [key]: 'x' });
+      const top = parseToolArgs('propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1)], [key]: 'x' });
       expect(top.ok, `top-level ${key}`).toBe(false);
-      const nested = parseToolArgs('propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1, { [key]: 'x' })] });
+      const nested = parseToolArgs('propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1, { [key]: 'x' })] });
       expect(nested.ok, `item ${key}`).toBe(false);
     }
   });
@@ -560,7 +560,7 @@ describe('get_judge_rubric', () => {
   });
 });
 
-describe('propose_judgements', () => {
+describe('propose_judgments', () => {
   test('writes source=judge, status=proposed rows only, with provenance, and answers created/ids/skipped', async () => {
     const { db, scope, call } = setup();
     const a = addInteraction(db);
@@ -593,7 +593,7 @@ describe('propose_judgements', () => {
   test('a stale rubricVersion is a 409 rubric_changed and writes nothing', async () => {
     const { db, call } = setup();
     const a = addInteraction(db);
-    const out = await call('propose_judgements', { judgeModel: 'm', rubricVersion: 'stale000000', items: [item(a)] });
+    const out = await call('propose_judgments', { judgeModel: 'm', rubricVersion: 'stale000000', items: [item(a)] });
     expect(out.ok).toBe(false);
     if (!out.ok) {
       expect(out.status).toBe(409);
@@ -649,7 +649,7 @@ describe('propose_judgements', () => {
     const b = addInteraction(db);
     const hidden = await propose(call, [item(b, { rationale: 'grounded: looks fine ‮to me' })]);
     expect(hidden.ok).toBe(false);
-    const model = await call('propose_judgements', { judgeModel: 'evil model!', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(b)] });
+    const model = await call('propose_judgments', { judgeModel: 'evil model!', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(b)] });
     expect(model.ok).toBe(false); // judgeModel must match /^[\w.:/-]{1,64}$/
   });
 
@@ -666,11 +666,11 @@ describe('propose_judgements', () => {
     const a = addInteraction(db);
     const tabA = testScope();
     const tabB = testScope();
-    const grantsA = grantTools(db, tabA, ['propose_judgements']);
-    const grantsB = grantTools(db, tabB, ['propose_judgements']);
-    setPolicy(db, ADMIN, 'propose_judgements', 'allow');
+    const grantsA = grantTools(db, tabA, ['propose_judgments']);
+    const grantsB = grantTools(db, tabB, ['propose_judgments']);
+    setPolicy(db, ADMIN, 'propose_judgments', 'allow');
     const run = (scope: RequestScope, grants: Record<string, string>, rating: number) =>
-      callTool(db, scope, grants.propose_judgements, 'propose_judgements', { judgeModel: 'claude-test', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a, { rating })] }, 'imperative');
+      callTool(db, scope, grants.propose_judgments, 'propose_judgments', { judgeModel: 'claude-test', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a, { rating })] }, 'imperative');
 
     await run(tabA, grantsA, 2);
     await run(tabB, grantsB, 3);
@@ -704,7 +704,7 @@ describe('propose_judgements', () => {
     for (const def of MCP_TOOL_CATALOG) {
       expect(Object.keys(def.zodShape).some((k) => /judgeDailyLimit|daily/i.test(k)), def.name).toBe(false);
     }
-    const out = parseToolArgs('propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1)], judgeDailyLimit: 2000 });
+    const out = parseToolArgs('propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(1)], judgeDailyLimit: 2000 });
     expect(out.ok).toBe(false);
   });
 
@@ -712,16 +712,16 @@ describe('propose_judgements', () => {
     const db = createTestDb();
     const user = await makeUser(db, 'viewer1', 'viewer');
     const scope = testScope({ role: 'viewer', userId: user.id });
-    const refusedGrant = (await import('../mcp/engine.js')).grantLocalAccess(db, scope, ['propose_judgements']);
+    const refusedGrant = (await import('../mcp/engine.js')).grantLocalAccess(db, scope, ['propose_judgments']);
     expect(refusedGrant.ok).toBe(false);
     if (!refusedGrant.ok) expect(refusedGrant.status).toBe(403);
     // A viewer may read the judge tools.
     expect((await import('../mcp/engine.js')).grantLocalAccess(db, scope, ['list_interactions', 'get_interaction', 'get_judge_rubric']).ok).toBe(true);
   });
 
-  test('judge_interaction is refused over /mcp (it is a form in the tab) and propose_judgements needs auth for tokens', async () => {
+  test('propose_judgment is refused over /mcp (it is a form in the tab) and propose_judgments needs auth for tokens', async () => {
     const { call } = setup();
-    const out = await call('judge_interaction', { interaction_id: 1, rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'http-mcp');
+    const out = await call('propose_judgment', { interaction_id: 1, rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'http-mcp');
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.status).toBe(404);
   });
@@ -773,9 +773,9 @@ describe('proposals under policy Ask', () => {
     const db = createTestDb();
     const owner = await makeUser(db, 'admin1', 'admin');
     const scope = testScope({ userId: owner.id });
-    const grants = grantTools(db, scope, ['propose_judgements']);
+    const grants = grantTools(db, scope, ['propose_judgments']);
     const a = addInteraction(db);
-    const out = await callTool(db, scope, grants.propose_judgements, 'propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'imperative');
+    const out = await callTool(db, scope, grants.propose_judgments, 'propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'imperative');
     if (!out.ok || out.kind !== 'operation') throw new Error('expected an operation');
     const viewerApprove = approveWebMcpOperation(db, out.operation.id, 'test', { userId: owner.id, role: 'viewer', authEnabled: true });
     expect(viewerApprove.outcome).toBe('forbidden');
@@ -794,12 +794,12 @@ describe('proposals under policy Ask', () => {
   });
 });
 
-describe('judge_interaction (the declarative form)', () => {
+describe('propose_judgment (the declarative form)', () => {
   test('inserts one proposal with the current rubric version, created_via declarative, whatever transport it claims', async () => {
     const { db, call } = setup();
     const a = addInteraction(db);
     for (const transport of ['declarative', 'imperative'] as const) {
-      const out = await call('judge_interaction', { interaction_id: a, rating: 3, rationale: RATIONALE, judge_model: `form-${transport}` }, transport);
+      const out = await call('propose_judgment', { interaction_id: a, rating: 3, rationale: RATIONALE, judge_model: `form-${transport}` }, transport);
       expect(out.ok && out.kind === 'read' && out.data).toMatchObject({ created: 1 });
     }
     const rows = db.prepare("SELECT created_via, rubric_version, judge_model, status, source FROM interaction_annotations").all() as Array<Record<string, string>>;
@@ -809,16 +809,16 @@ describe('judge_interaction (the declarative form)', () => {
     }
   });
 
-  test('an unknown interaction is a 404 and shares the 6-calls-a-minute limit with propose_judgements', async () => {
+  test('an unknown interaction is a 404 and shares the 6-calls-a-minute limit with propose_judgments', async () => {
     const { db, call } = setup();
     const a = addInteraction(db);
-    const missing = await call('judge_interaction', { interaction_id: 424242, rating: 3, rationale: RATIONALE, judge_model: 'm' }, 'declarative');
+    const missing = await call('propose_judgment', { interaction_id: 424242, rating: 3, rationale: RATIONALE, judge_model: 'm' }, 'declarative');
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.status).toBe(404);
     // Five more calls from either tool use up the six-per-minute bucket (the 404 above spent one).
     for (let i = 0; i < 2; i++) expect((await propose(call, [item(a)])).ok).toBe(true);
     for (let i = 0; i < 3; i++) {
-      expect((await call('judge_interaction', { interaction_id: a, rating: 3, rationale: RATIONALE, judge_model: 'm' }, 'declarative')).ok).toBe(true);
+      expect((await call('propose_judgment', { interaction_id: a, rating: 3, rationale: RATIONALE, judge_model: 'm' }, 'declarative')).ok).toBe(true);
     }
     const seventh = await propose(call, [item(a)]);
     expect(seventh.ok).toBe(false);
@@ -828,20 +828,20 @@ describe('judge_interaction (the declarative form)', () => {
   test('is not exposed to the bridge as an imperative tool: exposure is declarative', () => {
     const { db, scope } = setup();
     const tools = exposedTools(db, scope);
-    const form = tools.find((t) => t.name === 'judge_interaction');
+    const form = tools.find((t) => t.name === 'propose_judgment');
     expect(form?.exposure).toBe('declarative');
     expect(form?.surface).toEqual({ tab: 'llm' });
   });
 });
 
 describe('judge call rate limit', () => {
-  test('propose_judgements and judge_interaction share one bucket of 6 calls a minute per user; a rotated session gains nothing', async () => {
+  test('propose_judgments and propose_judgment share one bucket of 6 calls a minute per user; a rotated session gains nothing', async () => {
     const { db, call } = setup();
     const clock = { now: Date.now() };
     setLimiterFor(db, new RateLimiter({ now: () => clock.now }));
     const fresh = () => addInteraction(db);
     for (let i = 0; i < 5; i++) expect((await propose(call, [item(fresh())])).ok).toBe(true);
-    const form = await call('judge_interaction', { interaction_id: fresh(), rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'declarative');
+    const form = await call('propose_judgment', { interaction_id: fresh(), rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'declarative');
     expect(form.ok).toBe(true); // the sixth call
     const seventh = await propose(call, [item(fresh())]);
     expect(seventh.ok).toBe(false);
@@ -849,7 +849,7 @@ describe('judge call rate limit', () => {
     // Another session of the same user shares the user-level bucket.
     const scope2 = testScope();
     const grants2 = grantTools(db, scope2, [...JUDGE_TOOLS]);
-    const rotated = await callTool(db, scope2, grants2.propose_judgements, 'propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(fresh())] }, 'imperative');
+    const rotated = await callTool(db, scope2, grants2.propose_judgments, 'propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(fresh())] }, 'imperative');
     expect(rotated.ok).toBe(false);
     if (!rotated.ok) expect(rotated.code).toBe('rate_limited');
     // After the window the bucket is open again.
@@ -872,7 +872,7 @@ describe('agreement is measured only on blind proposals', () => {
     const afterOpen = await seedRated(db, 4);
 
     expect((await propose(call, [item(blind, { rating: 5 })])).ok).toBe(true); // within 1 of 4
-    expect((await call('judge_interaction', { interaction_id: viaForm, rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'declarative')).ok).toBe(true);
+    expect((await call('propose_judgment', { interaction_id: viaForm, rating: 4, rationale: RATIONALE, judge_model: 'm' }, 'declarative')).ok).toBe(true);
     expect((await call('open_interaction', { id: afterOpen }, 'page')).ok).toBe(true);
     expect((await propose(call, [item(afterOpen, { rating: 4 })])).ok).toBe(true);
 
@@ -886,13 +886,13 @@ describe('agreement is measured only on blind proposals', () => {
     // A second session (new sessionGeneration, so a different principal) of the same user proposes afterwards.
     const scope2 = testScope();
     const grants2 = grantTools(db, scope2, [...JUDGE_TOOLS]);
-    const out = await callTool(db, scope2, grants2.propose_judgements, 'propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(id, { rating: 4 })] }, 'imperative');
+    const out = await callTool(db, scope2, grants2.propose_judgments, 'propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(id, { rating: 4 })] }, 'imperative');
     expect(out.ok).toBe(true);
     expect(agreement(db)).toEqual({ n: 0, within1Pct: null });
     // A different user's open does not count against this user's proposal.
     const other = await seedRated(db, 4);
     db.prepare("INSERT INTO mcp_audit_log (transport, principal_kind, principal_id, user_id, role, origin, tool_name, classification, decision, args_preview) VALUES ('page','tab','someone-else',7,'admin','http://x','open_interaction','page','allowed', @p)").run({ p: JSON.stringify({ id: other }) });
-    expect((await callTool(db, scope2, grants2.propose_judgements, 'propose_judgements', { judgeModel: 'm2', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(other, { rating: 4 })] }, 'imperative')).ok).toBe(true);
+    expect((await callTool(db, scope2, grants2.propose_judgments, 'propose_judgments', { judgeModel: 'm2', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(other, { rating: 4 })] }, 'imperative')).ok).toBe(true);
     expect(agreement(db)).toEqual({ n: 1, within1Pct: 100 });
   });
 
@@ -928,7 +928,7 @@ describe('agreement is measured only on blind proposals', () => {
     for (let s = 0; s < 6; s++) {
       const scope = testScope();
       const grants = grantTools(db, scope, [...JUDGE_TOOLS]);
-      const out = await callTool(db, scope, grants.propose_judgements, 'propose_judgements', {
+      const out = await callTool(db, scope, grants.propose_judgments, 'propose_judgments', {
         judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: ids.map((id) => item(id, { rating: 5 })),
       }, 'imperative');
       expect(out.ok).toBe(true);
@@ -945,7 +945,7 @@ describe('agreement is measured only on blind proposals', () => {
         items: [{ interactionId: id, rating, rationale: RATIONALE }],
       });
       expect(out.ok).toBe(true);
-      db.prepare("INSERT INTO mcp_audit_log (transport, principal_kind, principal_id, user_id, role, origin, tool_name, classification, decision) VALUES ('imperative','tab',@p,42,'admin','http://x','propose_judgements','proposal','allowed')").run({ p: principal });
+      db.prepare("INSERT INTO mcp_audit_log (transport, principal_kind, principal_id, user_id, role, origin, tool_name, classification, decision) VALUES ('imperative','tab',@p,42,'admin','http://x','propose_judgments','proposal','allowed')").run({ p: principal });
     };
     for (let i = 0; i < 5; i++) insert(`rot-${i}`, 1); // far from the human 5
     insert('rot-5', 5); // the newest
@@ -964,22 +964,22 @@ describe('agreement is measured only on blind proposals', () => {
 describe('judge tools over /mcp (client tokens)', () => {
   test('mint rules: the reads work for any token; a proposal needs dashboard auth and an admin; the form is tab-only', () => {
     expect(checkTokenTools(['list_interactions', 'get_interaction', 'get_judge_rubric'], { role: 'viewer', authEnabled: false })).toBeNull();
-    const noAuth = checkTokenTools(['propose_judgements'], { role: 'admin', authEnabled: false });
+    const noAuth = checkTokenTools(['propose_judgments'], { role: 'admin', authEnabled: false });
     expect(noAuth?.status).toBe(400);
     expect(noAuth?.error).toContain('Enable dashboard auth');
-    expect(checkTokenTools(['propose_judgements'], { role: 'admin', authEnabled: true })).toBeNull();
-    expect(checkTokenTools(['propose_judgements'], { role: 'viewer', authEnabled: true })?.status).toBe(403);
-    const form = checkTokenTools(['judge_interaction'], { role: 'admin', authEnabled: true });
+    expect(checkTokenTools(['propose_judgments'], { role: 'admin', authEnabled: true })).toBeNull();
+    expect(checkTokenTools(['propose_judgments'], { role: 'viewer', authEnabled: true })?.status).toBe(403);
+    const form = checkTokenTools(['propose_judgment'], { role: 'admin', authEnabled: true });
     expect(form?.status).toBe(400);
     expect(form?.error).toContain('only works inside the dashboard tab');
   });
 
   test('tools/list hides a proposal tool while dashboard auth is off, and shows it once auth is on', () => {
-    const grants = ['get_judge_rubric', 'propose_judgements'].map((tool_name) => ({ tool_name, schema_digest: schemaDigest(tool_name) }));
+    const grants = ['get_judge_rubric', 'propose_judgments'].map((tool_name) => ({ tool_name, schema_digest: schemaDigest(tool_name) }));
     const names = (authEnabled: boolean, liveRole: 'admin' | 'viewer' = 'admin') =>
       visibleToolDefs(MCP_TOOL_CATALOG, grants, { authEnabled, liveRole }).map((d) => d.name);
     expect(names(false)).toEqual(['get_judge_rubric']);
-    expect(names(true)).toEqual(['propose_judgements', 'get_judge_rubric'].sort((a, b) => MCP_TOOL_CATALOG.findIndex((d) => d.name === a) - MCP_TOOL_CATALOG.findIndex((d) => d.name === b)));
+    expect(names(true)).toEqual(['propose_judgments', 'get_judge_rubric'].sort((a, b) => MCP_TOOL_CATALOG.findIndex((d) => d.name === a) - MCP_TOOL_CATALOG.findIndex((d) => d.name === b)));
     expect(names(true, 'viewer')).toEqual(['get_judge_rubric']);
   });
 
@@ -988,18 +988,18 @@ describe('judge tools over /mcp (client tokens)', () => {
     const admin = await makeUser(db, 'admin1', 'admin');
     enableAuth(db);
     setJudgementDwellMs(0);
-    const minted = mintTestToken(db, ['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgements'], { userId: admin.id, authEnabled: true });
+    const minted = mintTestToken(db, ['list_interactions', 'get_interaction', 'get_judge_rubric', 'propose_judgments'], { userId: admin.id, authEnabled: true });
     const resolved = resolveClientToken(db, minted.token, 'test')!;
     const grant = (tool: string) => resolved.grantByTool.get(tool)!;
     const a = addInteraction(db);
     addHumanRating(db, a, 1, 'HUMAN-NOTE-SECRET');
-    expect(setPolicy(db, { userId: admin.id, role: 'admin', authEnabled: true }, 'propose_judgements', 'allow').ok).toBe(true);
+    expect(setPolicy(db, { userId: admin.id, role: 'admin', authEnabled: true }, 'propose_judgments', 'allow').ok).toBe(true);
 
     const rubric = await callTool(db, resolved.scope, grant('get_judge_rubric'), 'get_judge_rubric', {}, 'http-mcp');
     expect(rubric.ok && rubric.kind === 'read' && (rubric.data as { version: string }).version).toBe(JUDGE_RUBRIC_VERSION);
     const overview = await callTool(db, resolved.scope, grant('get_interaction'), 'get_interaction', { id: a }, 'http-mcp');
     expect(JSON.stringify(overview)).not.toContain('HUMAN-NOTE-SECRET');
-    const out = await callTool(db, resolved.scope, grant('propose_judgements'), 'propose_judgements', { judgeModel: 'external-judge', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a, { rating: 2 })] }, 'http-mcp');
+    const out = await callTool(db, resolved.scope, grant('propose_judgments'), 'propose_judgments', { judgeModel: 'external-judge', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a, { rating: 2 })] }, 'http-mcp');
     expect(out.ok && out.kind === 'read' && out.data).toMatchObject({ created: 1 });
     const row = db.prepare("SELECT principal_id, created_via, status, source FROM interaction_annotations WHERE source = 'judge'").get() as Record<string, string>;
     expect(row).toEqual({ principal_id: minted.id, created_via: 'http-mcp', status: 'proposed', source: 'judge' });
@@ -1012,11 +1012,11 @@ describe('judge tools over /mcp (client tokens)', () => {
     const db = createTestDb();
     const admin = await makeUser(db, 'admin1', 'admin');
     enableAuth(db);
-    const minted = mintTestToken(db, ['propose_judgements'], { userId: admin.id, authEnabled: true });
+    const minted = mintTestToken(db, ['propose_judgments'], { userId: admin.id, authEnabled: true });
     const resolved = resolveClientToken(db, minted.token, 'test')!;
     const a = addInteraction(db);
     disableAuth(db);
-    const out = await callTool(db, resolved.scope, resolved.grantByTool.get('propose_judgements')!, 'propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'http-mcp');
+    const out = await callTool(db, resolved.scope, resolved.grantByTool.get('propose_judgments')!, 'propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'http-mcp');
     expect(out.ok).toBe(false);
     expect(count(db, 'interaction_annotations')).toBe(0);
   });
@@ -1025,10 +1025,10 @@ describe('judge tools over /mcp (client tokens)', () => {
     const db = createTestDb();
     const admin = await makeUser(db, 'admin1', 'admin');
     enableAuth(db);
-    const minted = mintTestToken(db, ['propose_judgements'], { userId: admin.id, authEnabled: true });
+    const minted = mintTestToken(db, ['propose_judgments'], { userId: admin.id, authEnabled: true });
     const resolved = resolveClientToken(db, minted.token, 'test')!;
     const a = addInteraction(db);
-    const out = await callTool(db, resolved.scope, resolved.grantByTool.get('propose_judgements')!, 'propose_judgements', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'http-mcp');
+    const out = await callTool(db, resolved.scope, resolved.grantByTool.get('propose_judgments')!, 'propose_judgments', { judgeModel: 'm', rubricVersion: JUDGE_RUBRIC_VERSION, items: [item(a)] }, 'http-mcp');
     if (!out.ok || out.kind !== 'operation') throw new Error('expected an operation');
     expect(approveWebMcpOperation(db, out.operation.id, 'test', { userId: admin.id, role: 'admin', authEnabled: true }).outcome).toBe('committed');
     const row = db.prepare("SELECT principal_id, created_via FROM interaction_annotations WHERE source = 'judge'").get() as Record<string, string>;

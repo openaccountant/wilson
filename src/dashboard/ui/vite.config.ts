@@ -90,7 +90,7 @@ export default defineConfig({
       // and the pure submit routing, argument coercion and option builders those forms share with root tests.
       '@webmcp-registry': path.resolve(__dirname, '../../dashboard/webmcp-page-registry'),
       '@declarative-submit': path.resolve(__dirname, '../../dashboard/declarative-submit-core'),
-      // What `get_page_context` and `navigate_to_tab` answer (pure, tested from the root), registered by WebMcpProvider.
+      // What `get_page_context` and `open_tab` answer (pure, tested from the root), registered by WebMcpProvider.
       '@webmcp-page-tools': path.resolve(__dirname, '../../dashboard/webmcp-page-tools-core'),
       // The Training tab's judge rules: the blind rule for an agent-opened panel, the queue's text and limits,
       // and the export opt-ins (pure, tested from the root).

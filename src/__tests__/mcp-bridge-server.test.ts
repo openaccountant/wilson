@@ -57,12 +57,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', tools: ['transaction_search'] }),
+      body: JSON.stringify({ sessionGeneration: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', tools: ['search_transactions'] }),
     });
 
     const tabATools = await j(base, '/api/mcp/tools?sessionGeneration=cccccccc-cccc-4ccc-8ccc-cccccccccccc');
     const tabBTools = await j(base, '/api/mcp/tools?sessionGeneration=dddddddd-dddd-4ddd-8ddd-dddddddddddd');
-    expect(tabATools.body.tools.map((t: any) => t.name)).toEqual(['transaction_search']);
+    expect(tabATools.body.tools.map((t: any) => t.name)).toEqual(['search_transactions']);
     expect(tabBTools.body.tools).toEqual([]);
   });
 
@@ -87,14 +87,14 @@ describe('WebMCP bridge acceptance matrix', () => {
     const grantAttempt = await j(base, '/api/mcp/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${viewerLogin.body.token}` },
-      body: JSON.stringify({ sessionGeneration: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tools: ['update_transaction'] }),
     });
     expect(grantAttempt.status).toBe(403);
 
     const readGrant = await j(base, '/api/mcp/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${viewerLogin.body.token}` },
-      body: JSON.stringify({ sessionGeneration: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tools: ['transaction_search'] }),
+      body: JSON.stringify({ sessionGeneration: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tools: ['search_transactions'] }),
     });
     expect(readGrant.status).toBe(200);
   });
@@ -103,12 +103,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'confirmed via test' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'confirmed via test' } });
     expect(prepared.body.operation.status).toBe('pending');
     // The AGENT's copy carries no row text: no before/after delta and no summary.
     expect(prepared.body.operation.before_json).toBeUndefined();
@@ -134,12 +134,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'first' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'first' } });
 
     // Someone else (or the plain REST edit route) changes the row in between.
     db.prepare("UPDATE transactions SET revision = revision + 1 WHERE id = @id").run({ id: txnId });
@@ -152,12 +152,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'once' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'once' } });
     const opId = prepared.body.operation.id;
 
     const first = await j(base, `/api/mcp/operations/${opId}/approve`, { method: 'POST' });
@@ -173,12 +173,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'should not land' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'should not land' } });
 
     await j(base, `/api/mcp/grants/${grantId}`, { method: 'DELETE' });
 
@@ -193,12 +193,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'pre-switch' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'pre-switch' } });
 
     // Switch the active profile out from under the pending approval.
     setInitialProfile('a-different-profile', db);
@@ -212,14 +212,14 @@ describe('WebMCP bridge acceptance matrix', () => {
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: `http://localhost:${port}` },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['transaction_search'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['search_transactions'] }),
     });
     const grantId = grantRes.body.grants[0].id;
 
-    const foreignRead = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'transaction_search', args: { query: 'groceries' } }, { Origin: 'http://evil.example' });
+    const foreignRead = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'search_transactions', args: { query: 'groceries' } }, { Origin: 'http://evil.example' });
     expect(foreignRead.status).toBe(403);
 
-    const sameOriginRead = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'transaction_search', args: { query: 'groceries' } }, { Origin: `http://localhost:${port}` });
+    const sameOriginRead = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'search_transactions', args: { query: 'groceries' } }, { Origin: `http://localhost:${port}` });
     expect(sameOriginRead.status).toBe(200);
   });
 
@@ -252,14 +252,14 @@ describe('WebMCP bridge acceptance matrix', () => {
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${login.body.token}` },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
     await j(base, '/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${login.body.token}` } });
 
-    const prepareAfterLogout = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'after logout' } }, { Authorization: `Bearer ${login.body.token}` });
+    const prepareAfterLogout = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'after logout' } }, { Authorization: `Bearer ${login.body.token}` });
     // Unauthorized (token revoked) before the grant even gets checked.
     expect(prepareAfterLogout.status).toBe(401);
   });
@@ -268,12 +268,12 @@ describe('WebMCP bridge acceptance matrix', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', tools: ['update_transaction'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     const txnId = firstTransactionId(db);
 
-    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'edit_transaction', args: { id: txnId, notes: 'reconcile me' } });
+    const prepared = await mcpCall(base, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { grantId, tool: 'update_transaction', args: { id: txnId, notes: 'reconcile me' } });
 
     await j(base, `/api/mcp/operations/${prepared.body.operation.id}/approve`, { method: 'POST' });
 
@@ -352,21 +352,21 @@ describe('grant and operation ownership', () => {
   test('viewer cannot DELETE admin grant (404), and the grant stays live', async () => {
     const { base, adminAuth, viewerAuth } = await authed();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction'], adminAuth);
-    const del = await j(base, `/api/mcp/grants/${grants.edit_transaction}`, { method: 'DELETE', headers: { ...viewerAuth, [SESSION_HEADER]: session } });
+    const grants = await grantVia(base, session, ['update_transaction'], adminAuth);
+    const del = await j(base, `/api/mcp/grants/${grants.update_transaction}`, { method: 'DELETE', headers: { ...viewerAuth, [SESSION_HEADER]: session } });
     expect(del.status).toBe(404);
     expect(del.body.error.code).toBe('not_found');
     const still = await j(base, '/api/mcp/grants', { headers: { ...adminAuth, [SESSION_HEADER]: session } });
     expect(still.body.grants).toHaveLength(1);
     // The owner can.
-    const ownDel = await j(base, `/api/mcp/grants/${grants.edit_transaction}`, { method: 'DELETE', headers: { ...adminAuth, [SESSION_HEADER]: session } });
+    const ownDel = await j(base, `/api/mcp/grants/${grants.update_transaction}`, { method: 'DELETE', headers: { ...adminAuth, [SESSION_HEADER]: session } });
     expect(ownDel.status).toBe(200);
   });
 
   test("GET grants for another user's session returns []", async () => {
     const { base, adminAuth, viewerAuth } = await authed();
     const session = crypto.randomUUID();
-    await grantVia(base, session, ['transaction_search'], adminAuth);
+    await grantVia(base, session, ['search_transactions'], adminAuth);
     const asViewer = await j(base, '/api/mcp/grants', { headers: { ...viewerAuth, [SESSION_HEADER]: session } });
     expect(asViewer.status).toBe(200);
     expect(asViewer.body.grants).toEqual([]);
@@ -377,7 +377,7 @@ describe('grant and operation ownership', () => {
   test("revoke-session by another user revokes nothing", async () => {
     const { base, adminAuth, viewerAuth } = await authed();
     const session = crypto.randomUUID();
-    await grantVia(base, session, ['transaction_search'], adminAuth);
+    await grantVia(base, session, ['search_transactions'], adminAuth);
     const res = await post(base, '/api/mcp/grants/revoke-session', {}, { ...viewerAuth, [SESSION_HEADER]: session });
     expect(res.body.revoked).toBe(0);
     const still = await j(base, '/api/mcp/grants', { headers: { ...adminAuth, [SESSION_HEADER]: session } });
@@ -387,7 +387,7 @@ describe('grant and operation ownership', () => {
   test('grant responses never include the session generation', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const res = await post(base, '/api/mcp/grants', { tools: ['transaction_search'] }, { [SESSION_HEADER]: session });
+    const res = await post(base, '/api/mcp/grants', { tools: ['search_transactions'] }, { [SESSION_HEADER]: session });
     expect(JSON.stringify(res.body)).not.toContain(session);
     expect(JSON.stringify(res.body)).not.toContain('session_generation');
   });
@@ -397,17 +397,17 @@ describe('the agent-facing operation view carries no row text', () => {
   test('/api/mcp/call returns only id, status, tool, expiry, requester and outcome status, for every transport the client reports', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
+    const grants = await grantVia(base, session, ['update_transaction']);
     const txnId = firstTransactionId(db);
     db.prepare("UPDATE transactions SET description = 'SECRET MERCHANT 4111 1111 1111 1111', notes = 'private note' WHERE id = @id").run({ id: txnId });
-    const imperative = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: txnId, notes: 'x' } }, { [SESSION_HEADER]: session });
-    const declarative = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: txnId, notes: 'y' }, transport: 'declarative' }, { [SESSION_HEADER]: session });
+    const imperative = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'x' } }, { [SESSION_HEADER]: session });
+    const declarative = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'y' }, transport: 'declarative' }, { [SESSION_HEADER]: session });
     for (const res of [imperative, declarative]) {
       expect(res.status).toBe(200);
       expect(res.body.kind).toBe('operation');
       const op = res.body.operation;
       expect(Object.keys(op).sort()).toEqual(['expires_at', 'id', 'outcome', 'requestedBy', 'status', 'tool']);
-      expect(op.tool).toBe('edit_transaction');
+      expect(op.tool).toBe('update_transaction');
       expect(op.outcome).toBeNull();
       const raw = JSON.stringify(res.body);
       expect(raw).not.toContain('SECRET MERCHANT');
@@ -419,9 +419,9 @@ describe('the agent-facing operation view carries no row text', () => {
   test('the poll the bridge uses (?view=agent) hands back a sanitized committed result', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
+    const grants = await grantVia(base, session, ['update_transaction']);
     const txnId = firstTransactionId(db);
-    const res = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: txnId, notes: 'z' } }, { [SESSION_HEADER]: session });
+    const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'z' } }, { [SESSION_HEADER]: session });
     const id = res.body.operation.id;
     await j(base, `/api/mcp/operations/${id}/approve`, { method: 'POST' });
     const agent = await j(base, `/api/mcp/operations/${id}?view=agent`, { headers: { [SESSION_HEADER]: session } });
@@ -438,8 +438,8 @@ describe('POST /api/mcp/call', () => {
   test("read path returns {kind:'read'} with the capped envelope", async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['transaction_search']);
-    const res = await post(base, '/api/mcp/call', { grantId: grants.transaction_search, tool: 'transaction_search', args: { query: 'groceries' } }, { [SESSION_HEADER]: session });
+    const grants = await grantVia(base, session, ['search_transactions']);
+    const res = await post(base, '/api/mcp/call', { grantId: grants.search_transactions, tool: 'search_transactions', args: { query: 'groceries' } }, { [SESSION_HEADER]: session });
     expect(res.status).toBe(200);
     expect(res.body.kind).toBe('read');
     expect(res.body.data.total).toBe(2);
@@ -449,9 +449,9 @@ describe('POST /api/mcp/call', () => {
   test("mutating path returns {kind:'operation'} with a projected, pending operation", async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
+    const grants = await grantVia(base, session, ['update_transaction']);
     const txnId = firstTransactionId(db);
-    const res = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: txnId, notes: 'via call' }, transport: 'declarative' }, { [SESSION_HEADER]: session });
+    const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'via call' }, transport: 'declarative' }, { [SESSION_HEADER]: session });
     expect(res.status).toBe(200);
     expect(res.body.kind).toBe('operation');
     expect(res.body.operation.status).toBe('pending');
@@ -467,10 +467,10 @@ describe('POST /api/mcp/call', () => {
   test('the server, not the client, decides read vs mutating: a write is only ever an operation, whatever the client reports', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
+    const grants = await grantVia(base, session, ['update_transaction']);
     const txnId = firstTransactionId(db);
     for (const transport of ['imperative', 'declarative', 'page']) {
-      const res = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: txnId, notes: 'sneaky' }, transport }, { [SESSION_HEADER]: session });
+      const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'sneaky' }, transport }, { [SESSION_HEADER]: session });
       expect(res.body.kind, transport).toBe('operation');
     }
     expect((db.prepare('SELECT notes FROM transactions WHERE id=@id').get({ id: txnId }) as any).notes).toBeNull();
@@ -480,8 +480,8 @@ describe('POST /api/mcp/call', () => {
   test('validation errors are 400 with an actionable body, and create no operation', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
-    const res = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: 1, amount: '12abc' } }, { [SESSION_HEADER]: session });
+    const grants = await grantVia(base, session, ['update_transaction']);
+    const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: 1, amount: '12abc' } }, { [SESSION_HEADER]: session });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('invalid_args');
     expect(res.body.error.message).toContain('amount must be a number');
@@ -491,8 +491,8 @@ describe('POST /api/mcp/call', () => {
   test('the body is strict: unknown keys, a missing session header and a malformed one are all 400', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['transaction_search']);
-    const body = { grantId: grants.transaction_search, tool: 'transaction_search', args: { query: 'x' } };
+    const grants = await grantVia(base, session, ['search_transactions']);
+    const body = { grantId: grants.search_transactions, tool: 'search_transactions', args: { query: 'x' } };
     expect((await post(base, '/api/mcp/call', { ...body, extra: 1 }, { [SESSION_HEADER]: session })).status).toBe(400);
     expect((await post(base, '/api/mcp/call', body)).status).toBe(400);
     expect((await post(base, '/api/mcp/call', body, { [SESSION_HEADER]: 'not-a-uuid' })).status).toBe(400);
@@ -504,8 +504,8 @@ describe('POST /api/mcp/call', () => {
   test('another tab cannot use this tab\'s grant', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['transaction_search']);
-    const res = await post(base, '/api/mcp/call', { grantId: grants.transaction_search, tool: 'transaction_search', args: { query: 'x' } }, { [SESSION_HEADER]: crypto.randomUUID() });
+    const grants = await grantVia(base, session, ['search_transactions']);
+    const res = await post(base, '/api/mcp/call', { grantId: grants.search_transactions, tool: 'search_transactions', args: { query: 'x' } }, { [SESSION_HEADER]: crypto.randomUUID() });
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('grant_invalid');
   });
@@ -522,10 +522,10 @@ describe('POST /api/mcp/call', () => {
   test('429 carries Retry-After', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['transaction_search']);
+    const grants = await grantVia(base, session, ['search_transactions']);
     let last: Awaited<ReturnType<typeof post>> | undefined;
     for (let i = 0; i < 21; i++) {
-      last = await post(base, '/api/mcp/call', { grantId: grants.transaction_search, tool: 'transaction_search', args: { query: 'groceries' } }, { [SESSION_HEADER]: session });
+      last = await post(base, '/api/mcp/call', { grantId: grants.search_transactions, tool: 'search_transactions', args: { query: 'groceries' } }, { [SESSION_HEADER]: session });
     }
     expect(last!.status).toBe(429);
     expect(last!.body.error.code).toBe('rate_limited');
@@ -537,8 +537,8 @@ describe('cancel', () => {
   test('cancel by the requester rejects the op; cancel by another session -> 404', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    const grants = await grantVia(base, session, ['edit_transaction']);
-    const prepared = await post(base, '/api/mcp/call', { grantId: grants.edit_transaction, tool: 'edit_transaction', args: { id: firstTransactionId(db), notes: 'cancel me' } }, { [SESSION_HEADER]: session });
+    const grants = await grantVia(base, session, ['update_transaction']);
+    const prepared = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: firstTransactionId(db), notes: 'cancel me' } }, { [SESSION_HEADER]: session });
     const opId = prepared.body.operation.id;
 
     const other = await post(base, `/api/mcp/operations/${opId}/cancel`, {}, { [SESSION_HEADER]: crypto.randomUUID() });
@@ -570,8 +570,8 @@ describe('GET /api/mcp/audit', () => {
 
     for (const [auth, query] of [[adminAuth, 'groceries'], [viewerAuth, 'dining']] as const) {
       const session = crypto.randomUUID();
-      const grants = await grantVia(base, session, ['transaction_search'], auth);
-      const res = await post(base, '/api/mcp/call', { grantId: grants.transaction_search, tool: 'transaction_search', args: { query } }, { [SESSION_HEADER]: session, ...auth });
+      const grants = await grantVia(base, session, ['search_transactions'], auth);
+      const res = await post(base, '/api/mcp/call', { grantId: grants.search_transactions, tool: 'search_transactions', args: { query } }, { [SESSION_HEADER]: session, ...auth });
       expect(res.status).toBe(200);
     }
 
@@ -594,33 +594,33 @@ describe('exposed tools', () => {
   test('a grant issued against an older schema is listed in Settings but not offered to the agent', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    await grantVia(base, session, ['transaction_search', 'net_worth']);
-    db.prepare("UPDATE mcp_grants SET schema_digest = 'old-schema' WHERE tool_name = 'net_worth'").run();
+    await grantVia(base, session, ['search_transactions', 'get_net_worth']);
+    db.prepare("UPDATE mcp_grants SET schema_digest = 'old-schema' WHERE tool_name = 'get_net_worth'").run();
     const tools = await j(base, '/api/mcp/tools', { headers: { [SESSION_HEADER]: session } });
-    expect(tools.body.tools.map((t: any) => t.name)).toEqual(['transaction_search']);
+    expect(tools.body.tools.map((t: any) => t.name)).toEqual(['search_transactions']);
     const grants = await j(base, '/api/mcp/grants', { headers: { [SESSION_HEADER]: session } });
-    expect(grants.body.grants.map((g: any) => g.tool_name).sort()).toEqual(['net_worth', 'transaction_search']);
+    expect(grants.body.grants.map((g: any) => g.tool_name).sort()).toEqual(['get_net_worth', 'search_transactions']);
   });
 
   test('every exposed tool carries classification and the full annotation set', async () => {
     const { base } = await start();
     const session = crypto.randomUUID();
-    await grantVia(base, session, ['transaction_search', 'edit_transaction']);
+    await grantVia(base, session, ['search_transactions', 'update_transaction']);
     const tools = await j(base, '/api/mcp/tools', { headers: { [SESSION_HEADER]: session } });
     const byName = Object.fromEntries(tools.body.tools.map((t: any) => [t.name, t]));
-    expect(byName.transaction_search.classification).toBe('read');
-    expect(byName.transaction_search.annotations.untrustedContentHint).toBe(true);
-    expect(byName.edit_transaction.classification).toBe('mutating');
-    expect(byName.edit_transaction.annotations.consequentialHint).toBe(true);
-    expect(byName.edit_transaction.inputSchema.additionalProperties).toBe(false);
+    expect(byName.search_transactions.classification).toBe('read');
+    expect(byName.search_transactions.annotations.untrustedContentHint).toBe(true);
+    expect(byName.update_transaction.classification).toBe('mutating');
+    expect(byName.update_transaction.annotations.consequentialHint).toBe(true);
+    expect(byName.update_transaction.inputSchema.additionalProperties).toBe(false);
   });
 
   test('the catalog route lists server-side classification, minRole and transports', async () => {
     const { base } = await start();
     const catalog = await j(base, '/api/mcp/catalog');
     const names = catalog.body.tools.map((t: any) => t.name).sort();
-    expect(names).toContain('tax_summary');
-    const edit = catalog.body.tools.find((t: any) => t.name === 'edit_transaction');
+    expect(names).toContain('get_tax_summary');
+    const edit = catalog.body.tools.find((t: any) => t.name === 'update_transaction');
     expect(edit).toMatchObject({ classification: 'mutating', minRole: 'admin' });
     expect(edit.transports.sort()).toEqual(['http-mcp', 'webmcp']);
   });
@@ -635,7 +635,7 @@ describe('browser proof: no localhost fallback for a missing Origin', () => {
 
   test('no Origin and no Sec-Fetch-Site → 403 origin_required on grants, tools and the call route', async () => {
     const { base, db: sdb } = await start();
-    const grant = await noProof(base, '/api/mcp/grants', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ tools: ['transaction_search'] }) });
+    const grant = await noProof(base, '/api/mcp/grants', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ tools: ['search_transactions'] }) });
     expect(grant.status).toBe(403);
     expect(((await grant.json()) as any).error.code).toBe('origin_required');
     expect((sdb.prepare('SELECT COUNT(*) AS n FROM mcp_grants').get() as { n: number }).n).toBe(0);
@@ -643,7 +643,7 @@ describe('browser proof: no localhost fallback for a missing Origin', () => {
     for (const [path, init] of [
       ['/api/mcp/tools', { headers: jsonHeaders }],
       ['/api/mcp/grants', { headers: jsonHeaders }],
-      ['/api/mcp/call', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ grantId: crypto.randomUUID(), tool: 'transaction_search', args: { query: 'a' } }) }],
+      ['/api/mcp/call', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ grantId: crypto.randomUUID(), tool: 'search_transactions', args: { query: 'a' } }) }],
     ] as const) {
       const res = await noProof(base, path, init);
       expect(res.status, path).toBe(403);
@@ -656,14 +656,14 @@ describe('browser proof: no localhost fallback for a missing Origin', () => {
     const created = await noProof(base, '/api/mcp/grants', {
       method: 'POST',
       headers: { ...jsonHeaders, Origin: `http://localhost:${port}`, 'Sec-Fetch-Site': 'same-origin' },
-      body: JSON.stringify({ tools: ['transaction_search'] }),
+      body: JSON.stringify({ tools: ['search_transactions'] }),
     });
     expect(created.status).toBe(200);
 
     // The same tab's later GET: a browser sends no Origin on a same-origin GET, only Sec-Fetch-Site.
     const listed = await noProof(base, '/api/mcp/grants', { headers: { ...jsonHeaders, 'Sec-Fetch-Site': 'same-origin' } });
     expect(listed.status).toBe(200);
-    expect(((await listed.json()) as any).grants.map((g: any) => g.tool_name)).toEqual(['transaction_search']);
+    expect(((await listed.json()) as any).grants.map((g: any) => g.tool_name)).toEqual(['search_transactions']);
 
     // Sec-Fetch-Site same-site (another localhost port) proves nothing.
     const sameSite = await noProof(base, '/api/mcp/grants', { headers: { ...jsonHeaders, 'Sec-Fetch-Site': 'same-site' } });
@@ -673,9 +673,9 @@ describe('browser proof: no localhost fallback for a missing Origin', () => {
   async function pendingOp(base: string) {
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: SESSION, tools: ['edit_transaction'] }),
+      body: JSON.stringify({ sessionGeneration: SESSION, tools: ['update_transaction'] }),
     });
-    const prepared = await mcpCall(base, SESSION, { grantId: grantRes.body.grants[0].id, tool: 'edit_transaction', args: { id: firstTransactionId(db), notes: 'proof test' } });
+    const prepared = await mcpCall(base, SESSION, { grantId: grantRes.body.grants[0].id, tool: 'update_transaction', args: { id: firstTransactionId(db), notes: 'proof test' } });
     return prepared.body.operation.id as string;
   }
 
@@ -722,7 +722,7 @@ describe('browser proof: no localhost fallback for a missing Origin', () => {
     const { base } = await start();
     const grantRes = await j(base, '/api/mcp/grants', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionGeneration: SESSION, tools: ['transaction_search'] }),
+      body: JSON.stringify({ sessionGeneration: SESSION, tools: ['search_transactions'] }),
     });
     const grantId = grantRes.body.grants[0].id;
     expect((await noProof(base, `/api/mcp/grants/${grantId}`, { method: 'DELETE', headers: jsonHeaders })).status).toBe(403);
@@ -738,11 +738,11 @@ describe('P1 user control', () => {
   const sessionHeaders = { 'Content-Type': 'application/json', 'X-Wilson-Agent-Session': P1_SESSION };
 
   async function prepared(base: string) {
-    const grantRes = await j(base, '/api/mcp/grants', { method: 'POST', headers: sessionHeaders, body: JSON.stringify({ tools: ['edit_transaction'] }) });
+    const grantRes = await j(base, '/api/mcp/grants', { method: 'POST', headers: sessionHeaders, body: JSON.stringify({ tools: ['update_transaction'] }) });
     const grantId = grantRes.body.grants[0].id;
     const call = await j(base, '/api/mcp/call', {
       method: 'POST', headers: sessionHeaders,
-      body: JSON.stringify({ grantId, tool: 'edit_transaction', args: { id: firstTransactionId(db), notes: 'dwell' } }),
+      body: JSON.stringify({ grantId, tool: 'update_transaction', args: { id: firstTransactionId(db), notes: 'dwell' } }),
     });
     return call.body.operation.id as string;
   }
@@ -788,16 +788,16 @@ describe('P1 user control', () => {
     expect(empty.body.ttlOptions).toEqual([15, 60, 240, 720]);
     expect(empty.body.pending).toEqual([]);
     const row = (name: string, state = empty) => state.body.tools.find((t: any) => t.name === name);
-    expect(row('transaction_search')).toMatchObject({ classification: 'read', policy: 'allow', grant: null, policyLocked: false });
-    expect(row('edit_transaction')).toMatchObject({ classification: 'mutating', policy: 'ask' });
+    expect(row('search_transactions')).toMatchObject({ classification: 'read', policy: 'allow', grant: null, policyLocked: false });
+    expect(row('update_transaction')).toMatchObject({ classification: 'mutating', policy: 'ask' });
     expect(row('get_operation_result')).toBeUndefined(); // /mcp-only: not a tab tool
     expect(JSON.stringify(empty.body)).not.toContain(P1_SESSION);
 
-    await j(base, '/api/mcp/policies/forecast', { method: 'PUT', headers: sessionHeaders, body: JSON.stringify({ policy: 'ask' }) });
+    await j(base, '/api/mcp/policies/get_cash_forecast', { method: 'PUT', headers: sessionHeaders, body: JSON.stringify({ policy: 'ask' }) });
     const id = await prepared(base);
     const state = await j(base, '/api/mcp/state', { headers: { 'X-Wilson-Agent-Session': P1_SESSION } });
-    expect(row('forecast', state).policy).toBe('ask');
-    expect(row('edit_transaction', state).grant).toMatchObject({ id: expect.any(String), expiresAt: expect.any(String) });
+    expect(row('get_cash_forecast', state).policy).toBe('ask');
+    expect(row('update_transaction', state).grant).toMatchObject({ id: expect.any(String), expiresAt: expect.any(String) });
     expect(state.body.pending.map((o: any) => o.id)).toEqual([id]);
     expect(state.body.pending[0].requestedBy).toEqual({ kind: 'this_tab', label: 'this tab' });
     expect(state.body.auditTail.length).toBeGreaterThan(0);
@@ -817,19 +817,19 @@ describe('P1 user control', () => {
     const { base } = await start();
     const put = (tool: string, policy: string) =>
       j(base, `/api/mcp/policies/${tool}`, { method: 'PUT', headers: sessionHeaders, body: JSON.stringify({ policy }) });
-    const refused = await put('edit_transaction', 'allow');
+    const refused = await put('update_transaction', 'allow');
     expect(refused.status).toBe(400);
     expect(refused.body.error.message).toBe('Changes always require approval; choose Ask or Off.');
-    expect((await put('edit_transaction', 'off')).body).toEqual({ tool: 'edit_transaction', policy: 'off', effective: 'off' });
-    expect((await put('forecast', 'ask')).body).toEqual({ tool: 'forecast', policy: 'ask', effective: 'ask' });
-    expect((await put('forecast', 'maybe')).status).toBe(400);
+    expect((await put('update_transaction', 'off')).body).toEqual({ tool: 'update_transaction', policy: 'off', effective: 'off' });
+    expect((await put('get_cash_forecast', 'ask')).body).toEqual({ tool: 'get_cash_forecast', policy: 'ask', effective: 'ask' });
+    expect((await put('get_cash_forecast', 'maybe')).status).toBe(400);
     const list = await j(base, '/api/mcp/policies');
-    expect(list.body.policies.find((p: any) => p.tool === 'forecast')).toEqual({ tool: 'forecast', policy: 'ask', effective: 'ask' });
+    expect(list.body.policies.find((p: any) => p.tool === 'get_cash_forecast')).toEqual({ tool: 'get_cash_forecast', policy: 'ask', effective: 'ask' });
   });
 
   test('policy routes need browser proof', async () => {
     const { base } = await start();
-    const res = await fetch(`${base}/api/mcp/policies/forecast`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ policy: 'off' }) });
+    const res = await fetch(`${base}/api/mcp/policies/get_cash_forecast`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ policy: 'off' }) });
     expect(res.status).toBe(403);
   });
 
@@ -844,12 +844,12 @@ describe('P1 user control', () => {
     enableAuth(db);
     const as = (token: string) => ({ ...sessionHeaders, Authorization: `Bearer ${token}` });
     expect((await j(base, '/api/mcp/settings', { method: 'PUT', headers: as(viewerTok), body: JSON.stringify({ grantTtlMinutes: 15 }) })).status).toBe(403);
-    expect((await j(base, '/api/mcp/policies/edit_transaction', { method: 'PUT', headers: as(viewerTok), body: JSON.stringify({ policy: 'off' }) })).status).toBe(403);
-    expect((await j(base, '/api/mcp/policies/forecast', { method: 'PUT', headers: as(viewerTok), body: JSON.stringify({ policy: 'ask' }) })).status).toBe(200);
+    expect((await j(base, '/api/mcp/policies/update_transaction', { method: 'PUT', headers: as(viewerTok), body: JSON.stringify({ policy: 'off' }) })).status).toBe(403);
+    expect((await j(base, '/api/mcp/policies/get_cash_forecast', { method: 'PUT', headers: as(viewerTok), body: JSON.stringify({ policy: 'ask' }) })).status).toBe(200);
     const state = await j(base, '/api/mcp/state', { headers: as(viewerTok) });
     expect(state.body.role).toBe('viewer');
-    expect(state.body.tools.find((t: any) => t.name === 'edit_transaction')).toMatchObject({ policyLocked: true });
-    expect(state.body.tools.find((t: any) => t.name === 'edit_transaction').lockReason).toBeTruthy();
+    expect(state.body.tools.find((t: any) => t.name === 'update_transaction')).toMatchObject({ policyLocked: true });
+    expect(state.body.tools.find((t: any) => t.name === 'update_transaction').lockReason).toBeTruthy();
     expect((await j(base, '/api/mcp/settings', { method: 'PUT', headers: as(adminTok), body: JSON.stringify({ grantTtlMinutes: 15 }) })).status).toBe(200);
   });
 
@@ -894,20 +894,20 @@ describe('P1 user control', () => {
     const grant = async (tool: string) =>
       (await j(base, '/api/mcp/grants', { method: 'POST', headers: sessionHeaders, body: JSON.stringify({ tools: [tool] }) })).body.grants[0] as { expires_at: string };
     try {
-      const hourGrant = await grant('forecast');
+      const hourGrant = await grant('get_cash_forecast');
       const hourMs = new Date(hourGrant.expires_at).getTime() - Date.now();
       expect(hourMs).toBeGreaterThan(55 * 60_000);
       expect(hourMs).toBeLessThanOrEqual(60 * 60_000);
 
       await put({ grantTtlMinutes: 15 });
-      const shortGrant = await grant('profit_loss');
+      const shortGrant = await grant('get_profit_loss');
       const shortMs = new Date(shortGrant.expires_at).getTime() - Date.now();
       expect(shortMs).toBeGreaterThan(14 * 60_000);
       expect(shortMs).toBeLessThanOrEqual(15 * 60_000);
 
       // The earlier grant kept its expiry.
       const grants = (await j(base, '/api/mcp/grants', { headers: { 'X-Wilson-Agent-Session': P1_SESSION } })).body.grants as any[];
-      expect(grants.find((g) => g.tool_name === 'forecast').expires_at).toBe(hourGrant.expires_at);
+      expect(grants.find((g) => g.tool_name === 'get_cash_forecast').expires_at).toBe(hourGrant.expires_at);
     } finally {
       await put({ grantTtlMinutes: 60 });
     }
@@ -923,7 +923,7 @@ describe('P1 user control', () => {
     expect(off.body.tools.every((t: any) => t.grant === null)).toBe(true);
     const tools = await j(base, '/api/mcp/tools', { headers: { 'X-Wilson-Agent-Session': P1_SESSION } });
     expect(tools.body.tools).toEqual([]);
-    const refused = await j(base, '/api/mcp/grants', { method: 'POST', headers: sessionHeaders, body: JSON.stringify({ tools: ['forecast'] }) });
+    const refused = await j(base, '/api/mcp/grants', { method: 'POST', headers: sessionHeaders, body: JSON.stringify({ tools: ['get_cash_forecast'] }) });
     expect(refused.status).toBe(403);
     expect(refused.body.error.code).toBe('kill_switch');
     await j(base, '/api/mcp/settings', { method: 'PUT', headers: sessionHeaders, body: JSON.stringify({ enabled: true }) });

@@ -250,8 +250,8 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
 
     /** While auth is off: an external client token (reads only, auth off) and a WebMCP tab with a pending operation. */
     async function mintWhileAuthOff(id: number) {
-      const client = mintTestToken(db, ['transaction_search'], { authEnabled: false });
-      expect(await mcpTools(client.token)).toEqual(['transaction_search']);
+      const client = mintTestToken(db, ['search_transactions'], { authEnabled: false });
+      expect(await mcpTools(client.token)).toEqual(['search_transactions']);
 
       const tab = (await (await grantVia(null, 'tab-1', ['categorize_transaction'])).json()) as { grants: { id: string }[] };
       const prepared = (await (await call('/api/mcp/call', null, 'POST', {
@@ -305,9 +305,9 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       expect(category(id)).toBe('Dining');
 
       const adminToken = await login('admin', 'adminpass');
-      expect((await grantVia(adminToken, 'admin-tab', ['transaction_search'])).status).toBe(200);
+      expect((await grantVia(adminToken, 'admin-tab', ['search_transactions'])).status).toBe(200);
       expect((await call('/api/auth/config', adminToken, 'PATCH', { auth_enabled: true })).status).toBe(200);
-      expect(listGrantsForSession(db, S('admin-tab')).map((g) => g.tool_name)).toEqual(['transaction_search']);
+      expect(listGrantsForSession(db, S('admin-tab')).map((g) => g.tool_name)).toEqual(['search_transactions']);
     });
 
     test('turning auth off and on again revokes grants minted in between', async () => {
@@ -366,8 +366,8 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
 
     test('a /mcp bearer whose ownerless grant somehow survives the enable gets no tools', async () => {
       // Legacy row: minted while auth was off, flag flipped without enableAuth's sweep.
-      const legacy = mintTestToken(db, ['transaction_search'], { authEnabled: false });
-      expect(await mcpTools(legacy.token)).toEqual(['transaction_search']);
+      const legacy = mintTestToken(db, ['search_transactions'], { authEnabled: false });
+      expect(await mcpTools(legacy.token)).toEqual(['search_transactions']);
       db.prepare("INSERT OR REPLACE INTO dashboard_config (key, value) VALUES ('auth_enabled', 'true')").run();
       expect(await mcpTools(legacy.token)).toEqual([]);
     });
@@ -408,12 +408,12 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       const opsToken = await login('ops', 'opspass');
       // The soon-deactivated admin's tab, granted through the real route; their
       // external client; and a pending write prepared under one of their grants.
-      expect((await grantVia(opsToken, 'ops-tab', ['categorize_transaction', 'transaction_search'])).status).toBe(200);
-      const client = mintTestToken(db, ['categorize_transaction', 'transaction_search'], { userId: ops.id, role: 'admin', authEnabled: true });
-      expect(await mcpTools(client.token)).toEqual(['categorize_transaction', 'transaction_search']);
+      expect((await grantVia(opsToken, 'ops-tab', ['categorize_transaction', 'search_transactions'])).status).toBe(200);
+      const client = mintTestToken(db, ['categorize_transaction', 'search_transactions'], { userId: ops.id, role: 'admin', authEnabled: true });
+      expect(await mcpTools(client.token)).toEqual(['categorize_transaction', 'search_transactions']);
       const op = await prepareAs({ userId: ops.id, role: 'admin' }, 'http-mcp', txnId());
       // Someone else's grant must survive.
-      expect((await grantVia(adminToken, 'admin-tab', ['transaction_search'])).status).toBe(200);
+      expect((await grantVia(adminToken, 'admin-tab', ['search_transactions'])).status).toBe(200);
       return { admin, adminToken, ops, op, client };
     }
 
@@ -429,7 +429,7 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       expect(((await approve.json()) as { outcome?: string }).outcome).not.toBe('committed');
       expect(category(txnId())).toBe('Dining');
 
-      expect(listGrantsForSession(db, S('admin-tab')).map((g) => g.tool_name)).toEqual(['transaction_search']);
+      expect(listGrantsForSession(db, S('admin-tab')).map((g) => g.tool_name)).toEqual(['search_transactions']);
     });
 
     test('deactivateUser() itself revokes and expires (not only the route)', async () => {
@@ -444,14 +444,14 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       const { ops, client } = await setupDeactivation();
       // Deactivated behind deactivateUser's back: the grant rows stay live.
       db.prepare('UPDATE dashboard_users SET is_active = 0 WHERE id = @id').run({ id: ops.id });
-      const [grant] = listGrantsForSession(db, S('ops-tab')).filter((g) => g.tool_name === 'transaction_search');
+      const [grant] = listGrantsForSession(db, S('ops-tab')).filter((g) => g.tool_name === 'search_transactions');
       expect(grant).toBeDefined();
 
       expect(await mcpTools(client.token)).toEqual([]);
       const scope = { userId: ops.id, role: 'admin' as Role, profile: grant.profile, origin: grant.origin, sessionGeneration: S('ops-tab') };
-      const validation = validateGrant(db, grant.id, 'transaction_search', schemaDigest('transaction_search'), scope);
+      const validation = validateGrant(db, grant.id, 'search_transactions', schemaDigest('search_transactions'), scope);
       expect(validation.ok).toBe(false);
-      const read = await callTool(db, scope, grant.id, 'transaction_search', { query: 'Restaurant' }, 'imperative');
+      const read = await callTool(db, scope, grant.id, 'search_transactions', { query: 'Restaurant' }, 'imperative');
       expect(read.ok).toBe(false);
     });
   });
@@ -466,11 +466,11 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       const users = await withUsers();
       const mint = async (token: string, session: string, tools: string[]) =>
         ((await (await grantVia(token, session, tools)).json()) as { grants: G[] }).grants;
-      const adminGrants = await mint(users.adminToken, 'admin-tab', ['transaction_search', 'categorize_transaction']);
-      const viewerGrants = await mint(users.viewerToken, 'viewer-tab', ['transaction_search']);
+      const adminGrants = await mint(users.adminToken, 'admin-tab', ['search_transactions', 'categorize_transaction']);
+      const viewerGrants = await mint(users.viewerToken, 'viewer-tab', ['search_transactions']);
       // Same session generation used by both (e.g. a guessed or reused id).
-      const sharedAdmin = await mint(users.adminToken, 'shared', ['transaction_search']);
-      const sharedViewer = await mint(users.viewerToken, 'shared', ['spending_summary']);
+      const sharedAdmin = await mint(users.adminToken, 'shared', ['search_transactions']);
+      const sharedViewer = await mint(users.viewerToken, 'shared', ['get_spending_summary']);
       return { ...users, adminGrants, viewerGrants, sharedAdmin, sharedViewer };
     }
 
@@ -515,7 +515,7 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       const held = await heldRequest('/api/mcp/grants/revoke-session', {}, { session: S('admin-tab') });
       enableAuth(db);
       const adminToken = await login('admin', 'adminpass');
-      expect((await grantVia(adminToken, 'admin-tab', ['transaction_search'])).status).toBe(200);
+      expect((await grantVia(adminToken, 'admin-tab', ['search_transactions'])).status).toBe(200);
 
       expect((await held.finish()).status).toBe(401);
       expect(live('admin-tab')).toHaveLength(1);
