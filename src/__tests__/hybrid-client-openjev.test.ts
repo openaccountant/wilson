@@ -7,6 +7,7 @@ import {
   type SubagentRunArgs,
   type SubagentRunResult,
 } from '../dashboard/ui/src/hybrid/worker-protocol.js';
+import { installLocalChatOptIn } from './local-chat-optin-helper.js';
 
 /**
  * Round 4, slice R4-6 (specs/browser-subagent-round4-openjev-router.md §4.3, §11): the hybrid
@@ -89,7 +90,10 @@ describe('hybrid client: open-jev route tiebreak', () => {
   const savedNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
   const savedStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
   let warn: ReturnType<typeof spyOn>;
+  let optIn: ReturnType<typeof installLocalChatOptIn>;
   beforeEach(() => {
+    // This browser opted in to on-device chat (consent.ts); the server config says enabled.
+    optIn = installLocalChatOptIn(MODEL.repo);
     Object.defineProperty(globalThis, 'sessionStorage', { value: new MemoryStorage(), configurable: true, writable: true });
     Object.defineProperty(globalThis, 'navigator', { value: { gpu: { requestAdapter: async () => ({ features: { has: () => true } }) } }, configurable: true, writable: true });
     warn = spyOn(console, 'warn').mockImplementation(() => {});
@@ -99,6 +103,7 @@ describe('hybrid client: open-jev route tiebreak', () => {
     if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);
     if (savedStorage) Object.defineProperty(globalThis, 'sessionStorage', savedStorage);
     else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    optIn.restore();
   });
 
   function setup(sub: Sub, over: { routeCut?: number | null; chooseTool?: SubagentTurnOpts['chooseTool'] } = {}) {

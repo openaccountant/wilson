@@ -9,6 +9,7 @@ import { createUser, enableAuth, isAuthEnabled } from '../dashboard/auth.js';
 import { getChatSessionById, getChatHistoryBySession } from '../db/queries.js';
 import { existsSync } from 'node:fs';
 import type { Database } from '../db/compat-sqlite.js';
+import { setActiveProfilePaths, resetActiveProfile } from '../profile/index.js';
 
 /**
  * Hybrid (local-first WebGPU) chat server surface:
@@ -27,6 +28,7 @@ const HYBRID_BUILT = existsSync(join(DASHBOARD_ASSETS_DIR, 'hybrid-chat.js'));
 describe('local chat endpoints', () => {
   const servers: Awaited<ReturnType<typeof startDashboardServer>>['server'][] = [];
   const dbs: Database[] = [];
+  const dirs: string[] = [];
 
   afterEach(() => {
     for (const s of servers) {
@@ -38,9 +40,19 @@ describe('local chat endpoints', () => {
     }
     dbs.length = 0;
     closeAll();
+    resetActiveProfile();
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+    dirs.length = 0;
   });
 
   async function start(): Promise<{ base: string; token: string | null }> {
+    // A temp profile, so settings.json (localChatEnabled) is never the developer's own.
+    const dir = mkdtempSync(join(tmpdir(), 'dashboard-local-chat-'));
+    dirs.push(dir);
+    setActiveProfilePaths({
+      name: 'test', root: dir, database: join(dir, 'data.db'), settings: join(dir, 'settings.json'),
+      scratchpad: join(dir, 'scratchpad'), cache: join(dir, 'cache'),
+    });
     const db = createTestDb();
     dbs.push(db);
     setInitialProfile('test', db);
@@ -73,15 +85,21 @@ describe('local chat endpoints', () => {
 
   // ── GET /api/config/local-chat ───────────────────────────────────────────
 
-  test('config endpoint exposes the fastModel-derived choice and bundle bounds', async () => {
+  test('config endpoint exposes the fastModel-derived choice and bundle bounds, off until consented', async () => {
     const { base, token } = await start();
     const res = await fetch(`${base}/api/config/local-chat`, authed(token));
     expect(res.status).toBe(200);
     const cfg = await res.json() as {
-      enabled: boolean; id: string; repo: string; displayName: string; downloadSize: string;
+      enabled: boolean; available: boolean; consented: boolean; sourceHost: string;
+      id: string; repo: string; displayName: string; downloadSize: string;
       bundle: { days: number; limit: number; maxChars: number };
     };
-    expect(cfg.enabled).toBe(true);
+    // Opt-in: the model is described (for the consent copy) but not enabled.
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.consented).toBe(false);
+    expect(cfg.available).toBe(true);
+    expect(cfg.sourceHost).toBe('huggingface.co');
+    expect(cfg.downloadSize).toBe('~570MB');
     expect(cfg.id).toBe('transformers:onnx-community/Qwen3-0.6B-ONNX');
     expect(cfg.repo).toBe('onnx-community/Qwen3-0.6B-ONNX'); // prefix stripped for the browser
     expect(cfg.displayName).toContain('Qwen3 0.6B');

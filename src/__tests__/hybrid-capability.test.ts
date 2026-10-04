@@ -15,6 +15,7 @@ import {
   type TransformersModule,
 } from '../dashboard/ui/src/hybrid/client.js';
 import { clearDtypeMetadataCache, TransformersDtypeError, type DtypeFetch } from '../model/transformers-dtype.js';
+import { installLocalChatOptIn } from './local-chat-optin-helper.js';
 
 /**
  * Browser hybrid chat: which local-model failures stick for the session, how
@@ -148,7 +149,10 @@ function setGpu(shaderF16: boolean): void {
   });
 }
 
+let optIn: ReturnType<typeof installLocalChatOptIn>;
 beforeEach(() => {
+  // This browser opted in to on-device chat (consent.ts); the server config says enabled.
+  optIn = installLocalChatOptIn(REPO);
   clearDtypeMetadataCache();
   storage = new MemoryStorage();
   Object.defineProperty(globalThis, 'sessionStorage', { value: storage, configurable: true, writable: true });
@@ -159,6 +163,7 @@ afterEach(() => {
   if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);
   if (savedStorage) Object.defineProperty(globalThis, 'sessionStorage', savedStorage);
   else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+  optIn.restore();
 });
 
 /** Dashboard API stub: config + an (empty) bundle + local-chat recording. */
@@ -276,6 +281,9 @@ describe('createHybridChat load failures', () => {
     const warn = spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const granite = 'onnx-community/granite-4.0-micro-ONNX-web';
+      // The opt-in is per repo: this browser agreed to download this model too.
+      optIn.restore();
+      optIn = installLocalChatOptIn(REPO, granite);
       const hubFetch: DtypeFetch = async (url) =>
         url.includes('/api/models/')
           ? { ok: true, status: 200, json: async () => ({ siblings: [{ rfilename: 'onnx/model_q4f16.onnx' }] }) }

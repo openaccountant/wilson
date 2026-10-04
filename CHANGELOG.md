@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### On-device chat is now opt-in
+
+**Chat no longer downloads a model to your browser on its own.** Hybrid chat used to try the on-device model (Qwen3 0.6B, about 570 MB from huggingface.co) on the first message in any WebGPU browser, with no question asked. Now nothing local happens until two things are true, the same two the open-jev second opinion needs:
+
+- **An admin turns it on** for the profile: "On-device chat: off · Turn on" above the chat box (any user when auth is off). This writes `localChatEnabled: true` to the profile's `settings.json`; anything but a literal `true` is off, and so is the default. `PUT /api/config/local-chat {"enabled": true|false}` is admin-only when auth is on, JSON only, and needs the dashboard page's browser proof (`Origin` + `Sec-Fetch-Site: same-origin`).
+- **This browser agrees to the download**: the line names the model and its repo, the size from the model catalog and the source host, says inference runs on this device's GPU, and offers "Download once". That choice is kept in this browser only (the model cache is per browser too) and is asked again for a different model.
+
+"Turn off" (admin) turns it off for the profile and forgets this browser's download consent; anyone can "Stop on this browser". Either applies to the next message. Until then chat goes straight to the server: no worker, no WebGPU probe, no transaction bundle fetch, no model download, and answers are not labelled as a local fallback. The legacy dashboard follows the same consent and has no switch of its own. `GET /api/config/local-chat` now also reports `available`, `consented` and `sourceHost`; `enabled` means both "available" and "consented". The Speed Showdown server arm only needs a configured model, as before.
+
 ### WebMCP judge for LLM traces and training data (P4a)
 
 **An agent can now propose ratings for your recorded model calls, and nothing it proposes is used until you accept it.** Grant the judge tools in Settings -> Agent access like the others; with no grant none is registered. They live on the LLM tab and the reads also work on `/mcp`.

@@ -259,7 +259,7 @@ export async function runShowdownLocalServerArm(
   const payload = { system: SHOWDOWN_SYSTEM_PROMPT, user };
 
   const cfg = getLocalChatModelConfig();
-  if (!cfg.enabled) {
+  if (!cfg.available) {
     return {
       ok: false,
       label: LOCAL_SERVER_LABEL,

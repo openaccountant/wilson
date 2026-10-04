@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useHybridChat } from '@/hooks/useHybridChat';
+import { useLocalChatConsent } from '@/hooks/useLocalChatConsent';
+import { LocalChatPanel } from '@/components/LocalChatPanel';
 import { useTypeahead, type ActiveTrigger, type AcceptMode } from '@/hooks/useTypeahead';
 import {
   useMentionSources,
@@ -185,6 +187,11 @@ export function ChatTab() {
   const loadSeq = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
   const hybrid = useHybridChat();
+  // On-device chat is opt-in (admin turns it on, this browser agrees to the
+  // download). Until both, no message touches the local path.
+  const { data: authStatus } = useApi<{ authEnabled: boolean; user: { role?: string } | null }>('/api/auth/status');
+  const canAct = !authStatus?.authEnabled || authStatus?.user?.role === 'admin';
+  const localConsent = useLocalChatConsent(canAct, hybrid.reset);
   // Turns answered on-device in this chat, so a later server handoff can close the history gap.
   const priorLocalTurnsRef = useRef<PriorLocalTurn[]>([]);
   const { sources, loaded: sourcesLoaded, ensureLoaded } = useMentionSources();
@@ -681,7 +688,8 @@ export function ChatTab() {
     } | null = null;
     let hybridResult: HybridResult | null = null;
     let notice: string | null = null;
-    if (!needsServer) {
+    const localActive = !needsServer && localConsent.isActive();
+    if (localActive) {
       try {
         const r: HybridResult = await hybrid.tryLocal(query, setProgressLabel, sessionId, {
           priorLocalTurns: priorLocalTurnsRef.current,
@@ -715,7 +723,7 @@ export function ChatTab() {
     // because handleSend's closure may outdate the state snapshot.
     const provenance = deriveChatProvenance({
       localAnswered: local !== null,
-      hybridLayerPresent: !needsServer && hybrid.getStatus() !== 'unavailable',
+      hybridLayerPresent: localActive && hybrid.getStatus() !== 'unavailable',
       localMode: local?.mode === 'subagent' ? 'subagent' : 'bundle',
       handoffSent: hasHandoffPayload(request?.localHandoff),
     });
@@ -996,6 +1004,7 @@ export function ChatTab() {
             emptyText={sourcesLoaded ? undefined : 'Loading…'}
             status={status}
           />
+          <LocalChatPanel c={localConsent} canAct={canAct} />
           <div ref={composerRowRef} className="flex gap-2 items-end">
             <div className="relative flex-1 min-w-0 bg-surface rounded-lg">
               <ComposerBackdrop

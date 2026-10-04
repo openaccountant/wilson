@@ -14,6 +14,12 @@
  * importable under bun test; standalone.ts supplies the real worker
  * constructor.
  *
+ * Consent: nothing local runs (no worker, no probe, no bundle fetch, no model
+ * download) unless the server reports `enabled` (the admin's
+ * `localChatEnabled` setting) AND this browser opted in (consent.ts). Both are
+ * re-read on every public call, so turning either off applies to the next
+ * message.
+ *
  * Hard contract for the UIs: every failure path — no WebGPU, config/bundle
  * fetch failure, model load/download failure, generation error, worker crash,
  * tool-call or NEED_MORE_DATA output — resolves {ok:false} (→ server path).
@@ -72,6 +78,7 @@ import {
   restoreCapability,
   type PersistedCapability,
 } from './capability.js';
+import { hasLocalChatOptIn, type OptInStorage } from './consent.js';
 
 export type { HybridResult } from './core.js';
 export type { MirrorPrep, PriorLocalTurn } from './worker-protocol.js';
@@ -106,6 +113,8 @@ export interface HybridOpts {
    * sets it; `null` (the frozen value when no viable cut exists) disables the tiebreak.
    */
   routeCut?: number | null;
+  /** Where the per-browser opt-in is read (consent.ts). Defaults to localStorage. */
+  optInStorage?: OptInStorage | null;
 }
 
 /** The pinned open-jev model, as GET /api/config/local-chat ships it (the worker's `init` pins). */
@@ -122,7 +131,14 @@ export interface OpenJevConfigPins {
 
 /** GET /api/config/local-chat response. */
 export interface LocalChatConfigResponse {
+  /** Server side of consent: a fastModel exists AND `localChatEnabled` is on. */
   enabled: boolean;
+  /** A fastModel exists (absent from older servers). */
+  available?: boolean;
+  /** The `localChatEnabled` setting (absent from older servers). */
+  consented?: boolean;
+  /** Host the model downloads from (absent from older servers). */
+  sourceHost?: string;
   id: string;
   repo: string;
   displayName: string;
@@ -239,7 +255,12 @@ export function createHybridChat(opts: HybridOpts) {
   }
 
   // ── Config (model choice rides the server's fastModel field) ───────────
+  // Cached for one public call only (refreshConfig at each entry point), so a
+  // consent change on the server applies to the next message.
   let configPromise: Promise<LocalChatConfigResponse | null> | null = null;
+  function refreshConfig(): void {
+    configPromise = null;
+  }
   function fetchConfig(): Promise<LocalChatConfigResponse | null> {
     configPromise ??= (async () => {
       try {
@@ -254,10 +275,14 @@ export function createHybridChat(opts: HybridOpts) {
     return configPromise;
   }
 
-  /** Fetch the config, reconcile the verdict with it and tell the backend which model to run. */
+  /**
+   * Fetch the config, reconcile the verdict with it and tell the backend which
+   * model to run. Null (the server path) unless the server enabled local chat
+   * and this browser opted in: the consent gate every model path goes through.
+   */
   async function loadConfig(): Promise<LocalChatConfigResponse | null> {
     const cfg = await fetchConfig();
-    if (!cfg) return null;
+    if (!cfg || !hasLocalChatOptIn(cfg.repo, opts.optInStorage)) return null;
     syncWithConfig(cfg);
     getBackend()?.setModel(modelConfigOf(cfg));
     return cfg;
@@ -278,8 +303,10 @@ export function createHybridChat(opts: HybridOpts) {
       return 'unavailable';
     }
     // Layer 2, in the scope that will actually run the model: a real adapter.
-    const backend = getBackend();
-    if (!backend || !(await loadConfig())) {
+    // Consent first, so an unconsented browser never even spawns the worker.
+    const cfg = await loadConfig();
+    const backend = cfg ? getBackend() : null;
+    if (!backend || !cfg) {
       // Nothing to run on, or the server has local chat off: not a browser
       // property, so nothing is persisted.
       return 'unavailable';
@@ -599,6 +626,7 @@ export function createHybridChat(opts: HybridOpts) {
     try {
       if (verdict === 'unavailable') return { ok: false };
 
+      refreshConfig();
       const cfg = await loadConfig();
       if (!cfg) return { ok: false };
 
@@ -667,6 +695,7 @@ export function createHybridChat(opts: HybridOpts) {
     try {
       if (verdict === 'unavailable') return failed('unavailable');
 
+      refreshConfig();
       const cfg = await loadConfig();
       if (!cfg) return failed('unavailable');
 
@@ -713,9 +742,26 @@ export function createHybridChat(opts: HybridOpts) {
     backendInstance = undefined;
   }
 
+  /** Whether local chat may run in this browser now (server on AND opted in). Never throws. */
+  async function isLocalActive(): Promise<boolean> {
+    refreshConfig();
+    try {
+      return (await loadConfig()) !== null;
+    } catch {
+      return false;
+    }
+  }
+
   return {
-    probe,
-    loadModel,
+    probe: () => {
+      refreshConfig();
+      return probe();
+    },
+    loadModel: (onProgress?: ProgressCb) => {
+      refreshConfig();
+      return loadModel(onProgress);
+    },
+    isLocalActive,
     tryLocal,
     categorizeSample,
     dispose,

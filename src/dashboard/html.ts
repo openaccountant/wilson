@@ -1204,21 +1204,26 @@ export function getDashboardHtml(port: number): string {
     // attempt, question outside the pre-fetched bundle) resolves {ok:false} and
     // falls through to the server agent silently — hybrid failures must never
     // render an error bubble. The catch below stays reserved for genuine
-    // server-path failures.
+    // server-path failures. Nothing local is attempted (no download, no model)
+    // until an admin turned on-device chat on AND this browser opted in; this
+    // page has no consent UI, so the opt-in comes from the React dashboard.
     var localAnswer = null, hybridPresent = false;
     hybridInit();
-    if (window.WilsonHybridChat) {
-      hybridPresent = true;
+    if (window.WilsonHybridChat && typeof window.WilsonHybridChat.isLocalActive === 'function') {
       try {
-        var r = await window.WilsonHybridChat.tryLocal(q, function(label){ pendingText.textContent = label; }, activeSessionId);
-        if (r && r.ok) {
-          localAnswer = r.answer;
-          if (r.sessionId) { activeSessionId = r.sessionId; isLiveSession = true; }
+        hybridPresent = await window.WilsonHybridChat.isLocalActive();
+        if (hybridPresent) {
+          var r = await window.WilsonHybridChat.tryLocal(q, function(label){ pendingText.textContent = label; }, activeSessionId);
+          if (r && r.ok) {
+            localAnswer = r.answer;
+            if (r.sessionId) { activeSessionId = r.sessionId; isLiveSession = true; }
+          }
         }
       } catch(e) { /* silent: any local failure falls through to the server path */ }
     }
     // Which path produced this answer: local answered → on-device; local layer
-    // in play but server answered → fallback; hybrid chunk absent → neutral.
+    // in play but server answered → fallback; hybrid chunk absent or local chat
+    // not consented → neutral.
     var prov = deriveProv(localAnswer != null, hybridPresent);
     if (localAnswer != null) {
       // Safe: renderMd escapes all HTML entities before applying markdown transforms.

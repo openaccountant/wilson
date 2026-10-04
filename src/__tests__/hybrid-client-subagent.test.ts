@@ -8,6 +8,7 @@ import {
   type SubagentRunArgs,
   type SubagentRunResult,
 } from '../dashboard/ui/src/hybrid/worker-protocol.js';
+import { installLocalChatOptIn } from './local-chat-optin-helper.js';
 
 /**
  * The hybrid client's subagent branch (spec sections 3, 5, 11; slice 6), driven
@@ -115,7 +116,10 @@ describe('hybrid client: subagent branch', () => {
   const savedStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
   let warn: ReturnType<typeof spyOn>;
 
+  let optIn: ReturnType<typeof installLocalChatOptIn>;
   beforeEach(() => {
+    // This browser opted in to on-device chat (consent.ts); the server config says enabled.
+    optIn = installLocalChatOptIn(MODEL.repo);
     Object.defineProperty(globalThis, 'sessionStorage', { value: new MemoryStorage(), configurable: true, writable: true });
     Object.defineProperty(globalThis, 'navigator', {
       value: { gpu: { requestAdapter: async () => ({ features: { has: () => true } }) } },
@@ -129,6 +133,7 @@ describe('hybrid client: subagent branch', () => {
     if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);
     if (savedStorage) Object.defineProperty(globalThis, 'sessionStorage', savedStorage);
     else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    optIn.restore();
   });
 
   function chatFor(config: LocalChatConfigResponse, backend: FakeBackend) {

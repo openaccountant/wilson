@@ -25,6 +25,8 @@ export interface WilsonHybridChatGlobal {
   /** Configure (call once with the app's base URL before first use). */
   init(opts: HybridOpts): void;
   probe(): Promise<'ready' | 'unavailable' | 'failed'>;
+  /** Whether local chat may run in this browser now: the server turned it on AND this browser opted in. Never throws. */
+  isLocalActive(): Promise<boolean>;
   loadModel(onProgress?: (label: string) => void): Promise<unknown>;
   tryLocal(
     query: string,
@@ -60,6 +62,10 @@ export function probe(): Promise<'ready' | 'unavailable' | 'failed'> {
   return get().probe();
 }
 
+export function isLocalActive(): Promise<boolean> {
+  return get().isLocalActive();
+}
+
 export function loadModel(onProgress?: (label: string) => void): Promise<unknown> {
   return get().loadModel(onProgress);
 }
@@ -84,5 +90,5 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  window.WilsonHybridChat = { init, probe, loadModel, tryLocal, categorizeSample };
+  window.WilsonHybridChat = { init, probe, isLocalActive, loadModel, tryLocal, categorizeSample };
 }

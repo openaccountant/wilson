@@ -6,6 +6,7 @@ import {
 } from '../dashboard/ui/src/hybrid/model-backend.js';
 import { createHybridChat, CAPABILITY_STORAGE_KEY, type LocalChatConfigResponse } from '../dashboard/ui/src/hybrid/client.js';
 import { DEFAULT_SUBAGENT_LIMITS, isMainToWorker, type MainToWorker, type WorkerToMain } from '../dashboard/ui/src/hybrid/worker-protocol.js';
+import { installLocalChatOptIn } from './local-chat-optin-helper.js';
 
 /**
  * The main-thread proxy to the model worker, driven by a fake Worker: how it
@@ -349,7 +350,10 @@ describe('createHybridChat over the worker backend', () => {
   const savedStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
   let storage: MemoryStorage;
 
+  let optIn: ReturnType<typeof installLocalChatOptIn>;
   beforeEach(() => {
+    // This browser opted in to on-device chat (consent.ts); the server config says enabled.
+    optIn = installLocalChatOptIn(MODEL.repo);
     storage = new MemoryStorage();
     Object.defineProperty(globalThis, 'sessionStorage', { value: storage, configurable: true, writable: true });
     Object.defineProperty(globalThis, 'navigator', {
@@ -362,6 +366,7 @@ describe('createHybridChat over the worker backend', () => {
     if (savedNavigator) Object.defineProperty(globalThis, 'navigator', savedNavigator);
     if (savedStorage) Object.defineProperty(globalThis, 'sessionStorage', savedStorage);
     else delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    optIn.restore();
   });
 
   function workerThatAnswers(text: string) {

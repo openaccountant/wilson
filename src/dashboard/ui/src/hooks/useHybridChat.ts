@@ -87,6 +87,8 @@ export interface UseHybridChatResult {
    * `status` state can be stale. Updated the moment the chunk load resolves.
    */
   getStatus(): ChunkStatus;
+  /** Drop the loaded model and its worker (on-device chat turned off). A later call starts fresh. */
+  reset(): void;
 }
 
 export function useHybridChat(): UseHybridChatResult {
@@ -176,5 +178,16 @@ export function useHybridChat(): UseHybridChatResult {
 
   const getStatus = useCallback((): ChunkStatus => statusRef.current, []);
 
-  return { tryLocal, categorizeSample, status, getStatus };
+  const reset = useCallback(() => {
+    const hybrid = initedRef.current;
+    if (!hybrid) return;
+    try {
+      // init() disposes the previous client: its worker and the model in GPU memory.
+      hybrid.init({ baseUrl: getBaseUrl(), fetchImpl: authedFetch });
+    } catch {
+      initedRef.current = null;
+    }
+  }, []);
+
+  return { tryLocal, categorizeSample, status, getStatus, reset };
 }

@@ -33,7 +33,11 @@ describe('local chat config', () => {
     const catalogEntry = getModelsForProvider('transformers').find((m) => m.id === fastModel)!;
     const cfg = getLocalChatModelConfig();
 
-    expect(cfg.enabled).toBe(true);
+    // The model is described even while on-device chat is off (the consent
+    // copy names it); `enabled` additionally needs the localChatEnabled
+    // setting, which defaults off (local-chat-consent.test.ts).
+    expect(cfg.available).toBe(true);
+    expect(cfg.enabled).toBe(cfg.consented);
     expect(cfg.id).toBe(fastModel); // fastModel verbatim
     expect(cfg.id.startsWith('transformers:')).toBe(true);
     expect(cfg.repo).toBe(fastModel.replace(/^transformers:/, '')); // prefix stripped
@@ -76,6 +80,7 @@ describe('local chat config', () => {
     expect(cfg.bundle.days).toBe(LOCAL_CHAT_BUNDLE_DEFAULTS.days);
     if (!getProviderById('transformers')?.fastModel) {
       expect(cfg.enabled).toBe(false);
+      expect(cfg.available).toBe(false);
       expect(cfg.repo).toBe('');
     }
   });

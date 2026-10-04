@@ -54,6 +54,7 @@ import { isAgentPresent, revokeGrantsForUser } from '../mcp/store.js';
 import { runMcpMaintenance, runMcpMaintenanceAll, MAINTENANCE_INTERVAL_MS } from '../mcp/maintenance.js';
 import { appendRestExportAudit, appendRestWriteAudit } from '../mcp/audit.js';
 import { handlePrelabelRoute } from '../prelabel/routes.js';
+import { handleLocalChatSettingsPut } from './local-chat-settings.js';
 
 const DEFAULT_PORT = 3141;
 
@@ -1040,6 +1041,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // ── Hybrid (local-first WebGPU) chat ────────────────────────
 
         if (path === '/api/config/local-chat') {
+          if (req.method === 'PUT') return handleLocalChatSettingsPut(req, { headers, port: actualPort, mayWrite: !(authEnabled && currentUser && !canWrite(currentUser.role)) });
           return Response.json(apiLocalChatConfig(), { headers });
         }
 
