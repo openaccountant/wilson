@@ -92,6 +92,13 @@ export const categorizeTool = defineTool({
   func: async ({ limit, entityId, skipPendingReview }, config) => {
     const database = getDb();
     const threshold = getCategorizationConfidenceThreshold();
+    // A caller that can be cancelled (the dashboard's /categorize: its owner deactivated, or auth switched on
+    // under an anonymous run) passes a signal; the run then stops before writing anything more.
+    const signal = config?.signal;
+    const throwIfAborted = () => {
+      if (signal?.aborted) throw new DOMException('Categorization cancelled', 'AbortError');
+    };
+    throwIfAborted();
 
     // Load dynamic categories from DB (with fallback)
     let dbCategories: CategoryRow[] | undefined;
@@ -163,6 +170,7 @@ export const categorizeTool = defineTool({
         notAttempted = needsLlm.length - i;
         break;
       }
+      throwIfAborted();
       const batch = needsLlm.slice(i, i + batchSize);
       const inputs: CategorizationInput[] = batch.map((t: TransactionRow) => ({
         id: t.id,
@@ -185,7 +193,10 @@ export const categorizeTool = defineTool({
           // Room for every row's JSON: the local adapter otherwise caps output
           // at 512 tokens, truncating a 50-row reply into invalid JSON.
           maxTokens: OUTPUT_TOKENS_OVERHEAD + OUTPUT_TOKENS_PER_ROW * batch.length,
+          signal,
         });
+        // Cancelled while the model was answering: its answer must not be applied.
+        throwIfAborted();
 
         // callLlm validated the structured output against categorizationOutputSchema
         // (with one repair re-prompt) or threw — result.response.structured is guaranteed
@@ -224,6 +235,8 @@ export const categorizeTool = defineTool({
         }
         consecutiveFailures = 0;
       } catch (err) {
+        // A cancel is not a failed batch: stop the run (the caller reports it) instead of counting it.
+        if (signal?.aborted) throw err;
         consecutiveFailures++;
         errors.push(
           `Batch ${Math.floor(i / batchSize) + 1}: ${err instanceof Error ? err.message : String(err)}`

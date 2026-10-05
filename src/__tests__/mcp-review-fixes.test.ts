@@ -257,6 +257,29 @@ describe('chat approval expiry', () => {
       expect(getPendingChatOperation(db, poller)).toBeNull();
     });
   });
+
+  // #159 item 1 (decided: keep the fail-closed deny). An ownerless run with auth on has nobody who may approve, so
+  // the write is denied the moment it is seen: no card is ever raised, and neither a viewer nor an admin can see one.
+  test('ownerless run + auth on: the mutation is denied immediately, no card exists, and viewer and admin both see nothing', async () => {
+    const db = createTestDb();
+    await withChatRun(db, null, { tool: 'categorize', args: { limit: 5 } }, ({ respond }) => {
+      db.prepare("INSERT OR REPLACE INTO dashboard_config (key, value) VALUES ('auth_enabled', 'true')").run();
+      const viewer = { profile: 'test', userId: 2, role: 'viewer' as const };
+      const admin = { profile: 'test', userId: 1, role: 'admin' as const };
+
+      // The very first poll, whoever makes it, denies the agent and returns nothing.
+      expect(getPendingChatOperation(db, viewer)).toBeNull();
+      expect(respond).toHaveBeenCalledTimes(1);
+      expect(respond).toHaveBeenCalledWith('deny', REQUEST_ID);
+
+      // No operation row was ever created, so there is no card for anyone, and later polls stay empty.
+      expect(count(db, 'mcp_operations')).toBe(0);
+      expect(getPendingChatOperation(db, admin)).toBeNull();
+      expect(getPendingChatOperation(db, viewer)).toBeNull();
+      expect(count(db, 'mcp_operations')).toBe(0);
+      expect(respond).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('chat approval expiry (cont.)', () => {

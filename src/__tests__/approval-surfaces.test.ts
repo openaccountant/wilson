@@ -225,4 +225,48 @@ describe('approval on every agent surface (#152)', () => {
       expect(code).toBe(0);
     });
   });
+
+  describe("a deny-policy run (a viewer's chat) ignores the runner's session approvals (#159)", () => {
+    test("'allow-session' granted to an ask run does not let a later deny run write", async () => {
+      const [first, second] = (db.prepare("SELECT id FROM transactions ORDER BY id LIMIT 2").all() as { id: number }[]).map((r) => r.id);
+      const exists = (id: number) => Boolean(db.prepare('SELECT 1 FROM transactions WHERE id = @id').get({ id }));
+      const r = runner();
+
+      // An admin run approves delete_transaction for the session: the runner remembers it.
+      scriptedToolCall = { id: 'tc1', name: 'delete_transaction', args: { id: first } };
+      const adminRun = r.runQuery('delete one');
+      await waitFor(() => r.pendingApproval);
+      r.respondToApproval('allow-session');
+      await adminRun;
+      expect(exists(first)).toBe(false);
+
+      agentCalls = 0;
+      scriptedToolCall = { id: 'tc2', name: 'delete_transaction', args: { id: second } };
+      // A deny run (a viewer's) must not write, session approval or not, and must not raise a card.
+      await r.runQuery('delete another', { approvals: 'deny' });
+      expect(exists(second)).toBe(true);
+      expect(r.pendingApproval).toBeNull();
+      expect(r.lastDeniedTools).toEqual(['delete_transaction']);
+      const events = r.history.at(-1)!.events.map((e) => e.event);
+      expect(events.map((e) => e.type)).not.toContain('tool_start');
+      expect(events.find((e) => e.type === 'tool_approval')).toMatchObject({ tool: 'delete_transaction', approved: 'deny' });
+    });
+
+    test('an ask run after the deny run still honours the session approval (the deny run did not clear it)', async () => {
+      const [first, second] = (db.prepare("SELECT id FROM transactions ORDER BY id LIMIT 2").all() as { id: number }[]).map((r) => r.id);
+      const exists = (id: number) => Boolean(db.prepare('SELECT 1 FROM transactions WHERE id = @id').get({ id }));
+      const r = runner();
+      scriptedToolCall = { id: 'tc1', name: 'delete_transaction', args: { id: first } };
+      const adminRun = r.runQuery('delete one');
+      await waitFor(() => r.pendingApproval);
+      r.respondToApproval('allow-session');
+      await adminRun;
+
+      agentCalls = 0;
+      scriptedToolCall = { id: 'tc2', name: 'delete_transaction', args: { id: second } };
+      await r.runQuery('delete another');
+      expect(exists(second)).toBe(false);
+      expect(r.pendingApproval).toBeNull();
+    });
+  });
 });

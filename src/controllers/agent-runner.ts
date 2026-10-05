@@ -210,7 +210,11 @@ export class AgentRunnerController {
           controller.signal.aborted || approvals === 'deny'
             ? Promise.resolve<ApprovalDecision>('deny')
             : this.requestToolApproval(request),
-        sessionApprovedTools: this.sessionApprovedTools,
+        // A deny run (a viewer's chat) must not inherit the runner's shared
+        // 'allow-session' approvals — the gate would wave a write through
+        // before the handler could deny it (#159). It gets its own empty set;
+        // denials never add to it, so nothing leaks back either way.
+        sessionApprovedTools: approvals === 'deny' ? new Set<string>() : this.sessionApprovedTools,
       });
       const stream = agent.run(query, this.inMemoryChatHistory);
       for await (const event of stream) {

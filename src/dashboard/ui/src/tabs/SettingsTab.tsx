@@ -5,6 +5,7 @@ import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/
 import { parseDbTimestamp } from '@/format';
 import { reloadForProfileSwitch } from '@/hooks/useUrlState';
 import { AgentAccessCenter } from '@/components/agent/AgentAccessCenter';
+import { apiErrorMessage, firstAdminBody, shouldOfferFirstAdmin, validateFirstAdmin } from '@/lib/firstAdmin';
 
 const AUTH_KEY = 'wilson_auth_token';
 
@@ -159,9 +160,18 @@ function SecuritySection() {
   const [newRole, setNewRole] = useState<'admin' | 'viewer'>('viewer');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // The server's reason when enabling or disabling auth is refused (e.g. the 409 for "no active admin").
+  const [toggleError, setToggleError] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminConfirm, setAdminConfirm] = useState('');
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [adminError, setAdminError] = useState('');
 
   const isAdmin = authStatus?.user?.role === 'admin';
   const authEnabled = authStatus?.authEnabled ?? false;
+  // Auth off and nobody to log in as: the first admin is created together with turning auth on.
+  const offerFirstAdmin = shouldOfferFirstAdmin(authStatus);
 
   useEffect(() => {
     if (authEnabled && isAdmin) {
@@ -172,14 +182,43 @@ function SecuritySection() {
   }, [authEnabled, isAdmin]);
 
   async function handleToggleAuth() {
+    setToggleError('');
     try {
       await api('/api/auth/config', {
         method: 'PATCH',
         body: JSON.stringify({ auth_enabled: !authEnabled }),
       });
       refetch();
-    } catch {
-      // silent
+    } catch (err) {
+      setToggleError(apiErrorMessage(err, `Could not ${authEnabled ? 'disable' : 'enable'} authentication.`));
+    }
+  }
+
+  // POST /api/auth/setup creates the admin and turns auth on in one step and returns that admin's session.
+  async function handleCreateFirstAdmin() {
+    const input = { username: adminName, password: adminPassword, confirm: adminConfirm };
+    const problem = validateFirstAdmin(input);
+    if (problem) {
+      setAdminError(problem);
+      return;
+    }
+    setCreatingAdmin(true);
+    setAdminError('');
+    try {
+      const res = await api<{ token?: string }>('/api/auth/setup', {
+        method: 'POST',
+        body: JSON.stringify(firstAdminBody(input)),
+      });
+      // Log in as the new admin (every later request carries this token), then re-read the auth state.
+      if (res.token) localStorage.setItem(AUTH_KEY, res.token);
+      setAdminName('');
+      setAdminPassword('');
+      setAdminConfirm('');
+      refetch();
+    } catch (err) {
+      setAdminError(apiErrorMessage(err, 'Could not create the admin account.'));
+    } finally {
+      setCreatingAdmin(false);
     }
   }
 
@@ -256,7 +295,7 @@ function SecuritySection() {
                 Logout ({authStatus.user.username})
               </button>
             )}
-            {(!authEnabled || isAdmin) && (
+            {((!authEnabled && !offerFirstAdmin) || isAdmin) && (
               <button
                 onClick={handleToggleAuth}
                 className={`px-3 py-1 rounded text-xs font-medium cursor-pointer border-none ${
@@ -270,6 +309,59 @@ function SecuritySection() {
             )}
           </div>
         </div>
+
+        {toggleError && (
+          <div role="alert" className="text-xs text-red">{toggleError}</div>
+        )}
+
+        {/* First admin: auth is off and no user exists, so turning auth on means creating the admin first */}
+        {offerFirstAdmin && (
+          <form
+            className="space-y-2"
+            onSubmit={(e) => { e.preventDefault(); handleCreateFirstAdmin(); }}
+          >
+            <div className="text-xs text-text-muted">
+              Create the first admin to turn on authentication. You will be logged in as this account.
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                placeholder="Username"
+                autoComplete="username"
+                aria-label="Admin username"
+                className="bg-surface border border-border rounded px-2 py-1.5 text-sm text-text flex-1"
+              />
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="Password"
+                autoComplete="new-password"
+                aria-label="Admin password"
+                className="bg-surface border border-border rounded px-2 py-1.5 text-sm text-text flex-1"
+              />
+              <input
+                type="password"
+                value={adminConfirm}
+                onChange={(e) => setAdminConfirm(e.target.value)}
+                placeholder="Confirm password"
+                autoComplete="new-password"
+                aria-label="Confirm admin password"
+                className="bg-surface border border-border rounded px-2 py-1.5 text-sm text-text flex-1"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={creatingAdmin || !adminName.trim() || !adminPassword || !adminConfirm}
+              className="bg-green text-black px-3 py-1 rounded text-xs font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creatingAdmin ? 'Creating...' : 'Create admin & enable'}
+            </button>
+            {adminError && <div role="alert" className="text-xs text-red">{adminError}</div>}
+          </form>
+        )}
 
         {/* User list (admin only, when auth enabled) */}
         {authEnabled && isAdmin && users.length > 0 && (

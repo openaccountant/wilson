@@ -21,7 +21,7 @@ import type { ToolProgress } from '../model/types.js';
 import { getTaskModel } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { formatCategorizeSummary, parseCategorizeResult } from '../tools/categorize/summary.js';
-import { canWrite, type DashboardUser } from './auth.js';
+import { canWrite, onAuthEnabled, type DashboardUser } from './auth.js';
 import { ensureHandoffSecret, setHandoffReplayDb } from '../training/handoff-tag.js';
 
 /** The dashboard user a chat run belongs to (auth on); null when auth is off. */
@@ -353,10 +353,20 @@ export function respondToChatOperation(db: Database, operationId: string, decisi
  */
 let activeChatRun: Promise<void> | null = null;
 
+/**
+ * Stops the run `activeChatRun` stands for: the agent runner's cancel for a chat message, an abort of the
+ * categorizer for "/categorize". Set and cleared with `activeChatRun`; one cancel path serves deactivation
+ * (cancelChatRunForUser), auth being switched on under an ownerless run, and a replaced session.
+ */
+let cancelActiveRun: (() => void) | null = null;
+
 /** True while a dashboard chat agent run is in progress (diagnostic/test accessor). */
 export function isChatRunActive(): boolean {
   return activeChatRun !== null;
 }
+
+const STALE_PROFILE_MESSAGE =
+  'The active profile changed while this message was being sent, so it was not run. Nothing was changed; send it again on the current profile.';
 
 const CHAT_BUSY_MESSAGE =
   'Another chat message is still running. Wait for it to finish (or answer its approval) and try again.';
@@ -379,6 +389,40 @@ export function expireChatOperation(db: Database, operationId: string): boolean 
 }
 
 /**
+ * A deactivated user's in-flight chat run ends with the account (#159): the
+ * run they own is aborted, its pending approval is denied and its card is
+ * taken off the queue, so nothing it was about to do can be approved or run.
+ * Without this the run kept reading until its deadline. Covers a "/categorize"
+ * too. Returns true when a run was cancelled; a run owned by someone else (or none) is left alone, and so
+ * is any run when `db` is not the chat session's database (user ids are per profile).
+ */
+export function cancelChatRunForUser(db: Database, userId: number): boolean {
+  // User ids are per profile database: only the session's own database can name this run's owner.
+  if (db !== chatDb) return false;
+  if (!activeChatRun || !cancelActiveRun || chatRunOwner?.id !== userId) return false;
+  // Retire the card first, so no answer can reach the request while the run winds down.
+  retireBinding(chatDb, 'user_deactivated');
+  cancelActiveRun();
+  return true;
+}
+
+/**
+ * Dashboard auth was switched on for `db`. A run in flight with no owner (it started while auth was off, so
+ * it is anonymous: user null) must not carry on under the new login rules. Nobody owns its approval cards, and
+ * a "/categorize" writes without any card, so both are cancelled and their pending card taken off the queue.
+ * A run that has an owner, or one on another profile's database, is left alone.
+ */
+function cancelOwnerlessRun(db: Database): void {
+  if (db !== chatDb) return;
+  if (!activeChatRun || !cancelActiveRun || chatRunOwner !== null) return;
+  retireBinding(chatDb, 'auth_enabled');
+  cancelActiveRun();
+}
+
+// enableAuth calls this on the off -> on transition (a hook, because auth.ts cannot import this module).
+onAuthEnabled(cancelOwnerlessRun);
+
+/**
  * Initialize a chat session for the dashboard.
  * Reuses the same agent runner as headless mode.
  */
@@ -392,11 +436,14 @@ export function initChatSession(db: Database): void {
   // previous DB is not touched (a profile switch may already have closed it);
   // its leftover cards are expired here when it is next opened.
   const previous = agentRunner;
+  const cancelPrevious = cancelActiveRun;
   binding = null;
   agentRunner = null;
   activeChatRun = null;
+  cancelActiveRun = null;
   chatRunOwner = null;
   previous?.cancelExecution();
+  cancelPrevious?.(); // a "/categorize" has no runner: stop it before it writes into the old profile's tools
   try {
     expirePendingOperationsBySource(db, 'chat', 'chat session replaced');
   } catch (err) {
@@ -447,9 +494,15 @@ export function initChatSession(db: Database): void {
  * query — runQuery only takes a string, and this keeps the ids in history.
  */
 export async function handleChatMessage(
-  query: string, sessionId?: string, contextBlock?: string, options: { user?: ChatUser | null } = {}
-): Promise<{ answer: string; sessionId: string | null; busy?: true }> {
+  query: string, sessionId?: string, contextBlock?: string, options: { user?: ChatUser | null; db?: Database } = {}
+): Promise<{ answer: string; sessionId: string | null; busy?: true; stale?: true }> {
   const user = options.user ?? null;
+  // The runner and the agent tools are bound to the CURRENT profile's db (initChatSession). A caller that
+  // authenticated against a different db (a request that outlived a profile switch) must not run on this one.
+  if (options.db && options.db !== chatDb) {
+    logger.warn(`Dashboard chat: refused a message authenticated against a different profile than the chat session`);
+    return { answer: STALE_PROFILE_MESSAGE, sessionId: null, stale: true };
+  }
   // A user whose role cannot write (viewer, with auth on) gets the same rule
   // in chat as on the REST write routes (#156): no write runs, and no card is
   // raised for one — every mutating tool call is denied at once.
@@ -462,7 +515,24 @@ export async function handleChatMessage(
     return { answer: viewerCannotWrite(user!, '/categorize'), sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
   }
   if ('action' in expansion) {
-    return { answer: await runCategorizeCommand(expansion.limit), sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
+    // "/categorize" is a run like any other message: one at a time, owned by whoever typed it, and cancellable
+    // (deactivation of its owner, auth switched on under an anonymous run, a replaced session).
+    if (activeChatRun) {
+      logger.warn(`Dashboard chat: refused /categorize while another run is active`);
+      return { answer: CHAT_BUSY_MESSAGE, sessionId: sessionId ?? chatHistory?.getSessionId() ?? null, busy: true };
+    }
+    const controller = new AbortController();
+    const categorizing = runCategorizeCommand(expansion.limit, controller.signal);
+    const settled: Promise<void> = categorizing.then(() => {}, () => {}).finally(() => {
+      if (activeChatRun !== settled) return; // the session was replaced meanwhile
+      activeChatRun = null;
+      cancelActiveRun = null;
+      chatRunOwner = null;
+    });
+    activeChatRun = settled;
+    cancelActiveRun = () => controller.abort();
+    chatRunOwner = user;
+    return { answer: await categorizing, sessionId: sessionId ?? chatHistory?.getSessionId() ?? null };
   }
   query = contextBlock ? `${contextBlock}${expansion.query}` : expansion.query;
 
@@ -495,6 +565,7 @@ export async function handleChatMessage(
   const runner = agentRunner;
   let deadline: ReturnType<typeof setTimeout> | undefined;
   chatRunOwner = user;
+  cancelActiveRun = () => runner.cancelExecution();
   const run = runner.runQuery(query, readOnlyUser ? { approvals: 'deny' } : {});
   const settled: Promise<void> = run.then(
     () => {},
@@ -502,6 +573,7 @@ export async function handleChatMessage(
   ).finally(() => {
     if (activeChatRun !== settled) return; // the session was replaced meanwhile
     activeChatRun = null;
+    cancelActiveRun = null;
     // The owner applies only to the run it started (held until the run settles, which can outlast the
     // request after the deadline); never leave it behind for the next caller.
     chatRunOwner = null;
@@ -574,6 +646,10 @@ const LOCAL_CATEGORIZE_CHUNK = 50;
  */
 let categorizeProgress: ToolProgress | null = null;
 
+const CATEGORIZE_CANCELLED_MESSAGE =
+  '**Categorization cancelled.** It was stopped before it finished (the account that started it was deactivated, ' +
+  'or dashboard login was switched on while it ran). Rows it had already categorized stay as they are; nothing further was changed.';
+
 /** Live batch progress of the running /categorize, or null (route + test accessor). */
 export function getCategorizeProgress(): ToolProgress | null {
   return categorizeProgress;
@@ -586,7 +662,7 @@ export function getCategorizeProgress(): ToolProgress | null {
  * prompt is used instead of the agent's full tool-schema prompt. Failures
  * always come back as an answer.
  */
-async function runCategorizeCommand(limit?: number): Promise<string> {
+async function runCategorizeCommand(limit: number | undefined, signal: AbortSignal): Promise<string> {
   const startTime = Date.now();
   const local = resolveProvider(getTaskModel('categorization')).id === 'transformers';
   const effectiveLimit = limit ?? (local ? LOCAL_CATEGORIZE_CHUNK : undefined);
@@ -594,7 +670,7 @@ async function runCategorizeCommand(limit?: number): Promise<string> {
   try {
     const resultJson = await categorizeTool.func(
       { ...(effectiveLimit !== undefined ? { limit: effectiveLimit } : {}), skipPendingReview: true },
-      { onProgress: (p) => { categorizeProgress = p; } },
+      { onProgress: (p) => { categorizeProgress = p; }, signal },
     );
     const data = parseCategorizeResult(resultJson);
     let answer = formatCategorizeSummary(data, { errorDetail: true });
@@ -613,6 +689,10 @@ async function runCategorizeCommand(limit?: number): Promise<string> {
     logger.info(`Dashboard /categorize`, { durationMs: Date.now() - startTime, limit: effectiveLimit, remaining });
     return answer;
   } catch (err) {
+    if (signal.aborted) {
+      logger.info(`Dashboard /categorize cancelled`, { durationMs: Date.now() - startTime });
+      return CATEGORIZE_CANCELLED_MESSAGE;
+    }
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard /categorize error`, { durationMs: Date.now() - startTime, error: errorMsg });
     return `**Categorization failed:** ${errorMsg}`;

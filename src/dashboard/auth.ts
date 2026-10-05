@@ -38,8 +38,8 @@ export function isAuthEnabled(db: Database): boolean {
  * anything minted while auth was off has no owner (user_id null, role admin)
  * and would otherwise keep working, unattributed, under the new login rules.
  * Admins grant again afterwards. Re-enabling while already on changes nothing.
- * (Chat cards are not touched here: they answer a live chat run, and with
- * auth on an unowned one is visible and approvable only by an admin.)
+ * A chat run in flight with no owner (started while auth was off) is cancelled
+ * through `onAuthEnabled`, together with its pending card.
  */
 export function enableAuth(db: Database): void {
   if (isAuthEnabled(db)) return;
@@ -49,6 +49,28 @@ export function enableAuth(db: Database): void {
   db.prepare(
     "INSERT OR REPLACE INTO dashboard_config (key, value) VALUES ('auth_enabled', 'true')"
   ).run();
+  for (const listener of authEnabledListeners) {
+    try {
+      listener(db);
+    } catch (err) {
+      // Housekeeping must never undo the enable (the flag is already written); say so and carry on.
+      console.error('[auth] an onAuthEnabled listener failed:', err);
+    }
+  }
+}
+
+type AuthEnabledListener = (db: Database) => void;
+const authEnabledListeners = new Set<AuthEnabledListener>();
+
+/**
+ * Run `listener(db)` right after dashboard auth is switched on (the off -> on transition only) for `db`.
+ * The dashboard chat uses it to end runs that started with auth off: they have no owner, so nobody could
+ * approve their cards or be held to their writes under the new login rules. A hook rather than an import
+ * because chat.ts already depends on this module. Returns an unsubscribe function.
+ */
+export function onAuthEnabled(listener: AuthEnabledListener): () => void {
+  authEnabledListeners.add(listener);
+  return () => { authEnabledListeners.delete(listener); };
 }
 
 export function disableAuth(db: Database): void {

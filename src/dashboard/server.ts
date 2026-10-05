@@ -33,9 +33,9 @@ import { annotateAgentPresent, handleJudgementRoute } from './judgement-routes.j
 import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
 import { hasLicense } from '../licensing/license.js';
 import { getCheckoutUrl } from '../licensing/upsell.js';
-import { initChatSession, handleChatMessage, getCategorizeProgress } from './chat.js';
+import { initChatSession, handleChatMessage, getCategorizeProgress, cancelChatRunForUser } from './chat.js';
 import {
-  isAuthEnabled, enableAuth, disableAuth, lanAuthReady,
+  isAuthEnabled, enableAuth, disableAuth, lanAuthReady, hasActiveAdmin,
   listUsers, getUserCount, deactivateUser, hashPassword, insertUser, createFirstAdmin,
   verifyLogin, validateToken, revokeToken, cleanExpiredSessions, canWrite,
   type DashboardUser,
@@ -48,6 +48,7 @@ import {
 } from './origin-gate.js';
 import { getGlobalAgentState } from '../mcp/global-state.js';
 import { handleMcpRoute } from './mcp-routes.js';
+import { isStateChanging, readBodyThenRecheck } from './write-recheck.js';
 import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
 import { isAgentPresent, revokeGrantsForUser } from '../mcp/store.js';
@@ -159,6 +160,12 @@ const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
 type Role = 'admin' | 'viewer';
+
+/** Auth routes that need no token (they establish or report a login, so there is none to re-check). */
+const PUBLIC_AUTH_PATHS = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
+function isPublicAuthPath(path: string): boolean {
+  return PUBLIC_AUTH_PATHS.includes(path);
+}
 
 function canManageUsers(role: Role): boolean {
   return role === 'admin';
@@ -346,6 +353,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── Auth middleware ──────────────────────────────────────────
         let currentUser: DashboardUser | null = null;
+        let bearerToken: string | null = null;
         const authEnabled = isAuthEnabled(activeDb);
 
         if (authEnabled) {
@@ -358,13 +366,13 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             ? authHeader.slice(7)
             : isExportDownload ? url.searchParams.get('token') : null;
 
+          bearerToken = token;
           if (token) {
             currentUser = validateToken(activeDb, token);
           }
 
           // Public auth routes (no token required)
-          const publicPaths = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
-          const isPublicAuth = publicPaths.includes(path);
+          const isPublicAuth = isPublicAuthPath(path);
           const isHtmlPage = path === '/' || path === '/index.html' || path === '/webmcp-bridge.js';
           // /mcp authenticates each call with its own grant-bound bearer token
           // (see src/mcp/http-server.ts) — an external MCP client has no
@@ -385,6 +393,48 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // got past the middleware with no login must then be refused.
         const authTurnedOnMidRequest = () => !authEnabled && isAuthEnabled(activeDb);
         const unauthorized = () => Response.json({ error: 'Unauthorized' }, { status: 401, headers });
+        const profileChanged = () => Response.json(
+          { error: 'The active profile changed while this request was in flight, so it was not run. Nothing was changed; send it again on the current profile.' },
+          { status: 409, headers },
+        );
+
+        // What this request arrived with. A login-less request (auth off, or a public auth route)
+        // has nothing to re-validate beyond the profile and the auth flag.
+        const arrivedUser = currentUser;
+        const arrivedToken = bearerToken;
+        const hasLogin = authEnabled && arrivedUser !== null && arrivedToken !== null && !isPublicAuthPath(path);
+
+        /**
+         * Is this request still what it was when its headers arrived? Anything that awaits between the
+         * middleware and a write (the body, a password hash, a handoff build) asks again before writing:
+         *  - The active profile changed: the middleware authenticated against `activeDb`, but the chat runner
+         *    and the agent tools follow the CURRENT profile, so a request that outlives a switch would run on
+         *    a profile whose login it never presented ('profile_changed', 409).
+         *  - It arrived with auth off and auth is on now: it carries no login ('unauthorized').
+         *  - It arrived with a login that is gone or belongs to someone else now (deactivated, logged out,
+         *    expired): an offboarded admin must not finish a held write ('unauthorized'). A still-valid login
+         *    replaces `currentUser`, so a role change mid-request is honoured by the route's own canWrite checks.
+         */
+        const recheck = (): 'profile_changed' | 'unauthorized' | null => {
+          if (getActiveDb() !== activeDb) return 'profile_changed';
+          if (authTurnedOnMidRequest()) return 'unauthorized';
+          if (hasLogin) {
+            const fresh = validateToken(activeDb, arrivedToken!);
+            if (!fresh || fresh.id !== arrivedUser!.id) return 'unauthorized';
+            currentUser = fresh;
+          }
+          return null;
+        };
+        const refusal = (reason: 'profile_changed' | 'unauthorized') => (reason === 'profile_changed' ? profileChanged() : unauthorized());
+
+        // One write-time re-check for every state-changing route (#157): the body is read here, once,
+        // before any route sees it, and the request is refused if its authority changed meanwhile.
+        // `/mcp` is excluded because it authenticates each call with its own client token and reads its
+        // own body; the public auth routes (status, setup, login) carry no login to re-check.
+        if (isStateChanging(req.method) && path !== MCP_HTTP_PATH && (!authEnabled || hasLogin)) {
+          const refused = await readBodyThenRecheck(req, recheck);
+          if (refused) return refusal(refused);
+        }
 
         // Export downloads are the one REST read path the audit log covers.
         // Every request that reaches an export route is audited whatever its
@@ -524,7 +574,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
           const passwordHash = await hashPassword(body.password);
-          if (authTurnedOnMidRequest()) return unauthorized();
+          // The hash awaited: same profile, live login (not deactivated or logged out meanwhile), auth not
+          // switched on under a login-less request. Otherwise an offboarded admin finishes a backdoor account.
+          const stale = recheck();
+          if (stale) return refusal(stale);
           const user = insertUser(activeDb, body.username, passwordHash, body.role ?? 'viewer');
           return Response.json(user, { headers });
         }
@@ -537,7 +590,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const id = parseInt(userDeleteMatch[1], 10);
           const success = deactivateUser(activeDb, id);
           // A deactivated user's WebMCP grants die with the account, not at the grant's TTL.
-          if (success) revokeGrantsForUser(activeDb, id);
+          if (success) {
+            revokeGrantsForUser(activeDb, id);
+            // ...and so does a chat run they have in flight (and its pending card).
+            cancelChatRunForUser(activeDb, id);
+          }
           return Response.json({ success, id }, { headers });
         }
 
@@ -546,6 +603,18 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const body = await req.json() as { auth_enabled?: boolean };
+          // Auth on with no active admin is a bootstrap hijack (#157): /api/auth/setup stays public
+          // while no users exist, so whoever called it first would become admin. The first enable
+          // goes through /api/auth/setup, which creates the admin and flips the flag in one
+          // transaction. This check and enableAuth run with no await between them.
+          if (body.auth_enabled === true && !isAuthEnabled(activeDb) && !hasActiveAdmin(activeDb)) {
+            return Response.json(
+              { error: 'Cannot enable auth: no active admin user exists. Create the first admin through /api/auth/setup, which also enables auth.' },
+              { status: 409, headers },
+            );
+          }
+          // Write-time backstop: a request that arrived with auth off carries no login, so if auth came on
+          // since (a concurrent /api/auth/setup) it must not enable, and above all must not DISABLE, it.
           if (authTurnedOnMidRequest()) return unauthorized();
           if (body.auth_enabled === true) enableAuth(activeDb);
           else if (body.auth_enabled === false) disableAuth(activeDb);
@@ -1002,8 +1071,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         if (path === '/api/chat' && req.method === 'POST') {
           const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
-          // Headers may have arrived while auth was off; re-check after the body read.
-          if (authTurnedOnMidRequest()) return unauthorized();
+          // The body was read and auth re-checked centrally (readBodyThenRecheck).
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
@@ -1027,12 +1095,18 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const handoffBlock = apiLocalChatConfig().subagent.enabled
             ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb), db: activeDb })
             : '';
-          if (authTurnedOnMidRequest()) return unauthorized();
+          // The handoff build awaited: ask the whole question again (same profile, same live login, auth
+          // not switched on under a login-less request) before a run starts on the shared runner.
+          const stale = recheck();
+          if (stale) return refusal(stale);
           // The run belongs to this user: its approval cards are theirs alone,
-          // and a user who cannot write gets every write denied (#156).
+          // and a user who cannot write gets every write denied (#156). `db` is the profile this request
+          // was authenticated against; the chat session refuses to run for any other.
           const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined, {
             user: authEnabled && currentUser ? { id: currentUser.id, role: currentUser.role } : null,
+            db: activeDb,
           });
+          if (result.stale) return profileChanged();
           // One chat run at a time (chat.ts activeChatRun): a concurrent
           // message is refused, never queued behind another run's approval.
           if (result.busy) {

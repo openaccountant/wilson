@@ -815,7 +815,9 @@ describe('dashboard server', () => {
     });
 
     test('PATCH /api/auth/config toggles auth', async () => {
-      const { base } = await start();
+      const { base, db } = await start();
+      // Enabling auth needs an active admin (#157); first-time setup goes through /api/auth/setup.
+      await createUser(db, 'toggler', 'password123', 'admin');
       const res = await fetch(base + '/api/auth/config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

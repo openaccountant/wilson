@@ -3,7 +3,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { createTestDb, seedTestData } from './helpers.js';
-import { grantTools, mintTestToken, testScope } from './mcp-helpers.js';
+import { grantTools, makeUser, mintTestToken, testScope } from './mcp-helpers.js';
+import { nextArrival } from './held-request-helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, deactivateUser, enableAuth, getUserCount, isAuthEnabled } from '../dashboard/auth.js';
@@ -222,6 +223,9 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
     const split = Math.floor(text.length / 2);
     let ctl!: ReadableStreamDefaultController<Uint8Array>;
     const stream = new ReadableStream<Uint8Array>({ start(c) { ctl = c; } });
+    // Deterministic: resolves when the server has read the auth flag for THIS request, i.e. it has seen the
+    // headers (and is about to wait on the body). A fixed sleep could let the test race ahead of a slow runner.
+    const arrived = nextArrival(db);
     const res = fetch(base + path, {
       method: opts.method ?? 'POST',
       headers: {
@@ -235,8 +239,7 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       duplex: 'half',
     } as RequestInit);
     ctl.enqueue(new TextEncoder().encode(text.slice(0, split)));
-    // Let the server receive the headers and enter the handler.
-    await new Promise((r) => setTimeout(r, 100));
+    await arrived;
     return {
       finish: async () => {
         ctl.enqueue(new TextEncoder().encode(text.slice(split)));
@@ -322,6 +325,8 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
     test('reviewer probe: a grant whose body completes after auth is enabled is refused', async () => {
       // Request starts while auth is off (no login needed), body held open.
       const held = await heldRequest('/api/mcp/grants', { tools: ['categorize_transaction'] }, { session: S('race-tab') });
+      // Enabling auth needs an active admin (#157), so one exists before auth is switched on.
+      await makeUser(db, 'admin', 'admin');
       // Auth turned on while the grant request is still in flight.
       expect((await call('/api/auth/config', null, 'PATCH', { auth_enabled: true })).status).toBe(200);
       expect(isAuthEnabled(db)).toBe(true);
@@ -338,6 +343,7 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       const held = await heldRequest('/api/mcp/call', {
         grantId: tab.grants[0].id, tool: 'categorize_transaction', args: { id, category: 'Groceries' },
       }, { session: S('tab-race') });
+      await makeUser(db, 'admin', 'admin');
       expect((await call('/api/auth/config', null, 'PATCH', { auth_enabled: true })).status).toBe(200);
 
       const res = await held.finish();
@@ -378,7 +384,8 @@ describe('WebMCP/HTTP-MCP approval hardening', () => {
       expect(first.status).toBe(200);
 
       const res = await held.finish();
-      expect(res.status).toBe(400);
+      // Refused centrally (401: auth turned on while the body was in flight) before the route's own "Admin already exists" (400).
+      expect(res.status).toBe(401);
       expect(getUserCount(db)).toBe(1);
       expect((await call('/api/auth/login', null, 'POST', { username: 'attacker', password: 'attackerpass' })).status).toBe(401);
     });
