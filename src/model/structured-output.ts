@@ -80,8 +80,11 @@ export function buildRepairPrompt(
   failedResponse: LlmResponse,
   schema: z.ZodType,
   issues: string[],
+  options: { compact?: boolean } = {},
 ): string {
-  const schemaJson = JSON.stringify(z.toJSONSchema(schema), null, 2);
+  // Compact only where the caller says so (local models, whose context is
+  // scarce); every other provider keeps the pretty-printed schema.
+  const schemaJson = JSON.stringify(z.toJSONSchema(schema), null, options.compact ? undefined : 2);
   const excerpt = failedResponse.content.slice(0, 2000);
   const numberedIssues = issues.map((issue, index) => `${index + 1}. ${issue}`).join('\n');
 

@@ -42,6 +42,9 @@ import { homedir } from 'node:os';
 import { z } from 'zod';
 import { parseToolCall } from '../tool-call-parse.js';
 import type { ProviderAdapter, ProviderCallOptions, LlmResponse, ToolDef } from '../types.js';
+import { toConstraintSchema } from '../constraint-schema.js';
+import type { ResponseFormat } from '@huggingface/transformers-structured-output';
+import { logger } from '../../utils/logger.js';
 import { getTransformersCatalogEntry } from '../../utils/model.js';
 import { discoverSkills } from '../../skills/index.js';
 import {
@@ -253,8 +256,89 @@ async function getOrCreatePipeline(modelName: string) {
     console.warn = origWarn;
     console.info = origInfo;
   }
-  pipelineCache.set(modelName, pipe);
+  await registerPipeline(modelName, pipe);
   return pipe;
+}
+
+/**
+ * Cache a freshly loaded pipeline and precompute the structured-output
+ * tokenizer tables for it (cached per tokenizer object), so the first
+ * constrained call — agent, categorize or Showdown — does not pay for it.
+ * Warmup failures are logged and never break loading.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function registerPipeline(modelName: string, pipe: any): Promise<void> {
+  pipelineCache.set(modelName, pipe);
+  try {
+    const { StructuredOutputProcessor } = await loadStructuredOutput();
+    StructuredOutputProcessor.warmup(pipe.tokenizer);
+  } catch (err) {
+    logger.debug('structured-output warmup failed; constrained calls will warm lazily', {
+      model: modelName,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * Models whose generation config does not stop on the tokenizer EOS. Constrained
+ * decoding can never finish cleanly on them, so after the first mismatch their
+ * calls skip building the processor and generate once, prompt-only. Cleared by
+ * setPipelineForTests() with no arguments.
+ */
+const eosMismatchModels = new Set<string>();
+
+/** False once a model is known to run unconstrained (EOS mismatch), so callers keep their loose schema. */
+export function isConstrainedDecodingActive(model: string): boolean {
+  // Callers pass the prefixed id from getTaskModel(); the adapter records the bare repo id.
+  return !eosMismatchModels.has(model.replace(/^transformers:/, ''));
+}
+
+/**
+ * Test seam: install `pipe` as the loaded pipeline for `modelName` (warmup
+ * included), or clear the cache with no arguments.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function setPipelineForTests(modelName?: string, pipe?: any): Promise<void> {
+  if (modelName === undefined) {
+    pipelineCache.clear();
+    eosMismatchModels.clear();
+    return;
+  }
+  await registerPipeline(modelName, pipe);
+}
+
+/**
+ * The structured-output plugin, loaded on first use. Never imported statically:
+ * it imports @huggingface/transformers at top level, and this module is
+ * statically imported on the agent path.
+ */
+function loadStructuredOutput() {
+  return import('@huggingface/transformers-structured-output');
+}
+
+/**
+ * The processor saw the tokenizer EOS after a complete answer while the model's
+ * generation config does not stop on it: a tokenizer/config mismatch, not a bad
+ * generation, so repair cannot help.
+ */
+export function isEosMismatchError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes('observed the tokenizer EOS token');
+}
+
+/**
+ * Errors the structured-output processor raises mid-generation (a dead end, or
+ * a token the constraint did not allow). They mean "no valid output",
+ * not a broken model, so the call returns an unvalidated response and
+ * callLlm's repair path runs instead of a hard failure.
+ */
+export function isConstraintGenerationError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('constraint reached a dead end') ||
+    msg.includes('does not satisfy the constraint')
+  );
 }
 
 /**
@@ -467,7 +551,7 @@ function buildStructuredSystemPrompt(systemPrompt: string, schema: z.ZodType): s
   return `${systemPrompt}
 
 Respond ONLY with valid JSON matching this schema:
-${JSON.stringify(jsonSchema, null, 2)}
+${JSON.stringify(jsonSchema)}
 
 Do not include any other text, explanation, or markdown. Output only the JSON object.`;
 }
@@ -495,16 +579,65 @@ export class TransformersAdapter implements ProviderAdapter {
     const promptTokens = countPromptTokens(pipe, messages);
     if (promptTokens !== null) assertWithinPromptBudget(model, promptTokens);
 
+    // A new processor per call: it is single-use and stateful (a reused one
+    // silently produces garbage). An unconstrainable schema falls back to
+    // prompt-only generation; zod validation still gates the result.
+    let logitsProcessor: unknown;
+    if (outputSchema && !eosMismatchModels.has(model)) {
+      try {
+        const { StructuredOutputProcessor } = await loadStructuredOutput();
+        const responseFormat = {
+          type: 'json_schema',
+          json_schema: toConstraintSchema(outputSchema),
+        } as ResponseFormat;
+        logitsProcessor = new StructuredOutputProcessor(pipe.tokenizer, responseFormat);
+      } catch (err) {
+        logger.debug('outputSchema not constrainable; generating prompt-only', {
+          model,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const generate = (processor: unknown) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pipe(messages as any, {
+        max_new_tokens: options.maxTokens ?? 512,
+        do_sample: false,
+        ...(processor ? { logits_processor: processor } : {}),
+      });
+
+    // Whether the result came from a constrained generation. The EOS retry
+    // below produces an unconstrained one, which may be fenced or wrapped in prose.
+    let constrained = !!logitsProcessor;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result = await pipe(messages as any, {
-        max_new_tokens: options.maxTokens ?? 512,
-        do_sample: false,
-      });
+      result = await generate(logitsProcessor);
     } catch (err) {
-      throw explainGenerationError(model, resolveTransformersDevice(model), promptTokens, err);
+      if (logitsProcessor && isEosMismatchError(err)) {
+        // The answer was complete and valid; the model just does not stop on the
+        // tokenizer EOS. Retry once without the processor rather than discard it.
+        eosMismatchModels.add(model);
+        constrained = false;
+        logger.warn(
+          'model eos_token_id does not match the tokenizer; constrained decoding disabled for this model for the rest of this session',
+          { model, error: err instanceof Error ? err.message : String(err) },
+        );
+        try {
+          result = await generate(undefined);
+        } catch (retryErr) {
+          throw explainGenerationError(model, resolveTransformersDevice(model), promptTokens, retryErr);
+        }
+      } else if (logitsProcessor && isConstraintGenerationError(err)) {
+        logger.warn('constrained generation produced no valid output; deferring to repair', {
+          model,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return { content: '', toolCalls: [] };
+      } else {
+        throw explainGenerationError(model, resolveTransformersDevice(model), promptTokens, err);
+      }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -530,11 +663,17 @@ export class TransformersAdapter implements ProviderAdapter {
       }
     }
 
-    // Handle structured output
+    // Handle structured output. Constrained output is the JSON itself; the
+    // catch still covers truncation at max_new_tokens (partial JSON), which
+    // callLlm's zod gate and repair then handle. Prompt-only output may wrap
+    // the object in prose or fences, so it keeps the widest-{...} scrape.
     if (outputSchema) {
       try {
-        const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? jsonMatch[0] : rawOutput.trim();
+        let jsonStr = rawOutput.trim();
+        if (!constrained) {
+          const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
+          if (jsonMatch) jsonStr = jsonMatch[0];
+        }
         const parsed = JSON.parse(jsonStr);
         return { content: rawOutput, toolCalls: [], structured: parsed };
       } catch {

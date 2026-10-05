@@ -139,7 +139,9 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
             adapter.call({
               model: apiModel,
               systemPrompt: finalSystemPrompt,
-              userPrompt: buildRepairPrompt(prompt, response, outputSchema, first.issues),
+              userPrompt: buildRepairPrompt(prompt, response, outputSchema, first.issues, {
+                compact: provider.id === 'transformers',
+              }),
               outputSchema,
               signal,
               maxTokens,

@@ -9,6 +9,7 @@
         "@ai-sdk/google": "^4.0.76",
         "@ai-sdk/openai": "^4.0.71",
         "@huggingface/transformers": "4.3.0",
+        "@huggingface/transformers-structured-output": "4.3.0",
         "@mariozechner/pi-tui": "^0.73.1",
         "@modelcontextprotocol/sdk": "^1.27.1",
         "@opentelemetry/api": "^1.9.0",
@@ -71,6 +72,8 @@
     "@huggingface/tokenizers": ["@huggingface/tokenizers@0.2.0", "", {}, "sha512-LidMHe1FpcSYH4vcSjXooda34pC0M8m1gmDOv7SQi6Iv+ib1zX7J3sHBCC9/3FPCkn2k1b55FneVqMRxrr99pg=="],
 
     "@huggingface/transformers": ["@huggingface/transformers@4.3.0", "", { "dependencies": { "@huggingface/jinja": "^0.5.10", "@huggingface/tokenizers": "^0.2.0", "onnxruntime-node": "1.30.0", "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0", "sharp": "^0.35.4" } }, "sha512-fL1A/WUZwouPrOlYxU5dzIwD2T5J781JiB2jDR8bFe5DwCj0Gfudq+NEXCMno49kQgajHA7xQkrRLJlqG1veEA=="],
+
+    "@huggingface/transformers-structured-output": ["@huggingface/transformers-structured-output@4.3.0", "", { "peerDependencies": { "@huggingface/transformers": "^4.3.0" } }, "sha512-xtXd+gYnWqDYp2B/97hsPeBKDcwNTcAeT1+2K63iCsKXiTXLxGRCyPSKVjM241YdFurN+1oRg+WSpXk5EFYEcg=="],
 
     "@img/colour": ["@img/colour@1.1.0", "", {}, "sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ=="],
 

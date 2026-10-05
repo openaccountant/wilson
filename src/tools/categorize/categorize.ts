@@ -10,6 +10,8 @@ import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.
 import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
 import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
 import { resolveProvider } from '../../providers.js';
+import { isConstrainedDecodingActive } from '../../model/providers/transformers.js';
+import { numberLiteralUnion } from '../literal-union.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -18,6 +20,11 @@ let db: Database | null = null;
  * Initialize the categorize tool with a database connection.
  * Must be called before the agent starts.
  */
+/** Narrow only when decoding is really constrained: local provider and no EOS-mismatch fallback. */
+function isNarrowingSafe(model: string): boolean {
+  return resolveProvider(model).id === 'transformers' && isConstrainedDecodingActive(model);
+}
+
 export function initCategorizeTool(database: Database): void {
   db = database;
 }
@@ -37,16 +44,54 @@ function getDb(): Database {
 export const CATEGORIZER_SYSTEM_PROMPT =
   'You are a precise financial transaction categorizer. Respond only with valid JSON.';
 
-/** Zod schema for LLM structured output */
-const categorizationOutputSchema = z.object({
-  transactions: z.array(
-    z.object({
-      id: z.number(),
-      category: z.string(),
-      confidence: z.number().min(0).max(1),
-    })
-  ),
-});
+/**
+ * The category names the prompt offers: roots and their children for DB
+ * categories (what buildCategoryListFromDb renders), else the hardcoded list.
+ * 'Other' is always allowed: it is the backstop for anything unresolved.
+ */
+export function offeredCategoryNames(dbCategories: CategoryRow[] | undefined): string[] {
+  const names = dbCategories
+    ? dbCategories
+        .filter((c) => c.parent_id === null || dbCategories.some((p) => p.id === c.parent_id && p.parent_id === null))
+        .map((c) => c.name)
+    : CATEGORIES;
+  return [...new Set([...names, 'Other'])];
+}
+
+/**
+ * Zod schema for LLM structured output, built per batch. With `narrow` (only
+ * where decoding is constrained, i.e. local Transformers.js) category is limited
+ * to the names offered and id to this batch's ids, so the model cannot name
+ * anything else. Otherwise the schema stays loose: providers that do not enforce
+ * it would fail the whole batch on one near-miss, and the 'Other' fallback and
+ * batch-id guard below handle those rows instead. A fresh schema per call means
+ * a cold token-mask cache; the WeakMap memo in toConstraintSchema lets the old
+ * one be collected.
+ */
+export function buildCategorizationOutputSchema(batchIds: number[], categoryNames: string[], narrow: boolean) {
+  return z.object({
+    transactions: narrow
+      ? z
+          .array(
+            z.object({
+              id: numberLiteralUnion(batchIds),
+              category: z.enum(categoryNames as [string, ...string[]]),
+              confidence: z.number().min(0).max(1),
+            })
+          )
+          // An empty array would pass as "success" while categorizing nothing.
+          .min(1)
+          .max(batchIds.length)
+      : z
+          .array(
+            z.object({
+              id: z.number(),
+              category: z.string(),
+              confidence: z.number().min(0).max(1),
+            })
+          ),
+  });
+}
 
 const BATCH_SIZE = 50;
 /**
@@ -180,6 +225,12 @@ export const categorizeTool = defineTool({
       }));
 
       const prompt = buildCategorizationPrompt(inputs, dbCategories);
+      const batchIds = new Set(batch.map((t) => t.id));
+      const outputSchema = buildCategorizationOutputSchema(
+        [...batchIds],
+        offeredCategoryNames(dbCategories),
+        isNarrowingSafe(getTaskModel('categorization')),
+      );
 
       try {
         // 3. Call LLM with structured output. Resolved per batch so a pinned
@@ -187,7 +238,7 @@ export const categorizeTool = defineTool({
         const model = getTaskModel('categorization');
         const result = await callLlm(prompt, {
           systemPrompt: CATEGORIZER_SYSTEM_PROMPT,
-          outputSchema: categorizationOutputSchema,
+          outputSchema,
           model,
           callType: CALL_TYPE_CATEGORIZATION,
           // Room for every row's JSON: the local adapter otherwise caps output
@@ -198,14 +249,19 @@ export const categorizeTool = defineTool({
         // Cancelled while the model was answering: its answer must not be applied.
         throwIfAborted();
 
-        // callLlm validated the structured output against categorizationOutputSchema
+        // callLlm validated the structured output against the per-batch schema
         // (with one repair re-prompt) or threw — result.response.structured is guaranteed
         // to satisfy the schema, so a rejected batch lands in the catch below and this
         // batch's transactions stay uncategorized.
-        const categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
+        const categorizations = result.response.structured as { transactions: { id: number; category: string; confidence: number }[] };
 
         // 4. Update categories in database
         for (const cat of categorizations.transactions) {
+          // Whatever the provider enforced, an id outside this batch is never written.
+          if (!batchIds.has(cat.id)) {
+            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ignored id ${cat.id} not in batch`);
+            continue;
+          }
           // Validate category: try DB lookup first, fall back to hardcoded list, then 'Other'
           let validCategory: string;
           if (dbCategories) {

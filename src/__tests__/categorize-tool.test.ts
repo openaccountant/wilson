@@ -518,4 +518,55 @@ describe('categorize tool', () => {
       saveConfig({});
     }
   });
+
+  test('per-batch schema is narrowed only for local transformers models', async () => {
+    insertTransactions(db, [
+      { date: '2026-02-15', description: 'Mystery Store', amount: -50 },
+      { date: '2026-02-16', description: 'Other Store', amount: -20 },
+    ]);
+    initCategorizeTool(db);
+    const txns = getTransactions(db);
+    llmSpy.mockResolvedValue({ response: { content: '', structured: { transactions: [{ id: txns[0].id, category: 'Shopping', confidence: 0.1 }] } }, metadata: {} });
+    const schemaOf = () => (llmSpy.mock.calls.at(-1)![1] as { outputSchema: import('zod').ZodType }).outputSchema;
+    const check = (schema: import('zod').ZodType) => (id: number, category: string) =>
+      schema.safeParse({ transactions: [{ id, category, confidence: 0.9 }] }).success;
+
+    // Providers that do not enforce the schema keep a loose one, so a near-miss
+    // row falls back to 'Other' instead of failing the whole batch.
+    await categorizeTool.func({});
+    const loose = check(schemaOf());
+    expect(loose(txns[0].id, 'Shopping')).toBe(true);
+    expect(loose(txns[0].id + 9999, 'Totally Made Up')).toBe(true);
+
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      await categorizeTool.func({});
+      const schema = schemaOf();
+      const ok = check(schema);
+      expect(ok(txns[0].id, 'Shopping')).toBe(true);
+      expect(ok(txns[0].id + 9999, 'Shopping')).toBe(false);
+      expect(ok(txns[0].id, 'Totally Made Up')).toBe(false);
+      expect(schema.safeParse({ transactions: [] }).success).toBe(false);
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('an id outside the batch is never written, whatever the provider enforced', async () => {
+    insertTransactions(db, [{ date: '2026-02-15', description: 'Mystery Store', amount: -50 }]);
+    initCategorizeTool(db);
+    const txns = getTransactions(db);
+    const strayId = txns[0].id + 5000;
+    llmSpy.mockResolvedValue({
+      response: { content: '', structured: { transactions: [{ id: strayId, category: 'Shopping', confidence: 0.9 }] } },
+      metadata: {},
+    });
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    expect(result.data.categorized).toBe(0);
+    expect(result.data.errors[0]).toContain(`ignored id ${strayId}`);
+    expect(getTransactions(db)[0].category).toBeNull();
+  });
 });
