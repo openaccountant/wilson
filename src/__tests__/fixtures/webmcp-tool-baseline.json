@@ -1,0 +1,713 @@
+{
+  "categorize_transaction": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "9e4c6b89c5396f40",
+    "readEstimates": null
+  },
+  "tax_flag": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "a27b5dd8fd97b248",
+    "readEstimates": null
+  },
+  "edit_transaction": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "951dce14a3c2ea00",
+    "readEstimates": null
+  },
+  "tax_summary": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "ad67c6f89ca600f0",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "transaction_search": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "69d5a8a42ad91902",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "spending_summary": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "437c41758363e582",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "profit_loss": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "91efe453aa4ccec8",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "net_worth": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "5c1be45175eec5ee",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 15,
+        "chars": 1500
+      }
+    }
+  },
+  "forecast": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "70c4f1ee2d41d717",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "get_operation_result": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "http-mcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "allow"
+    ],
+    "schemaDigest": "35d4602c4baa8f32",
+    "readEstimates": {
+      "empty": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 1,
+        "chars": 1500
+      }
+    }
+  },
+  "filter_transactions": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "transactions"
+    },
+    "exposure": "declarative",
+    "uiEffect": null,
+    "autosubmit": true,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "5e8a528e2f16f243",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "review_action": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "review"
+    },
+    "exposure": "declarative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "53a174b348a500a2",
+    "readEstimates": null
+  },
+  "set_budget": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "goals"
+    },
+    "exposure": "declarative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "5632fe859e7e8fb8",
+    "readEstimates": null
+  },
+  "update_goal": {
+    "classification": "mutating",
+    "minRole": "admin",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "goals"
+    },
+    "exposure": "declarative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask"
+    ],
+    "schemaDigest": "7879143118924180",
+    "readEstimates": null
+  },
+  "set_forecast_inputs": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "forecast"
+    },
+    "exposure": "declarative",
+    "uiEffect": true,
+    "autosubmit": true,
+    "defaultPolicy": "allow",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "76fea1cd9c9d7636",
+    "readEstimates": null
+  },
+  "navigate_to_tab": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": true,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "ee812ddcedbb4624",
+    "readEstimates": null
+  },
+  "get_page_context": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": "global",
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "25c7d85c859a6f78",
+    "readEstimates": null
+  },
+  "open_transaction": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "transactions"
+    },
+    "exposure": "imperative",
+    "uiEffect": true,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "3b1acfa7ef7bcfde",
+    "readEstimates": null
+  },
+  "list_review_queue": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": {
+      "tab": "review"
+    },
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "cf0ffaa7864c71ae",
+    "readEstimates": {
+      "empty": {
+        "rows": 10,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 10,
+        "chars": 1500
+      }
+    }
+  },
+  "open_review_item": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "review"
+    },
+    "exposure": "imperative",
+    "uiEffect": true,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "a3dd0c7a5a02ece1",
+    "readEstimates": null
+  },
+  "open_interaction": {
+    "classification": "page",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "imperative",
+    "uiEffect": true,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "439449ba42537074",
+    "readEstimates": null
+  },
+  "list_interactions": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "876ea19cee4c415f",
+    "readEstimates": {
+      "empty": {
+        "rows": 5,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 7,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 5,
+        "chars": 1500
+      }
+    }
+  },
+  "get_interaction": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": true,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "a89f01db22577c23",
+    "readEstimates": {
+      "empty": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 1,
+        "chars": 1500
+      }
+    }
+  },
+  "get_judge_rubric": {
+    "classification": "read",
+    "minRole": "viewer",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "allow",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "25c7d85c859a6f78",
+    "readEstimates": {
+      "empty": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "limit7": {
+        "rows": 1,
+        "chars": 1500
+      },
+      "balance_sheet": {
+        "rows": 1,
+        "chars": 1500
+      }
+    }
+  },
+  "propose_judgements": {
+    "classification": "proposal",
+    "minRole": "admin",
+    "transports": [
+      "webmcp",
+      "http-mcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "imperative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "03ab80c2af855e77",
+    "readEstimates": null
+  },
+  "judge_interaction": {
+    "classification": "proposal",
+    "minRole": "admin",
+    "transports": [
+      "webmcp"
+    ],
+    "surface": {
+      "tab": "llm"
+    },
+    "exposure": "declarative",
+    "uiEffect": null,
+    "autosubmit": null,
+    "defaultPolicy": "ask",
+    "untrustedOutput": false,
+    "allowedPolicies": [
+      "off",
+      "ask",
+      "allow"
+    ],
+    "schemaDigest": "ec7b15a175a454cb",
+    "readEstimates": null
+  }
+}

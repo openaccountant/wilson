@@ -1,11 +1,24 @@
 import { z } from 'zod';
 import { callLlm } from '../model/llm.js';
+import { TEAM_ITERATION_CLOSING, buildOrchestrationIterationPrompt } from '../agent/iteration-prompt-format.js';
 import { LlmValidationError } from '../model/structured-output.js';
 import { getToolsByNames } from '../tools/registry.js';
 import type { ToolDef, LlmResponse } from '../model/types.js';
 import type { TeamDef, TeamRunOptions } from './types.js';
+import { orchestrationGate, runOrchestratedToolCall, type OrchestrationGate } from './tool-calls.js';
 
 const DEFAULT_MAX_MEMBER_ITERATIONS = 5;
+
+/** Recorded on every team call, so the judge tools know the prompt format (not 'standalone'). */
+const TEAM_CALL_TYPE = 'team';
+
+/** Interaction bookkeeping for one team run: a run id and a call counter shared by dispatcher and members. */
+interface RunTrace {
+  runId: string;
+  next: () => number;
+}
+
+const traceOptions = (trace: RunTrace) => ({ runId: trace.runId, sequenceNum: trace.next(), callType: TEAM_CALL_TYPE });
 
 /**
  * Schema for the dispatcher to assign subtasks to team members.
@@ -21,6 +34,7 @@ const dispatchSchema = z.object({
 
 /**
  * Run a single team member as a mini agent loop (same pattern as chain steps).
+ * Every tool call passes the parent agent's approval gate (see tool-calls.ts).
  */
 async function runMember(
   memberId: string,
@@ -30,8 +44,10 @@ async function runMember(
   systemPrompt: string | undefined,
   model: string | undefined,
   maxIterations: number,
-  signal?: AbortSignal,
+  gate: OrchestrationGate,
+  trace: RunTrace,
 ): Promise<string> {
+  const signal = gate.signal;
   const memberSystemPrompt =
     systemPrompt ??
     'You are a specialist on a financial analysis team. Complete your assigned subtask thoroughly and concisely.';
@@ -46,6 +62,7 @@ async function runMember(
       systemPrompt: memberSystemPrompt,
       tools: tools.length > 0 ? tools : undefined,
       signal,
+      ...traceOptions(trace),
     });
 
     // No tool calls → member's final output
@@ -53,31 +70,21 @@ async function runMember(
       return response.content;
     }
 
-    // Execute tool calls
+    // Execute tool calls (each through the approval gate)
     const toolResults: string[] = [];
     const toolMap = new Map(tools.map((t) => [t.name, t]));
 
     for (const tc of response.toolCalls) {
-      const tool = toolMap.get(tc.name);
-      if (!tool) {
-        toolResults.push(`[${tc.name}] Error: Tool not found`);
-        continue;
-      }
-      try {
-        const result = await tool.func(tc.args);
-        toolResults.push(`[${tc.name}] ${result}`);
-      } catch (err) {
-        toolResults.push(`[${tc.name}] Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      toolResults.push(await runOrchestratedToolCall(tc, toolMap, gate));
     }
 
-    iterationPrompt = `${prompt}\n\nTool results:\n${toolResults.join('\n\n')}\n\nBased on these results, continue or provide your final findings.`;
+    iterationPrompt = buildOrchestrationIterationPrompt(prompt, toolResults, TEAM_ITERATION_CLOSING);
   }
 
   // Max iterations — force final output
   const { response: finalResponse } = await callLlm(
     `${iterationPrompt}\n\nYou've reached the iteration limit. Provide your final findings now.`,
-    { model, systemPrompt: systemPrompt ?? 'Provide your final findings.', signal },
+    { model, systemPrompt: systemPrompt ?? 'Provide your final findings.', signal, ...traceOptions(trace) },
   );
   return finalResponse.content;
 }
@@ -91,6 +98,8 @@ export async function runTeam(
   options: TeamRunOptions = {},
 ): Promise<string> {
   const dispatcherModel = team.dispatcher.model ?? options.model;
+  let seq = 0;
+  const trace: RunTrace = { runId: `team-${crypto.randomUUID()}`, next: () => ++seq };
 
   // 1. Dispatcher assigns subtasks to members
   const memberDescriptions = team.members
@@ -115,6 +124,7 @@ Assign a specific subtask to each relevant member. Not all members need to be us
       model: dispatcherModel,
       systemPrompt: team.dispatcher.systemPrompt ?? 'You coordinate financial analysis specialists. Assign clear, specific subtasks.',
       outputSchema: dispatchSchema,
+      ...traceOptions(trace),
     }));
   } catch (err) {
     if (err instanceof LlmValidationError) {
@@ -132,6 +142,9 @@ Assign a specific subtask to each relevant member. Not all members need to be us
 
   // 2. Run assigned members in parallel
   const memberMap = new Map(team.members.map((m) => [m.id, m]));
+  // Members run in parallel but share one gate, so their approval requests
+  // are asked one at a time (the runner holds a single approval slot).
+  const gate = orchestrationGate(options);
 
   const memberPromises = assignments
     .filter((a) => memberMap.has(a.memberId))
@@ -149,7 +162,8 @@ Assign a specific subtask to each relevant member. Not all members need to be us
         member.systemPrompt,
         model,
         maxIterations,
-        options.signal,
+        { ...gate, model },
+        trace,
       );
 
       options.onMemberComplete?.(member.id, result);
@@ -174,6 +188,7 @@ Synthesize these findings into a comprehensive, actionable answer.`;
   const { response: synthesisResponse } = await callLlm(synthesisPrompt, {
     model: dispatcherModel,
     systemPrompt: team.dispatcher.systemPrompt ?? 'Synthesize your team\'s findings into a clear, actionable answer.',
+    ...traceOptions(trace),
   });
 
   return synthesisResponse.content;

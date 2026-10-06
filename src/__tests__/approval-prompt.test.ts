@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { describeApproval, ApprovalPromptComponent } from '../components/approval-prompt.js';
+import { describeApproval, ApprovalPromptComponent, sessionApprovalLabel } from '../components/approval-prompt.js';
+import { approvalSelectorItems } from '../components/select-list.js';
 
 describe('describeApproval', () => {
   test('renders a real before/after delta when one is provided', () => {
@@ -42,5 +43,39 @@ describe('ApprovalPromptComponent', () => {
           after: { category: 'Dining' },
         })
     ).not.toThrow();
+  });
+});
+
+describe('approval selector (#152)', () => {
+  test('the session option names the one tool it covers, not "all edits"', () => {
+    const items = approvalSelectorItems('Delete Transaction');
+    expect(items.map((i) => i.value)).toEqual(['allow-once', 'allow-session', 'deny']);
+    const session = items.find((i) => i.value === 'allow-session')!;
+    expect(session.label).toContain('Delete Transaction');
+    expect(session.label).not.toContain('all edits');
+  });
+});
+
+
+describe('approval selector session scope (#152)', () => {
+  test('an action-scoped approval names the action it covers', () => {
+    const session = approvalSelectorItems('Memory Manage (add)').find((i) => i.value === 'allow-session')!;
+    expect(session.label).toContain('Memory Manage (add)');
+  });
+
+  test('chain/team approvals (no session scope) offer only yes / no', () => {
+    const items = approvalSelectorItems(null);
+    expect(items.map((i) => i.value)).toEqual(['allow-once', 'deny']);
+    expect(items.map((i) => i.label)).toEqual(['1. Yes', '2. No']);
+  });
+
+  test('sessionApprovalLabel formats the scope for the prompt', () => {
+    expect(sessionApprovalLabel('memory_manage', { key: 'memory_manage:add', action: 'add' })).toBe('Memory Manage (add)');
+    expect(sessionApprovalLabel('delete_transaction', { key: 'delete_transaction' })).toBe('Delete Transaction');
+    expect(sessionApprovalLabel('chain_imp', null)).toBeNull();
+  });
+
+  test('the prompt constructs for a chain call with no session option', () => {
+    expect(() => new ApprovalPromptComponent('chain_imp', { input: 'x' }, undefined, null)).not.toThrow();
   });
 });

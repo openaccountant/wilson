@@ -50,6 +50,7 @@ async function callPerplexity(query: string): Promise<PerplexityCompletionRespon
 
 export const perplexitySearch = defineTool({
   name: 'web_search',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Search the web for current information on any topic. Returns a grounded, citation-backed answer with source URLs.',
   schema: z.object({

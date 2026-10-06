@@ -13,11 +13,11 @@ import { EMBEDDING_DIM, normalizeVector } from '../utils/embeddings.js';
 
 const wordIndex = new Map<string, number>();
 
-function basisVectorFor(word: string): Float32Array {
-  let idx = wordIndex.get(word);
+function basisVectorFor(word: string, index: Map<string, number>): Float32Array {
+  let idx = index.get(word);
   if (idx === undefined) {
-    idx = wordIndex.size % EMBEDDING_DIM;
-    wordIndex.set(word, idx);
+    idx = index.size % EMBEDDING_DIM;
+    index.set(word, idx);
   }
   const v = new Float32Array(EMBEDDING_DIM);
   v[idx] = 1;
@@ -26,9 +26,13 @@ function basisVectorFor(word: string): Float32Array {
 
 /** Embed one text deterministically: normalized sum of per-word basis vectors. */
 export function fakeEmbedText(text: string): Float32Array {
+  return embedWith(text, wordIndex);
+}
+
+function embedWith(text: string, index: Map<string, number>): Float32Array {
   const sum = new Float32Array(EMBEDDING_DIM);
   for (const word of text.toLowerCase().split(/\s+/).filter(Boolean)) {
-    const basis = basisVectorFor(word);
+    const basis = basisVectorFor(word, index);
     for (let i = 0; i < EMBEDDING_DIM; i++) sum[i] += basis[i];
   }
   return normalizeVector(sum);
@@ -46,10 +50,19 @@ export interface FakeEmbedder {
 export interface FakeEmbedderOptions {
   /** Simulate an interruption: throw once more batch calls than this have been made. */
   failAfterBatches?: number;
+  /**
+   * Give this embedder its own word -> basis map instead of the shared one.
+   * The shared map is process-wide and wraps at EMBEDDING_DIM words, so a test
+   * that embeds a big vocabulary (a whole tool registry) pushes later files
+   * past 384 words without --isolate and unrelated words start colliding.
+   * Not compatible with mixing in fakeEmbedText() vectors.
+   */
+  isolatedVocabulary?: boolean;
 }
 
 export function createFakeEmbedder(opts: FakeEmbedderOptions = {}): FakeEmbedder {
   const calls: string[] = [];
+  const index = opts.isolatedVocabulary ? new Map<string, number>() : wordIndex;
   let batches = 0;
   return {
     calls,
@@ -64,7 +77,7 @@ export function createFakeEmbedder(opts: FakeEmbedderOptions = {}): FakeEmbedder
         );
       }
       calls.push(...texts);
-      return texts.map(fakeEmbedText);
+      return texts.map((t) => embedWith(t, index));
     },
   };
 }

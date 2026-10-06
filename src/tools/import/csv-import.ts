@@ -62,6 +62,7 @@ function toInsert(t: ParsedTransaction, filePath: string): TransactionInsert {
     payment_channel: t.payment_channel ?? undefined,
     pending: t.pending ? 1 : 0,
     authorized_date: t.authorized_date ?? undefined,
+    account_name: t.account_name ?? undefined,
   };
 }
 
@@ -185,13 +186,21 @@ async function importSingleFile(
     }
   }
 
-  // 6. Per-transaction dedup via external_id
+  // 6. Per-transaction dedup via external_id — against both the DB and this
+  // same batch. Some exports (e.g. Quicken) legitimately contain two rows
+  // that hash to the same id (identical date/description/amount), which
+  // would otherwise pass this DB-only check and then crash the bulk insert
+  // below with a UNIQUE constraint violation.
   const newParsed: ParsedTransaction[] = [];
+  const seenInBatch = new Set<string>();
   let skipped = 0;
   for (const t of parsed) {
-    if (t.external_id && checkExternalId(database, t.external_id)) {
+    const isDuplicate =
+      !!t.external_id && (checkExternalId(database, t.external_id) || seenInBatch.has(t.external_id));
+    if (isDuplicate) {
       skipped++;
     } else {
+      if (t.external_id) seenInBatch.add(t.external_id);
       newParsed.push(t);
     }
   }
@@ -242,6 +251,22 @@ async function importSingleFile(
     }
   }
 
+  // Some formats name the account per row instead of a last4 (e.g. Quicken's
+  // combined multi-account "Transaction Report" CSV — see generic.ts). Every
+  // imported row already carries that name for display even if unlinked, but
+  // try to auto-link it to a matching tracked account too (case-insensitive,
+  // only when exactly one active account matches — an ambiguous name is left
+  // for the user to resolve via `link_transactions` rather than guessed at).
+  const accountNames = [...new Set(txns.map((t) => t.account_name ?? null).filter(Boolean))] as string[];
+  for (const name of accountNames) {
+    const matches = database.prepare(
+      'SELECT id, name FROM accounts WHERE is_active = 1 AND LOWER(name) = LOWER(@name)'
+    ).all({ name }) as { id: number; name: string }[];
+    if (matches.length === 1) {
+      autoLinked += linkTransactionsToAccount(database, matches[0].id, { accountName: name });
+    }
+  }
+
   const formatLabel = detected.format === 'csv' ? `${detectedBank} CSV` : detected.format.toUpperCase();
   let message = `Imported ${count} transactions from ${formatLabel} (${dateRangeStart} to ${dateRangeEnd}).`;
   if (skipped > 0) message += ` ${skipped} duplicates skipped.`;
@@ -267,6 +292,7 @@ async function importSingleFile(
  */
 export const csvImportTool = defineTool({
   name: 'csv_import',
+  mutates: true,
   description:
     'Import transactions from a bank file or directory (CSV, OFX, or QIF). Auto-detects file format ' +
     'and bank (Chase, Amex, BofA, generic). Prevents duplicates by file hash and per-transaction ID. ' +

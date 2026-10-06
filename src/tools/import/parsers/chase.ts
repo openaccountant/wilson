@@ -16,6 +16,7 @@ export interface ParsedTransaction {
   payment_channel?: string;    // online, in_store, other
   pending?: boolean;           // Pending status
   authorized_date?: string;    // YYYY-MM-DD
+  account_name?: string;       // Account name/label, when the source file itself names it per row
 }
 
 /**

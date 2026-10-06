@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import {
   getEntities,
@@ -27,6 +28,7 @@ function getDb(): Database {
 
 export const entityManageTool = defineTool({
   name: 'entity_manage',
+  mutates: mutatesUnlessAction('list'),
   description:
     'Manage business entities — list, add, update, delete, or assign transactions/accounts to an entity.',
   schema: z.object({

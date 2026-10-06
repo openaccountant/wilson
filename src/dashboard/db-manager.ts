@@ -2,6 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { initDatabase } from '../db/database.js';
 import {
   listProfiles,
+  profileExists,
   resolveProfile,
   setActiveProfile,
 } from '../profile/index.js';
@@ -21,6 +22,26 @@ function openDb(profileName: string): Database {
   const db = initDatabase(paths.database);
   connections.set(profileName, db);
   return db;
+}
+
+/**
+ * Every profile DB currently open, with its profile name (the active one included).
+ * Housekeeping that must reach all profiles, not only the one in use, iterates this.
+ */
+export function getOpenDbs(): Array<{ profile: string; db: Database }> {
+  return [...connections].map(([profile, db]) => ({ profile, db }));
+}
+
+/**
+ * A profile's DB connection WITHOUT making it the active profile, or null when
+ * that profile does not exist. The LAN-mode switch gate uses it to check a
+ * target's dashboard auth before switching to it.
+ */
+export function peekProfileDb(name: string): Database | null {
+  const existing = connections.get(name);
+  if (existing) return existing;
+  if (!profileExists(name)) return null;
+  return openDb(name);
 }
 
 /**

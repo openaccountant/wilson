@@ -19,6 +19,7 @@ function getDb(): Database {
 
 export const deleteTransactionTool = defineTool({
   name: 'delete_transaction',
+  mutates: true,
   description:
     'Delete a transaction by ID. This is permanent. ' +
     'Use transaction_search first to find the transaction ID.',

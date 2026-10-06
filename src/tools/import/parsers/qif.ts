@@ -1,6 +1,7 @@
 import type { ParsedTransaction } from './chase.js';
 import { FREEFORM_TO_PFC } from '../../../categories/pfc-taxonomy.js';
 import type { PfcDetailed } from '../../../categories/pfc-taxonomy.js';
+import { parseAmount } from './amount.js';
 
 /**
  * Parse a QIF date string into YYYY-MM-DD format.
@@ -138,7 +139,7 @@ export function parseQif(content: string): ParsedTransaction[] {
       // Split transaction: create one ParsedTransaction per split
       for (const split of current.splits) {
         const splitCategory = split.category?.trim() ?? category;
-        const splitAmount = split.amount ? parseFloat(split.amount) : 0;
+        const splitAmount = split.amount ? parseAmount(split.amount) : 0;
         const pfcCode = mapCategoryToPfc(splitCategory);
         const splitMemo = split.memo?.trim();
 
@@ -156,7 +157,7 @@ export function parseQif(content: string): ParsedTransaction[] {
       }
     } else {
       // Regular (non-split) transaction
-      const amount = current.amount ? parseFloat(current.amount) : 0;
+      const amount = current.amount ? parseAmount(current.amount) : 0;
       const pfcCode = mapCategoryToPfc(category);
 
       transactions.push({

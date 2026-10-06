@@ -85,4 +85,23 @@ describe('runTeam', () => {
     expect(call).toBe(3); // dispatch + member + synthesis
     expect(completed).toEqual([['analyst', 'Member findings: spent $42.']]);
   });
+
+  test('every call is recorded as a team call under one run id, with a rising sequence number', async () => {
+    const res = (content: string, extra: Partial<LlmResult['response']> = {}): LlmResult => ({ response: { content, toolCalls: [], ...extra }, traceId: 't', durationMs: 1 });
+    const responses = [
+      res('d', { structured: { assignments: [{ memberId: 'analyst', subtask: 'Summarize' }] } }),
+      res('member'),
+      res('final'),
+    ];
+    let call = 0;
+    llmSpy.mockImplementation(async () => responses[call++]);
+    await runTeam(team, 'q');
+    type Opts = { callType?: string; runId?: string; sequenceNum?: number };
+    const seen: Opts[] = llmSpy.mock.calls.map((c: unknown[]) => c[1] as Opts);
+    expect(seen.length).toBe(3);
+    expect(seen.every((o: Opts) => o.callType === 'team')).toBe(true);
+    expect(new Set(seen.map((o: Opts) => o.runId)).size).toBe(1);
+    expect(seen[0].runId?.startsWith('team-')).toBe(true);
+    expect(seen.map((o: Opts) => o.sequenceNum)).toEqual([1, 2, 3]);
+  });
 });

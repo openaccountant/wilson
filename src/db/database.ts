@@ -1,7 +1,9 @@
+import { ensureHandoffSecret } from '../training/handoff-tag.js';
 import { Database } from './compat-sqlite.js';
 import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname } from 'path';
 import { runMigrations } from './migrations.js';
+import { applyToolRenames } from '../mcp/tool-rename.js';
 import { getActiveProfile } from '../profile/active.js';
 import { encryptionAvailable, initSqlcipher } from './sqlcipher-dylib.js';
 import { getOrInitEncryptionKey } from './encryption-key.js';
@@ -51,6 +53,20 @@ export function initDatabase(dbPath?: string, profileName?: string): Database {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   runMigrations(db);
+  // Carry persisted WebMCP tool names over the 0.10.0 rename. Idempotent, never throws, no migration (v34 is reserved).
+  try {
+    applyToolRenames(db, { profile: profileName ?? 'default' });
+  } catch (err) {
+    console.error('[mcp] tool name fix-up error:', err);
+  }
+  // Create the handoff-tag secret as soon as the profile DB exists, so every writer of llm_interactions (CLI,
+  // headless, dashboard) records rows in the tagged era. Not a migration: it writes two dashboard_config rows.
+  // Rows recorded before `handoff_tag_since` in an EXISTING profile stay legacy by design (fail-safe).
+  try {
+    ensureHandoffSecret(db);
+  } catch (err) {
+    console.error('[handoff] secret setup error:', err);
+  }
   return db;
 }
 

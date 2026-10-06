@@ -15,7 +15,14 @@
     "paths": {
       "@/*": ["./src/*"],
       "@import-tools/*": ["../../tools/import/*"],
-      "@webmcp-session": ["../../dashboard/webmcp-session"]
+      "@webmcp-session": ["../../dashboard/webmcp-session"],
+      "@webmcp-token-reveal": ["../../dashboard/webmcp-token-reveal"],
+      "@agent-access-model": ["../../dashboard/agent-access-model"],
+      "@confirmation-card": ["../../mcp/confirmation-card"],
+      "@webmcp-registry": ["../../dashboard/webmcp-page-registry"],
+      "@declarative-submit": ["../../dashboard/declarative-submit-core"],
+      "@webmcp-page-tools": ["../../dashboard/webmcp-page-tools-core"],
+      "@judge-ui": ["../../dashboard/judge-ui-core"]
     },
     "baseUrl": "."
   },

@@ -1,3 +1,5 @@
+import type { ApprovalDecision, ToolApprovalRequest } from '../agent/types.js';
+
 /**
  * Chain orchestration — sequential multi-step workflows.
  * Each step runs as a mini agent loop with its own tools and optional system prompt.
@@ -23,7 +25,19 @@ export interface ChainDef {
   tier?: 'free' | 'paid';
 }
 
-export interface ChainRunOptions {
+/**
+ * How chain steps and team members reach the parent agent's approval gate
+ * (src/agent/approval-gate.ts). Every mutating tool call they make is asked
+ * through `requestToolApproval`; without it, those calls are denied.
+ */
+export interface OrchestrationApprovalOptions {
+  /** The parent agent's approval handler (the runner's approval card). */
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<ApprovalDecision>;
+  /** The parent agent's session approvals, honoured and extended like the agent's own. */
+  sessionApprovedTools?: Set<string>;
+}
+
+export interface ChainRunOptions extends OrchestrationApprovalOptions {
   /** Model to use (can be overridden per-step) */
   model?: string;
   /** AbortSignal for cancellation */
@@ -58,7 +72,7 @@ export interface TeamDef {
   members: TeamMember[];
 }
 
-export interface TeamRunOptions {
+export interface TeamRunOptions extends OrchestrationApprovalOptions {
   /** Model to use for dispatcher and members (can be overridden) */
   model?: string;
   /** AbortSignal for cancellation */

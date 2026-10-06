@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
+import { money } from '@/format';
 import { useHybridChat } from '@/hooks/useHybridChat';
 import {
   parseCategorizationDecision,
@@ -147,9 +148,6 @@ function fmtMs(ms: number | null): string {
   return `${Math.round(ms)} ms`;
 }
 
-function money(n: number): string {
-  return (n < 0 ? '-$' : '$') + Math.abs(n).toFixed(2);
-}
 
 function LoadLine({ loadMs, loadFresh }: { loadMs: number | null; loadFresh: boolean | null }) {
   if (loadMs === null) return null;
@@ -358,7 +356,11 @@ export function DemoTab() {
           setLocalArm(arm);
           return;
         }
-        onLocalProgress('browser GPU unavailable — using this machine…');
+        onLocalProgress(
+          r.detail
+            ? `browser GPU can't run this model (${r.detail}) — using this machine…`
+            : 'browser GPU unavailable — using this machine…',
+        );
         try {
           const res = await api<ShowdownArmResponse>('/api/demo/showdown/local', {
             method: 'POST',

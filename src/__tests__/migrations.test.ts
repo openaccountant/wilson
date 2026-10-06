@@ -264,3 +264,27 @@ describe('migration runner', () => {
     db.close();
   });
 });
+
+describe('P1 migrations (v30 tool policies, v31 operation kind)', () => {
+  test('v30 and v31 are contiguous after v29 and named', () => {
+    const byVersion = new Map(MIGRATIONS.map((m) => [m.version, m.name]));
+    expect(byVersion.get(30)).toBe('create_mcp_tool_policies');
+    expect(byVersion.get(31)).toBe('add_mcp_operation_kind');
+  });
+
+  test('upgrading a v29 database keeps its operations, defaulting them to kind mutation with no bank data', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    runMigrationsUpTo(db, 29);
+    db.prepare(`INSERT INTO mcp_operations (id, source, tool_name, args_json, profile, origin, session_generation, role, expires_at)
+                VALUES ('op1', 'webmcp', 'edit_transaction', '{}', 'p', 'o', 's', 'admin', '2099-01-01T00:00:00.000Z')`).run();
+    runMigrations(db);
+    const row = db.prepare("SELECT kind, bank_data FROM mcp_operations WHERE id = 'op1'").get() as { kind: string; bank_data: string | null };
+    expect(row).toEqual({ kind: 'mutation', bank_data: null });
+    expect(() => db.prepare("INSERT INTO mcp_tool_policies (user_key, tool_name, policy) VALUES (0, 'forecast', 'ask')").run()).not.toThrow();
+    expect(() => db.prepare("INSERT INTO mcp_tool_policies (user_key, tool_name, policy) VALUES (0, 'forecast', 'bogus')").run()).toThrow();
+    // (user_key, tool_name) is the key: a second row for the same pair is refused.
+    expect(() => db.prepare("INSERT INTO mcp_tool_policies (user_key, tool_name, policy) VALUES (0, 'forecast', 'off')").run()).toThrow();
+    db.close();
+  });
+});

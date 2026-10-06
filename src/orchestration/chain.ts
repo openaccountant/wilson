@@ -1,13 +1,25 @@
 import { callLlm } from '../model/llm.js';
+import { CHAIN_ITERATION_CLOSING, buildOrchestrationIterationPrompt } from '../agent/iteration-prompt-format.js';
 import { getToolsByNames } from '../tools/registry.js';
 import type { ToolDef } from '../model/types.js';
 import type { ChainDef, ChainRunOptions } from './types.js';
+import { orchestrationGate, runOrchestratedToolCall, type OrchestrationGate } from './tool-calls.js';
 
 const DEFAULT_MAX_STEP_ITERATIONS = 5;
+
+/** Recorded on every chain call, so the judge tools know the prompt format (not 'standalone'). */
+const CHAIN_CALL_TYPE = 'chain';
+
+/** Interaction bookkeeping for one chain run: a run id and a call counter shared by all its steps. */
+interface RunTrace {
+  runId: string;
+  next: () => number;
+}
 
 /**
  * Run a single step as a mini agent loop.
  * The step agent can call tools up to maxIterations times, then must produce a text answer.
+ * Every tool call passes the parent agent's approval gate (see tool-calls.ts).
  */
 async function runStepAgent(
   stepId: string,
@@ -17,8 +29,10 @@ async function runStepAgent(
   tools: ToolDef[],
   model: string | undefined,
   maxIterations: number,
-  signal?: AbortSignal,
+  gate: OrchestrationGate,
+  trace: RunTrace,
 ): Promise<string> {
+  const signal = gate.signal;
   const stepSystemPrompt =
     systemPrompt ??
     'You are a step in a multi-step financial analysis pipeline. Complete your assigned task concisely.';
@@ -35,6 +49,9 @@ async function runStepAgent(
       systemPrompt: stepSystemPrompt,
       tools: tools.length > 0 ? tools : undefined,
       signal,
+      runId: trace.runId,
+      sequenceNum: trace.next(),
+      callType: CHAIN_CALL_TYPE,
     });
 
     // No tool calls → this is the step's final output
@@ -42,32 +59,22 @@ async function runStepAgent(
       return response.content;
     }
 
-    // Execute tool calls and collect results
+    // Execute tool calls (each through the approval gate) and collect results
     const toolResults: string[] = [];
     const toolMap = new Map(tools.map((t) => [t.name, t]));
 
     for (const tc of response.toolCalls) {
-      const tool = toolMap.get(tc.name);
-      if (!tool) {
-        toolResults.push(`[${tc.name}] Error: Tool not found`);
-        continue;
-      }
-      try {
-        const result = await tool.func(tc.args);
-        toolResults.push(`[${tc.name}] ${result}`);
-      } catch (err) {
-        toolResults.push(`[${tc.name}] Error: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      toolResults.push(await runOrchestratedToolCall(tc, toolMap, gate));
     }
 
     // Feed tool results back for next iteration
-    iterationPrompt = `${prompt}\n\nTool results:\n${toolResults.join('\n\n')}\n\nBased on these results, continue your analysis or provide your final output.`;
+    iterationPrompt = buildOrchestrationIterationPrompt(prompt, toolResults, CHAIN_ITERATION_CLOSING);
   }
 
   // Max iterations reached — ask for a summary without tools
   const { response: finalResponse } = await callLlm(
     `${iterationPrompt}\n\nYou've reached the iteration limit. Provide your final output now.`,
-    { model, systemPrompt: stepSystemPrompt, signal },
+    { model, systemPrompt: stepSystemPrompt, signal, runId: trace.runId, sequenceNum: trace.next(), callType: CHAIN_CALL_TYPE },
   );
   return finalResponse.content;
 }
@@ -81,6 +88,11 @@ export async function runChain(
   options: ChainRunOptions = {},
 ): Promise<string> {
   let currentInput = input;
+  // One gate for the whole run: approvals are asked one at a time and denied
+  // once the run is cancelled; with no handler, mutating calls are denied.
+  const gate = orchestrationGate(options);
+  let seq = 0;
+  const trace: RunTrace = { runId: `chain-${crypto.randomUUID()}`, next: () => ++seq };
 
   for (const step of chain.steps) {
     const tools = step.tools ? await getToolsByNames(step.tools) : [];
@@ -95,7 +107,8 @@ export async function runChain(
       tools,
       model,
       maxIterations,
-      options.signal,
+      { ...gate, model },
+      trace,
     );
 
     options.onStepComplete?.(step.id, currentInput);

@@ -1,0 +1,3 @@
+[test]
+# Every test runs against a throwaway home dir, never ~/.openaccountant.
+preload = ["./src/__tests__/preload.ts"]

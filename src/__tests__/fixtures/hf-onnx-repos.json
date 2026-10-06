@@ -1,0 +1,172 @@
+{
+  "_recorded": "2026-10-02 from https://huggingface.co/api/models/<repo> (siblings, onnx/ only) and <repo>/resolve/main/config.json (transformers.js_config)",
+  "repos": {
+    "HuggingFaceTB/SmolLM3-3B-ONNX": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model_bnb4.onnx",
+        "onnx/model_bnb4.onnx_data",
+        "onnx/model_fp16.onnx",
+        "onnx/model_fp16.onnx_data",
+        "onnx/model_int8.onnx",
+        "onnx/model_int8.onnx_data",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4.onnx_data",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_q4f16.onnx_data",
+        "onnx/model_quantized.onnx",
+        "onnx/model_quantized.onnx_data",
+        "onnx/model_uint8.onnx",
+        "onnx/model_uint8.onnx_data"
+      ],
+      "transformers.js_config": {
+        "use_external_data_format": true,
+        "dtype": "q4",
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        }
+      }
+    },
+    "LiquidAI/LFM2.5-1.2B-Instruct-ONNX": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model.onnx_data_1",
+        "onnx/model.onnx_data_2",
+        "onnx/model_fp16.onnx",
+        "onnx/model_fp16.onnx_data",
+        "onnx/model_fp16.onnx_data_1",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4.onnx_data",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_q4f16.onnx_data",
+        "onnx/model_q8.onnx",
+        "onnx/model_q8.onnx_data",
+        "onnx/model_quantized.onnx",
+        "onnx/model_quantized.onnx_data"
+      ],
+      "transformers.js_config": {
+        "use_external_data_format": {
+          "model.onnx": 3,
+          "model_fp16.onnx": 2,
+          "model_quantized": 1,
+          "model_q4.onnx": 1,
+          "model_q4f16.onnx": 1
+        },
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        }
+      }
+    },
+    "onnx-community/granite-4.0-350m-ONNX-web": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model_fp16.onnx",
+        "onnx/model_fp16.onnx_data",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4.onnx_data",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_q4f16.onnx_data"
+      ],
+      "transformers.js_config": {
+        "use_external_data_format": {
+          "model.onnx": 1,
+          "model_fp16.onnx": 1,
+          "model_q4.onnx": 1,
+          "model_q4f16.onnx": 1
+        },
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        }
+      }
+    },
+    "onnx-community/granite-4.0-micro-ONNX-web": {
+      "siblings": [
+        "onnx/model_q4f16.onnx",
+        "onnx/model_q4f16.onnx_data",
+        "onnx/model_q4f16.onnx_data_1"
+      ],
+      "transformers.js_config": {
+        "dtype": "q4f16",
+        "use_external_data_format": {
+          "model_q4f16.onnx": 2
+        },
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        }
+      }
+    },
+    "onnx-community/Qwen2.5-1.5B-Instruct": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model_bnb4.onnx",
+        "onnx/model_fp16.onnx",
+        "onnx/model_fp16.onnx_data",
+        "onnx/model_int8.onnx",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_quantized.onnx",
+        "onnx/model_uint8.onnx"
+      ],
+      "transformers.js_config": {
+        "use_external_data_format": {
+          "model.onnx": true,
+          "model_fp16.onnx": true
+        }
+      }
+    },
+    "onnx-community/Qwen3-0.6B-ONNX": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model_bnb4.onnx",
+        "onnx/model_fp16.onnx",
+        "onnx/model_int8.onnx",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_quantized.onnx",
+        "onnx/model_uint8.onnx"
+      ],
+      "transformers.js_config": {
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        },
+        "use_external_data_format": {
+          "model.onnx": true
+        }
+      }
+    },
+    "onnx-community/Qwen3-1.7B-ONNX": {
+      "siblings": [
+        "onnx/model.onnx",
+        "onnx/model.onnx_data",
+        "onnx/model_bnb4.onnx",
+        "onnx/model_fp16.onnx",
+        "onnx/model_fp16.onnx_data",
+        "onnx/model_int8.onnx",
+        "onnx/model_q4.onnx",
+        "onnx/model_q4f16.onnx",
+        "onnx/model_quantized.onnx",
+        "onnx/model_uint8.onnx"
+      ],
+      "transformers.js_config": {
+        "kv_cache_dtype": {
+          "q4f16": "float16",
+          "fp16": "float16"
+        },
+        "use_external_data_format": {
+          "model.onnx": true,
+          "model_fp16.onnx": true
+        }
+      }
+    }
+  }
+}

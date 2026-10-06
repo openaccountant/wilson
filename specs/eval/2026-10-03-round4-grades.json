@@ -1,0 +1,50 @@
+{
+ "rubric": "Identical to round 3 (strict): good = right tool + answers as asked (period, labels, what-if, yes/no) + figures match tool + nothing misleading; useless = faithful but does not answer (bare figure for a statement/listing request, generic template for a yes/no question, non-responsive); wrong = incorrect or misleading. Known tool quirks (transfers counted as income/expense, card-payment leg counted as spending) are tool issues, not answer errors. Graded blind: key not opened until this file was committed.",
+ "grades": {
+  "c49eafadf1": {
+   "q": "profit for june",
+   "grade": "good",
+   "reason": "Net June 2026 $862.20 with income $3,235.00 and expenses $2,372.80; matches tool and notes."
+  },
+  "7b664de7b0": {
+   "q": "navient payments so far this year",
+   "grade": "good",
+   "reason": "Lists both Navient payments (06/24, 06/04, -$210.00 each), total -$420.00, period stated; matches tool and notes."
+  },
+  "05c706b1b8": {
+   "q": "childcare payment",
+   "grade": "good",
+   "reason": "Lists 06/03 SUNRISE CHILDCARE CENTER -$620.00 with date and merchant; matches tool and notes."
+  },
+  "4e75b800d7": {
+   "q": "net worth",
+   "grade": "good",
+   "reason": "Net worth -$33,232.01 with assets $1,879.14, liabilities $35,111.15 and line items; matches tool and notes."
+  },
+  "6ac1232b98": {
+   "q": "p&l for june",
+   "grade": "good",
+   "reason": "P&L June 2026: net $1,079.14, income $2,900.00, expenses $1,820.86; matches tool and notes."
+  },
+  "e14616c329": {
+   "q": "balance sheet",
+   "grade": "good",
+   "reason": "Totals plus every asset line (IRA, home, brokerage, checking) and liabilities $0.00; matches tool and notes (same standard as round-3 d19d9b369e)."
+  },
+  "86cd1618c9": {
+   "q": "is my car worth more than the loan",
+   "grade": "useless",
+   "reason": "Yes/no question answered with the generic net-worth template: no yes/no and no equity figure; vehicle $11,050 and loan $8,713.20 are listed but the reader must compare them (same standard as round-3 6ec5aee3bd)."
+  },
+  "d0d22f74ee": {
+   "q": "ytd spending by category",
+   "grade": "good",
+   "reason": "Spending 2026 $4,878.29 across 17 transactions, all Uncategorized; matches tool; $600 card-payment leg is a tool quirk, not an answer error."
+  },
+  "2d9515d46d": {
+   "q": "did we come out ahead in june",
+   "grade": "good",
+   "reason": "Leads with net June 2026 +$5,988.61 (income $10,900.00, expenses $4,911.39), which answers 'came out ahead'; matches tool; savings-transfer outflow is a tool quirk."
+  }
+ }
+}

@@ -24,6 +24,7 @@
     "@ai-sdk/google": "^4.0.76",
     "@ai-sdk/openai": "^4.0.71",
     "@huggingface/transformers": "4.3.0",
+    "@huggingface/transformers-structured-output": "4.3.0",
     "@mariozechner/pi-tui": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentelemetry/api": "^1.9.0",
@@ -41,13 +42,16 @@
     "js-yaml": "^4.1.0",
     "monarch-money-api": "^0.0.8",
     "plaid": "^47.0.0",
+    "playwright": "^1.60.0",
     "winston": "^3.19.0",
-    "xlsx": "^0.18.5",
+    "write-excel-file": "4.1.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
+    "fflate": "^0.8.2",
+    "open-jev": "0.1.2",
     "typescript": "^7.0.2"
   },
   "trustedDependencies": [

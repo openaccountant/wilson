@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach } from 'bun:test';
 import type { Database } from '../db/compat-sqlite.js';
 import { generateReport } from '../report/generator.js';
+import { insertTransactions } from '../db/queries.js';
 import { createTestDb, seedTestData } from './helpers.js';
 
 describe('generateReport', () => {
@@ -61,5 +62,21 @@ describe('generateReport', () => {
     const report = generateReport(db, '2026-02', ['all']);
     expect(report).toContain('## Summary');
     expect(report).toContain('## Spending by Category');
+  });
+
+  test('includes the last day of the month regardless of timezone', () => {
+    const prevTz = process.env.TZ;
+    process.env.TZ = 'Europe/Berlin';
+    try {
+      const fresh = createTestDb();
+      insertTransactions(fresh, [
+        { date: '2026-09-30', description: 'Last Day Purchase', amount: -12.34, category: 'Dining' },
+      ]);
+      const report = generateReport(fresh, '2026-09', ['transactions']);
+      expect(report).toContain('Last Day Purchase');
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
   });
 });

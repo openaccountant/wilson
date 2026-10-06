@@ -1,13 +1,20 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 import { useMirrorStatus } from '@/hooks/useMirrorSync';
 import { useAppState } from '@/state';
+import { useUrlState } from '@/hooks/useUrlState';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
 import { ImportStatementDialog, type ImportResponse } from '@/components/ImportStatementDialog';
 import { classifyWriteError, type WriteFailureKind } from '@/store/offline-writes';
-import type { Transaction, Entity } from '@/types';
+import { useDeclarativeTool } from '@/agent/useDeclarativeTool';
+import { useWebMcpPageTools } from '@/agent/useWebMcpPageTools';
+import { usePageContext } from '@/agent/WebMcpProvider';
+import { dateOutsideRange, monthBoundsOf, pollUntil } from '@webmcp-page-tools';
+import { armPageGuard, scrollForAgent } from '@/agent/agentGuard';
+import { buildCategoryOptions } from '@declarative-submit';
+import type { Transaction, Entity, CategoryRow } from '@/types';
 
 /** Confidence at or above which the categorize tool auto-assigns (src/tools/categorize). */
 const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -133,15 +140,25 @@ function TxRow({
   entities,
   onUpdate,
   score,
+  highlighted,
 }: {
   tx: Transaction;
   entities: Entity[];
   onUpdate: (txId: number, entityId: number | null) => void;
   /** Cosine similarity in [-1, 1] — present only on semantic matches. */
   score?: number;
+  /** The row a drill-down 'Open in Transactions' link pointed at (URL `txn`), or one an agent asked to show (`open_transaction`). */
+  highlighted?: boolean;
 }) {
   return (
-    <tr className="border-b border-border last:border-b-0 hover:bg-surface transition-colors">
+    <tr
+      data-txn-id={tx.id}
+      data-tx-id={tx.id}
+      aria-current={highlighted ? 'true' : undefined}
+      className={`border-b border-border last:border-b-0 hover:bg-surface transition-colors ${
+        highlighted ? 'bg-green/10 outline outline-1 outline-green/40' : ''
+      }`}
+    >
       <td className="px-4 py-3 text-text-secondary font-mono text-xs whitespace-nowrap">
         {formatDate(tx.date)}
       </td>
@@ -150,7 +167,8 @@ function TxRow({
           <span className="truncate max-w-[300px]">
             {tx.merchant_name ?? tx.description}
           </span>
-          {tx.pending && (
+          {/* SQLite hands back 0/1, not a boolean — `0 && …` would render a literal "0". */}
+          {!!tx.pending && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-border text-text-muted uppercase tracking-wider">
               pending
             </span>
@@ -204,6 +222,15 @@ function TxRow({
   );
 }
 
+/** The filter form's four boxes. While an agent's values are held they live here instead of in the real filters. */
+interface FilterDraft {
+  search: string;
+  /** A category NAME ('' for all), as the tab-local filter holds it. */
+  category: string;
+  start: string;
+  end: string;
+}
+
 export function TransactionsTab() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -213,27 +240,93 @@ export function TransactionsTab() {
   const [zoneDragOver, setZoneDragOver] = useState(false);
   const mirror = useMirrorStatus();
   const { dateRange, setDateRange, accountId, category: globalCategory, entityId } = useAppState();
+  // Drill-down links ('Open in Transactions') carry the exact merchant key and
+  // optionally a transaction id; a plain tab switch drops both.
+  const { state: url, navigate } = useUrlState();
+  const merchantExact = url.merchant;
+  const highlightId = url.txn && /^\d+$/.test(url.txn) ? Number(url.txn) : null;
+  const clearMerchant = () => navigate((s) => ({ ...s, merchant: null, txn: null }), { mode: 'replace' });
 
   const apiPath = useMemo(() => {
     const parts = [`start=${dateRange.startDate}`, `end=${dateRange.endDate}`, 'limit=500'];
     if (accountId != null) parts.push(`accountId=${accountId}`);
     if (globalCategory) parts.push(`category=${encodeURIComponent(globalCategory)}`);
     if (entityId != null) parts.push(`entityId=${entityId}`);
+    // Exact label match — never the fuzzy `merchant` (description LIKE) param.
+    if (merchantExact) parts.push(`merchantExact=${encodeURIComponent(merchantExact)}`);
     return `/api/transactions?${parts.join('&')}`;
-  }, [dateRange, accountId, globalCategory, entityId]);
+  }, [dateRange, accountId, globalCategory, entityId, merchantExact]);
 
   const { data, loading, error, refetch } = useApi<Transaction[]>(apiPath, [apiPath]);
+
+  // Bring the linked transaction into view once its page has loaded.
+  useEffect(() => {
+    if (highlightId == null || !data) return;
+    // The least scroll that shows it (never centred): the same helper every agent-driven scroll uses (T16).
+    scrollForAgent(document.querySelector<HTMLElement>(`tr[data-txn-id="${highlightId}"]`));
+  }, [highlightId, data]);
   const { data: entitiesData } = useApi<Entity[]>('/api/entities');
   const entities = useMemo(() => entitiesData ?? [], [entitiesData]);
 
-  const categories = useMemo(() => {
-    if (!data) return [];
-    const set = new Set<string>();
-    for (const tx of data) {
-      if (tx.category) set.add(tx.category);
-    }
-    return Array.from(set).sort();
-  }, [data]);
+  // Category rows (with ids) feed the filter's <select>: the agent-facing tool takes `category_id`, and option
+  // labels go through the same safe-label rule as everything else an agent reads (threat T20).
+  const { data: categoryRows } = useApi<CategoryRow[]>('/api/categories');
+  const categoryOptions = useMemo(() => buildCategoryOptions(categoryRows ?? []), [categoryRows]);
+  const categoryIdFor = (name: string): string => {
+    const row = (categoryRows ?? []).find((c) => c.name === name);
+    return row ? String(row.id) : '';
+  };
+
+  // The filter bar is a declarative form (`list_transactions`). Humans keep filtering live as they type; an
+  // agent's submit is a server read, after which the page applies the same filters to its own state.
+  //
+  // An agent's values must not filter the list (or move the app-wide date range, which refetches) before the server
+  // authorizes the call: under an Ask policy the card is still open while the agent has already filled the form. While
+  // `effectsHeld` the boxes write into a DRAFT and the real filters stay the human's; the draft becomes the filters in
+  // `afterServer` (authorized) and is dropped by `restore` (Reject, expiry, a refusal, the agent cancelling).
+  const [draft, setDraft] = useState<FilterDraft | null>(null);
+  const filterForm = useDeclarativeTool({
+    tool: 'list_transactions',
+    // Options are loaded before the form advertises itself, so Chrome derives the complete category enum.
+    ready: categoryRows != null,
+    snapshot: () => ({ search, category: categoryFilter, start: dateRange.startDate, end: dateRange.endDate }),
+    restore: (snap) => {
+      setDraft(null);
+      const human = snap as FilterDraft | undefined;
+      if (!human) return;
+      // Under Allow the agent's values were applied live: put the human's back (only what differs).
+      if (human.search !== search) setSearch(human.search);
+      if (human.category !== categoryFilter) setCategoryFilter(human.category);
+      if (human.start !== dateRange.startDate || human.end !== dateRange.endDate) setDateRange({ startDate: human.start, endDate: human.end });
+    },
+    afterServer: (args, server) => {
+      setDraft(null);
+      setSearch(typeof args.search === 'string' ? args.search : '');
+      const picked = (categoryRows ?? []).find((c) => c.id === args.category_id);
+      setCategoryFilter(picked ? picked.name : '');
+      const start = typeof args.start === 'string' ? args.start : dateRange.startDate;
+      const end = typeof args.end === 'string' ? args.end : dateRange.endDate;
+      if (start !== dateRange.startDate || end !== dateRange.endDate) setDateRange({ startDate: start, endDate: end });
+      return server;
+    },
+  });
+  const humanFilters: FilterDraft = { search, category: categoryFilter, start: dateRange.startDate, end: dateRange.endDate };
+  const shownFilters = draft ?? humanFilters;
+  /**
+   * A box changed: into the draft while an agent's values are held, else straight into the real filter. The hold is read
+   * from `effectsHeldRef` at event time (set inside the `toolactivated` listener), never from render state, which lags
+   * the event: the agent's first `input` events can land before the render that would show the hold. The draft is
+   * updated functionally for the same reason, since several fields can change within one tick.
+   */
+  const editFilter = (patch: Partial<FilterDraft>, apply: () => void) => {
+    if (filterForm.effectsHeldRef.current) setDraft((d) => ({ ...(d ?? humanFilters), ...patch }));
+    else apply();
+  };
+  const filterCategoryOptions = filterForm.hold('categories', categoryOptions);
+
+  // The category select lists every category (/api/categories), not just the ones in the loaded page, so a
+  // filter whose category has no rows in the current range still shows as selected (the stale "All Categories"
+  // display the page-derived list once had cannot happen) and the empty state explains the empty list.
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -283,6 +376,58 @@ export function TransactionsTab() {
       return true;
     });
   }, [semanticData, categoryFilter]);
+
+  // ── Agent journey: open one transaction (`open_transaction`) ──────────────
+  // The bridge registers the tool only while this tab shows; the server has already authorized the call and read the
+  // row (`pageData`). The handler makes the row visible, then says whether it really is on screen.
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const shownIds = useMemo(() => new Set((semanticActive ? semanticResults : filtered).map((t) => t.id)), [semanticActive, semanticResults, filtered]);
+  const latest = useRef({ shownIds, dateRange, setDateRange, search, categoryFilter });
+  latest.current = { shownIds, dateRange, setDateRange, search, categoryFilter };
+
+  useWebMcpPageTools('transactions', {
+    open_transaction: async (args, { signal, pageData }) => {
+      const id = args.id as number;
+      const row = (pageData ?? { id }) as Record<string, unknown>;
+      const { shownIds: shown, dateRange: range, setDateRange: moveRange, search: typed, categoryFilter: chosen } = latest.current;
+      let filtersCleared = false;
+      if (!shown.has(id)) {
+        // Clearing filters or moving the range re-lays out the list under the pointer: guard first (T16).
+        armPageGuard();
+        // Not in view: drop this tab's own filters (and say so), and move to the row's month only when the row's date
+        // is outside the loaded range. A row inside the range is hidden by a filter, not by the range: leave the range.
+        filtersCleared = typed !== '' || chosen !== '';
+        setSearch('');
+        setCategoryFilter('');
+        const month = monthBoundsOf(row.date);
+        if (month && dateOutsideRange(row.date, range)) moveRange(month);
+      }
+      setHighlightedId(id);
+      const selector = `[data-tx-id="${id}"]`;
+      const onScreen = await pollUntil(() => document.querySelector(selector) !== null, signal, { timeoutMs: 2500 });
+      if (onScreen) {
+        // Not centred, and not at all when the row is already fully visible. Any agent-driven move pauses the page's human actions for a moment (T16).
+        armPageGuard();
+        scrollForAgent(document.querySelector(selector));
+      }
+      return onScreen
+        ? { ...row, highlighted: true, ...(filtersCleared ? { filtersCleared: true } : {}) }
+        : { ...row, highlighted: false, ...(filtersCleared ? { filtersCleared: true } : {}), viewNote: 'The row is not in this view. A header filter (account, category, entity) may be hiding it.' };
+    },
+  });
+
+  // The highlight is a cue, not a state: it fades after a while.
+  useEffect(() => {
+    if (highlightedId === null) return;
+    const timer = setTimeout(() => setHighlightedId(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [highlightedId]);
+
+  usePageContext('transactions', {
+    filters: { search, ...(categoryFilter ? { category: categoryFilter } : {}) },
+    selection: { transactionId: highlightedId },
+    visibleRows: shownIds.size,
+  });
 
   function handleEntityUpdate(txId: number, newEntityId: number | null) {
     // Optimistically update local data
@@ -363,27 +508,74 @@ export function TransactionsTab() {
           </button>
         </div>
 
-        <div className="flex gap-3">
+        <form key={filterForm.formKey} className="flex gap-3" aria-label="Filter transactions" {...filterForm.formProps}>
           <input
             type="text"
+            name="search"
             placeholder="Search by merchant or description..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={shownFilters.search}
+            onChange={(e) => editFilter({ search: e.target.value }, () => setSearch(e.target.value))}
             className="flex-1 bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text placeholder:text-text-muted focus:outline-none focus:border-green"
+            {...filterForm.field('search')}
           />
           <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            name="category_id"
+            value={categoryIdFor(shownFilters.category)}
+            onChange={(e) => {
+              const name = categoryRows?.find((c) => String(c.id) === e.target.value)?.name ?? '';
+              editFilter({ category: name }, () => setCategoryFilter(name));
+            }}
             className="bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text focus:outline-none focus:border-green"
+            {...filterForm.field('category_id')}
           >
             <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
+            {filterCategoryOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
-        </div>
+          <input
+            type="date"
+            name="start"
+            aria-label="From date"
+            value={shownFilters.start}
+            onChange={(e) => e.target.value && editFilter({ start: e.target.value }, () => setDateRange({ ...dateRange, startDate: e.target.value }))}
+            className="bg-surface-raised border border-border rounded-md px-2 py-2 text-sm text-text focus:outline-none focus:border-green"
+            {...filterForm.field('start')}
+          />
+          <input
+            type="date"
+            name="end"
+            aria-label="To date"
+            value={shownFilters.end}
+            onChange={(e) => e.target.value && editFilter({ end: e.target.value }, () => setDateRange({ ...dateRange, endDate: e.target.value }))}
+            className="bg-surface-raised border border-border rounded-md px-2 py-2 text-sm text-text focus:outline-none focus:border-green"
+            {...filterForm.field('end')}
+          />
+          <button
+            type="submit"
+            className="bg-surface-raised hover:bg-border-muted text-text-secondary border border-border text-sm font-medium px-3 py-2 rounded-md transition-colors cursor-pointer whitespace-nowrap"
+          >
+            Apply
+          </button>
+        </form>
+
+        {merchantExact && (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border border-green/40 bg-green/10 text-green max-w-full">
+              <span className="truncate">Merchant: {merchantExact}</span>
+              <button
+                type="button"
+                onClick={clearMerchant}
+                aria-label={`Clear merchant filter ${merchantExact}`}
+                className="bg-transparent border-none p-0 text-green hover:text-text cursor-pointer leading-none"
+              >
+                &times;
+              </button>
+            </span>
+          </div>
+        )}
 
         {banner && (
           <div className="flex items-center justify-between border border-green-700/50 bg-green-900/30 text-text rounded-md px-3 py-2 text-sm">
@@ -458,6 +650,7 @@ export function TransactionsTab() {
                         entities={entities}
                         onUpdate={handleEntityUpdate}
                         score={tx.score}
+                        highlighted={tx.id === highlightedId}
                       />
                     ))}
                   </tbody>
@@ -505,7 +698,13 @@ export function TransactionsTab() {
               <TxTableHead entities={entities} />
               <tbody>
                 {filtered.map((tx) => (
-                  <TxRow key={tx.id} tx={tx} entities={entities} onUpdate={handleEntityUpdate} />
+                  <TxRow
+                    key={tx.id}
+                    tx={tx}
+                    entities={entities}
+                    onUpdate={handleEntityUpdate}
+                    highlighted={tx.id === highlightId || tx.id === highlightedId}
+                  />
                 ))}
               </tbody>
             </table>

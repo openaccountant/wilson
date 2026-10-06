@@ -48,6 +48,8 @@ export interface CallLlmOptions {
   systemPrompt?: string;
   outputSchema?: z.ZodType<unknown>;
   tools?: ToolDef[];
+  /** Names-only tool index for local tool selection (see ProviderCallOptions.toolIndex). */
+  toolIndex?: string[];
   signal?: AbortSignal;
   runId?: string;
   sequenceNum?: number;
@@ -72,7 +74,7 @@ export interface LlmResult {
  * Always returns LlmResponse — no string | AIMessage branching downstream.
  */
 export async function callLlm(prompt: string, options: CallLlmOptions = {}): Promise<LlmResult> {
-  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, signal, runId, sequenceNum, callType } = options;
+  const { model = DEFAULT_MODEL, systemPrompt, outputSchema, tools, toolIndex, signal, runId, sequenceNum, callType, maxTokens } = options;
   const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   const provider = resolveProvider(model);
@@ -90,6 +92,10 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   }
 
   const adapter = getAdapter(provider.id);
+  // Local Transformers.js runs greedy (do_sample: false) in-process: a failed
+  // call fails identically on retry — and a failed WebGPU prefill on a large
+  // prompt can take a minute and a half — so it gets exactly one attempt.
+  const maxAttempts = provider.id === 'transformers' ? 1 : 3;
   const startTime = Date.now();
   const promptChars = prompt.length + finalSystemPrompt.length;
   const toolCount = tools?.length ?? 0;
@@ -104,10 +110,13 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
           systemPrompt: finalSystemPrompt,
           userPrompt: prompt,
           tools,
+          ...(toolIndex ? { toolIndex } : {}),
           outputSchema,
           signal,
+          maxTokens,
         }),
       provider.displayName,
+      maxAttempts,
     );
 
     // Structured-output gate: when a schema was supplied, validate what came back
@@ -130,11 +139,15 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
             adapter.call({
               model: apiModel,
               systemPrompt: finalSystemPrompt,
-              userPrompt: buildRepairPrompt(prompt, response, outputSchema, first.issues),
+              userPrompt: buildRepairPrompt(prompt, response, outputSchema, first.issues, {
+                compact: provider.id === 'transformers',
+              }),
               outputSchema,
               signal,
+              maxTokens,
             }),
           provider.displayName,
+          maxAttempts,
         );
         const second = validateStructuredOutput(finalResponse, outputSchema);
         if (!second.ok) {

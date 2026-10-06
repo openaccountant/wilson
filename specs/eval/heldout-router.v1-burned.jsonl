@@ -1,0 +1,123 @@
+{"q": "find all my uber charges from last week", "expect": "transaction_search"}
+{"q": "show me anything over $200 at Amazon in September", "expect": "transaction_search"}
+{"q": "did I get charged twice by Netflix?", "expect": "transaction_search"}
+{"q": "pull up every transaction with Whole Foods this year", "expect": "transaction_search"}
+{"q": "what was that $47.12 charge on the 3rd", "expect": "transaction_search"}
+{"q": "list my deposits from yesterday", "expect": "transaction_search"}
+{"q": "any charges from hulu lately", "expect": "transaction_search"}
+{"q": "show transactons at starbcks since august", "expect": "transaction_search"}
+{"q": "look up the payment to my landlord in march", "expect": "transaction_search"}
+{"q": "which purchases did I make at Target 2 weeks ago", "expect": "transaction_search"}
+{"q": "find the venmo payment to Dave", "expect": "transaction_search"}
+{"q": "all gas station purchases this month, itemized", "expect": "transaction_search"}
+{"q": "search for refunds in the last 30 days", "expect": "transaction_search"}
+{"q": "show me my largest 10 transactions this quarter", "expect": "transaction_search"}
+{"q": "where did I buy coffee last tuesday", "expect": "transaction_search"}
+{"q": "find the adobe charges", "expect": "transaction_search"}
+{"q": "every transaction tagged groceries in july", "expect": "transaction_search"}
+{"q": "show pending charges from today", "expect": "transaction_search"}
+{"q": "anything from Delta airlines in 2026", "expect": "transaction_search"}
+{"q": "lookup charge 'SQ *BLUE BOTTLE'", "expect": "transaction_search"}
+{"q": "what did I pay Comcast in the last three months, each bill", "expect": "transaction_search"}
+{"q": "how much did I spend on dining out this month", "expect": "spending_summary"}
+{"q": "break down my spending by category", "expect": "spending_summary"}
+{"q": "where is my money going lately", "expect": "spending_summary"}
+{"q": "what are my top spending categories this quarter", "expect": "spending_summary"}
+{"q": "am I spending more on groceries than last month", "expect": "spending_summary"}
+{"q": "total spent on subscriptions this year", "expect": "spending_summary"}
+{"q": "how much have i spent on food so frist", "expect": "spending_summary"}
+{"q": "spending by category for the past 30 days", "expect": "spending_summary"}
+{"q": "what percent of my spend goes to transportation", "expect": "spending_summary"}
+{"q": "give me a rundown of this month's expenses", "expect": "spending_summary"}
+{"q": "how much did entertainment cost me this quarter", "expect": "spending_summary"}
+{"q": "what's my biggest expense category ytd", "expect": "spending_summary"}
+{"q": "compare my spending this month vs the usual", "expect": "spending_summary"}
+{"q": "tell me how much I blew on shopping since Jan", "expect": "spending_summary"}
+{"q": "monthly spend breakdown pls", "expect": "spending_summary"}
+{"q": "what did I spend on travel in 2026", "expect": "spending_summary"}
+{"q": "how much are utilities costing me per month", "expect": "spending_summary"}
+{"q": "summarize expenses for last month by category", "expect": "spending_summary"}
+{"q": "what's my P&L for Q3", "expect": "profit_loss"}
+{"q": "income vs expenses this year", "expect": "profit_loss"}
+{"q": "did I make a profit last month", "expect": "profit_loss"}
+{"q": "how much did my side business earn after expenses", "expect": "profit_loss"}
+{"q": "show me profit and loss for the first half of 2026", "expect": "profit_loss"}
+{"q": "net income for the past 12 months", "expect": "profit_loss"}
+{"q": "am I in the black this quarter?", "expect": "profit_loss"}
+{"q": "revenue minus costs for freelance work in august", "expect": "profit_loss"}
+{"q": "income statement for last year", "expect": "profit_loss"}
+{"q": "how much more did I earn than spend in September", "expect": "profit_loss"}
+{"q": "profit/loss ytd", "expect": "profit_loss"}
+{"q": "what's my net income this month", "expect": "profit_loss"}
+{"q": "earnings vs outgoings since January", "expect": "profit_loss"}
+{"q": "P&L by category for the last quarter", "expect": "profit_loss"}
+{"q": "are my expenses exceeding my income this year", "expect": "profit_loss"}
+{"q": "what's my net worth", "expect": "net_worth"}
+{"q": "show my balance sheet", "expect": "net_worth"}
+{"q": "how has my net worth changed over the past year", "expect": "net_worth"}
+{"q": "total assets minus liabilities", "expect": "net_worth"}
+{"q": "what am I worth right now", "expect": "net_worth"}
+{"q": "net worth trend since january", "expect": "net_worth"}
+{"q": "how much debt do I have compared to assets", "expect": "net_worth"}
+{"q": "show me my overall financial position", "expect": "net_worth"}
+{"q": "what is my networth today", "expect": "net_worth"}
+{"q": "balance sheet as of end of last quarter", "expect": "net_worth"}
+{"q": "how much richer am I than 6 months ago", "expect": "net_worth"}
+{"q": "give me my assets and liabilities", "expect": "net_worth"}
+{"q": "net worth growth this year", "expect": "net_worth"}
+{"q": "what will my balance be in 3 months", "expect": "forecast"}
+{"q": "project my cash flow for next quarter", "expect": "forecast"}
+{"q": "will I run out of money before December", "expect": "forecast"}
+{"q": "forecast my spending for next month", "expect": "forecast"}
+{"q": "how much will I have saved by next summer", "expect": "forecast"}
+{"q": "predict my expenses for the rest of the year", "expect": "forecast"}
+{"q": "based on current trends where will I be in 6 months", "expect": "forecast"}
+{"q": "what's my projected cash position at end of month", "expect": "forecast"}
+{"q": "can I afford rent in two months at this rate", "expect": "forecast"}
+{"q": "estimate my savings by year end", "expect": "forecast"}
+{"q": "cashflow outlook for the next 90 days", "expect": "forecast"}
+{"q": "how much will i spend on groceries next month", "expect": "forecast"}
+{"q": "if things keep going like this, what's my balance on Jan 1", "expect": "forecast"}
+{"q": "that Starbucks thing should be Dining", "expect": "none"}
+{"q": "drop the second Adobe charge", "expect": "none"}
+{"q": "the Costco one from Tuesday belongs under Groceries not Shopping", "expect": "none"}
+{"q": "make the $12.99 Spotify charge a business expense", "expect": "none"}
+{"q": "mark yesterday's Shell receipt as tax deductible", "expect": "none"}
+{"q": "that Uber was actually for work", "expect": "none"}
+{"q": "get rid of the duplicate Netflix entry", "expect": "none"}
+{"q": "the amount on my last Target purchase should read 54.20", "expect": "none"}
+{"q": "I need the Amazon order from the 5th filed under Gifts", "expect": "none"}
+{"q": "flag the dentist payment for taxes", "expect": "none"}
+{"q": "that deposit on Friday is a reimbursement, not income", "expect": "none"}
+{"q": "rename the 'SQ *JOES' entry to Joe's Pizza", "expect": "none"}
+{"q": "the AirBnb charge needs to go in Travel", "expect": "none"}
+{"q": "put the Home Depot one under Home Improvement", "expect": "none"}
+{"q": "toss that second Lyft charge, it's a dupe", "expect": "none"}
+{"q": "the gym membership should be tagged Health", "expect": "none"}
+{"q": "that PayPal transfer was rent, file it that way", "expect": "none"}
+{"q": "move the Chipotle lunch into Business Meals", "expect": "none"}
+{"q": "last Whole Foods trip should be split: half Groceries, half Household", "expect": "none"}
+{"q": "the date on that Venmo is wrong, it was the 12th", "expect": "none"}
+{"q": "that charge from Monday is mine but under the Personal entity not LLC", "expect": "none"}
+{"q": "hey there!", "expect": "none"}
+{"q": "thanks, that was helpful", "expect": "none"}
+{"q": "good morning", "expect": "none"}
+{"q": "who are you?", "expect": "none"}
+{"q": "lol nice", "expect": "none"}
+{"q": "what can you do?", "expect": "none"}
+{"q": "should I pay off my credit card or invest?", "expect": "none"}
+{"q": "explain what a Roth IRA is", "expect": "none"}
+{"q": "is it a good idea to get a 15 year mortgage", "expect": "none"}
+{"q": "tips for building an emergency fund", "expect": "none"}
+{"q": "how does compound interest work", "expect": "none"}
+{"q": "what's a good savings rate in general", "expect": "none"}
+{"q": "import my Chase CSV", "expect": "none"}
+{"q": "connect my bank account", "expect": "none"}
+{"q": "export everything to Excel", "expect": "none"}
+{"q": "set a budget of $500 for dining", "expect": "none"}
+{"q": "remind me to pay rent on the 1st", "expect": "none"}
+{"q": "email me a monthly report", "expect": "none"}
+{"q": "what's the weather in Denver", "expect": "none"}
+{"q": "file my taxes for me", "expect": "none"}
+{"q": "transfer $200 to savings", "expect": "none"}
+{"q": "show me my credit score", "expect": "none"}

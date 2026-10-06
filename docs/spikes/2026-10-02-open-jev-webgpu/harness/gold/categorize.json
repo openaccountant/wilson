@@ -1,0 +1,394 @@
+[
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+  "amount": 2400,
+  "date": "2026-06-01",
+  "expected": "Income"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "RENT PAYMENT",
+  "amount": -1800,
+  "date": "2026-06-02",
+  "expected": "Home"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "WHOLE FOODS MARKET",
+  "amount": -142.33,
+  "date": "2026-06-03",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "TRANSFER TO CREDIT CARD XXXX-4471",
+  "amount": -600,
+  "date": "2026-06-04",
+  "expected": "Transfer"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "ADOBE CREATIVE CLOUD",
+  "amount": -54.99,
+  "date": "2026-06-05",
+  "expected": "Subscriptions"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "ADOBE CREATIVE CLOUD",
+  "amount": -54.99,
+  "date": "2026-06-05",
+  "expected": "Subscriptions"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "PAYROLL DEP - DAYJOB INC",
+  "amount": 3100,
+  "date": "2026-06-08",
+  "expected": "Income"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "CONED UTILITY",
+  "amount": -96.4,
+  "date": "2026-06-10",
+  "expected": "Utilities"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "CLIENT PAYMT - HARBOR LOGISTICS",
+  "amount": 1800,
+  "date": "2026-06-15",
+  "expected": "Income"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "GYM MEMBERSHIP",
+  "amount": -45,
+  "date": "2026-06-18",
+  "expected": "Health"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "TRADER JOE'S #229",
+  "amount": -88.1,
+  "date": "2026-06-20",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/checking.csv",
+  "description": "GROCERY OUTLET",
+  "amount": -63.55,
+  "date": "2026-06-27",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "STAPLES BUSINESS ADVANTAGE",
+  "amount": -89.2,
+  "date": "2026-06-01",
+  "expected": "Shopping"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "UNION SQUARE CAFE - CLIENT DINNER",
+  "amount": -156.4,
+  "date": "2026-06-03",
+  "expected": "Dining"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "AMEX EPAYMENT - THANK YOU",
+  "amount": 600,
+  "date": "2026-06-04",
+  "expected": "Transfer"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "DELTA AIR LINES - CONF TRAVEL",
+  "amount": -412,
+  "date": "2026-06-06",
+  "expected": "Travel"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "NETFLIX.COM",
+  "amount": -15.49,
+  "date": "2026-06-09",
+  "expected": "Subscriptions"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "UBER TRIP HELP.UBER.COM",
+  "amount": -22.1,
+  "date": "2026-06-13",
+  "expected": "Transport"
+ },
+ {
+  "persona": 1,
+  "file": "1-comingled-founder/card.csv",
+  "description": "APPLE.COM/BILL",
+  "amount": -2.99,
+  "date": "2026-06-19",
+  "expected": "Subscriptions"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+  "amount": 1450,
+  "date": "2026-06-02",
+  "expected": "Income"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "RENT PAYMENT",
+  "amount": -975,
+  "date": "2026-06-03",
+  "expected": "Home"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "TRADER JOE'S #118",
+  "amount": -54.2,
+  "date": "2026-06-05",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "CHIPOTLE 2291",
+  "amount": -11.85,
+  "date": "2026-06-07",
+  "expected": "Dining"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "VERIZON WIRELESS",
+  "amount": -65,
+  "date": "2026-06-09",
+  "expected": "Utilities"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "PLANET FITNESS",
+  "amount": -24.99,
+  "date": "2026-06-11",
+  "expected": "Health"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "TICKETMASTER - CONCERT",
+  "amount": -185,
+  "date": "2026-06-14",
+  "expected": "Entertainment"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+  "amount": 1450,
+  "date": "2026-06-16",
+  "expected": "Income"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "RAMEN HOUSE",
+  "amount": -9.4,
+  "date": "2026-06-18",
+  "expected": "Dining"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "TARGET",
+  "amount": -63.12,
+  "date": "2026-06-20",
+  "expected": "Shopping"
+ },
+ {
+  "persona": 2,
+  "file": "2-new-grad/checking.csv",
+  "description": "CHIPOTLE 2291",
+  "amount": -12.3,
+  "date": "2026-06-27",
+  "expected": "Dining"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+  "amount": 780,
+  "date": "2026-06-01",
+  "expected": "Income"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "RENT PAYMENT",
+  "amount": -1150,
+  "date": "2026-06-02",
+  "expected": "Home"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "GROCERY OUTLET",
+  "amount": -71.3,
+  "date": "2026-06-05",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+  "amount": -85,
+  "date": "2026-06-10",
+  "expected": "Education"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "OVERDRAFT FEE",
+  "amount": -35,
+  "date": "2026-06-14",
+  "expected": "Fees & Interest"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "DOLLAR GENERAL",
+  "amount": -42.6,
+  "date": "2026-06-18",
+  "expected": "Shopping"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "PEDIATRIC CO-PAY",
+  "amount": -35,
+  "date": "2026-06-21",
+  "expected": "Health"
+ },
+ {
+  "persona": 5,
+  "file": "5-single-parent/checking.csv",
+  "description": "GROCERY OUTLET",
+  "amount": -68.9,
+  "date": "2026-06-23",
+  "expected": "Groceries"
+ },
+ {
+  "persona": 4,
+  "file": "4-near-retiree/checking.qif",
+  "description": "MEDIGAP INSURANCE PREMIUM",
+  "amount": -245,
+  "date": "2026-06-05",
+  "expected": "Insurance"
+ },
+ {
+  "persona": 4,
+  "file": "4-near-retiree/checking.qif",
+  "description": "CVS PHARMACY",
+  "amount": -38.55,
+  "date": "2026-06-09",
+  "expected": "Health"
+ },
+ {
+  "persona": 4,
+  "file": "4-near-retiree/checking.qif",
+  "description": "UNKNOWN MERCHANT INTL*7719402",
+  "amount": -412.6,
+  "date": "2026-06-15",
+  "expected": "Other"
+ },
+ {
+  "persona": 4,
+  "file": "4-near-retiree/checking.qif",
+  "description": "COMCAST CABLE",
+  "amount": -128,
+  "date": "2026-06-18",
+  "expected": "Utilities"
+ },
+ {
+  "persona": 4,
+  "file": "4-near-retiree/checking.qif",
+  "description": "AMAZON.COM - GRANDKIDS GIFT",
+  "amount": -64.99,
+  "date": "2026-06-28",
+  "expected": "Gifts"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+  "amount": -2100,
+  "date": "2026-06-05",
+  "expected": "Home"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "STATE FARM INSURANCE",
+  "amount": -145,
+  "date": "2026-06-10",
+  "expected": "Insurance"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "TRANSFER TO SAVINGS HOUSE FUND",
+  "amount": -500,
+  "date": "2026-06-13",
+  "expected": "Transfer"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "CITY POWER AND WATER UTILITY",
+  "amount": -210.55,
+  "date": "2026-06-22",
+  "expected": "Utilities"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "TARGET",
+  "amount": -95.1,
+  "date": "2026-06-26",
+  "expected": "Shopping"
+ },
+ {
+  "persona": 3,
+  "file": "3-dual-income-household/joint-checking.ofx",
+  "description": "TRANSFER TO SAVINGS HOUSE FUND",
+  "amount": -500,
+  "date": "2026-06-29",
+  "expected": "Transfer"
+ }
+]

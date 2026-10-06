@@ -6,6 +6,12 @@ updates:
       interval: "daily"
     commit-message:
       prefix: "chore(deps):"
+    ignore:
+      # open-jev is 0.x: a minor bump may change encoding or temperature
+      # defaults, and the minor-and-patch fast-track auto-merges on green CI
+      # (docs/dependency-policy.md). Bumps are manual and re-run live step L10
+      # (specs/open-jev-labeler.md R16).
+      - dependency-name: "open-jev"
     groups:
       minor-and-patch:
         update-types:

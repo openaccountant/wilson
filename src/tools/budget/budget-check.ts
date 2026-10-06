@@ -12,13 +12,15 @@ export function initBudgetCheckTool(database: Database) {
 
 export const budgetCheckTool = defineTool({
   name: 'budget_check',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description: 'Compare actual spending vs budget limits for the current or specified month.',
   schema: z.object({
     month: z.string().optional().describe('Month to check (YYYY-MM), defaults to current month'),
     category: z.string().optional().describe('Specific category, or all if omitted'),
   }),
   func: async ({ month, category }) => {
-    const targetMonth = month ?? new Date().toISOString().slice(0, 7);
+    const now = new Date();
+    const targetMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let results = getBudgetVsActual(db, targetMonth);
 
     if (category) {

@@ -1,0 +1,254 @@
+{
+ "rubric": "strict: good = right tool + answers as asked (period, labels, what-if) + figures match tool + nothing misleading; useless = faithful but does not answer (bare figure for a statement/listing request, non-responsive); wrong = incorrect or misleading. A bare or labeled single figure is accepted when the question asks for one quantity with an explicit period (round-2 rule). Forecasts built from an empty trailing window presented without caveat are misleading (wrong) when they answer the projection asked, useless when they do not address the question at all. The known profit_loss transfer-as-income quirk is a tool issue, not an answer error.",
+ "grades": {
+  "0723882073": {
+   "q": "will i go overdrawn next month",
+   "grade": "wrong",
+   "reason": "Forecast from an empty trailing window (Jul-Sep): flat $577.20 with net $0.00, no caveat; implies no overdraft risk where notes say risky (June low -$1,346.30)."
+  },
+  "d48b19eaf9": {
+   "q": "net worth",
+   "grade": "good",
+   "reason": "Net worth $2,914.00 with assets/liabilities and line items, all match tool."
+  },
+  "bfd46daa50": {
+   "q": "income vs expenses june",
+   "grade": "good",
+   "reason": "Income $2,900.00, expenses $1,820.86, net $1,079.14 match tool; period named in question."
+  },
+  "7b71eab4b0": {
+   "q": "projected cash in 12 months",
+   "grade": "wrong",
+   "reason": "Bare $9,860.45 as 12-month projection: flat projection from empty trailing window, unlabeled, no caveat; notes expect ~$31,548.77 on June rate."
+  },
+  "9b55bc82f8": {
+   "q": "what is my net worth",
+   "grade": "good",
+   "reason": "Labeled net worth $1,136,210.94 matches tool; question asks only for net worth."
+  },
+  "5a6ea5f7dc": {
+   "q": "net worth now",
+   "grade": "good",
+   "reason": "Labeled net worth $228,134.06 matches tool; question asks only for net worth now."
+  },
+  "cc7bfda52c": {
+   "q": "navient payments",
+   "grade": "good",
+   "reason": "Both Navient payments (-$210.00 on 06/04 and 06/24), net -$420.00; matches tool and notes."
+  },
+  "47c3e5a25c": {
+   "q": "forecast next month",
+   "grade": "wrong",
+   "reason": "Bare $1,879.14 for next-month forecast: flat projection from empty trailing window, unlabeled, no caveat; notes expect ~$2,958.28."
+  },
+  "89c6dffdab": {
+   "q": "net worth",
+   "grade": "good",
+   "reason": "Labeled net worth $2,914.00 matches tool; question asks only for net worth."
+  },
+  "1cab9fcf2f": {
+   "q": "ytd profit",
+   "grade": "good",
+   "reason": "Net 2026 $3,021.71 with income/expenses matching tool; $600 card transfer in income is the known tool quirk, not an answer error."
+  },
+  "d998c09562": {
+   "q": "show the card payment",
+   "grade": "good",
+   "reason": "Shows the -$600.00 card payment from checking, matches tool; mirror +$600 on the card not found by search, but the singular payment asked for is shown."
+  },
+  "df72a6f098": {
+   "q": "projected cash in 12 months",
+   "grade": "wrong",
+   "reason": "Templated flat 12-month forecast from empty trailing window ($9,860.45, net $0.00), no caveat; notes expect ~$31,548.77."
+  },
+  "0c90c5dd50": {
+   "q": "net worth last month",
+   "grade": "wrong",
+   "reason": "'Net worth last month' answered as of 2026-10-03; period not respected and does not say latest available is 06/30."
+  },
+  "7ab3f17d8a": {
+   "q": "show consulting payments",
+   "grade": "wrong",
+   "reason": "Lists only Stonebridge $2,400 (keyword 'consulting'); misses Harbor $1,800 client payment, so count and total ($2,400 vs $4,200) mislead."
+  },
+  "aa5050f583": {
+   "q": "how much was the mortgage payment",
+   "grade": "good",
+   "reason": "'The mortgage payment was $2100.00' directly answers how much; matches tool."
+  },
+  "8ff424215a": {
+   "q": "forecast my cash for the next 3 months",
+   "grade": "wrong",
+   "reason": "Bare $9,520.17 for 3-month forecast: flat projection from empty trailing window, unlabeled, no caveat; notes expect ~+$3,155/month."
+  },
+  "af6a9faf49": {
+   "q": "childcare payments",
+   "grade": "good",
+   "reason": "Lists the 06/03 Sunrise Childcare -$620.00 payment with date and merchant; matches tool."
+  },
+  "729d31de9a": {
+   "q": "how much was the mortgage payment",
+   "grade": "good",
+   "reason": "Lists 06/05 Lakeview mortgage -$2,100.00; answers how much; matches tool."
+  },
+  "c02eba6497": {
+   "q": "car payment",
+   "grade": "useless",
+   "reason": "'2 transactions found.' gives no amount, date or merchant for 'car payment' (and one of the two is childcare)."
+  },
+  "bbbe116189": {
+   "q": "income vs expenses june",
+   "grade": "good",
+   "reason": "Net June 2026 $1,079.14 with income $2,900.00 and expenses $1,820.86; matches tool."
+  },
+  "4af891193e": {
+   "q": "childcare payments",
+   "grade": "useless",
+   "reason": "Bare unlabeled '$620.00' for a listing request ('childcare payments'): no date, merchant or count."
+  },
+  "cfd10bed5d": {
+   "q": "net worth",
+   "grade": "good",
+   "reason": "Labeled net worth $37,777.80 matches tool; question asks only for net worth."
+  },
+  "a2db3ed114": {
+   "q": "profit and loss for june",
+   "grade": "good",
+   "reason": "P&L June 2026: net $3,021.71, income $7,900.00, expenses $4,878.29 match tool; transfer-in-income is the known tool quirk."
+  },
+  "d28481a038": {
+   "q": "profit loss q2",
+   "grade": "useless",
+   "reason": "Bare unlabeled '$5988.61' for a P&L request (Q2): income and expenses omitted, figure not identified as net."
+  },
+  "03a9a25254": {
+   "q": "when will my student loan be paid off",
+   "grade": "useless",
+   "reason": "Asked when the student loan is paid off; answer is a generic cash forecast and never addresses the payoff date."
+  },
+  "f3f7286f84": {
+   "q": "net worth",
+   "grade": "good",
+   "reason": "Net worth $37,777.80 with assets/liabilities and line items; matches tool."
+  },
+  "4bbd076249": {
+   "q": "car payment",
+   "grade": "wrong",
+   "reason": "Includes SUNRISE CHILDCARE -$620 as a car payment (substring match) and reports net -$885.00; car payment is -$265.00."
+  },
+  "588490828d": {
+   "q": "projected house fund in 6 months",
+   "grade": "wrong",
+   "reason": "Asked for the house fund in 6 months; gives flat total cash $21,088.61 (net $0.00 from empty window), not the house fund (~$20,500 per notes)."
+  },
+  "16fd323a84": {
+   "q": "net worth now",
+   "grade": "good",
+   "reason": "Net worth $228,134.06 with assets/liabilities and line items; matches tool; 'now' respected."
+  },
+  "6ec5aee3bd": {
+   "q": "will i have enough for next quarters tax",
+   "grade": "useless",
+   "reason": "Asked whether next quarter's tax is covered; answer is a generic cash forecast with no yes/no and no mention of the tax reserve."
+  },
+  "0134efd2a4": {
+   "q": "ytd profit",
+   "grade": "good",
+   "reason": "'$3021.71' for 'ytd profit': single requested figure, matches tool net; terse accepted for an explicit single-quantity question."
+  },
+  "7629de95d1": {
+   "q": "forecast next month",
+   "grade": "wrong",
+   "reason": "Templated flat forecast from empty trailing window ($1,879.14, net $0.00), no one-month caveat; notes expect ~$2,958.28 next month."
+  },
+  "0798244052": {
+   "q": "projected house fund in 6 months",
+   "grade": "wrong",
+   "reason": "Bare $21,088.61 for 'projected house fund in 6 months': flat total cash from empty window presented as the house fund; notes expect ~$20,500."
+  },
+  "06053652f8": {
+   "q": "profit and loss for june",
+   "grade": "useless",
+   "reason": "Bare unlabeled '$3021.71' for 'profit and loss for june': income and expenses omitted (same as round-2 P&L june)."
+  },
+  "b120a17cc1": {
+   "q": "balance sheet",
+   "grade": "useless",
+   "reason": "'Balance sheet' answered with three totals only; no asset or liability lines, so the breakdown requested is missing."
+  },
+  "d19d9b369e": {
+   "q": "balance sheet",
+   "grade": "good",
+   "reason": "Balance sheet with totals and every asset/liability line; matches tool."
+  },
+  "fd1c0aa36a": {
+   "q": "profit for the year",
+   "grade": "good",
+   "reason": "Net 2026 $862.20 with income $3,235.00 and expenses $2,372.80; matches tool."
+  },
+  "1863ac4eea": {
+   "q": "forecast my cash for the next 3 months",
+   "grade": "wrong",
+   "reason": "Templated flat 3-month forecast from empty trailing window ($9,520.17, net $0.00), no caveat; notes expect ~+$3,155/month."
+  },
+  "affab05e50": {
+   "q": "profit for the year",
+   "grade": "good",
+   "reason": "'+$862.20' for 'profit for the year': single requested figure, matches tool net; terse accepted."
+  },
+  "1e1f16d681": {
+   "q": "where will my checking be in 3 months",
+   "grade": "wrong",
+   "reason": "Templated flat forecast ($1,879.14, net $0.00) from empty window, no caveat; notes expect ~$5,116.56 in 3 months."
+  },
+  "693b96ce1e": {
+   "q": "spending ytd",
+   "grade": "good",
+   "reason": "'$4911.39' for 'spending ytd': single requested figure matching tool total; terse accepted (same as round-2 'spending this year')."
+  },
+  "229765eab6": {
+   "q": "profit loss q2",
+   "grade": "good",
+   "reason": "Net Q2 2026 $5,988.61 with income $10,900.00 and expenses $4,911.39; matches tool."
+  },
+  "ee0c57fb5c": {
+   "q": "spending ytd",
+   "grade": "good",
+   "reason": "Spending for 2026 $4,911.39 across 9 transactions; matches tool."
+  },
+  "cbc8684aad": {
+   "q": "net worth last month",
+   "grade": "wrong",
+   "reason": "'Net worth last month' answered with an undated current figure; period not respected and no note that latest available is 06/30."
+  },
+  "fbc07b5900": {
+   "q": "will i run out of money",
+   "grade": "wrong",
+   "reason": "Templated flat forecast (net $0.00 from empty window) for 'will i run out of money'; no direct answer and contradicts June net +$1,807.36 (rising)."
+  },
+  "250e8bca43": {
+   "q": "what is my net worth",
+   "grade": "good",
+   "reason": "Net worth $1,136,210.94 with assets/liabilities and line items; matches tool."
+  }
+ },
+ "byArm": {
+  "M6": {
+   "local": 19,
+   "good": 9,
+   "wrong": 5,
+   "useless": 5,
+   "precisionStrict": 0.4737,
+   "wrongOrUselessRate": 0.5263
+  },
+  "T": {
+   "local": 27,
+   "good": 15,
+   "wrong": 10,
+   "useless": 2,
+   "precisionStrict": 0.5556,
+   "wrongOrUselessRate": 0.4444
+  }
+ },
+ "byArmNote": "Aggregated after all 46 grades were written; key opened only then. 19 rows answered by both arms (T good 13, M6 good 9); 8 rows answered by T only, none by M6 only."
+}

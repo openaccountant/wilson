@@ -36,6 +36,7 @@ Execute a skill to get specialized instructions for complex tasks.
  */
 export const skillTool = defineTool({
   name: 'skill',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description: 'Execute a skill to get specialized instructions for a task. Returns instructions to follow.',
   schema: z.object({
     skill: z.string().describe('Name of the skill to invoke (e.g., "subscription-audit")'),

@@ -126,6 +126,7 @@ async function fetchFireflyTransactions(opts: {
  */
 export const fireflyImportTool = defineTool({
   name: 'firefly_import',
+  mutates: true,
   description:
     'Import transactions from a self-hosted Firefly III instance. Requires FIREFLY_API_URL and FIREFLY_API_TOKEN env vars. ' +
     'Fetches transactions via Firefly III REST API and imports them into the local database.',

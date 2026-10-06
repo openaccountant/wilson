@@ -1,4 +1,5 @@
 import { buildToolDescriptions } from '../tools/registry.js';
+import { resolveProvider } from '../providers.js';
 import { buildSkillMetadataSection, discoverSkills } from '../skills/index.js';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -57,14 +58,23 @@ export async function loadSoulDocument(): Promise<string | null> {
  * Build the skills section for the system prompt.
  * Only includes skill metadata if skills are available.
  */
-function buildSkillsSection(): string {
+function buildSkillsSection(local = false, skillSelection: readonly string[] = []): string {
   const skills = discoverSkills();
 
   if (skills.length === 0) {
     return '';
   }
 
-  const skillList = buildSkillMetadataSection();
+  // Local models get names only: the 50+ descriptions were ~2.5k of a ~7.7k
+  // prompt that WebGPU models can barely prefill. The skill tool returns the
+  // full instructions once the model picks a name. Skills the local tool
+  // selector picked for this request (≤ 3) keep their description.
+  const selected = skills.filter((s) => skillSelection.includes(s.name));
+  const skillList = !local
+    ? buildSkillMetadataSection()
+    : selected.length > 0
+      ? `Call the skill tool with one of these exact names:\n${selected.map((s) => `- **${s.name}**: ${s.description}`).join('\n')}\nOther skills: ${skills.filter((s) => !selected.includes(s)).map((s) => s.name).join(', ')}`
+      : `Call the skill tool with one of these exact names:\n${skills.map((s) => s.name).join(', ')}`;
 
   return `## Available Skills
 
@@ -130,9 +140,30 @@ Keep tables compact:
 /**
  * Build the system prompt for the agent.
  * @param model - The model name (used to get appropriate tool descriptions)
+ * @param options.skillSelection - Local models only: skills shown with their
+ *   description (local tool selection); cloud models ignore it.
  */
-export async function buildSystemPrompt(model: string, soulContent?: string | null): Promise<string> {
-  const toolDescriptions = await buildToolDescriptions(model);
+export async function buildSystemPrompt(
+  model: string,
+  soulContent?: string | null,
+  options: { skillSelection?: readonly string[] } = {},
+): Promise<string> {
+  // Local Transformers.js models get every tool's schema injected by their
+  // adapter (prompt-based tool calling); listing the rich descriptions here as
+  // well doubled the prompt (~17k tokens) past what WebGPU models can prefill.
+  const local = resolveProvider(model).id === 'transformers';
+  // The numeric example row leaked into granite's answers ("$842.50 (22%)" for
+  // every question), so local models get placeholders instead.
+  const exampleRow = local
+    ? '| Groceries  | $X      | Y%      |'
+    : '| Groceries  | $842.50 | 22%     |';
+  const toolSection = local
+    ? ''
+    : `## Available Tools
+
+${await buildToolDescriptions(model)}
+
+`;
 
   return `You are Open Accountant, a CLI assistant for personal finance bookkeeping.
 
@@ -140,11 +171,7 @@ Current date: ${getCurrentDate()}
 
 Your output is displayed on a command line interface. Keep responses short and concise.
 
-## Available Tools
-
-${toolDescriptions}
-
-## Tool Usage Policy
+${toolSection}## Tool Usage Policy
 
 - Only use tools when the query actually requires data retrieval or computation
 - Use csv_import to import transaction data from CSV files
@@ -157,7 +184,7 @@ ${toolDescriptions}
 - Users can manage multiple profiles with /profile (list) and /profile switch <name>. Each profile has its own database.
 - Only respond directly for: conceptual definitions, general financial advice, or conversational queries
 
-${buildSkillsSection()}
+${buildSkillsSection(local, options.skillSelection)}
 
 ## Behavior
 
@@ -194,7 +221,7 @@ STRICT FORMAT - each row must:
 
 | Category   | Amount  | % Total |
 |------------|---------|---------|
-| Groceries  | $842.50 | 22%     |
+${exampleRow}
 
 Keep tables compact:
 - Max 2-3 columns; prefer multiple small tables over one wide table
@@ -208,40 +235,8 @@ Keep tables compact:
 // User Prompts
 // ============================================================================
 
-/**
- * Build user prompt for agent iteration with full tool results.
- * Anthropic-style: full results in context for accurate decision-making.
- * Context clearing happens at threshold, not inline summarization.
- *
- * @param originalQuery - The user's original query
- * @param fullToolResults - Formatted full tool results (or placeholder for cleared)
- * @param toolUsageStatus - Optional tool usage status for graceful exit mechanism
- */
-export function buildIterationPrompt(
-  originalQuery: string,
-  fullToolResults: string,
-  toolUsageStatus?: string | null
-): string {
-  let prompt = `Query: ${originalQuery}`;
-
-  if (fullToolResults.trim()) {
-    prompt += `
-
-Data retrieved from tool calls:
-${fullToolResults}`;
-  }
-
-  // Add tool usage status if available (graceful exit mechanism)
-  if (toolUsageStatus) {
-    prompt += `\n\n${toolUsageStatus}`;
-  }
-
-  prompt += `
-
-Continue working toward answering the query. When you have gathered sufficient data to answer, write your complete answer directly and do not call more tools.`;
-
-  return prompt;
-}
+// `buildIterationPrompt` lives in iteration-prompt-format.ts (import-free, so the judge read tools can share its wording).
+export { buildIterationPrompt } from './iteration-prompt-format.js';
 
 // ============================================================================
 // Data Context

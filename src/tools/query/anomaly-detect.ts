@@ -271,6 +271,7 @@ function formatAnomalies(anomalies: Anomaly[]): string {
  */
 export const anomalyDetectTool = defineTool({
   name: 'anomaly_detect',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Detect anomalies in your transactions: duplicate charges, spending spikes, ' +
     'and potentially unused subscriptions.',

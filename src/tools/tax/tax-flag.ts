@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { flagTaxDeduction, unflagTaxDeduction, getTaxDeductions, getTaxSummary } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
 import { IRS_CATEGORIES } from './irs-categories.js';
 import { hasLicense } from '../../licensing/license.js';
 import { toolUpsell } from '../../licensing/upsell.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToSheets } from './schedule-c.js';
+import { writeFileSync } from 'fs';
+import { writeXlsxFile } from '../../utils/xlsx-writer.js';
 
 let db: Database | null = null;
 
@@ -20,17 +24,20 @@ function getDb(): Database {
 
 export const taxFlagTool = defineTool({
   name: 'tax_flag',
+  mutates: mutatesUnlessAction('summary', 'list'),
   description:
     'Flag transactions as tax-deductible with IRS Schedule C categories. ' +
-    'Supports flag, unflag, summary, and list actions. Requires Pro license.',
+    'Supports flag, unflag, summary, list, and export (Schedule C CSV/XLSX file) actions. Requires Pro license.',
   schema: z.object({
-    action: z.enum(['flag', 'unflag', 'summary', 'list']).describe('Action to perform'),
+    action: z.enum(['flag', 'unflag', 'summary', 'list', 'export']).describe('Action to perform'),
     transactionId: z.number().optional().describe('Transaction ID (for flag/unflag)'),
     irsCategory: z.string().optional().describe('IRS Schedule C category'),
     taxYear: z.number().optional().describe('Tax year (default: current year)'),
     notes: z.string().optional().describe('Optional notes for the deduction'),
+    format: z.enum(['csv', 'xlsx']).optional().describe('Export file format (for export; default xlsx)'),
+    filePath: z.string().optional().describe('Output file path (for export)'),
   }),
-  func: async ({ action, transactionId, irsCategory, taxYear, notes }) => {
+  func: async ({ action, transactionId, irsCategory, taxYear, notes, format, filePath }) => {
     if (!hasLicense('pro')) return toolUpsell('Tax tracking');
 
     const database = getDb();
@@ -91,6 +98,35 @@ export const taxFlagTool = defineTool({
             irsCategory: d.irs_category,
             notes: d.notes,
           })),
+        });
+      }
+      case 'export': {
+        if (!filePath) return formatToolResult({ error: 'filePath is required for export' });
+        const fmt = format ?? 'xlsx';
+        // Only ever write a spreadsheet: the path comes from the model, and a
+        // prompt-injected one must not be able to clobber e.g. ~/.zshrc.
+        if (!filePath.toLowerCase().endsWith(`.${fmt}`)) {
+          return formatToolResult({ error: `filePath must end in .${fmt} for a ${fmt} export` });
+        }
+        const report = buildScheduleC(database, year);
+        if (report.details.length === 0) {
+          return formatToolResult({ success: false, message: `No tax deductions flagged for ${year}; nothing to export.` });
+        }
+        const resolvedPath = filePath.startsWith('~') ? filePath.replace('~', process.env.HOME ?? '') : filePath;
+        try {
+          if (fmt === 'csv') writeFileSync(resolvedPath, scheduleCToCsv(report));
+          else await writeXlsxFile(scheduleCToSheets(report), resolvedPath);
+        } catch (err) {
+          return formatToolResult({ error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}` });
+        }
+        return formatToolResult({
+          success: true,
+          taxYear: year,
+          format: fmt,
+          filePath: resolvedPath,
+          deductionsExported: report.details.length,
+          total: report.total,
+          message: `Exported ${report.details.length} deductions ($${report.total.toFixed(2)}) for ${year} to ${resolvedPath} (Schedule C ${fmt.toUpperCase()}).`,
         });
       }
     }

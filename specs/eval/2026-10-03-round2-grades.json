@@ -1,0 +1,117 @@
+{
+ "list client payments": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Faithful to the 3 rows the tool returned; both expected client payments (Stonebridge 2400, Harbor 1800) are present with correct amounts. Also lists the Union Square Cafe client dinner (-156.40) because the keyword query was 'client', and shortens its description to 'CLIENT DINNER'. Marginal: it answers, noise row is clearly signed."
+ },
+ "spending by category": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Tool result is October 2026 (empty) vs September (empty). Answer says Total $0.00 and 'Category: Total spending remains unchanged', which names no period, never says the month has no data, and gives no categories. A user with $4.9k of June spending reads this as nothing spent."
+ },
+ "spending this year": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: 2026 Uncategorized -4878.29 (17 txns). Answer '$4878.29' matches and answers 'spending this year' as a single figure. Terse, unlabeled, but unambiguous for this question."
+ },
+ "spending summary": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Tool is empty October 2026. Answer is a bare '$0.00' to a request for a summary: no period, no categories, no 'no data'. Faithful number, does not address the question."
+ },
+ "what am i spending on?": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Names the period (October 2026) and says no spending, matching the empty tool result. Honest and responsive to the data window used."
+ },
+ "spending vs last month": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Question asks for a comparison; answer is a bare '$0.00' (both months empty). Figure matches the tool but the comparison and the empty-data fact are missing."
+ },
+ "are we spending more than last month": {
+  "answerOk": true,
+  "useless": true,
+  "why": "'No' is arithmetically consistent with 0 vs 0, but the answer hides that both months are empty; a reader concludes spending fell or held when there is simply no data. Does not inform."
+ },
+ "what's the biggest category": {
+  "answerOk": false,
+  "useless": true,
+  "why": "Says the biggest category is 'TOTAL' with -$0.00. TOTAL is the footer row, not a category; the tool returned no categories. Fabricated reading of the table."
+ },
+ "expenses by category": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Total $0.00 and 'No categories listed (only TOTAL is shown)' matches the empty tool table, but gives no period and does not say the month is empty; a breakdown was requested and none is conveyed."
+ },
+ "how much did we spend this year by category": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: 2026 Uncategorized -4911.39 (9 txns); I re-summed persona 3's nine debits = 4911.39. Answer states total and the single Uncategorized category correctly."
+ },
+ "how's my spending trending vs last month": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Figures match (0 vs September 0) and the period is named, but 'no change in spending patterns' draws a pattern conclusion from two empty months. Does not inform."
+ },
+ "P&L june": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Answer is the bare net '$3021.71', which equals the tool's NET PROFIT for June 2026. The tool counts the +600 Amex payment as income (7900, not the notes' 7300); the server tool does the same, so that is a data/tool matter, not a local-answer error. A P&L was requested and income and expenses are omitted, with no label."
+ },
+ "p&l this quarter": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: Q4 2026, net profit +0.00, no income or expense lines. '$0.00.' is the correct net for the quarter so far and the question's period is explicit. Terse."
+ },
+ "profit loss year to date": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Income 2900.00, expenses 1820.86, net 1079.14 all match the tool; I re-summed persona 2's rows (2 paychecks, 11 debits) and they agree."
+ },
+ "income minus expenses last month": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Tool: September 2026 empty. Answer '$0.00.' is arithmetically the tool figure, but the row's notes require saying there is no data; a bare zero reads as break-even."
+ },
+ "profit this month?": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: October 2026, net +0.00. '+$0.00' answers the question as asked for the explicit period."
+ },
+ "did i come out ahead this month": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: October 2026 net +0.00. '$0.00 net profit.' correctly implies no, with the explicit period in the question."
+ },
+ "net worth summary": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Tool: 'No accounts configured.' Answer repeats it verbatim. The persona seed has no account balances, which is what the notes say to report."
+ },
+ "net worth last 3 months": {
+  "answerOk": true,
+  "useless": false,
+  "why": "Question asks for a 3-month trend; the local run called net_worth summary (trend stays server-only). Because the book has no accounts, 'No accounts configured' is still true, so the answer is correct here. Latent hazard: with accounts present this phrasing would be answered with a current summary."
+ },
+ "forecast": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Tool: 3-month forecast, every figure $0.00 (no accounts; trailing three months Jul-Sep are empty). Answer is a bare '$0.00' with no horizon and no assumptions; the notes require stating assumptions. Faithful but reads as a real prediction."
+ },
+ "where will my cash be in 3 months": {
+  "answerOk": true,
+  "useless": true,
+  "why": "Same all-zero forecast. Bare '$0.00' presents an empty-input forecast as the answer; no assumptions or 'no data' stated, as the notes require."
+ },
+ "how much will we have saved in 6 months": {
+  "answerOk": true,
+  "useless": true,
+  "why": "All-zero 6-month forecast (no accounts, empty trailing window). Bare '$0.00.' ignores the house-fund transfers the notes expect and states no assumptions."
+ },
+ "forecast without golf dues": {
+  "answerOk": false,
+  "useless": true,
+  "why": "The what-if premise (drop the $150 golf dues) is not applied: the local run called the plain forecast and answered '$0.00' as if it were the what-if result. Answers a different question."
+ }
+}

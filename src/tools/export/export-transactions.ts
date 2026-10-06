@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import * as XLSX from 'xlsx';
+import { writeFileSync } from 'node:fs';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
 import { getTransactions, type TransactionFilters } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
+import { writeXlsxFile, sheetToCsv, type XlsxSheet } from '../../utils/xlsx-writer.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -29,6 +30,7 @@ function getDb(): Database {
  */
 export const exportTransactionsTool = defineTool({
   name: 'export_transactions',
+  mutates: true,
   description:
     'Export transactions to a CSV or XLSX file. Supports filtering by date range, category, ' +
     'and merchant/description. Useful for sharing data or creating reports.',
@@ -66,21 +68,19 @@ export const exportTransactionsTool = defineTool({
     }
 
     // Select useful columns for export
-    const rows = transactions.map((t) => ({
-      date: t.date,
-      description: t.description,
-      amount: t.amount,
-      category: t.category ?? '',
-    }));
-
-    // Create workbook and worksheet
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+    // String cells are formula-neutralised inside the writer.
+    const sheet: XlsxSheet = {
+      name: 'Transactions',
+      header: ['date', 'description', 'amount', 'category'],
+      rows: transactions.map((t) => [t.date, t.description, t.amount, t.category ?? '']),
+      widths: [12, 48, 14, 22],
+      currencyColumns: ['amount'],
+    };
 
     // Write file
     try {
-      XLSX.writeFile(wb, resolvedPath, { bookType: format });
+      if (format === 'xlsx') await writeXlsxFile([sheet], resolvedPath);
+      else writeFileSync(resolvedPath, sheetToCsv(sheet));
     } catch (err) {
       return formatToolResult({
         error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,

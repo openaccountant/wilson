@@ -1,13 +1,22 @@
 import { z } from 'zod';
 import type { Database } from '../../db/compat-sqlite.js';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessDryRun } from '../mutation.js';
 import { getEntities, getUnassignedTransactions, assignEntityToTransactions } from '../../db/entity-queries.js';
 import { buildEntityClassificationPrompt, type ClassificationInput } from './entity-classify-prompt.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
+import { numberLiteralUnion } from '../literal-union.js';
+import { resolveProvider } from '../../providers.js';
+import { isConstrainedDecodingActive } from '../../model/providers/transformers.js';
 import { CALL_TYPE_ENTITY_CLASSIFICATION, getTaskModel } from '../../model/task-models.js';
 
 let db: Database | null = null;
+
+/** Narrow only when decoding is really constrained: local provider and no EOS-mismatch fallback. */
+function isNarrowingSafe(model: string): boolean {
+  return resolveProvider(model).id === 'transformers' && isConstrainedDecodingActive(model);
+}
 
 export function initEntityClassifyTool(database: Database): void {
   db = database;
@@ -20,21 +29,37 @@ function getDb(): Database {
   return db;
 }
 
-const classificationOutputSchema = z.object({
-  transactions: z.array(
+/**
+ * Per-batch output schema. With `narrow` (only where decoding is constrained,
+ * i.e. local Transformers.js) id is limited to this batch's ids and entityId to
+ * the known entities, so the model cannot emit anything else. Otherwise it stays
+ * loose so one unknown entityId routes that row to review instead of failing
+ * the batch. (A fresh schema per call means a cold token-mask cache.)
+ */
+export function buildClassificationOutputSchema(batchIds: number[], entityIds: number[], narrow: boolean) {
+  const rows = z.array(
     z.object({
-      id: z.number(),
-      entityId: z.number(),
+      id: narrow ? numberLiteralUnion(batchIds) : z.number(),
+      entityId: narrow ? numberLiteralUnion(entityIds) : z.number(),
       confidence: z.number().min(0).max(1),
       reasoning: z.string(),
     }),
-  ),
-});
+  );
+  // An empty array would pass as "success" while classifying nothing, but only
+  // constrained decoding is prone to it; cloud schemas stay as they were.
+  return z.object({ transactions: narrow ? rows.min(1) : rows });
+}
 
 const BATCH_SIZE = 50;
+/** Local Transformers.js models are slow and cap output at 512 tokens, so batch small. */
+const LOCAL_BATCH_SIZE = 10;
+/** Output tokens per {"id","entityId","confidence","reasoning"} row (~40–50 with a short reason), with headroom. */
+const OUTPUT_TOKENS_PER_ROW = 80;
+const OUTPUT_TOKENS_OVERHEAD = 64;
 
 export const entityClassifyTool = defineTool({
   name: 'entity_classify',
+  mutates: mutatesUnlessDryRun,
   description:
     'Classify unassigned transactions into business entities using AI. ' +
     'Assigns each transaction to an entity with confidence scores and reasoning.',
@@ -83,9 +108,10 @@ export const entityClassifyTool = defineTool({
     // Build entity ID → name lookup
     const entityMap = new Map(entities.map((e) => [e.id, e.name]));
 
-    // 3. Process in batches
-    for (let i = 0; i < unassigned.length; i += BATCH_SIZE) {
-      const batch = unassigned.slice(i, i + BATCH_SIZE);
+    // 3. Process in batches (smaller for local models, as categorize does)
+    const batchSize = resolveProvider(getTaskModel('entity-classification')).id === 'transformers' ? LOCAL_BATCH_SIZE : BATCH_SIZE;
+    for (let i = 0; i < unassigned.length; i += batchSize) {
+      const batch = unassigned.slice(i, i + batchSize);
       const inputs: ClassificationInput[] = batch.map((t) => ({
         id: t.id,
         description: t.description,
@@ -95,6 +121,12 @@ export const entityClassifyTool = defineTool({
       }));
 
       const prompt = buildEntityClassificationPrompt(inputs, entities);
+      const batchIds = new Set(batch.map((t) => t.id));
+      const outputSchema = buildClassificationOutputSchema(
+        [...batchIds],
+        entities.map((e) => e.id),
+        isNarrowingSafe(getTaskModel('entity-classification')),
+      );
 
       try {
         // Resolved per batch so a pinned override (settings.json) lands on the
@@ -102,21 +134,29 @@ export const entityClassifyTool = defineTool({
         const model = getTaskModel('entity-classification');
         const result = await callLlm(prompt, {
           systemPrompt: 'You are a precise financial entity classifier. Respond only with valid JSON.',
-          outputSchema: classificationOutputSchema,
+          outputSchema,
           model,
           callType: CALL_TYPE_ENTITY_CLASSIFICATION,
+          // Room for every row's JSON: the local adapter otherwise caps output
+          // at 512 tokens, truncating a full batch into invalid JSON.
+          maxTokens: OUTPUT_TOKENS_OVERHEAD + OUTPUT_TOKENS_PER_ROW * batch.length,
         });
 
-        // callLlm validated the structured output against classificationOutputSchema
+        // callLlm validated the structured output against the per-batch schema
         // (with one repair re-prompt) or threw — result.response.structured is guaranteed
         // to satisfy the schema, so a rejected batch lands in the catch below and nothing
         // is assigned for this batch.
-        const classifications = result.response.structured as z.infer<typeof classificationOutputSchema>;
+        const classifications = result.response.structured as z.infer<ReturnType<typeof buildClassificationOutputSchema>>;
 
         // 4. Process results
         const highConfIds: Map<number, number[]> = new Map(); // entityId → txnIds
 
         for (const cls of classifications.transactions) {
+          // Whatever the provider enforced, an id outside this batch is never assigned.
+          if (!batchIds.has(cls.id)) {
+            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ignored id ${cls.id} not in batch`);
+            continue;
+          }
           const confidence = Math.max(0, Math.min(1, cls.confidence));
           const entityName = entityMap.get(cls.entityId) ?? `Unknown (#${cls.entityId})`;
 
@@ -162,7 +202,7 @@ export const entityClassifyTool = defineTool({
         }
       } catch (err) {
         errors.push(
-          `Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : String(err)}`,
+          `Batch ${Math.floor(i / batchSize) + 1}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }

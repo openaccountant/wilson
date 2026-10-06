@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { defineTool } from '../tools/define-tool.js';
 import { formatToolResult } from '../tools/types.js';
 import { getMcpClient, getConnectedServers } from './client.js';
+import { loadMcpConfig } from './config.js';
+import { logger } from '../utils/logger.js';
 import type { ToolDef } from '../model/types.js';
 
 /**
@@ -55,6 +57,20 @@ function jsonSchemaToZod(schema: Record<string, unknown>): z.ZodType {
   }
 }
 
+/**
+ * Whether a wrapped MCP tool counts as mutating for the approval gate (#152).
+ * External tools are unknown code, so every tool writes — and every call
+ * needs approval — unless the USER lists it as read-only in
+ * ~/.openaccountant/mcp.json under that server's `readOnlyTools`.
+ *
+ * The server's own annotations (readOnlyHint, destructiveHint) are NOT
+ * consulted: they are claims by the code being gated, and a server could
+ * label a write tool read-only to skip the approval card.
+ */
+export function mcpToolMutates(toolName: string, userReadOnlyTools: ReadonlySet<string>): boolean {
+  return !userReadOnlyTools.has(toolName);
+}
+
 // Cached MCP tools — populated once at startup, read synchronously by the registry
 let cachedMcpTools: ToolDef[] = [];
 
@@ -79,16 +95,35 @@ export function getCachedMcpTools(): ToolDef[] {
  */
 async function getMcpTools(): Promise<ToolDef[]> {
   const tools: ToolDef[] = [];
+  const config = loadMcpConfig();
 
   for (const serverName of getConnectedServers()) {
     const client = getMcpClient(serverName);
     if (!client) continue;
 
-    let toolList: { tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> };
+    let toolList: {
+      tools: Array<{
+        name: string;
+        description?: string;
+        inputSchema?: Record<string, unknown>;
+      }>;
+    };
     try {
       toolList = await client.listTools();
     } catch {
       continue;
+    }
+
+    // The user's read-only list for this server (validated by loadMcpConfig).
+    const readOnlyTools = new Set(config.servers[serverName]?.readOnlyTools ?? []);
+    const offered = new Set(toolList.tools.map((t) => t.name));
+    for (const listed of readOnlyTools) {
+      if (!offered.has(listed)) {
+        logger.warn(
+          `[mcp] mcp.json: readOnlyTools for server "${serverName}" names "${listed}", which the server does not offer; ignoring it`,
+          { server: serverName, tool: listed },
+        );
+      }
     }
 
     for (const mcpTool of toolList.tools) {
@@ -101,6 +136,7 @@ async function getMcpTools(): Promise<ToolDef[]> {
         name: toolName,
         description,
         schema: zodSchema,
+        mutates: mcpToolMutates(mcpTool.name, readOnlyTools),
         func: async (args: unknown) => {
           const mcpClient = getMcpClient(serverName);
           if (!mcpClient) {

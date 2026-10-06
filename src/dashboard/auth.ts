@@ -1,4 +1,11 @@
 import type { Database } from '../db/compat-sqlite.js';
+import {
+  revokeAllGrants,
+  revokeGrantsForUser,
+  expirePendingOperationsBySource,
+  expirePendingOperationsForUser,
+  isDashboardAuthEnabled,
+} from '../mcp/store.js';
 
 export interface DashboardUser {
   id: number;
@@ -9,19 +16,61 @@ export interface DashboardUser {
   updated_at: string;
 }
 
-// ── Config ──────────────────────────────────────────────────────────────────
-
-export function isAuthEnabled(db: Database): boolean {
-  const row = db.prepare(
-    "SELECT value FROM dashboard_config WHERE key = 'auth_enabled'"
-  ).get() as { value: string } | undefined;
-  return row?.value === 'true';
+/**
+ * Whether a dashboard role may change data. The one RBAC rule for writes:
+ * every REST write route, and approving a chat agent's mutating tool call
+ * (#156), require it.
+ */
+export function canWrite(role: DashboardUser['role']): boolean {
+  return role === 'admin';
 }
 
+// ── Config ──────────────────────────────────────────────────────────────────
+
+/** Read fresh from the DB on every call — see isDashboardAuthEnabled. */
+export function isAuthEnabled(db: Database): boolean {
+  return isDashboardAuthEnabled(db);
+}
+
+/**
+ * Turn dashboard auth on. On the off -> on transition every WebMCP / HTTP-MCP
+ * grant is revoked and every pending WebMCP / HTTP-MCP operation expired:
+ * anything minted while auth was off has no owner (user_id null, role admin)
+ * and would otherwise keep working, unattributed, under the new login rules.
+ * Admins grant again afterwards. Re-enabling while already on changes nothing.
+ * A chat run in flight with no owner (started while auth was off) is cancelled
+ * through `onAuthEnabled`, together with its pending card.
+ */
 export function enableAuth(db: Database): void {
+  if (isAuthEnabled(db)) return;
+  revokeAllGrants(db);
+  expirePendingOperationsBySource(db, 'webmcp', 'auth_enabled');
+  expirePendingOperationsBySource(db, 'http-mcp', 'auth_enabled');
   db.prepare(
     "INSERT OR REPLACE INTO dashboard_config (key, value) VALUES ('auth_enabled', 'true')"
   ).run();
+  for (const listener of authEnabledListeners) {
+    try {
+      listener(db);
+    } catch (err) {
+      // Housekeeping must never undo the enable (the flag is already written); say so and carry on.
+      console.error('[auth] an onAuthEnabled listener failed:', err);
+    }
+  }
+}
+
+type AuthEnabledListener = (db: Database) => void;
+const authEnabledListeners = new Set<AuthEnabledListener>();
+
+/**
+ * Run `listener(db)` right after dashboard auth is switched on (the off -> on transition only) for `db`.
+ * The dashboard chat uses it to end runs that started with auth off: they have no owner, so nobody could
+ * approve their cards or be held to their writes under the new login rules. A hook rather than an import
+ * because chat.ts already depends on this module. Returns an unsubscribe function.
+ */
+export function onAuthEnabled(listener: AuthEnabledListener): () => void {
+  authEnabledListeners.add(listener);
+  return () => { authEnabledListeners.delete(listener); };
 }
 
 export function disableAuth(db: Database): void {
@@ -30,7 +79,41 @@ export function disableAuth(db: Database): void {
   ).run();
 }
 
+/** True when at least one active admin account exists, i.e. someone can actually log in and manage the dashboard. */
+export function hasActiveAdmin(db: Database): boolean {
+  const row = db.prepare("SELECT 1 AS ok FROM dashboard_users WHERE role = 'admin' AND is_active = 1 LIMIT 1").get();
+  return !!row;
+}
+
+/**
+ * The precondition for serving a profile over the network: the auth flag is on
+ * AND an active admin exists. The flag alone is not enough, because with zero
+ * users `/api/auth/setup` is public and the first caller would become admin.
+ */
+export function lanAuthReady(db: Database): boolean {
+  return isAuthEnabled(db) && hasActiveAdmin(db);
+}
+
 // ── Users ───────────────────────────────────────────────────────────────────
+
+export function hashPassword(password: string): Promise<string> {
+  return Bun.password.hash(password, 'argon2id');
+}
+
+/** Insert a user from an already-computed hash. Synchronous, so a caller can check state and insert with no await in between. */
+export function insertUser(
+  db: Database,
+  username: string,
+  passwordHash: string,
+  role: 'admin' | 'viewer' = 'viewer'
+): DashboardUser {
+  const result = db.prepare(`
+    INSERT INTO dashboard_users (username, password_hash, role)
+    VALUES (@username, @passwordHash, @role)
+  `).run({ username, passwordHash, role });
+  const id = (result as { lastInsertRowid: number }).lastInsertRowid;
+  return getUser(db, id)!;
+}
 
 export async function createUser(
   db: Database,
@@ -38,13 +121,23 @@ export async function createUser(
   password: string,
   role: 'admin' | 'viewer' = 'viewer'
 ): Promise<DashboardUser> {
-  const passwordHash = await Bun.password.hash(password, 'argon2id');
-  const result = db.prepare(`
-    INSERT INTO dashboard_users (username, password_hash, role)
-    VALUES (@username, @passwordHash, @role)
-  `).run({ username, passwordHash, role });
-  const id = (result as { lastInsertRowid: number }).lastInsertRowid;
-  return getUser(db, id)!;
+  return insertUser(db, username, await hashPassword(password), role);
+}
+
+/**
+ * First-run setup: create the admin and turn auth on, but only if there is
+ * still no user at the moment of writing. The count check, the insert and
+ * enableAuth run in one transaction with no await between them, so of two
+ * concurrent setups (each having passed an early check, then awaited its body
+ * and the password hash) exactly one wins; the other gets null.
+ */
+export function createFirstAdmin(db: Database, username: string, passwordHash: string): DashboardUser | null {
+  return db.transaction(() => {
+    if (getUserCount(db) > 0) return null;
+    const user = insertUser(db, username, passwordHash, 'admin');
+    enableAuth(db);
+    return user;
+  })();
 }
 
 export function getUser(db: Database, id: number): DashboardUser | undefined {
@@ -70,11 +163,22 @@ export function getUserCount(db: Database): number {
   return row.count;
 }
 
+/**
+ * Deactivate a user and end their MCP access with them: every WebMCP /
+ * HTTP-MCP grant they hold is revoked and every pending operation prepared
+ * under one is expired, so an external client holding their bearer token
+ * sees no tools and nothing they queued can still be approved.
+ */
 export function deactivateUser(db: Database, id: number): boolean {
-  const result = db.prepare(
-    "UPDATE dashboard_users SET is_active = 0, updated_at = datetime('now') WHERE id = @id"
-  ).run({ id });
-  return (result as { changes: number }).changes > 0;
+  return db.transaction(() => {
+    const result = db.prepare(
+      "UPDATE dashboard_users SET is_active = 0, updated_at = datetime('now') WHERE id = @id"
+    ).run({ id });
+    if ((result as { changes: number }).changes === 0) return false;
+    revokeGrantsForUser(db, id);
+    expirePendingOperationsForUser(db, id, 'user_deactivated');
+    return true;
+  })();
 }
 
 // ── Sessions ────────────────────────────────────────────────────────────────

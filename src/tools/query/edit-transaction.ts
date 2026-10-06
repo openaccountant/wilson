@@ -20,6 +20,7 @@ function getDb(): Database {
 
 export const editTransactionTool = defineTool({
   name: 'edit_transaction',
+  mutates: true,
   description:
     'Edit a transaction by ID. Can update date, description, amount, category, or notes. ' +
     'Use transaction_search first to find the transaction ID.',

@@ -1,0 +1,247 @@
+{"q": "adobe charges?", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Adobe Creative Cloud charges in June 2026: two $54.99 rows on 06/05 (possible duplicate); should flag both"}
+{"q": "show me everything adobe", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Adobe Creative Cloud charges in June 2026: two $54.99 rows on 06/05 (possible duplicate); should flag both"}
+{"q": "netflix", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Netflix: one $15.49 charge on 06/09/2026"}
+{"q": "did i pay netflix in june?", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Netflix: one $15.49 charge on 06/09/2026"}
+{"q": "hulu charges?", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Must say no matching transactions (no Hulu in data)"}
+{"q": "any spotify payments", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Must say no matching transactions (no Hulu in data)"}
+{"q": "list client payments", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Client payments: Stonebridge $2400 (6/1) and Harbor Logistics $1800 (6/15)"}
+{"q": "who paid me from clients in june", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Client payments: Stonebridge $2400 (6/1) and Harbor Logistics $1800 (6/15)"}
+{"q": "how much was the delta flight", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Delta Air Lines $412.00 on 06/06/2026"}
+{"q": "whole foods trips", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Whole Foods $142.33 on 06/03/2026"}
+{"q": "wholefoods purchases", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Whole Foods $142.33 on 06/03/2026"}
+{"q": "tax payments", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "State quarterly tax payment $1,200 on 06/24/2026"}
+{"q": "quarterly estimated tax pmt?", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "State quarterly tax payment $1,200 on 06/24/2026"}
+{"q": "transactions last month", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Must say no matching transactions for last month (data is June 2026; today is Oct 2026, so September is empty)"}
+{"q": "what did i buy last week", "expect": "transaction_search", "persona": "1-comingled-founder", "answerNotes": "Must say no matching transactions for last month (data is June 2026; today is Oct 2026, so September is empty)"}
+{"q": "chipotle", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Chipotle: $11.85 (6/7) and $12.30 (6/27)"}
+{"q": "how many times did i eat at chipotle", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Chipotle: $11.85 (6/7) and $12.30 (6/27)"}
+{"q": "student loan payments", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Navient student loan payments: two of $210.00 (6/4, 6/24)"}
+{"q": "navient?", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Navient student loan payments: two of $210.00 (6/4, 6/24)"}
+{"q": "concert ticket cost", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Ticketmaster concert $185.00 on 06/14/2026"}
+{"q": "ticketmastr charge", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Ticketmaster concert $185.00 on 06/14/2026"}
+{"q": "starbucks", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Must say no matching transactions (no Starbucks)"}
+{"q": "coffee shop purchases", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Must say no matching transactions (no Starbucks)"}
+{"q": "anything over $100", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Transactions over $100: rent -975, Ticketmaster -185, payroll deposits; list those matching"}
+{"q": "big purchases over 100 bucks", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Transactions over $100: rent -975, Ticketmaster -185, payroll deposits; list those matching"}
+{"q": "gym charge", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Planet Fitness $24.99 on 06/11/2026"}
+{"q": "planet fitness", "expect": "transaction_search", "persona": "2-new-grad", "answerNotes": "Planet Fitness $24.99 on 06/11/2026"}
+{"q": "costco run", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Costco $212.44"}
+{"q": "show costco", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Costco $212.44"}
+{"q": "daycare payments", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Sunshine Daycare $980.00"}
+{"q": "how much is daycare", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Sunshine Daycare $980.00"}
+{"q": "house fund transfers", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Transfers to savings house fund: $500 twice"}
+{"q": "transfers to savings", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Transfers to savings house fund: $500 twice"}
+{"q": "amazon orders", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Must say no matching transactions (no Amazon)"}
+{"q": "amzn", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Must say no matching transactions (no Amazon)"}
+{"q": "mortgage payment", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Mortgage payment $2,100 Lakeview Home Loans"}
+{"q": "lakeview", "expect": "transaction_search", "persona": "3-dual-income-household", "answerNotes": "Mortgage payment $2,100 Lakeview Home Loans"}
+{"q": "what is that unknown intl charge", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Unknown merchant Intl*7719402 $412.60 on 06/15/2026; suspicious"}
+{"q": "unknown merchant charge", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Unknown merchant Intl*7719402 $412.60 on 06/15/2026; suspicious"}
+{"q": "amazon purchases", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Amazon.com grandkids gift $64.99 on 06/28/2026"}
+{"q": "grandkid gift charge", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Amazon.com grandkids gift $64.99 on 06/28/2026"}
+{"q": "social security deposit", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Social Security $2100 deposit 06/01 and pension $1800 on 06/03"}
+{"q": "pension payments", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Social Security $2100 deposit 06/01 and pension $1800 on 06/03"}
+{"q": "medigap", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Medigap premium $245.00"}
+{"q": "insurance premium paid", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Medigap premium $245.00"}
+{"q": "uber rides", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Must say no matching transactions (no Uber)"}
+{"q": "lyft or uber?", "expect": "transaction_search", "persona": "4-near-retiree", "answerNotes": "Must say no matching transactions (no Uber)"}
+{"q": "overdraft fees", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Overdraft fee $35.00 on 06/14/2026"}
+{"q": "any bank fees i got hit with", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Overdraft fee $35.00 on 06/14/2026"}
+{"q": "child support received", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Child support $400 received 06/09"}
+{"q": "when did child support land", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Child support $400 received 06/09"}
+{"q": "grocery outlet", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Grocery Outlet $71.30 (6/5) and $68.90 (6/23)"}
+{"q": "groc outlet visits", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Grocery Outlet $71.30 (6/5) and $68.90 (6/23)"}
+{"q": "sunrise childcare", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Childcare center $620.00 on 06/03"}
+{"q": "how much did childcare cost me", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Childcare center $620.00 on 06/03"}
+{"q": "paychecks", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Riverside Medical payroll deposits: 780, 612, 845, 598"}
+{"q": "show my payroll deposits", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Riverside Medical payroll deposits: 780, 612, 845, 598"}
+{"q": "riverside paychecks in june", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Riverside Medical payroll deposits: 780, 612, 845, 598"}
+{"q": "doctor copay", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Pediatric co-pay $35.00"}
+{"q": "pediatric visits", "expect": "transaction_search", "persona": "5-single-parent", "answerNotes": "Pediatric co-pay $35.00"}
+{"q": "biggest 5 transactions", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions if none match; otherwise list top 5 largest"}
+{"q": "largest expenses ever", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions if none match; otherwise list top 5 largest"}
+{"q": "anything today?", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions for this week or list any found"}
+{"q": "transactions yesterday", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions for this week or list any found"}
+{"q": "purchases in march 2019", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions for a 2019 date range"}
+{"q": "2019 transactions", "expect": "transaction_search", "persona": null, "answerNotes": "Must say no matching transactions for a 2019 date range"}
+{"q": "spending by category", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Category breakdown for June 2026 with total; business items (Staples, Delta, client dinner) appear under their categories"}
+{"q": "where did my money go in june", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Category breakdown for June 2026 with total; business items (Staples, Delta, client dinner) appear under their categories"}
+{"q": "spending this year", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Year-to-date category breakdown"}
+{"q": "ytd spend by category", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Year-to-date category breakdown"}
+{"q": "how did this quarter compare to last", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Quarter view, optionally compared with previous quarter"}
+{"q": "qtr spending vs prior", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Quarter view, optionally compared with previous quarter"}
+{"q": "spending summary", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Monthly category breakdown; rent and student loan dominate; groceries and dining small"}
+{"q": "what am i spending on?", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Monthly category breakdown; rent and student loan dominate; groceries and dining small"}
+{"q": "how much on restaurants", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Dining category total (Chipotle, Ramen House) for the period; if current month has no data say so"}
+{"q": "eating out total", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Dining category total (Chipotle, Ramen House) for the period; if current month has no data say so"}
+{"q": "groceries spend", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Groceries total (Whole Foods, Costco, Target) for month"}
+{"q": "how much on food this month", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Groceries total (Whole Foods, Costco, Target) for month"}
+{"q": "spending vs last month", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Month vs previous month comparison by category"}
+{"q": "are we spending more than last month", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Month vs previous month comparison by category"}
+{"q": "spend breakdown", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Category breakdown incl. healthcare, utilities, property tax"}
+{"q": "what's the biggest category", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Category breakdown incl. healthcare, utilities, property tax"}
+{"q": "annual spending by category", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Yearly category view"}
+{"q": "spending 2026", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Yearly category view"}
+{"q": "monthly spending", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Month breakdown: housing, childcare, auto loan, groceries"}
+{"q": "budget breakdown this month", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Month breakdown: housing, childcare, auto loan, groceries"}
+{"q": "cat totals this month", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Current month; if no current-month data, say so rather than inventing figures"}
+{"q": "top spending categories now", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Current month; if no current-month data, say so rather than inventing figures"}
+{"q": "pie of spending by category for the quarter", "expect": "spending_summary", "persona": null, "answerNotes": "Quarter breakdown with percent of total"}
+{"q": "where is most of my money going", "expect": "spending_summary", "persona": null, "answerNotes": "Quarter breakdown with percent of total"}
+{"q": "spending yoy", "expect": "spending_summary", "persona": null, "answerNotes": "Year view with previous-year comparison"}
+{"q": "did i spend more this year than last", "expect": "spending_summary", "persona": null, "answerNotes": "Year view with previous-year comparison"}
+{"q": "rank my categories", "expect": "spending_summary", "persona": null, "answerNotes": "Month category list sorted descending"}
+{"q": "categories biggest to smallest", "expect": "spending_summary", "persona": null, "answerNotes": "Month category list sorted descending"}
+{"q": "entertainment spend", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Dining/entertainment categories (Ticketmaster concert) for the period"}
+{"q": "fun money spent", "expect": "spending_summary", "persona": "2-new-grad", "answerNotes": "Dining/entertainment categories (Ticketmaster concert) for the period"}
+{"q": "q3 spending", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Quarter view"}
+{"q": "spending last quarter", "expect": "spending_summary", "persona": "5-single-parent", "answerNotes": "Quarter view"}
+{"q": "expenses by category", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Category breakdown by month"}
+{"q": "categry breakdwn", "expect": "spending_summary", "persona": "1-comingled-founder", "answerNotes": "Category breakdown by month"}
+{"q": "how much did we spend this year by category", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Year breakdown"}
+{"q": "yearly spend report", "expect": "spending_summary", "persona": "3-dual-income-household", "answerNotes": "Year breakdown"}
+{"q": "how's my spending trending vs last month", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Month breakdown with delta vs previous month"}
+{"q": "compare spending to prior month", "expect": "spending_summary", "persona": "4-near-retiree", "answerNotes": "Month breakdown with delta vs previous month"}
+{"q": "this month's spending", "expect": "spending_summary", "persona": null, "answerNotes": "Month breakdown; must say there is no data if the month is empty"}
+{"q": "spent so far in oct", "expect": "spending_summary", "persona": null, "answerNotes": "Month breakdown; must say there is no data if the month is empty"}
+{"q": "P&L 2025", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Income vs expenses for June 2026: income 3100+2400+1800=7300; expenses by category; net"}
+{"q": "P&L june", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Income vs expenses for June 2026: income 3100+2400+1800=7300; expenses by category; net"}
+{"q": "profit and loss", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Business income (Stonebridge, Harbor) vs expenses (Staples, Delta, Adobe, client dinner); net"}
+{"q": "how much profit did my consulting make", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Business income (Stonebridge, Harbor) vs expenses (Staples, Delta, Adobe, client dinner); net"}
+{"q": "p&l this quarter", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Quarter P&L"}
+{"q": "income statement for the quarter", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Quarter P&L"}
+{"q": "last month p&l", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Previous-month P&L (offset -1); must say no data if empty"}
+{"q": "profit loss prev month", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Previous-month P&L (offset -1); must say no data if empty"}
+{"q": "am i making more than i spend", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Income 2900 vs expenses; net"}
+{"q": "income vs expenses", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Income 2900 vs expenses; net"}
+{"q": "profit loss year to date", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Year P&L"}
+{"q": "ytd income and expenses", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Year P&L"}
+{"q": "household income vs expenses", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Income 5450 per paycheck pair ($2850+$2600) vs expenses"}
+{"q": "net income for the month", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Income 5450 per paycheck pair ($2850+$2600) vs expenses"}
+{"q": "q2 p&l", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Previous quarter P&L"}
+{"q": "last quarter profit and loss", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Previous quarter P&L"}
+{"q": "retirement income vs outflow", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Income (SS 2100 + pension 1800 = 3900) vs expenses"}
+{"q": "is my income covering expenses", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Income (SS 2100 + pension 1800 = 3900) vs expenses"}
+{"q": "annual P&L", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Year P&L"}
+{"q": "earned vs spent this year", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Year P&L"}
+{"q": "how much did i earn vs spend", "expect": "profit_loss", "persona": "5-single-parent", "answerNotes": "Income: payroll deposits plus child support; expenses; net"}
+{"q": "single parent p&l month", "expect": "profit_loss", "persona": "5-single-parent", "answerNotes": "Income: payroll deposits plus child support; expenses; net"}
+{"q": "p&l two months ago", "expect": "profit_loss", "persona": "5-single-parent", "answerNotes": "Previous period; say no data if none"}
+{"q": "income minus expenses last month", "expect": "profit_loss", "persona": "5-single-parent", "answerNotes": "Previous period; say no data if none"}
+{"q": "P&L 2024", "expect": "profit_loss", "persona": null, "answerNotes": "Year offset -1 (2025) P&L; must say no data if empty"}
+{"q": "prior year profit & loss", "expect": "profit_loss", "persona": null, "answerNotes": "Year offset -1 (2025) P&L; must say no data if empty"}
+{"q": "net income this month", "expect": "profit_loss", "persona": null, "answerNotes": "Current month P&L"}
+{"q": "profit this month?", "expect": "profit_loss", "persona": null, "answerNotes": "Current month P&L"}
+{"q": "last quarter profit", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Quarter P&L offset -1"}
+{"q": "pnl prev qtr", "expect": "profit_loss", "persona": "1-comingled-founder", "answerNotes": "Quarter P&L offset -1"}
+{"q": "what's our surplus this month", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Month P&L"}
+{"q": "are we in the black", "expect": "profit_loss", "persona": "3-dual-income-household", "answerNotes": "Month P&L"}
+{"q": "cash in vs cash out", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Month P&L"}
+{"q": "did i come out ahead this month", "expect": "profit_loss", "persona": "4-near-retiree", "answerNotes": "Month P&L"}
+{"q": "q3 income statement", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Quarter P&L"}
+{"q": "earnings this quarter", "expect": "profit_loss", "persona": "2-new-grad", "answerNotes": "Quarter P&L"}
+{"q": "net worth", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Summary of assets minus liabilities; if no accounts have balances say so"}
+{"q": "what am i worth", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Summary of assets minus liabilities; if no accounts have balances say so"}
+{"q": "net worth trend", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Trend over 12 months"}
+{"q": "nw over the last year", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Trend over 12 months"}
+{"q": "how much am i worth with my student loans", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Summary; student loan as liability"}
+{"q": "net worth now", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Summary; student loan as liability"}
+{"q": "balance sheet", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Balance sheet of assets and liabilities"}
+{"q": "assets vs liabilities", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Balance sheet of assets and liabilities"}
+{"q": "what's our net worth", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Summary with mortgage liability and savings house fund"}
+{"q": "networth", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Summary with mortgage liability and savings house fund"}
+{"q": "6 month net worth trend", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Trend, 6 months"}
+{"q": "has our net worth gone up since spring", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Trend, 6 months"}
+{"q": "total assets", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Summary or balance sheet; say if retirement balances absent"}
+{"q": "how much do i have all in", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Summary or balance sheet; say if retirement balances absent"}
+{"q": "net worth over time", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Trend 12 months"}
+{"q": "is my net worth growing", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Trend 12 months"}
+{"q": "what do i owe vs own", "expect": "net_worth", "persona": "5-single-parent", "answerNotes": "Balance sheet incl. auto loan"}
+{"q": "balance sheet please", "expect": "net_worth", "persona": "5-single-parent", "answerNotes": "Balance sheet incl. auto loan"}
+{"q": "am i net positive", "expect": "net_worth", "persona": "5-single-parent", "answerNotes": "Summary"}
+{"q": "net worth summary", "expect": "net_worth", "persona": "5-single-parent", "answerNotes": "Summary"}
+{"q": "net worth last 3 months", "expect": "net_worth", "persona": null, "answerNotes": "Trend 3 months"}
+{"q": "nw trend quarter", "expect": "net_worth", "persona": null, "answerNotes": "Trend 3 months"}
+{"q": "list my debts and assets", "expect": "net_worth", "persona": null, "answerNotes": "Balance sheet; say if no accounts"}
+{"q": "liabilities", "expect": "net_worth", "persona": null, "answerNotes": "Balance sheet; say if no accounts"}
+{"q": "how rich am i lol", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Summary"}
+{"q": "total net worth", "expect": "net_worth", "persona": "1-comingled-founder", "answerNotes": "Summary"}
+{"q": "show account balances", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Balance sheet"}
+{"q": "balance sheet breakdown", "expect": "net_worth", "persona": "3-dual-income-household", "answerNotes": "Balance sheet"}
+{"q": "what's my networth", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Summary"}
+{"q": "current net worth", "expect": "net_worth", "persona": "4-near-retiree", "answerNotes": "Summary"}
+{"q": "two year net worth trend", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Trend 24 months; say limited history if less"}
+{"q": "net worth history", "expect": "net_worth", "persona": "2-new-grad", "answerNotes": "Trend 24 months; say limited history if less"}
+{"q": "forecast", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Trailing 3-month projection of end-of-period cash; say assumptions"}
+{"q": "where will my cash be in 3 months", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Trailing 3-month projection of end-of-period cash; say assumptions"}
+{"q": "what if i cancel adobe", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Whatif: drop recurring Adobe Creative Cloud $54.99/mo and show new projection"}
+{"q": "forecast without adobe", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Whatif: drop recurring Adobe Creative Cloud $54.99/mo and show new projection"}
+{"q": "projection for the next 6 months", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Projection with horizon 6 months"}
+{"q": "will i have savings by december", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Projection with horizon 6 months"}
+{"q": "if i cut eating out by 50 a month how much do i save", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Whatif: dining spend reduced by amount (e.g. -$50/mo)"}
+{"q": "forecast with $50 less dining", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Whatif: dining spend reduced by amount (e.g. -$50/mo)"}
+{"q": "how much will we have saved in 6 months", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Projection of cash with house fund transfers continuing"}
+{"q": "savings projection", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Projection of cash with house fund transfers continuing"}
+{"q": "what happens if we spend 100 less on groceries", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Whatif: reduce groceries by 100/mo"}
+{"q": "grocery cut scenario", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Whatif: reduce groceries by 100/mo"}
+{"q": "can i keep this up for a year", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Trailing-rate projection 12-month horizon"}
+{"q": "12 month cash projection", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Trailing-rate projection 12-month horizon"}
+{"q": "what if i quit the golf club", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Whatif: drop golf club dues $150/mo"}
+{"q": "forecast without golf dues", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Whatif: drop golf club dues $150/mo"}
+{"q": "will i run out of money", "expect": "forecast", "persona": "5-single-parent", "answerNotes": "3-month projection; flag if trending negative"}
+{"q": "end of year cash estimate", "expect": "forecast", "persona": "5-single-parent", "answerNotes": "3-month projection; flag if trending negative"}
+{"q": "what if childcare cost dropped to 400", "expect": "forecast", "persona": "5-single-parent", "answerNotes": "Whatif: drop recurring childcare? or adjust; show effect"}
+{"q": "forecast if childcare falls by 220", "expect": "forecast", "persona": "5-single-parent", "answerNotes": "Whatif: drop recurring childcare? or adjust; show effect"}
+{"q": "based on last 6 months where do i land", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Projection with trailing 6 months lookback"}
+{"q": "6mo trailing forecast", "expect": "forecast", "persona": "1-comingled-founder", "answerNotes": "Projection with trailing 6 months lookback"}
+{"q": "forcast", "expect": "forecast", "persona": null, "answerNotes": "Basic forecast default 3/3"}
+{"q": "cash forecast", "expect": "forecast", "persona": null, "answerNotes": "Basic forecast default 3/3"}
+{"q": "what if i dropped my gym", "expect": "forecast", "persona": null, "answerNotes": "Whatif drop gym membership"}
+{"q": "forecast minus gym", "expect": "forecast", "persona": null, "answerNotes": "Whatif drop gym membership"}
+{"q": "one year out balance estimate", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Projection, horizon 12"}
+{"q": "where will i be in a year", "expect": "forecast", "persona": "2-new-grad", "answerNotes": "Projection, horizon 12"}
+{"q": "how long will my money last", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Savings projection"}
+{"q": "projected savings at this rate", "expect": "forecast", "persona": "4-near-retiree", "answerNotes": "Savings projection"}
+{"q": "if we cut spending 10% what then", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Whatif adjusting a category spend"}
+{"q": "spend less scenario", "expect": "forecast", "persona": "3-dual-income-household", "answerNotes": "Whatif adjusting a category spend"}
+{"q": "Mark transaction 4411 as Groceries", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "That Whole Foods charge should be under Dining", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Make the Adobe charge a business expense", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Rename 'AMZN MKTP' to Amazon in my history", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Put the Delta flight in Travel instead", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "The 06/18 gym payment is actually $50", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Duplicate Adobe row needs to go away", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Tag all my Costco runs as Household", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Chipotle should count as Dining, not Shopping", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Amount on transaction 112 ought to be 54.99", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Get rid of the overdraft fee entry", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Make rent a recurring bill", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Flag the Staples purchase for taxes", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Turn that Uber charge into a reimbursable item", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Date for the Ticketmaster charge should read June 12", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Add a note 'client lunch' to the Union Square Cafe charge", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Assign all Trader Joe's to Groceries from now on", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Mark the unknown merchant charge as fraud", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Rid my records of the second Adobe line", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Reclassify nothing, just make the pharmacy one Medical", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "I want Netflix under Entertainment", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Split the Costco charge between Groceries and Household", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "Use 'Childcare' for Sunshine Daycare going forward", "expect": "none", "persona": null, "answerNotes": "Mutation request; assistant must not call a read tool or claim it changed anything; should explain it is read-only here and point to the proper mutation flow/confirmation"}
+{"q": "hi there", "expect": "none", "persona": null, "answerNotes": "Greeting only; no tool call"}
+{"q": "thanks!", "expect": "none", "persona": null, "answerNotes": "Acknowledge; no tool"}
+{"q": "who are you?", "expect": "none", "persona": null, "answerNotes": "Explain it is the dashboard finance assistant; no tool"}
+{"q": "what can you do?", "expect": "none", "persona": null, "answerNotes": "Describe read capabilities (search, spending, P&L, net worth, forecast); no tool"}
+{"q": "lol nice", "expect": "none", "persona": null, "answerNotes": "Small talk; no tool"}
+{"q": "good morning", "expect": "none", "persona": null, "answerNotes": "Greeting; no tool"}
+{"q": "Should I pay off my student loan or invest?", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "Is a Roth IRA better than a 401k?", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "How much should I have in an emergency fund?", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "What's a good credit score?", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "Should I refinance my mortgage?", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "Explain the 50/30/20 rule", "expect": "none", "persona": null, "answerNotes": "General financial education; answer generically without tool call or fabricating the user's data; no personalized advice claims"}
+{"q": "Connect my Plaid account", "expect": "none", "persona": null, "answerNotes": "Unsupported here; no read tool matches; say it cannot do that from chat"}
+{"q": "Import this CSV file", "expect": "none", "persona": null, "answerNotes": "Unsupported in chat; direct to import flow"}
+{"q": "Show me my investment portfolio performance", "expect": "none", "persona": null, "answerNotes": "No tool for portfolio holdings; say unsupported"}
+{"q": "Email me this report", "expect": "none", "persona": null, "answerNotes": "Unsupported; no tool"}
+{"q": "What's the weather in Denver?", "expect": "none", "persona": null, "answerNotes": "Out of scope; no tool"}
+{"q": "Show my credit score history", "expect": "none", "persona": null, "answerNotes": "Unsupported; no tool"}

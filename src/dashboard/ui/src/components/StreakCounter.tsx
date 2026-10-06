@@ -1,9 +1,12 @@
 import { useApi } from '@/hooks/useApi';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { useAppState } from '@/state';
+import { entityScopedPath } from '@/lib/overviewQueries';
 import type { StreakData } from '@/types';
 
 export function StreakCounter() {
-  const { data, loading, offline } = useApi<StreakData>('/api/streak');
+  const { entityId } = useAppState();
+  const { data, loading, offline } = useApi<StreakData>(entityScopedPath('/api/streak', entityId));
 
   if (loading) {
     return (

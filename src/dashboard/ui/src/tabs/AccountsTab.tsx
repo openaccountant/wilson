@@ -9,17 +9,18 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { useApi } from '@/hooks/useApi';
+import { ChartCard } from '@/charts/ChartCard';
+import { ChartTooltip } from '@/charts/ChartTooltip';
+import { chartTokens } from '@/charts/tokens';
+import { formatDate, money, moneyCompact } from '@/format';
 import type { Account, NetWorthResponse, NetWorthTrendPoint } from '@/types';
 
-function fmt(n: number): string {
-  return (
-    '$' +
-    Math.abs(n).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })
-  );
-}
+/** Display names keyed by the trend point's dataKey. */
+const SERIES_NAMES: Record<string, string> = {
+  netWorth: 'Net worth',
+  totalAssets: 'Assets',
+  totalLiabilities: 'Liabilities',
+};
 
 function StatCard({
   label,
@@ -36,67 +37,69 @@ function StatCard({
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4">
       <div className="text-xs text-text-muted uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-bold font-mono mt-1" style={{ color: hex }}>
-        {value < 0 && '-'}
-        {fmt(value)}
+      <div className="text-2xl font-bold font-mono tabular-nums mt-1" style={{ color: hex }}>
+        {money(value)}
       </div>
     </div>
   );
 }
 
-function NetWorthChart({ data }: { data: NetWorthTrendPoint[] }) {
+function NetWorthChart({ data, loading }: { data: NetWorthTrendPoint[]; loading: boolean }) {
+  const t = chartTokens();
+  const first = data[0];
+  const last = data[data.length - 1];
+  const change = first && last ? last.netWorth - first.netWorth : 0;
+  const takeaway =
+    first && last && data.length > 1
+      ? `Net worth ${change >= 0 ? 'up' : 'down'} ${money(Math.abs(change))} since ${formatDate(first.date)}, now ${money(last.netWorth)}.`
+      : undefined;
   return (
-    <div className="bg-surface-raised border border-border rounded-lg p-4">
-      <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-3">
-        Net Worth Trend
-      </h3>
+    <ChartCard
+      title="Net Worth Trend"
+      takeaway={takeaway}
+      loading={loading}
+      hasData={data.length > 0}
+      height={240}
+      table={{
+        columns: [
+          { label: 'Date' },
+          { label: 'Assets', numeric: true },
+          { label: 'Liabilities', numeric: true },
+          { label: 'Net worth', numeric: true },
+        ],
+        rows: data.map((p) => [p.date, money(p.totalAssets), money(p.totalLiabilities), money(p.netWorth)]),
+      }}
+    >
       <div className="h-[240px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data}>
             <defs>
               <linearGradient id="nwFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#22c55e" stopOpacity={0.25} />
-                <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                <stop offset="0%" stopColor={t.green} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={t.green} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2a2d37" />
+            <CartesianGrid strokeDasharray="3 3" stroke={t.chartGrid} vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: t.chartAxis, fontSize: 11 }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#71717a', fontSize: 11 }}
+              tick={{ fill: t.chartAxis, fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v: number) =>
-                `$${(v / 1000).toFixed(0)}k`
-              }
+              tickFormatter={(v: number) => moneyCompact(v)}
               width={60}
             />
             <Tooltip
-              contentStyle={{
-                background: '#1a1d27',
-                border: '1px solid #2a2d37',
-                borderRadius: 6,
-                fontSize: 12,
-                color: '#fff',
-              }}
-              formatter={(value: number, name: string) => [
-                fmt(value),
-                name === 'netWorth'
-                  ? 'Net Worth'
-                  : name === 'assets'
-                    ? 'Assets'
-                    : 'Liabilities',
-              ]}
-              labelFormatter={(label: string) => label}
+              content={<ChartTooltip nameFor={(dataKey, name) => SERIES_NAMES[dataKey] ?? name} />}
             />
             <Area
               type="monotone"
               dataKey="netWorth"
-              stroke="#22c55e"
+              stroke={t.green}
               strokeWidth={2}
               fill="url(#nwFill)"
               dot={false}
@@ -104,12 +107,15 @@ function NetWorthChart({ data }: { data: NetWorthTrendPoint[] }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </ChartCard>
   );
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const isPositive = account.current_balance >= 0;
+  // Liabilities are stored as positive amounts owed, so a positive balance is bad.
+  const isGood = account.account_type === 'liability'
+    ? account.current_balance <= 0
+    : account.current_balance >= 0;
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4 flex items-center justify-between">
@@ -119,9 +125,8 @@ function AccountCard({ account }: { account: Account }) {
           <div className="text-xs text-text-muted mt-0.5">{account.institution}</div>
         )}
       </div>
-      <div className={`text-sm font-bold font-mono ${isPositive ? 'text-green' : 'text-red'}`}>
-        {account.current_balance < 0 && '-'}
-        {fmt(account.current_balance)}
+      <div className={`text-sm font-bold font-mono tabular-nums ${isGood ? 'text-green' : 'text-red'}`}>
+        {money(account.current_balance)}
       </div>
     </div>
   );
@@ -174,7 +179,7 @@ export function AccountsTab() {
       </div>
 
       {/* Net worth trend chart */}
-      {trend && trend.length > 0 && <NetWorthChart data={trend} />}
+      {trend && trend.length > 0 && <NetWorthChart data={trend} loading={trendLoading} />}
 
       {/* Accounts grouped by type */}
       {Object.keys(grouped).length > 0 ? (

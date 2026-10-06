@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessDryRun } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import { linkTransactionsToAccount, getAccountById, getAccounts } from '../../db/net-worth-queries.js';
@@ -12,6 +13,7 @@ export function initLinkTransactionsTool(database: Database) {
 
 export const linkTransactionsTool = defineTool({
   name: 'link_transactions',
+  mutates: mutatesUnlessDryRun,
   description: 'Link unlinked transactions to an account by matching account_last4, bank, or account_name. Can look up the target account by ID or by name (lookupName).',
   schema: z.object({
     accountId: z.number().optional().describe('Account ID to link transactions to (if omitted, looks up by lookupName)'),

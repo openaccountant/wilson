@@ -80,7 +80,7 @@ function sectionSavings(db: Database, month: string): string {
   lines.push('|-------|--------|----------|-------|------|');
 
   for (const m of data) {
-    lines.push(`| ${m.month} | $${m.income.toFixed(2)} | $${m.expenses.toFixed(2)} | $${m.savings.toFixed(2)} | ${m.savingsRate.toFixed(0)}% |`);
+    lines.push(`| ${m.month} | $${m.income.toFixed(2)} | $${m.expenses.toFixed(2)} | ${m.savings >= 0 ? '$' : '-$'}${Math.abs(m.savings).toFixed(2)} | ${m.savingsRate.toFixed(0)}% |`);
   }
   return lines.join('\n');
 }
@@ -114,10 +114,11 @@ export function generateReport(
   month?: string,
   sections?: ReportSection[]
 ): string {
-  const targetMonth = month ?? new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  const targetMonth = month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [year, mon] = targetMonth.split('-').map(Number);
   const startDate = `${targetMonth}-01`;
-  const endDate = new Date(year, mon, 0).toISOString().slice(0, 10);
+  const endDate = `${targetMonth}-${String(new Date(year, mon, 0).getDate()).padStart(2, '0')}`;
   const label = new Date(year, mon - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
   const activeSections = (!sections || sections.includes('all'))

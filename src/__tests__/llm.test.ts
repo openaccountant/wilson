@@ -91,6 +91,41 @@ describe('callLlm', () => {
     await expect(callLlm('test', { model: 'gpt-5.2' })).rejects.toThrow('invalid api key');
   });
 
+  test('local transformers failures are not retried (greedy decoding fails the same way every time)', async () => {
+    let callCount = 0;
+    mockAdapterFn = async () => {
+      callCount++;
+      throw new Error('Unknown failure');
+    };
+
+    await expect(
+      callLlm('test', { model: 'transformers:onnx-community/granite-4.0-micro-ONNX-web' }),
+    ).rejects.toThrow('Unknown failure');
+    expect(callCount).toBe(1);
+  });
+
+  test('maxTokens reaches the adapter', async () => {
+    let seen: unknown;
+    mockAdapterFn = async (opts: { maxTokens?: number }) => {
+      seen = opts.maxTokens;
+      return makeLlmResponse();
+    };
+    await callLlm('test', { model: 'gpt-5.2', maxTokens: 1234 });
+    expect(seen).toBe(1234);
+  });
+
+  test('toolIndex reaches the adapter only when given (cloud calls are unchanged)', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    mockAdapterFn = async (opts: Record<string, unknown>) => {
+      seen.push(opts);
+      return makeLlmResponse();
+    };
+    await callLlm('test', { model: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', toolIndex: ['plaid_sync'] });
+    await callLlm('test', { model: 'gpt-5.2' });
+    expect(seen[0].toolIndex).toEqual(['plaid_sync']);
+    expect('toolIndex' in seen[1]).toBe(false);
+  });
+
   test('max retries exceeded throws', async () => {
     mockAdapterFn = async () => {
       throw new Error('service unavailable');

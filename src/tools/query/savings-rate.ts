@@ -51,6 +51,7 @@ function formatSavings(data: MonthlyIncomeExpense[]): string {
 
 export const savingsRateTool = defineTool({
   name: 'savings_rate',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Calculate savings rate trend showing income, expenses, and savings for each month. Includes 50/30/20 benchmark.',
   schema: z.object({

@@ -8,12 +8,17 @@
 //   { id, type: 'setProfile', profile }              → same shape (closes/reopens the pool)
 //   { id, type: 'applySync',  payload: SyncPayload } → ApplySyncResult + lastSyncedAt
 //   { id, type: 'serve',      path }                 → rows | null (null = cannot serve)
+//   { id, type: 'attachPort', profile } + transferred MessagePort
+//                                                    → null; the port then speaks the SCOPED
+//                                                      tool protocol (mirror-port-protocol.ts:
+//                                                      status | toolRead only), bound to `profile`
 // Responses: { id, ok: true, result } | { id, ok: false, error }.
 
 import wasmBase64 from 'virtual:wa-sqlite-wasm';
 import { createWaSqliteHandle, type WaSqliteHandle } from './wa-sqlite-adapter.js';
 import { applySync, getMeta, isMirrorSeeded } from './mirror-schema.js';
 import { serveApiPath } from './mirror-reads.js';
+import { servePort, type PortHost, type PortLike } from './mirror-port-protocol.js';
 import type { MirrorStatus, SyncPayload } from './types.js';
 
 let handle: WaSqliteHandle | null = null;
@@ -68,12 +73,50 @@ interface WorkerScope {
 
 const ctx = self as unknown as WorkerScope;
 
+// Scoped tool ports (one per subagent run). A small cap keeps abandoned ports
+// from accumulating: the main thread closes its end when a run finishes, but a
+// closed peer is not observable here.
+const MAX_ATTACHED_PORTS = 4;
+const attachedPorts: PortLike[] = [];
+
 // Serialize dispatch: a serve read must never interleave with an in-flight
 // applySync transaction (reads on the same connection see uncommitted rows).
 let chain: Promise<unknown> = Promise.resolve();
 
+/** Run `fn` on the same chain as the main-channel messages (shared with applySync). */
+function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(fn);
+  chain = run.catch(() => undefined);
+  return run;
+}
+
+const portHost: PortHost = {
+  getBinding: () => handle?.binding ?? null,
+  getContext: async () => ({ profile, seeded, lastSyncedAt: handle ? await readLastSyncedAt() : null }),
+  enqueue,
+};
+
+function attachPort(port: MessagePort | undefined, boundProfile: unknown): void {
+  if (!port || typeof boundProfile !== 'string') {
+    throw new Error('attachPort requires a transferred port and a profile');
+  }
+  const scoped = port as unknown as PortLike;
+  servePort(scoped, boundProfile, portHost);
+  attachedPorts.push(scoped);
+  while (attachedPorts.length > MAX_ATTACHED_PORTS) attachedPorts.shift()!.close();
+}
+
 ctx.onmessage = (event) => {
   const { id, ...rest } = event.data;
+  if (rest.type === 'attachPort') {
+    try {
+      attachPort((event as unknown as { ports?: MessagePort[] }).ports?.[0], rest.profile);
+      ctx.postMessage({ id, ok: true, result: null });
+    } catch (err) {
+      ctx.postMessage({ id, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
   chain = chain
     .then(() => dispatch(rest))
     .then((result) => {

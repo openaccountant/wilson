@@ -7,6 +7,10 @@ import { runTeam } from './team.js';
 import * as loader from './loader.js';
 import * as licenseModule from '../licensing/license.js';
 
+function uniqueToolNames(lists: Array<string[] | undefined>): string[] {
+  return [...new Set(lists.flatMap((l) => l ?? []))];
+}
+
 /**
  * Convert a chain definition into a tool that the main agent can invoke.
  */
@@ -16,6 +20,15 @@ export function chainToTool(chain: ChainDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${chain.name}" chain: ${chain.description}`,
+    // Every tool call a step makes passes the agent's approval gate on its
+    // own (orchestration/tool-calls.ts), so each write gets its own card.
+    // The chain call itself is ALSO asked, once per run, when any tool it can
+    // call writes: a cheap up-front "run this chain?" that shows the input,
+    // and defence in depth (#152). The registry resolves this from usesTools.
+    usesTools: uniqueToolNames(chain.steps.map((s) => s.tools)),
+    // Conservative until the tool registry resolves usesTools (it may relax
+    // this to false when every tool the chain can call is read-only).
+    mutates: true,
     schema: z.object({
       input: z.string().describe('Input for the chain (e.g., file path, query, or context)'),
     }),
@@ -23,6 +36,10 @@ export function chainToTool(chain: ChainDef): ToolDef {
       const result = await runChain(chain, input, {
         model: config?.model,
         signal: config?.signal,
+        // The caller's approval gate: each step's tool calls are asked through
+        // it; without one (headless), mutating calls are denied.
+        requestToolApproval: config?.requestToolApproval,
+        sessionApprovedTools: config?.sessionApprovedTools,
       });
       return result;
     },
@@ -38,6 +55,9 @@ export function teamToTool(team: TeamDef): ToolDef {
   return defineTool({
     name: toolName,
     description: `Run the "${team.name}" team: ${team.description}`,
+    // Members' tool calls are each gated; the team call is asked too — see chainToTool.
+    usesTools: uniqueToolNames(team.members.map((m) => m.tools)),
+    mutates: true, // see chainToTool
     schema: z.object({
       query: z.string().describe('Query or task for the team to work on'),
     }),
@@ -45,6 +65,8 @@ export function teamToTool(team: TeamDef): ToolDef {
       const result = await runTeam(team, query, {
         model: config?.model,
         signal: config?.signal,
+        requestToolApproval: config?.requestToolApproval,
+        sessionApprovedTools: config?.sessionApprovedTools,
       });
       return result;
     },

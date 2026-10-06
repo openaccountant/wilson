@@ -6,6 +6,7 @@ import { createTestDb } from './helpers.js';
 import { startDashboardServer, stopDashboardServer, serveDashboardAsset, DASHBOARD_ASSETS_DIR } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth, isAuthEnabled } from '../dashboard/auth.js';
+import { MAX_CHAT_QUERY_CHARS, MAX_LOCAL_ANSWER_CHARS } from '../dashboard/api.js';
 import { getChatSessionById, getChatHistoryBySession } from '../db/queries.js';
 import { existsSync } from 'node:fs';
 import type { Database } from '../db/compat-sqlite.js';
@@ -116,6 +117,37 @@ describe('local chat endpoints', () => {
     expect(rows[0].query).toBe('how much did I spend on groceries this week?');
     expect(rows[0].answer).toBe('You spent $54.21.');
     expect(rows[0].summary).toBeNull(); // LLM summaries are a server-agent behavior
+  });
+
+  test('POST /api/chat/local caps query and answer: over-cap is a 400 naming the limit and nothing is recorded', async () => {
+    const { base, token } = await start();
+    const db = dbs[0];
+    const post = (body: unknown) => fetch(`${base}/api/chat/local`, authed(token, { method: 'POST', body: JSON.stringify(body) }));
+    const count = () => (db.prepare('SELECT COUNT(*) AS n FROM chat_history').get() as { n: number }).n;
+
+    const longQuery = await post({ query: 'q'.repeat(MAX_CHAT_QUERY_CHARS + 1), answer: 'ok' });
+    expect(longQuery.status).toBe(400);
+    expect(((await longQuery.json()) as { error: string }).error).toContain(`at most ${MAX_CHAT_QUERY_CHARS} characters`);
+
+    const longAnswer = await post({ query: 'ok', answer: 'a'.repeat(MAX_LOCAL_ANSWER_CHARS + 1) });
+    expect(longAnswer.status).toBe(400);
+    expect(((await longAnswer.json()) as { error: string }).error).toContain(`at most ${MAX_LOCAL_ANSWER_CHARS} characters`);
+    expect(count()).toBe(0);
+
+    // Exactly at the caps is still recorded.
+    const atCap = await post({ query: 'q'.repeat(MAX_CHAT_QUERY_CHARS), answer: 'a'.repeat(MAX_LOCAL_ANSWER_CHARS) });
+    expect(atCap.status).toBe(200);
+    expect(count()).toBe(1);
+  });
+
+  test('POST /api/chat caps the query: over-cap is a 400 naming the limit', async () => {
+    const { base, token } = await start();
+    const res = await fetch(`${base}/api/chat`, authed(token, {
+      method: 'POST',
+      body: JSON.stringify({ query: 'q'.repeat(MAX_CHAT_QUERY_CHARS + 1) }),
+    }));
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toContain(`at most ${MAX_CHAT_QUERY_CHARS} characters`);
   });
 
   test('reuses a supplied sessionId instead of creating a new session', async () => {

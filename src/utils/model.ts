@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { PROVIDERS as PROVIDER_DEFS } from '../providers.js';
+import type { OnnxDtype, TransformersDevice } from '../model/transformers-dtype.js';
 
 export type ModelTag = 'paid' | 'open' | 'local' | 'cloud' | 'small' | 'large' | 'reasoning' | 'webgpu';
 
@@ -10,6 +11,10 @@ export interface Model {
   displayName: string;
   tags?: ModelTag[];
   downloadSize?: string; // approximate first-run download size
+  /** transformers only: where the pipeline runs (agrees with the 'webgpu' tag). */
+  device?: TransformersDevice;
+  /** transformers only: the ONNX weights to load (onnx/model_<dtype>.onnx). */
+  dtype?: OnnxDtype;
 }
 
 interface Provider {
@@ -32,14 +37,21 @@ const PROVIDER_MODELS: Record<string, Model[]> = {
     { id: 'ollama:granite4:350m',   displayName: 'Granite 4 350M (local)',  tags: ['local', 'open', 'small'] },
   ],
   transformers: [
+    // Every entry pins `device` and `dtype`. The dtype names the exact ONNX
+    // file Transformers.js loads (onnx/model_<dtype>.onnx): repos publish
+    // different subsets, and a missing file is a hard "Could not locate file"
+    // failure. src/__tests__/transformers-dtype.test.ts checks every pin
+    // against the recorded Hub file lists. downloadSize is the size at that dtype.
+    //
     // WebGPU models — require a GPU that ORT's bundled WebGPU EP can drive
-    { id: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', displayName: 'Granite 4.0 Micro 3B (WebGPU)', tags: ['local', 'small', 'webgpu'], downloadSize: '~3.2GB' },
-    { id: 'transformers:onnx-community/LFM2-1.2B-Tool-ONNX',        displayName: 'LFM2 1.2B Tool (WebGPU)',       tags: ['local', 'small', 'webgpu'], downloadSize: '~1.2GB' },
-    { id: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',  displayName: 'Granite 4.0 350M (WebGPU)',     tags: ['local', 'small', 'webgpu'], downloadSize: '~350MB' },
-    { id: 'transformers:onnx-community/Qwen3-0.6B-ONNX',            displayName: 'Qwen3 0.6B (WebGPU)',           tags: ['local', 'small', 'webgpu'], downloadSize: '~600MB' },
+    { id: 'transformers:onnx-community/granite-4.0-micro-ONNX-web', displayName: 'Granite 4.0 Micro 3B (WebGPU)', tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~2.3GB' },
+    { id: 'transformers:onnx-community/Qwen3-1.7B-ONNX',            displayName: 'Qwen3 1.7B (WebGPU)',           tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~1.4GB' },
+    { id: 'transformers:LiquidAI/LFM2.5-1.2B-Instruct-ONNX',        displayName: 'LFM2.5 1.2B Instruct (WebGPU)', tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~760MB' },
+    { id: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',  displayName: 'Granite 4.0 350M (WebGPU)',     tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~350MB' },
+    { id: 'transformers:onnx-community/Qwen3-0.6B-ONNX',            displayName: 'Qwen3 0.6B (WebGPU)',           tags: ['local', 'small', 'webgpu'], device: 'webgpu', dtype: 'q4f16', downloadSize: '~570MB' },
     // CPU/WASM models — work out of the box, no GPU required
-    { id: 'transformers:HuggingFaceTB/SmolLM3-3B-ONNX',             displayName: 'SmolLM3 3B (CPU)',              tags: ['local', 'small'],            downloadSize: '~2.0GB' },
-    { id: 'transformers:onnx-community/Qwen2.5-1.5B-Instruct',      displayName: 'Qwen 2.5 1.5B (CPU)',           tags: ['local', 'small'],            downloadSize: '~900MB' },
+    { id: 'transformers:HuggingFaceTB/SmolLM3-3B-ONNX',             displayName: 'SmolLM3 3B (CPU)',              tags: ['local', 'small'],            device: 'cpu',    dtype: 'q4',    downloadSize: '~2.8GB' },
+    { id: 'transformers:onnx-community/Qwen2.5-1.5B-Instruct',      displayName: 'Qwen 2.5 1.5B (CPU)',           tags: ['local', 'small'],            device: 'cpu',    dtype: 'q4',    downloadSize: '~1.8GB' },
   ],
   openai: [
     { id: 'gpt-5.2', displayName: 'GPT 5.2', tags: ['paid', 'cloud', 'large'] },
@@ -95,6 +107,15 @@ export function getModelDisplayName(modelId: string): string {
   }
 
   return normalizedId;
+}
+
+/**
+ * The transformers catalog entry for a Hub repo, accepting the id with or
+ * without the `transformers:` prefix. Undefined for user-typed repos.
+ */
+export function getTransformersCatalogEntry(modelId: string): Model | undefined {
+  const id = modelId.startsWith('transformers:') ? modelId : `transformers:${modelId}`;
+  return getModelsForProvider('transformers').find((m) => m.id === id);
 }
 
 /**

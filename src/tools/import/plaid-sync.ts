@@ -368,6 +368,7 @@ export async function syncPlaidItem(
 
 export const plaidSyncTool = defineTool({
   name: 'plaid_sync',
+  mutates: true,
   description: 'Sync transactions from all linked bank accounts via Plaid.',
   schema: z.object({}),
   func: async () => {

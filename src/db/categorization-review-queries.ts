@@ -116,7 +116,9 @@ export type ReviewResolution =
  * review's own suggested category + stored confidence; correct uses the
  * caller-validated category and NULLs the machine confidence (a human-assigned
  * category carries no score — this also clears stale low scores on backfilled
- * rows). Doing all three effects inside one db.transaction makes "applied
+ * rows). The revision is bumped like every other write to a transaction, so an agent's card prepared against
+ * the old revision (categorize, edit, review action) goes stale instead of overwriting this decision (threat T30).
+ * Doing all three effects inside one db.transaction makes "applied
  * category with still-pending review" and "resolved review with unapplied
  * category" impossible. The review row is kept with status='resolved' (the
  * partial unique index only constrains pending rows, so resolved rows never
@@ -140,7 +142,8 @@ export function resolveCategorizationReview(
     db.prepare(`
       UPDATE transactions
       SET category = @category, category_confidence = @confidence,
-          user_verified = 1, updated_at = datetime('now')
+          user_verified = 1, updated_at = datetime('now'),
+          revision = revision + 1
       WHERE id = @id
     `).run({ id: review.transaction_id, category, confidence });
     db.prepare("UPDATE categorization_reviews SET status = 'resolved' WHERE id = @id").run({ id: rid });

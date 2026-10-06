@@ -70,6 +70,20 @@ export function getPeriodDates(
 }
 
 /**
+ * Months from the current month to `month` ("YYYY-MM"); 0 when absent or
+ * malformed. `month` is deliberately not in the schema, so cloud tool
+ * definitions stay unchanged: only the local agent sets it, when the user
+ * named a month (src/agent/local-date-args.ts). defineTool passes the
+ * original arguments through, extra keys included.
+ */
+function monthOffset(month: unknown): number {
+  const m = typeof month === 'string' ? /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month) : null;
+  if (!m) return 0;
+  const now = new Date();
+  return (Number(m[1]) - now.getFullYear()) * 12 + (Number(m[2]) - 1 - now.getMonth());
+}
+
+/**
  * Format a spending summary for display.
  */
 function formatSummary(
@@ -142,12 +156,67 @@ function formatSummary(
   return lines.join('\n');
 }
 
+export interface SpendingSummaryOptions {
+  period?: 'month' | 'quarter' | 'year';
+  compareWithPrevious?: boolean;
+  /**
+   * "YYYY-MM": report that month instead of the current one (period 'month' only; malformed means current). Not in
+   * any tool schema: only the local agent fills it in (see monthOffset).
+   */
+  month?: unknown;
+}
+
+/**
+ * Spending breakdown for a period (and optionally the one before it), read
+ * from the database passed in. The chat tool and the WebMCP `spending_summary`
+ * tool both call this, so neither depends on a module-global connection.
+ */
+export function computeSpendingSummary(database: Database, opts: SpendingSummaryOptions = {}) {
+  const period = opts.period ?? 'month';
+
+  // Current period, or the month the local agent filled in
+  const offset = period === 'month' ? monthOffset(opts.month) : 0;
+  const current = getPeriodDates(period, offset);
+  const currentRows = getSpendingSummary(database, current.start, current.end);
+
+  // Previous period (if requested)
+  let prevRows: SpendingSummaryRow[] | undefined;
+  let prevLabel: string | undefined;
+  if (opts.compareWithPrevious) {
+    const prev = getPeriodDates(period, offset - 1);
+    prevRows = getSpendingSummary(database, prev.start, prev.end);
+    prevLabel = prev.label;
+  }
+
+  const formatted = formatSummary(currentRows, current.label, prevRows, prevLabel);
+
+  const grandTotal = currentRows.reduce((sum, r) => sum + r.total, 0);
+  const transactionCount = currentRows.reduce((sum, r) => sum + r.count, 0);
+
+  return {
+    period: current.label,
+    dateRange: { start: current.start, end: current.end },
+    totalSpending: grandTotal,
+    transactionCount,
+    categories: currentRows,
+    previousPeriod: prevRows
+      ? {
+          label: prevLabel,
+          categories: prevRows,
+          totalSpending: prevRows.reduce((sum, r) => sum + r.total, 0),
+        }
+      : undefined,
+    formatted,
+  };
+}
+
 /**
  * Spending summary tool — breaks down spending by category for a given period,
  * optionally comparing with the previous period.
  */
 export const spendingSummaryTool = defineTool({
   name: 'spending_summary',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description:
     'Get a spending breakdown by category for the current month, quarter, or year. ' +
     'Optionally compare with the previous period to see changes.',
@@ -161,41 +230,9 @@ export const spendingSummaryTool = defineTool({
       .default(true)
       .describe('Compare with the previous period'),
   }),
-  func: async ({ period, compareWithPrevious }) => {
-    const database = getDb();
-
-    // Current period
-    const current = getPeriodDates(period, 0);
-    const currentRows = getSpendingSummary(database, current.start, current.end);
-
-    // Previous period (if requested)
-    let prevRows: SpendingSummaryRow[] | undefined;
-    let prevLabel: string | undefined;
-    if (compareWithPrevious) {
-      const prev = getPeriodDates(period, -1);
-      prevRows = getSpendingSummary(database, prev.start, prev.end);
-      prevLabel = prev.label;
-    }
-
-    const formatted = formatSummary(currentRows, current.label, prevRows, prevLabel);
-
-    const grandTotal = currentRows.reduce((sum, r) => sum + r.total, 0);
-    const transactionCount = currentRows.reduce((sum, r) => sum + r.count, 0);
-
-    return formatToolResult({
-      period: current.label,
-      dateRange: { start: current.start, end: current.end },
-      totalSpending: grandTotal,
-      transactionCount,
-      categories: currentRows,
-      previousPeriod: prevRows
-        ? {
-            label: prevLabel,
-            categories: prevRows,
-            totalSpending: prevRows.reduce((sum, r) => sum + r.total, 0),
-          }
-        : undefined,
-      formatted,
-    });
+  func: async (args) => {
+    const { period, compareWithPrevious } = args;
+    const month = (args as { month?: unknown }).month;
+    return formatToolResult(computeSpendingSummary(getDb(), { period, compareWithPrevious, month }));
   },
 });

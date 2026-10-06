@@ -1,0 +1,3774 @@
+{
+ "generatedFrom": {
+  "run": "${SCRATCH}/r2/results.json",
+  "grades": "specs/eval/2026-10-03-round2-grades.json",
+  "set": "heldout"
+ },
+ "meta": {
+  "startedAt": "2026-10-03T12:21:30.091Z",
+  "model": "onnx-community/Qwen3-0.6B-ONNX",
+  "web": "http://127.0.0.1:51960",
+  "headless": true,
+  "browserVersion": "153.0.8010.12",
+  "adapter": {
+   "vendor": "apple",
+   "architecture": "metal-3",
+   "description": "",
+   "isFallbackAdapter": false,
+   "shaderF16": true,
+   "crossOriginIsolated": false
+  },
+  "firstLoad": {
+   "loadMs": 26024.699999928474,
+   "loadFresh": true,
+   "dtype": "q4f16",
+   "wallMs": 26027
+  },
+  "warmReload": {
+   "loadMs": 1645.8000000715256,
+   "wallMs": 1647
+  },
+  "finishedAt": "2026-10-03T12:22:10.973Z"
+ },
+ "bars": {
+  "divertedMinPct": 95,
+  "c4MinRows": 15,
+  "precisionMinPct": 97,
+  "wrongOrUselessMaxPct": 3,
+  "coverageTargetPct": 35,
+  "p95MaxMs": 2000
+ },
+ "score": {
+  "base": {
+   "n": 247,
+   "read": {
+    "n": 206,
+    "routedCorrect": 63,
+    "routedCorrectPct": 30.58252427184466,
+    "falselyGated": 112,
+    "falselyGatedPct": 54.36893203883495,
+    "routedWrong": 3,
+    "routedNone": 28
+   },
+   "none": {
+    "n": 41,
+    "diverted": 39,
+    "divertedPct": 95.1219512195122,
+    "misrouted": [
+     "Show me my investment portfolio performance",
+     "Show my credit score history"
+    ]
+   },
+   "confusion": {
+    "transaction_search": {
+     "gated": 53,
+     "transaction_search": 4,
+     "none": 9
+    },
+    "spending_summary": {
+     "spending_summary": 15,
+     "gated": 20,
+     "none": 5
+    },
+    "profit_loss": {
+     "profit_loss": 13,
+     "gated": 18,
+     "none": 5
+    },
+    "net_worth": {
+     "net_worth": 14,
+     "none": 8,
+     "gated": 8,
+     "transaction_search": 2
+    },
+    "forecast": {
+     "forecast": 17,
+     "gated": 13,
+     "none": 1,
+     "spending_summary": 1
+    },
+    "none": {
+     "gated": 35,
+     "none": 4,
+     "transaction_search": 2
+    }
+   },
+   "c4": {
+    "n": 12,
+    "diverted": 12,
+    "pass": true,
+    "enoughRows": false
+   },
+   "c3": {
+    "n": 4,
+    "withRows": 3,
+    "emptyResult": 1,
+    "argsUnfillable": 0,
+    "localAnswerOnEmpty": 0,
+    "other": 0,
+    "pass": true
+   },
+   "c15": {
+    "n": 193,
+    "p50": 0,
+    "p95": 1.2000000476837158,
+    "max": 1.399999976158142,
+    "byPath": {
+     "gated": {
+      "n": 147,
+      "p50": 0,
+      "p95": 0.10000002384185791,
+      "max": 0.5
+     },
+     "router-none": {
+      "n": 32,
+      "p50": 1,
+      "p95": 1.2999999523162842,
+      "max": 1.3000000715255737
+     },
+     "args-unfillable": {
+      "n": 14,
+      "p50": 1,
+      "p95": 1.399999976158142,
+      "max": 1.399999976158142
+     }
+    },
+    "pass": true
+   },
+   "keywordOnly": {
+    "read": {
+     "n": 206,
+     "routedCorrect": 63,
+     "routedCorrectPct": 30.58252427184466,
+     "falselyGatedPct": 54.36893203883495
+    },
+    "none": {
+     "n": 41,
+     "diverted": 39,
+     "divertedPct": 95.1219512195122
+    }
+   }
+  },
+  "local": {
+   "answered": 23,
+   "good": 10,
+   "wrongOrUseless": 13,
+   "ungraded": 0,
+   "precisionPct": 43.47826086956522,
+   "wrongOrUselessPct": 56.52173913043478
+  },
+  "coverage": {
+   "readRows": 206,
+   "answeredLocally": 23,
+   "pct": 11.16504854368932
+  }
+ },
+ "verdict": {
+  "bars": {
+   "allLocalAnswersGraded": true,
+   "divertedGe95": true,
+   "c4AllDiverted": false,
+   "precisionGe97": false,
+   "wrongOrUselessLe3": false,
+   "p95Le2s": true
+  },
+  "allPass": false,
+  "coverageMetTarget": false
+ },
+ "perTool": {
+  "transaction_search": {
+   "n": 66,
+   "gated": 53,
+   "routerNone": 9,
+   "routedRight": 4,
+   "routedWrong": 0,
+   "answered": 1,
+   "good": 1,
+   "wrongOrUseless": 0,
+   "precisionPct": 100,
+   "coveragePct": 1.5151515151515151,
+   "handoffReasons": {
+    "non-data": 53,
+    "outside-bundle": 1,
+    "router-none": 9,
+    "ungrounded": 1,
+    "empty-result": 1
+   }
+  },
+  "spending_summary": {
+   "n": 40,
+   "gated": 20,
+   "routerNone": 5,
+   "routedRight": 15,
+   "routedWrong": 0,
+   "answered": 10,
+   "good": 3,
+   "wrongOrUseless": 7,
+   "precisionPct": 30,
+   "coveragePct": 25,
+   "handoffReasons": {
+    "args-unfillable": 4,
+    "non-data": 20,
+    "router-none": 5,
+    "outside-bundle": 1
+   }
+  },
+  "profit_loss": {
+   "n": 36,
+   "gated": 18,
+   "routerNone": 5,
+   "routedRight": 13,
+   "routedWrong": 0,
+   "answered": 6,
+   "good": 4,
+   "wrongOrUseless": 2,
+   "precisionPct": 66.66666666666667,
+   "coveragePct": 16.666666666666668,
+   "handoffReasons": {
+    "args-unfillable": 7,
+    "non-data": 18,
+    "router-none": 5
+   }
+  },
+  "net_worth": {
+   "n": 32,
+   "gated": 8,
+   "routerNone": 8,
+   "routedRight": 14,
+   "routedWrong": 2,
+   "answered": 2,
+   "good": 2,
+   "wrongOrUseless": 0,
+   "precisionPct": 100,
+   "coveragePct": 6.25,
+   "handoffReasons": {
+    "ungrounded": 7,
+    "router-none": 8,
+    "tool-unavailable": 3,
+    "non-data": 8,
+    "outside-bundle": 2,
+    "empty-result": 2
+   }
+  },
+  "forecast": {
+   "n": 32,
+   "gated": 13,
+   "routerNone": 1,
+   "routedRight": 17,
+   "routedWrong": 1,
+   "answered": 4,
+   "good": 0,
+   "wrongOrUseless": 4,
+   "precisionPct": 0,
+   "coveragePct": 12.5,
+   "handoffReasons": {
+    "outside-bundle": 7,
+    "non-data": 13,
+    "ungrounded": 4,
+    "args-unfillable": 3,
+    "router-none": 1
+   }
+  },
+  "none": {
+   "n": 41,
+   "gated": 35,
+   "routerNone": 4,
+   "routedRight": 4,
+   "routedWrong": 2,
+   "answered": 0,
+   "good": 0,
+   "wrongOrUseless": 0,
+   "precisionPct": null,
+   "coveragePct": null,
+   "handoffReasons": {
+    "mutation-intent": 13,
+    "non-data": 22,
+    "router-none": 4,
+    "empty-result": 2
+   }
+  }
+ },
+ "none": {
+  "n": 41,
+  "divertedByScorer": 39,
+  "notAnsweredLocally": 41,
+  "reachedReadTool": [
+   "Show me my investment portfolio performance",
+   "Show my credit score history"
+  ],
+  "mutationRows": 23,
+  "mutationDiverted": 23,
+  "verblessMutationRows": 12,
+  "verblessDiverted": 12
+ },
+ "timing": {
+  "barPaths": {
+   "n": 193,
+   "p50": 0,
+   "p95": 1.2000000476837158,
+   "max": 1.399999976158142,
+   "byPath": {
+    "gated": {
+     "n": 147,
+     "p50": 0,
+     "p95": 0.10000002384185791,
+     "max": 0.5
+    },
+    "router-none": {
+     "n": 32,
+     "p50": 1,
+     "p95": 1.2999999523162842,
+     "max": 1.3000000715255737
+    },
+    "args-unfillable": {
+     "n": 14,
+     "p50": 1,
+     "p95": 1.399999976158142,
+     "max": 1.399999976158142
+    }
+   },
+   "pass": true
+  },
+  "allHandoffs": {
+   "n": 224,
+   "p50": 0,
+   "p95": 217.20000004768372,
+   "max": 441.2999999523163
+  }
+ },
+ "sensitivity": {
+  "strict": {
+   "good": 10,
+   "precisionPct": 43.47826086956522
+  },
+  "lenientAnswerOkOnly": {
+   "good": 21,
+   "precisionPct": 91.30434782608695
+  }
+ },
+ "stages": {
+  "gateMs": {
+   "n": 247,
+   "p50": 0,
+   "p95": 0.10000002384185791,
+   "max": 0.5,
+   "mean": 0.010526315885999424
+  },
+  "routerGenMs": {
+   "n": 0,
+   "p50": null,
+   "p95": null,
+   "max": null,
+   "mean": null
+  },
+  "nextGenMs": {
+   "n": 0,
+   "p50": null,
+   "p95": null,
+   "max": null,
+   "mean": null
+  },
+  "composeGenMs": {
+   "n": 46,
+   "p50": 238.79999995231628,
+   "p95": 498.7000000476837,
+   "max": 1020.5,
+   "mean": 275.0108695704004
+  },
+  "toolWallMs": {
+   "n": 54,
+   "p50": 0.7999999523162842,
+   "p95": 1.5,
+   "max": 1.8000000715255737,
+   "mean": 0.8740740837874236
+  },
+  "toolExecMs": {
+   "n": 54,
+   "p50": 0.21225000000413274,
+   "p95": 0.7339170000050217,
+   "max": 1.0038750000021537,
+   "mean": 0.25575622222216526
+  },
+  "statusMs": {
+   "n": 100,
+   "p50": 1,
+   "p95": 1.2000000476837158,
+   "max": 1.3000000715255737,
+   "mean": 0.9000000071525573
+  },
+  "answeredTotalMs": {
+   "n": 23,
+   "p50": 252.5,
+   "p95": 543.5,
+   "max": 1024.1000000238419,
+   "mean": 323.9260869699976
+  },
+  "stepsPerAnsweredRun": {
+   "n": 23,
+   "p50": 1,
+   "p95": 1,
+   "max": 1,
+   "mean": 1
+  },
+  "nextGensPerRun": {
+   "n": 54,
+   "p50": 0,
+   "p95": 0,
+   "max": 0,
+   "mean": 0
+  }
+ },
+ "rows": [
+  {
+   "q": "adobe charges?",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.5
+  },
+  {
+   "q": "show me everything adobe",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "query": "adobe"
+   },
+   "toolSummary": "Found 2 transactions. Filters: {\"merchant\":\"adobe\"}\n#14 2026-06-05 -$54.99 Uncategorized ADOBE CREATIVE CLOUD\n#13 2026-06-05 -$54.99 Uncategorized ADOBE CREATIVE CLOUD",
+   "searchRows": 2,
+   "ms": 230.10000002384186
+  },
+  {
+   "q": "netflix",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "did i pay netflix in june?",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "hulu charges?",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "any spotify payments",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "list client payments",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "query": "client"
+   },
+   "toolSummary": "Found 3 transactions. Filters: {\"merchant\":\"client\"}\n#17 2026-06-15 +$1800.00 Uncategorized CLIENT PAYMT - HARBOR LOGISTICS\n#2 2026-06-03 -$156.40 Uncategorized UNION SQUARE CAFE - CLIENT DINNER\n#9 2026-06-01 +$2400.00 Uncategorized CLIENT PAYMT - STONEBRIDGE CONSULTING",
+   "searchRows": 3,
+   "ms": 1024.1000000238419,
+   "answerText": "#17 2026-06-15 +$1800.00 Uncategorized CLIENT PAYMT - HARBOR LOGISTICS  \n#2 2026-06-03 -$156.40 Uncategorized CLIENT DINNER  \n#9 2026-06-01 +$2400.00 Uncategorized CLIENT PAYMT - STONEBRIDGE CONSULTING",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Faithful to the 3 rows the tool returned; both expected client payments (Stonebridge 2400, Harbor 1800) are present with correct amounts. Also lists the Union Square Cafe client dinner (-156.40) because the keyword query was 'client', and shortens its description to 'CLIENT DINNER'. Marginal: it answers, noise row is clearly signed."
+   }
+  },
+  {
+   "q": "who paid me from clients in june",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.100000023841858
+  },
+  {
+   "q": "how much was the delta flight",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.7000000476837158
+  },
+  {
+   "q": "whole foods trips",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "wholefoods purchases",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "tax payments",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "quarterly estimated tax pmt?",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "transactions last month",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what did i buy last week",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1
+  },
+  {
+   "q": "chipotle",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how many times did i eat at chipotle",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.5999999046325684
+  },
+  {
+   "q": "student loan payments",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "navient?",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "concert ticket cost",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "ticketmastr charge",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "starbucks",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "coffee shop purchases",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "anything over $100",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "big purchases over 100 bucks",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "gym charge",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "planet fitness",
+   "persona": "2-new-grad",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "costco run",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "show costco",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "query": "costco"
+   },
+   "toolSummary": "Found 1 transaction. Filters: {\"merchant\":\"costco\"}\n#5 2026-06-08 -$212.44 Uncategorized COSTCO WHOLESALE",
+   "searchRows": 1,
+   "ms": 190.20000004768372
+  },
+  {
+   "q": "daycare payments",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much is daycare",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.100000023841858
+  },
+  {
+   "q": "house fund transfers",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "transfers to savings",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "amazon orders",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "amzn",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "mortgage payment",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "lakeview",
+   "persona": "3-dual-income-household",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what is that unknown intl charge",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1
+  },
+  {
+   "q": "unknown merchant charge",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "amazon purchases",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "grandkid gift charge",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "social security deposit",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "pension payments",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "medigap",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "insurance premium paid",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "uber rides",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "lyft or uber?",
+   "persona": "4-near-retiree",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "overdraft fees",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "any bank fees i got hit with",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "child support received",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "when did child support land",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8000000715255737
+  },
+  {
+   "q": "grocery outlet",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "groc outlet visits",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "sunrise childcare",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much did childcare cost me",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "paychecks",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "show my payroll deposits",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "empty-result",
+   "toolArgs": {
+    "query": "payroll deposits"
+   },
+   "toolSummary": "No transactions found matching your query.",
+   "searchRows": 0,
+   "ms": 2.299999952316284
+  },
+  {
+   "q": "riverside paychecks in june",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "doctor copay",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "pediatric visits",
+   "persona": "5-single-parent",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "biggest 5 transactions",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "largest expenses ever",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "anything today?",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "transactions yesterday",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "purchases in march 2019",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "2019 transactions",
+   "persona": "1-comingled-founder",
+   "expect": "transaction_search",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "spending by category",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 334.40000009536743,
+   "answerText": "- **Total**: $0.00  \n- **Category**: Total spending remains unchanged.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Tool result is October 2026 (empty) vs September (empty). Answer says Total $0.00 and 'Category: Total spending remains unchanged', which names no period, never says the month has no data, and gives no categories. A user with $4.9k of June spending reads this as nothing spent."
+   }
+  },
+  {
+   "q": "where did my money go in june",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1.3000000715255737
+  },
+  {
+   "q": "spending this year",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "year",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\nUncategorized          -$4878.29      17  new\n--------------------------------------------------\nTOTAL                  -$4878.29        \n\nCompared with: 2025",
+   "ms": 244.39999997615814,
+   "answerText": "$4878.29",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: 2026 Uncategorized -4878.29 (17 txns). Answer '$4878.29' matches and answers 'spending this year' as a single figure. Terse, unlabeled, but unambiguous for this question."
+   }
+  },
+  {
+   "q": "ytd spend by category",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how did this quarter compare to last",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "qtr spending vs prior",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "spending summary",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 201.79999995231628,
+   "answerText": "$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Tool is empty October 2026. Answer is a bare '$0.00' to a request for a summary: no period, no categories, no 'no data'. Faithful number, does not address the question."
+   }
+  },
+  {
+   "q": "what am i spending on?",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 405.5,
+   "answerText": "The spending summary for October 2026 shows that there was a total amount of -$0.00, indicating no spending.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Names the period (October 2026) and says no spending, matching the empty tool result. Honest and responsive to the data window used."
+   }
+  },
+  {
+   "q": "how much on restaurants",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2999999523162842
+  },
+  {
+   "q": "eating out total",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "groceries spend",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much on food this month",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.3000000715255737
+  },
+  {
+   "q": "spending vs last month",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 203,
+   "answerText": "$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Question asks for a comparison; answer is a bare '$0.00' (both months empty). Figure matches the tool but the comparison and the empty-data fact are missing."
+   }
+  },
+  {
+   "q": "are we spending more than last month",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 265.3000000715256,
+   "answerText": "No, we are not spending more than last month.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "'No' is arithmetically consistent with 0 vs 0, but the answer hides that both months are empty; a reader concludes spending fell or held when there is simply no data. Does not inform."
+   }
+  },
+  {
+   "q": "spend breakdown",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what's the biggest category",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 312.2999999523163,
+   "answerText": "The biggest category is \"TOTAL\" with an amount of -$0.00.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": false,
+    "useless": true,
+    "good": false,
+    "why": "Says the biggest category is 'TOTAL' with -$0.00. TOTAL is the footer row, not a category; the tool returned no categories. Fabricated reading of the table."
+   }
+  },
+  {
+   "q": "annual spending by category",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "spending 2026",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "monthly spending",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "budget breakdown this month",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "cat totals this month",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "top spending categories now",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "pie of spending by category for the quarter",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "where is most of my money going",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1
+  },
+  {
+   "q": "spending yoy",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 194.10000002384186
+  },
+  {
+   "q": "did i spend more this year than last",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "rank my categories",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "categories biggest to smallest",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "entertainment spend",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "fun money spent",
+   "persona": "2-new-grad",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "q3 spending",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "spending last quarter",
+   "persona": "5-single-parent",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 0.8000000715255737
+  },
+  {
+   "q": "expenses by category",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 377,
+   "answerText": "- **Total**: $0.00  \n- **Category**: No categories listed (only \"TOTAL\" is shown).",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Total $0.00 and 'No categories listed (only TOTAL is shown)' matches the empty tool table, but gives no period and does not say the month is empty; a breakdown was requested and none is conveyed."
+   }
+  },
+  {
+   "q": "categry breakdwn",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much did we spend this year by category",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "year",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\nUncategorized          -$4911.39       9  new\n--------------------------------------------------\nTOTAL                  -$4911.39        \n\nCompared with: 2025",
+   "ms": 460.5,
+   "answerText": "The spending summary for 2026 shows a total of -$4911.39, with the \"Uncategorized\" category accounting for this amount.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: 2026 Uncategorized -4911.39 (9 txns); I re-summed persona 3's nine debits = 4911.39. Answer states total and the single Uncategorized category correctly."
+   }
+  },
+  {
+   "q": "yearly spend report",
+   "persona": "3-dual-income-household",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how's my spending trending vs last month",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 500.8000000715256,
+   "answerText": "The spending summary for October 2026 shows a total of $0.00, compared to September 2026. There is no change in spending patterns between the two months.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Figures match (0 vs September 0) and the period is named, but 'no change in spending patterns' draws a pattern conclusion from two empty months. Does not inform."
+   }
+  },
+  {
+   "q": "compare spending to prior month",
+   "persona": "4-near-retiree",
+   "expect": "spending_summary",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1
+  },
+  {
+   "q": "this month's spending",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "spent so far in oct",
+   "persona": "1-comingled-founder",
+   "expect": "spending_summary",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "P&L 2025",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 0.6999999284744263
+  },
+  {
+   "q": "P&L june",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "offset": -4
+   },
+   "toolSummary": "Profit & Loss: June 2026\n\nINCOME\n  Uncategorized        $   7900.00  (4 txns)\n  TOTAL INCOME         $   7900.00\n\nEXPENSES\n  Uncategorized        -$  4878.29  (17 txns)\n  TOTAL EXPENSES       -$  4878.29\n\n----------------------------------------\nNET PROFIT:           +$3021.71",
+   "ms": 248.10000002384186,
+   "answerText": "$3021.71",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Answer is the bare net '$3021.71', which equals the tool's NET PROFIT for June 2026. The tool counts the +600 Amex payment as income (7900, not the notes' 7300); the server tool does the same, so that is a data/tool matter, not a local-answer error. A P&L was requested and income and expenses are omitted, with no label."
+   }
+  },
+  {
+   "q": "profit and loss",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1
+  },
+  {
+   "q": "how much profit did my consulting make",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 0.5
+  },
+  {
+   "q": "p&l this quarter",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "quarter",
+    "offset": 0
+   },
+   "toolSummary": "Profit & Loss: Q4 2026\n\n----------------------------------------\nNET PROFIT:           +$0.00",
+   "ms": 205.90000009536743,
+   "answerText": "$0.00.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: Q4 2026, net profit +0.00, no income or expense lines. '$0.00.' is the correct net for the quarter so far and the question's period is explicit. Terse."
+   }
+  },
+  {
+   "q": "income statement for the quarter",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "last month p&l",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "profit loss prev month",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1.1999999284744263
+  },
+  {
+   "q": "am i making more than i spend",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8000000715255737
+  },
+  {
+   "q": "income vs expenses",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 0.6000000238418579
+  },
+  {
+   "q": "profit loss year to date",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "year",
+    "offset": 0
+   },
+   "toolSummary": "Profit & Loss: 2026\n\nINCOME\n  Uncategorized        $   2900.00  (2 txns)\n  TOTAL INCOME         $   2900.00\n\nEXPENSES\n  Uncategorized        -$  1820.86  (11 txns)\n  TOTAL EXPENSES       -$  1820.86\n\n----------------------------------------\nNET PROFIT:           +$1079.14",
+   "ms": 543.5,
+   "answerText": "Profit & Loss: 2026  \n- Income: $2900.00  \n- Expenses: $1820.86  \n\nNet Profit: $1079.14",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Income 2900.00, expenses 1820.86, net 1079.14 all match the tool; I re-summed persona 2's rows (2 paychecks, 11 debits) and they agree."
+   }
+  },
+  {
+   "q": "ytd income and expenses",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "household income vs expenses",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "net income for the month",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "q2 p&l",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "last quarter profit and loss",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "retirement income vs outflow",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "is my income covering expenses",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8000000715255737
+  },
+  {
+   "q": "annual P&L",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "earned vs spent this year",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much did i earn vs spend",
+   "persona": "5-single-parent",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.6000000238418579
+  },
+  {
+   "q": "single parent p&l month",
+   "persona": "5-single-parent",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "p&l two months ago",
+   "persona": "5-single-parent",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 0.5
+  },
+  {
+   "q": "income minus expenses last month",
+   "persona": "5-single-parent",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "offset": -1
+   },
+   "toolSummary": "Profit & Loss: September 2026\n\n----------------------------------------\nNET PROFIT:           +$0.00",
+   "ms": 201.5,
+   "answerText": "$0.00.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Tool: September 2026 empty. Answer '$0.00.' is arithmetically the tool figure, but the row's notes require saying there is no data; a bare zero reads as break-even."
+   }
+  },
+  {
+   "q": "P&L 2024",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1
+  },
+  {
+   "q": "prior year profit & loss",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "net income this month",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "profit this month?",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "offset": 0
+   },
+   "toolSummary": "Profit & Loss: October 2026\n\n----------------------------------------\nNET PROFIT:           +$0.00",
+   "ms": 188.5,
+   "answerText": "+$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: October 2026, net +0.00. '+$0.00' answers the question as asked for the explicit period."
+   }
+  },
+  {
+   "q": "last quarter profit",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "pnl prev qtr",
+   "persona": "1-comingled-founder",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what's our surplus this month",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8999999761581421
+  },
+  {
+   "q": "are we in the black",
+   "persona": "3-dual-income-household",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.5
+  },
+  {
+   "q": "cash in vs cash out",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "did i come out ahead this month",
+   "persona": "4-near-retiree",
+   "expect": "profit_loss",
+   "gate": "route",
+   "hits": [
+    "profit_loss"
+   ],
+   "route": "profit_loss",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "period": "month",
+    "offset": 0
+   },
+   "toolSummary": "Profit & Loss: October 2026\n\n----------------------------------------\nNET PROFIT:           +$0.00",
+   "ms": 209.29999995231628,
+   "answerText": "$0.00 net profit.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: October 2026 net +0.00. '$0.00 net profit.' correctly implies no, with the explicit period in the question."
+   }
+  },
+  {
+   "q": "q3 income statement",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "earnings this quarter",
+   "persona": "2-new-grad",
+   "expect": "profit_loss",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "net worth",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 160
+  },
+  {
+   "q": "what am i worth",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1
+  },
+  {
+   "q": "net worth trend",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "tool-unavailable",
+   "toolArgs": {
+    "action": "trend",
+    "months": 12
+   },
+   "ms": 1.399999976158142
+  },
+  {
+   "q": "nw over the last year",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how much am i worth with my student loans",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.5
+  },
+  {
+   "q": "net worth now",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 157.40000009536743
+  },
+  {
+   "q": "balance sheet",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "balance_sheet"
+   },
+   "toolSummary": "No accounts configured.",
+   "ms": 179.70000004768372
+  },
+  {
+   "q": "assets vs liabilities",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what's our net worth",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 185.5
+  },
+  {
+   "q": "networth",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "6 month net worth trend",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "has our net worth gone up since spring",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 178.60000002384186
+  },
+  {
+   "q": "total assets",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.100000023841858
+  },
+  {
+   "q": "how much do i have all in",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8999999761581421
+  },
+  {
+   "q": "net worth over time",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "tool-unavailable",
+   "toolArgs": {
+    "action": "trend",
+    "months": 12
+   },
+   "ms": 1.899999976158142
+  },
+  {
+   "q": "is my net worth growing",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 178.39999997615814
+  },
+  {
+   "q": "what do i owe vs own",
+   "persona": "5-single-parent",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.100000023841858
+  },
+  {
+   "q": "balance sheet please",
+   "persona": "5-single-parent",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "balance_sheet"
+   },
+   "toolSummary": "No accounts configured.",
+   "ms": 189.19999992847443
+  },
+  {
+   "q": "am i net positive",
+   "persona": "5-single-parent",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.2000000476837158
+  },
+  {
+   "q": "net worth summary",
+   "persona": "5-single-parent",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 235.80000007152557,
+   "answerText": "No accounts configured. Add accounts to track net worth.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Tool: 'No accounts configured.' Answer repeats it verbatim. The persona seed has no account balances, which is what the notes say to report."
+   }
+  },
+  {
+   "q": "net worth last 3 months",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 243.20000004768372,
+   "answerText": "No accounts configured. Add accounts to track net worth.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": false,
+    "good": true,
+    "why": "Question asks for a 3-month trend; the local run called net_worth summary (trend stays server-only). Because the book has no accounts, 'No accounts configured' is still true, so the answer is correct here. Latent hazard: with accounts present this phrasing would be answered with a current summary."
+   }
+  },
+  {
+   "q": "nw trend quarter",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "list my debts and assets",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "empty-result",
+   "toolArgs": {
+    "query": "debts assets"
+   },
+   "toolSummary": "No transactions found matching your query.",
+   "searchRows": 0,
+   "ms": 2.899999976158142
+  },
+  {
+   "q": "liabilities",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "how rich am i lol",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.7999999523162842
+  },
+  {
+   "q": "total net worth",
+   "persona": "1-comingled-founder",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "summary"
+   },
+   "toolSummary": "No accounts configured. Add accounts to track net worth.",
+   "ms": 165.60000002384186
+  },
+  {
+   "q": "show account balances",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "empty-result",
+   "toolArgs": {
+    "query": "account balances"
+   },
+   "toolSummary": "No transactions found matching your query.",
+   "searchRows": 0,
+   "ms": 2.600000023841858
+  },
+  {
+   "q": "balance sheet breakdown",
+   "persona": "3-dual-income-household",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "action": "balance_sheet"
+   },
+   "toolSummary": "No accounts configured.",
+   "ms": 192.10000002384186
+  },
+  {
+   "q": "what's my networth",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8000000715255737
+  },
+  {
+   "q": "current net worth",
+   "persona": "4-near-retiree",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "two year net worth trend",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "net worth history",
+   "persona": "2-new-grad",
+   "expect": "net_worth",
+   "gate": "route",
+   "hits": [
+    "net_worth"
+   ],
+   "route": "net_worth",
+   "outcome": "handoff",
+   "reason": "tool-unavailable",
+   "toolArgs": {
+    "action": "trend",
+    "months": 12
+   },
+   "ms": 2
+  },
+  {
+   "q": "forecast",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 253.89999997615814,
+   "answerText": "$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Tool: 3-month forecast, every figure $0.00 (no accounts; trailing three months Jul-Sep are empty). Answer is a bare '$0.00' with no horizon and no assumptions; the notes require stating assumptions. Faithful but reads as a real prediction."
+   }
+  },
+  {
+   "q": "where will my cash be in 3 months",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 249.20000004768372,
+   "answerText": "$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "Same all-zero forecast. Bare '$0.00' presents an empty-input forecast as the answer; no assumptions or 'no data' stated, as the notes require."
+   }
+  },
+  {
+   "q": "what if i cancel adobe",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3,
+    "whatIf": [
+     {
+      "type": "drop_recurring",
+      "description": "adobe"
+     }
+    ]
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\nWhat-if: Drop recurring expense matching \"adobe\" (~$0.00/mo) -> $0.00/mo\nAdjusted monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 277.10000002384186
+  },
+  {
+   "q": "forecast without adobe",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 241.29999995231628
+  },
+  {
+   "q": "projection for the next 6 months",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "will i have savings by december",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 2
+   },
+   "toolSummary": "Forecast: 2 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 441.2999999523163
+  },
+  {
+   "q": "if i cut eating out by 50 a month how much do i save",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1.399999976158142
+  },
+  {
+   "q": "forecast with $50 less dining",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 243
+  },
+  {
+   "q": "how much will we have saved in 6 months",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 6
+   },
+   "toolSummary": "Forecast: 6 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\n2027-02: $0.00\n2027-03: $0.00\n2027-04: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 289.7999999523163,
+   "answerText": "$0.00.",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": true,
+    "useless": true,
+    "good": false,
+    "why": "All-zero 6-month forecast (no accounts, empty trailing window). Bare '$0.00.' ignores the house-fund transfers the notes expect and states no assumptions."
+   }
+  },
+  {
+   "q": "savings projection",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what happens if we spend 100 less on groceries",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.8999999761581421
+  },
+  {
+   "q": "grocery cut scenario",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "can i keep this up for a year",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "12 month cash projection",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what if i quit the golf club",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3,
+    "whatIf": [
+     {
+      "type": "drop_recurring",
+      "description": "golf club"
+     }
+    ]
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\nWhat-if: Drop recurring expense matching \"golf club\" (~$0.00/mo) -> $0.00/mo\nAdjusted monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 273.5
+  },
+  {
+   "q": "forecast without golf dues",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "answer",
+   "reason": null,
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 252.5,
+   "answerText": "$0.00",
+   "grade": {
+    "toolCorrect": true,
+    "answerOk": false,
+    "useless": true,
+    "good": false,
+    "why": "The what-if premise (drop the $150 golf dues) is not applied: the local run called the plain forecast and answered '$0.00' as if it were the what-if result. Answers a different question."
+   }
+  },
+  {
+   "q": "will i run out of money",
+   "persona": "5-single-parent",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 239.69999992847443
+  },
+  {
+   "q": "end of year cash estimate",
+   "persona": "5-single-parent",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what if childcare cost dropped to 400",
+   "persona": "5-single-parent",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1.399999976158142
+  },
+  {
+   "q": "forecast if childcare falls by 220",
+   "persona": "5-single-parent",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 245.70000004768372
+  },
+  {
+   "q": "based on last 6 months where do i land",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "6mo trailing forecast",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "forcast",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "cash forecast",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "what if i dropped my gym",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "args-unfillable",
+   "ms": 1
+  },
+  {
+   "q": "forecast minus gym",
+   "persona": "1-comingled-founder",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 233.40000009536743
+  },
+  {
+   "q": "one year out balance estimate",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "where will i be in a year",
+   "persona": "2-new-grad",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 12
+   },
+   "toolSummary": "Forecast: 12 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\n2027-02: $0.00\n2027-03: $0.00\n2027-04: $0.00\n2027-05: $0.00\n2027-06: $0.00\n2027-07: $0.00\n2027-08: $0.00\n2027-09: $0.00\n2027-10: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 314.89999997615814
+  },
+  {
+   "q": "how long will my money last",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "forecast"
+   ],
+   "route": "forecast",
+   "outcome": "handoff",
+   "reason": "ungrounded",
+   "toolArgs": {
+    "trailingMonths": 3,
+    "horizonMonths": 3
+   },
+   "toolSummary": "Forecast: 3 months ahead, based on the last 3 months\nStarting cash: $0.00\nAverage monthly income: $0.00\nAverage monthly expenses: $0.00\nAverage monthly net: $0.00\n2026-11: $0.00\n2026-12: $0.00\n2027-01: $0.00\nCash at the end of the horizon: $0.00",
+   "ms": 369.89999997615814
+  },
+  {
+   "q": "projected savings at this rate",
+   "persona": "4-near-retiree",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "if we cut spending 10% what then",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "route",
+   "hits": [
+    "spending_summary"
+   ],
+   "route": "spending_summary",
+   "outcome": "handoff",
+   "reason": "outside-bundle",
+   "toolArgs": {
+    "period": "month",
+    "compareWithPrevious": true
+   },
+   "toolSummary": "Spending Summary: October 2026\n\nCategory                  Amount   Count    Change\n--------------------------------------------------\n--------------------------------------------------\nTOTAL                     -$0.00        \n\nCompared with: September 2026",
+   "ms": 217.20000004768372
+  },
+  {
+   "q": "spend less scenario",
+   "persona": "3-dual-income-household",
+   "expect": "forecast",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Mark transaction 4411 as Groceries",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0.2999999523162842
+  },
+  {
+   "q": "That Whole Foods charge should be under Dining",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Make the Adobe charge a business expense",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Rename 'AMZN MKTP' to Amazon in my history",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Put the Delta flight in Travel instead",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "The 06/18 gym payment is actually $50",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "Duplicate Adobe row needs to go away",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Tag all my Costco runs as Household",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Chipotle should count as Dining, not Shopping",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Amount on transaction 112 ought to be 54.99",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Get rid of the overdraft fee entry",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Make rent a recurring bill",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Flag the Staples purchase for taxes",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "Turn that Uber charge into a reimbursable item",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Date for the Ticketmaster charge should read June 12",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Add a note 'client lunch' to the Union Square Cafe charge",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Assign all Trader Joe's to Groceries from now on",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Mark the unknown merchant charge as fraud",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Rid my records of the second Adobe line",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Reclassify nothing, just make the pharmacy one Medical",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "I want Netflix under Entertainment",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Split the Costco charge between Groceries and Household",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": true,
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Use 'Childcare' for Sunshine Daycare going forward",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "mutation": true,
+   "denylist": false,
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "hi there",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0.10000002384185791
+  },
+  {
+   "q": "thanks!",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "who are you?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1.0999999046325684
+  },
+  {
+   "q": "what can you do?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "lol nice",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "good morning",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Should I pay off my student loan or invest?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Is a Roth IRA better than a 401k?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 1
+  },
+  {
+   "q": "How much should I have in an emergency fund?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.5
+  },
+  {
+   "q": "What's a good credit score?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Should I refinance my mortgage?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Explain the 50/30/20 rule",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Connect my Plaid account",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "Import this CSV file",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "mutation-intent",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "mutation-intent",
+   "ms": 0
+  },
+  {
+   "q": "Show me my investment portfolio performance",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "empty-result",
+   "toolArgs": {
+    "query": "investment portfolio performance"
+   },
+   "toolSummary": "No transactions found matching your query.",
+   "searchRows": 0,
+   "ms": 2.700000047683716
+  },
+  {
+   "q": "Email me this report",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "non-data",
+   "hits": [],
+   "route": null,
+   "outcome": "handoff",
+   "reason": "non-data",
+   "ms": 0
+  },
+  {
+   "q": "What's the weather in Denver?",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [],
+   "route": "none",
+   "outcome": "handoff",
+   "reason": "router-none",
+   "ms": 0.7999999523162842
+  },
+  {
+   "q": "Show my credit score history",
+   "persona": "1-comingled-founder",
+   "expect": "none",
+   "gate": "route",
+   "hits": [
+    "transaction_search"
+   ],
+   "route": "transaction_search",
+   "outcome": "handoff",
+   "reason": "empty-result",
+   "toolArgs": {
+    "query": "credit score history"
+   },
+   "toolSummary": "No transactions found matching your query.",
+   "searchRows": 0,
+   "ms": 1
+  }
+ ]
+}

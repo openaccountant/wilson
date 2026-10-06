@@ -1,6 +1,7 @@
 import {
   RequiresConnectionError,
   isNetworkError,
+  mirroredHttpErrorMessage,
   resolveFetchOutcome,
 } from './store/offline-writes';
 // mirror-client deliberately does NOT import this module: its sync pulls must
@@ -10,8 +11,13 @@ import { tryMirror } from './store/mirror-client';
 
 const AUTH_KEY = 'wilson_auth_token';
 
+/**
+ * Relative in dev too: the page on :5173 talks to the dashboard through vite's proxy (see
+ * vite.config.ts), so every request is same-origin and the server's Origin / Host gate sees
+ * what a production page would send. Run the server with WILSON_DASHBOARD_DEV=1.
+ */
 export function getBaseUrl(): string {
-  if (import.meta.env.DEV) return 'http://localhost:3141';
+  if (import.meta.env.DEV) return '';
   return window.location.origin;
 }
 
@@ -42,7 +48,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       const isWrite = method !== 'GET';
       const mirrored = isWrite ? null : await tryMirror(path).catch(() => null);
       const outcome = resolveFetchOutcome({ isWrite, networkError: true, mirrored });
-      if (outcome === 'return-mirror') return mirrored as T;
+      if (outcome === 'return-mirror') {
+        // A mirrored 400 (the drill endpoints' shared BadRequest) fails the
+        // same way the online request would.
+        const httpError = mirroredHttpErrorMessage(mirrored);
+        if (httpError) throw new Error(httpError);
+        return mirrored as T;
+      }
       if (outcome === 'throw-requires-connection') {
         throw new RequiresConnectionError();
       }

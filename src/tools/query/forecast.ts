@@ -8,6 +8,9 @@ import type { Database } from '../../db/compat-sqlite.js';
 import { getMonthlySavingsData, getSpendingSummary } from '../../db/queries.js';
 import { getNetWorthSummary } from '../../db/net-worth-queries.js';
 
+/** The horizon cap for callers that do not ask for more. */
+export const DEFAULT_MAX_HORIZON_MONTHS = 24;
+
 const CASH_SUBTYPES = new Set(['checking', 'savings', 'cash']);
 
 export interface ForecastWhatIf {
@@ -22,6 +25,8 @@ export interface ForecastWhatIf {
 export interface ForecastParams {
   trailingMonths?: number;
   horizonMonths?: number;
+  /** Largest horizon this caller allows (default 24). Only the MCP `forecast` tool raises it, to 60. */
+  maxHorizonMonths?: number;
   whatIf?: ForecastWhatIf[];
 }
 
@@ -63,7 +68,7 @@ function monthlyRecurringAverage(db: Database, descriptionMatch: string, months:
  */
 export function computeForecast(db: Database, params: ForecastParams = {}): ForecastResult {
   const trailingMonths = Math.max(1, Math.min(24, params.trailingMonths ?? 3));
-  const horizonMonths = Math.max(1, Math.min(24, params.horizonMonths ?? 3));
+  const horizonMonths = Math.max(1, Math.min(params.maxHorizonMonths ?? DEFAULT_MAX_HORIZON_MONTHS, params.horizonMonths ?? 3));
 
   const netWorth = getNetWorthSummary(db);
   const startingCash = netWorth.accounts

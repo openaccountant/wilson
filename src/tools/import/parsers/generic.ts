@@ -1,12 +1,43 @@
 import { parse } from 'csv-parse/sync';
 import type { ParsedTransaction } from './chase.js';
+import { parseAmount } from './amount.js';
 
 /** Patterns used to auto-detect column roles from headers. */
 const DATE_PATTERNS = /^(date|transaction\s*date|trans\s*date|posted?\s*date)$/i;
-const DESCRIPTION_PATTERNS = /^(description|merchant|payee|memo|name|transaction\s*description)$/i;
+// Quicken's "Transaction Report" CSV labels its description column
+// "Payee/Security" (it covers investment-security transactions too).
+const DESCRIPTION_PATTERNS = /^(description|merchant|payee(\s*\/\s*security)?|memo|name|transaction\s*description)$/i;
 const AMOUNT_PATTERNS = /^(amount|debit|credit|transaction\s*amount)$/i;
 const DEBIT_PATTERNS = /^(debit|withdrawal|payment)$/i;
 const CREDIT_PATTERNS = /^(credit|deposit)$/i;
+// Some exports (e.g. Quicken's combined "Transaction Report" CSV) cover
+// multiple accounts in one file and name the account per row.
+const ACCOUNT_PATTERNS = /^(account|account\s*name)$/i;
+
+/**
+ * Some exports (e.g. Quicken's "Transaction Report" CSV) prepend a title and
+ * report-metadata lines — like "All Transactions" / "Report Created: ..." —
+ * before the actual header row, so the first line isn't a real header.
+ * Scans for the first line that looks like one (contains both a date-like
+ * and a description-like column) and strips everything before it, the same
+ * way `parseBofA` strips BofA's non-CSV preamble.
+ */
+function stripReportPreamble(content: string): string {
+  // Strip a leading UTF-8 BOM (common in Excel/Windows-originated exports),
+  // which would otherwise corrupt the first cell of whichever line it lands on.
+  const lines = content.replace(/^﻿/, '').split(/\r?\n/);
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const cells = lines[i].split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+    const hasDate = cells.some((c) => DATE_PATTERNS.test(c));
+    const hasDesc = cells.some((c) => DESCRIPTION_PATTERNS.test(c));
+    if (hasDate && hasDesc) {
+      return lines.slice(i).join('\n');
+    }
+  }
+  // No recognizable header found — return as-is and let the caller's
+  // column-detection error surface with the real (unmodified) headers.
+  return content;
+}
 
 /**
  * Parse a generic bank CSV by auto-detecting column roles.
@@ -16,7 +47,8 @@ const CREDIT_PATTERNS = /^(credit|deposit)$/i;
  * Tries to detect sign convention: if most amounts are positive, assumes positive = expense and negates.
  */
 export function parseGenericCSV(content: string): ParsedTransaction[] {
-  const records = parse(content, {
+  const cleaned = stripReportPreamble(content);
+  const records = parse(cleaned, {
     columns: true,
     skip_empty_lines: true,
     trim: true,
@@ -33,6 +65,7 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
   const amountCol = headers.find((h) => AMOUNT_PATTERNS.test(h.trim()));
   const debitCol = headers.find((h) => DEBIT_PATTERNS.test(h.trim()));
   const creditCol = headers.find((h) => CREDIT_PATTERNS.test(h.trim()));
+  const accountCol = headers.find((h) => ACCOUNT_PATTERNS.test(h.trim()));
 
   if (!dateCol || !descCol) {
     throw new Error(
@@ -51,7 +84,7 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
   const hasSeparateDebitCredit = !!(debitCol || creditCol) && !amountCol;
 
   // First pass: parse raw amounts to detect sign convention
-  const rawTransactions: { date: string; description: string; amount: number }[] = [];
+  const rawTransactions: { date: string; description: string; amount: number; accountName?: string }[] = [];
 
   for (const row of records) {
     const rawDate = row[dateCol] ?? '';
@@ -62,18 +95,19 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     let amount: number;
 
     if (hasSeparateDebitCredit) {
-      const debit = debitCol ? parseFloat(row[debitCol] || '0') : 0;
-      const credit = creditCol ? parseFloat(row[creditCol] || '0') : 0;
+      const debit = debitCol ? parseAmount(row[debitCol] || '0') : 0;
+      const credit = creditCol ? parseAmount(row[creditCol] || '0') : 0;
       // Debit = negative (expense), credit = positive (income)
       amount = isNaN(debit) ? 0 : -Math.abs(debit);
       amount += isNaN(credit) ? 0 : Math.abs(credit);
     } else {
-      amount = parseFloat(row[amountCol!] ?? '0');
+      amount = parseAmount(row[amountCol!] ?? '0');
       if (isNaN(amount)) continue;
     }
 
     const date = normalizeDate(rawDate);
-    rawTransactions.push({ date, description: description.trim(), amount });
+    const accountName = accountCol ? row[accountCol]?.trim() || undefined : undefined;
+    rawTransactions.push({ date, description: description.trim(), amount, accountName });
   }
 
   // Detect sign convention: if most amounts are positive, the bank likely uses
@@ -86,6 +120,7 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     description: t.description,
     amount: shouldNegate ? -t.amount : t.amount,
     bank: 'generic' as const,
+    account_name: t.accountName,
   }));
 
   return transactions;

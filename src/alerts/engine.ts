@@ -11,11 +11,31 @@ export interface Alert {
   amount?: number;
 }
 
+/** Formats a non-negative dollar amount with `digits` decimals, including the '$'. */
+export type AlertMoneyFormatter = (amount: number, digits: 0 | 2) => string;
+
+/** The historical CLI/report text: '$1035', '$1234.56' (no separators). */
+export const plainAlertMoney: AlertMoneyFormatter = (amount, digits) => `$${amount.toFixed(digits)}`;
+
+/** Dashboard text: thousands separators — '$1,035', '$1,234.56'. */
+export const groupedAlertMoney: AlertMoneyFormatter = (amount, digits) =>
+  `$${amount.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+
+export interface CheckAlertsOptions {
+  /** Money formatter for alert messages; defaults to the historical plain form. */
+  formatMoney?: AlertMoneyFormatter;
+}
+
 /**
  * Check all alert conditions and return active alerts.
  * All alerts are computed in real-time from existing data — no new tables needed.
+ *
+ * CLI, reports and the agent prompt call this with no options and keep the
+ * historical message text byte-for-byte; the dashboard passes
+ * groupedAlertMoney for thousands separators.
  */
-export function checkAlerts(db: Database): Alert[] {
+export function checkAlerts(db: Database, opts: CheckAlertsOptions = {}): Alert[] {
+  const fmt = opts.formatMoney ?? plainAlertMoney;
   const alerts: Alert[] = [];
   const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -27,7 +47,7 @@ export function checkAlerts(db: Database): Alert[] {
         alerts.push({
           type: 'budget_exceeded',
           severity: 'critical',
-          message: `${b.category} budget exceeded by $${Math.abs(b.remaining).toFixed(0)} (${b.percent_used}% used)`,
+          message: `${b.category} budget exceeded by ${fmt(Math.abs(b.remaining), 0)} (${b.percent_used}% used)`,
           category: b.category,
           amount: Math.abs(b.remaining),
         });
@@ -35,7 +55,7 @@ export function checkAlerts(db: Database): Alert[] {
         alerts.push({
           type: 'budget_warning',
           severity: 'warning',
-          message: `${b.category} budget at ${b.percent_used}% — $${b.remaining.toFixed(0)} remaining`,
+          message: `${b.category} budget at ${b.percent_used}% — ${fmt(b.remaining, 0)} remaining`,
           category: b.category,
           amount: b.remaining,
         });
@@ -66,7 +86,7 @@ export function checkAlerts(db: Database): Alert[] {
       alerts.push({
         type: 'spending_spike',
         severity: 'warning',
-        message: `${s.description}: $${Math.abs(s.amount).toFixed(2)} on ${s.date} (${multiplier}x avg of $${Math.abs(s.avg_amount).toFixed(2)})`,
+        message: `${s.description}: ${fmt(Math.abs(s.amount), 2)} on ${s.date} (${multiplier}x avg of ${fmt(Math.abs(s.avg_amount), 2)})`,
         amount: Math.abs(s.amount),
       });
     }
@@ -90,7 +110,7 @@ export function checkAlerts(db: Database): Alert[] {
       alerts.push({
         type: 'new_recurring',
         severity: 'info',
-        message: `New recurring charge: ${r.description} $${Math.abs(r.amount).toFixed(2)}/mo`,
+        message: `New recurring charge: ${r.description} ${fmt(Math.abs(r.amount), 2)}/mo`,
         amount: Math.abs(r.amount),
       });
     }

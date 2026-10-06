@@ -1,5 +1,6 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { createHash } from 'crypto';
+import { z } from 'zod';
 import {
   importStep,
   embeddingStep,
@@ -13,9 +14,11 @@ import {
 import {
   getSpendingSummary,
   getProfitLoss,
-  getBudgetVsActual,
+  getBudgetVsActualRange,
   getBudgets,
+  getCoverage,
   getCategories,
+  getCategoryOptions,
   getMonthlySavingsData,
   getMonthlyCashflowData,
   getTransactions,
@@ -33,6 +36,7 @@ import {
   checkExternalId,
   recordImport,
   resolveCategory,
+  setBudget,
   type TransactionFilters,
   type TransactionUpdate,
   type TransactionInsert,
@@ -63,8 +67,8 @@ import {
   getWeeklySummary,
   getBudgetCountdown,
 } from '../db/daily-queries.js';
-import { checkAlerts } from '../alerts/engine.js';
-import { getActiveGoals, getGoalSnapshots, resolveGoalTarget, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
+import { checkAlerts, groupedAlertMoney } from '../alerts/engine.js';
+import { getActiveGoals, getAllGoals, getGoalById, getGoalSnapshots, resolveGoalTarget, updateGoalStatus, upsertGoal, type GoalRow, type GoalSnapshotRow } from '../db/goal-queries.js';
 import { getActiveMemories, addMemory, deactivateMemory, type MemoryInsert } from '../db/memory-queries.js';
 import {
   countMissingTransactionTargets,
@@ -76,8 +80,31 @@ import { getLocalChatModelConfig } from '../model/local-chat.js';
 import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
 import { setSetting } from '../utils/config.js';
+import {
+  agreement as judgeAgreement,
+  annotationHistory,
+  currentHuman,
+  listJudgements,
+  trainingReadiness,
+  writeHumanVersion,
+  type AnnotationRow,
+} from '../training/annotations.js';
+import { analyzeHandoff } from '../training/handoff-block.js';
+import { detectorFromDb } from '../training/handoff-tag.js';
 import { computeExternalId } from '../tools/import/external-id.js';
 import { parseTransactionListParams } from './transactions-query.js';
+import {
+  parseSpendingBreakdownParams,
+  parseSpendingSeriesParams,
+  isBadRequest,
+  type BadRequest,
+} from './spending-params.js';
+import {
+  runSpendingBreakdown,
+  runSpendingSeries,
+  type SpendingBreakdownResult,
+  type SpendingSeriesResult,
+} from '../db/spending-drill-sql.js';
 import { embedTransactionIds } from '../utils/embed-on-write.js';
 import { CATEGORIES } from '../tools/categorize/categories.js';
 import {
@@ -87,7 +114,11 @@ import {
   parseSavingsMonths,
   parseBudgetCountdownMonth,
   parseDailySpendingRange,
+  parseDashboardOptions,
+  parseNetWorthMonths,
 } from './overview-params.js';
+import { DASHBOARD_RULES } from '../db/spend-rules.js';
+import { buildTransactionConditions } from '../db/transaction-where.js';
 import { logger } from '../utils/logger.js';
 import { traceStore } from '../utils/trace-store.js';
 import {
@@ -99,59 +130,81 @@ import {
 } from '../demo/showdown.js';
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
+import { discoverSkills } from '../skills/registry.js';
+import { csvText } from '../utils/spreadsheet-safe.js';
+import { xlsxToBuffer } from '../utils/xlsx-writer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 // The overview param parsers moved to overview-params.ts (shared with the
 // offline dashboard mirror); imported above so both sides parse identically.
 
-function escapeCsv(v: string): string {
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-    return '"' + v.replace(/"/g, '""') + '"';
-  }
-  return v;
-}
-
 // ── Overview APIs ───────────────────────────────────────────────────────────
+//
+// Dashboard endpoints opt into the dashboard spend/income rules
+// (src/db/spend-rules.ts) via parseDashboardOptions / DASHBOARD_RULES. The
+// CLI, reports, goals and context hints call the same server functions
+// WITHOUT options and keep their historical output.
 
+/** Spending by category (SPEND rule; honors accountId, entityId, category). */
 export function apiSummary(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getSpendingSummary(db, startDate, endDate, accountId, entityId);
+  return getSpendingSummary(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
+/**
+ * P&L (INCOME / SPEND rules; honors accountId, entityId, category). Under a
+ * category filter the P&L is expense-only for that category (income only
+ * when the filter is 'Income' itself) — see composePnlSql.
+ */
 export function apiPnl(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getProfitLoss(db, startDate, endDate, accountId, entityId);
+  return getProfitLoss(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
+/**
+ * Budgets vs actual over the requested range: the limit is monthly_limit ×
+ * the day-prorated months in [startDate, endDate] (rows carry `limit` + `months`;
+ * a whole month counts 1, a partial month days/daysInMonth).
+ * With only `month` (or nothing), the range is that one month.
+ */
 export function apiBudgets(db: Database, params: URLSearchParams) {
-  const { month } = parseDateRange(params);
+  const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getBudgetVsActual(db, month, accountId, entityId);
+  return getBudgetVsActualRange(db, startDate, endDate, accountId, entityId, DASHBOARD_RULES);
 }
 
 export function apiSavings(db: Database, params: URLSearchParams) {
   const months = parseSavingsMonths(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  return getMonthlySavingsData(db, undefined, months, accountId, entityId);
+  return getMonthlySavingsData(db, undefined, months, accountId, entityId, { ...DASHBOARD_RULES });
 }
 
-// Read-only monthly income/expense series for the client-side cash forecast.
-// Portfolio-level flows (no account/entity filters) to line up with the
-// liquid-cash starting balance the card computes from all accounts.
+/** GET /api/coverage — { start, end, months[] } of ANY imported transactions (unfiltered). */
+export function apiCoverage(db: Database) {
+  return getCoverage(db);
+}
+
+// Read-only monthly income/expense series for the client-side cash forecast
+// and the Forecast tab. Portfolio-level flows (no account/entity filters) to
+// line up with the liquid-cash starting balance the card computes from all
+// accounts. Classified with the dashboard spend/income rules so it agrees with
+// the P&L and savings cards (negative-stored Income counts as income; card
+// payments and transfers are never expenses).
 export function apiCashflowMonthly(db: Database, params: URLSearchParams) {
   const months = Math.min(120, Math.max(1, parseInt(params.get('months') ?? '24', 10) || 24));
-  return getMonthlyCashflowData(db, undefined, months);
+  return getMonthlyCashflowData(db, undefined, months, DASHBOARD_RULES);
 }
 
+/** Dashboard alerts: same engine as the CLI, money text with thousands separators. */
 export function apiAlerts(db: Database) {
-  return checkAlerts(db);
+  return checkAlerts(db, { formatMoney: groupedAlertMoney });
 }
 
 /**
@@ -173,12 +226,90 @@ export function apiCategories(db: Database) {
   return getCategories(db);
 }
 
+/**
+ * GET /api/category-options — every category label present in transactions
+ * (incl. Transfer / Credit Card / Payment / Income and one 'Uncategorized'),
+ * for the header category filter. Unlike /api/summary it is not limited to
+ * spending categories, so non-spend categories stay filterable. Mirrored.
+ */
+export function apiCategoryOptions(db: Database) {
+  return getCategoryOptions(db);
+}
+
+// ── Spending drill (Overview → category → merchant → transaction) ──────────
+//
+// Dashboard-only (spend rules + spendOnly). Strict params: a bad param returns
+// a BadRequest that server.ts answers with 400 `{ error }` — never a 500.
+// Both run the SAME driver as the offline mirror (src/db/spending-drill-sql.ts),
+// so serveApiPath answers identically. Mirrored.
+
+/** GET /api/spending/breakdown — ranked spend by category | merchant | detailed. */
+export async function apiSpendingBreakdown(
+  db: Database,
+  params: URLSearchParams
+): Promise<SpendingBreakdownResult | BadRequest> {
+  const query = parseSpendingBreakdownParams(params);
+  if (isBadRequest(query)) return query;
+  return runSpendingBreakdown(db, query);
+}
+
+/** GET /api/spending/series — monthly spend, null outside coverage, 0 inside. */
+export async function apiSpendingSeries(
+  db: Database,
+  params: URLSearchParams
+): Promise<SpendingSeriesResult | BadRequest> {
+  const query = parseSpendingSeriesParams(params);
+  if (isBadRequest(query)) return query;
+  return runSpendingSeries(db, query);
+}
+
+// ── Chat composer typeahead sources ─────────────────────────────────────────
+
+/**
+ * Skills for the chat "/" menu. Never exposes the absolute SKILL.md `path`.
+ * discoverSkills() caches after the first scan.
+ */
+export function apiSkills() {
+  return discoverSkills().map(({ name, description, tier, source }) => ({ name, description, tier, source }));
+}
+
+export interface MerchantRow {
+  label: string;
+  n: number;
+  last: string;
+}
+
+/** Escape LIKE wildcards (`%`, `_`) and the escape char itself. */
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/**
+ * Distinct merchants for the chat "@" menu: merchant_name (or description when
+ * blank) with transaction counts. Read-only aggregate over data /api/transactions
+ * already serves. `limit` defaults to 20, max 50.
+ */
+export function apiMerchants(db: Database, q: string | null, limitRaw: string | null): MerchantRow[] {
+  const parsed = parseInt(limitRaw ?? '', 10);
+  const limit = Math.min(50, Math.max(1, Number.isFinite(parsed) ? parsed : 20));
+  const pattern = `%${escapeLike((q ?? '').trim())}%`;
+  return db.prepare(`
+    SELECT COALESCE(NULLIF(TRIM(merchant_name), ''), description) AS label,
+           COUNT(*) AS n,
+           MAX(date) AS last
+    FROM transactions
+    WHERE COALESCE(NULLIF(TRIM(merchant_name), ''), description) LIKE @pattern ESCAPE '\\'
+    GROUP BY label
+    ORDER BY n DESC, label ASC
+    LIMIT @limit
+  `).all({ pattern, limit }) as MerchantRow[];
+}
+
 // ── Transactions ────────────────────────────────────────────────────────────
 
 export function apiTransactions(db: Database, params: URLSearchParams) {
-  const { filters, limit } = parseTransactionListParams(params);
-  const txns = getTransactions(db, filters);
-  return txns.slice(0, limit);
+  const { filters, limit, offset } = parseTransactionListParams(params);
+  return getTransactions(db, filters, { rules: DASHBOARD_RULES, page: { limit, offset } });
 }
 
 export async function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
@@ -221,6 +352,75 @@ export function apiCorrectReview(db: Database, reviewId: number, body: { categor
   const result = resolveCategorizationReview(db, reviewId, { action: 'correct', category });
   if (!result.ok) return { success: false, error: result.error, status: 404 };
   return { success: true, transactionId: result.transactionId, category: result.category };
+}
+
+// ── Budget and goal edits (the declarative forms' human path) ───────────────
+
+export type WriteResult<T extends object> = ({ success: true } & T) | { success: false; error: string; status: number };
+
+function zodMessage(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 3)
+    .map((issue) => (issue.path.length > 0 ? `${issue.path.join('.')}: ${issue.message}` : issue.message))
+    .join('; ');
+}
+
+function isRealCalendarDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+const BudgetBody = z.object({ monthlyLimit: z.number().min(0).max(10_000_000) }).strict();
+
+/**
+ * PUT /api/budgets/:category {monthlyLimit} (admin-only route). The category is a name in the URL, resolved
+ * the way the other category-taking routes do (the categories table, then the static list).
+ */
+export function apiSetBudget(db: Database, categoryParam: string, body: unknown): WriteResult<{ category: string; monthlyLimit: number }> {
+  const parsed = BudgetBody.safeParse(body);
+  if (!parsed.success) return { success: false, error: zodMessage(parsed.error), status: 400 };
+  const raw = categoryParam.trim();
+  const category = resolveCategory(db, raw) ?? CATEGORIES.find((c) => c.toLowerCase() === raw.toLowerCase()) ?? null;
+  if (!category) return { success: false, error: `unknown category "${raw.slice(0, 40)}"`, status: 404 };
+  // Keep an existing row's spelling: budgets.category is unique case-sensitively, but lookups elsewhere are not.
+  const existing = db.prepare('SELECT category FROM budgets WHERE LOWER(category) = LOWER(@category)').get({ category }) as { category: string } | undefined;
+  setBudget(db, existing?.category ?? category, parsed.data.monthlyLimit);
+  return { success: true, category: existing?.category ?? category, monthlyLimit: parsed.data.monthlyLimit };
+}
+
+const GoalPatchBody = z
+  .object({
+    targetAmount: z.number().min(0).max(1e9).optional(),
+    targetDate: z.string().refine(isRealCalendarDate, 'must be a real date in YYYY-MM-DD format').optional(),
+    status: z.enum(['active', 'paused', 'completed', 'abandoned']).optional(),
+  })
+  .strict()
+  .refine((b) => b.targetAmount !== undefined || b.targetDate !== undefined || b.status !== undefined, {
+    message: 'give at least one of targetAmount, targetDate or status',
+  });
+
+/** PATCH /api/goals/:id {targetAmount?, targetDate?, status?} (admin-only route). */
+export function apiUpdateGoal(db: Database, id: number, body: unknown): WriteResult<{ id: number }> {
+  const parsed = GoalPatchBody.safeParse(body);
+  if (!parsed.success) return { success: false, error: zodMessage(parsed.error), status: 400 };
+  const goal = getGoalById(db, id);
+  if (!goal) return { success: false, error: `goal #${id} not found`, status: 404 };
+  const { targetAmount, targetDate, status } = parsed.data;
+  if (targetAmount !== undefined && goal.goal_type !== 'financial') {
+    return { success: false, error: `goal #${id} is a behavioral goal and has no target amount`, status: 400 };
+  }
+  db.transaction(() => {
+    if (targetAmount !== undefined || targetDate !== undefined) {
+      upsertGoal(db, {
+        id,
+        ...(targetAmount !== undefined ? { targetAmount } : {}),
+        ...(targetDate !== undefined ? { targetDate } : {}),
+      } as unknown as Parameters<typeof upsertGoal>[1]);
+    }
+    if (status !== undefined) updateGoalStatus(db, id, status);
+  })();
+  return { success: true, id };
 }
 
 // ── Semantic search ─────────────────────────────────────────────────────────
@@ -287,7 +487,10 @@ export async function apiSemanticSearch(
   const embedFn = embed ?? embedTexts;
   const [queryVec] = await embedFn([q]);
 
-  const hits = searchTransactionsSemantic(db, queryVec, filters, limit, model);
+  // Dashboard category/entity semantics, same as /api/transactions: an
+  // 'Uncategorized' filter matches blank/NULL rows and the default entity owns
+  // NULL-entity rows (CLI callers pass no rules and keep exact matching).
+  const hits = searchTransactionsSemantic(db, queryVec, filters, limit, model, DASHBOARD_RULES);
 
   // Enrich the narrow DB-layer projection into full transaction rows, one
   // query, in ranked order. The compat-sqlite wrapper only accepts named
@@ -332,18 +535,18 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
   if (entityId !== undefined) filters.entityId = entityId;
-  const txns = getTransactions(db, filters);
+  // Same Uncategorized/default-entity matching as /api/transactions, so an
+  // export contains exactly the rows the Transactions tab shows.
+  const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
   const header = 'Date,Description,Amount,Category';
   const rows = txns.map((t) =>
-    [t.date, escapeCsv(t.description), String(t.amount), escapeCsv(t.category ?? '')].join(',')
+    [t.date, csvText(t.description), String(t.amount), csvText(t.category ?? '')].join(',')
   );
   return [header, ...rows].join('\n');
 }
 
-export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
-  // Dynamic import since xlsx is optional
-  const XLSX = require('xlsx');
+export async function apiExportXlsx(db: Database, params: URLSearchParams): Promise<Buffer> {
   const filters: TransactionFilters = {};
   const start = params.get('start');
   const end = params.get('end');
@@ -355,35 +558,35 @@ export function apiExportXlsx(db: Database, params: URLSearchParams): Buffer {
   if (category) filters.category = category;
   if (accountId !== undefined) filters.accountId = accountId;
   if (entityId !== undefined) filters.entityId = entityId;
-  const txns = getTransactions(db, filters);
+  // Same Uncategorized/default-entity matching as /api/transactions, so an
+  // export contains exactly the rows the Transactions tab shows.
+  const txns = getTransactions(db, filters, { rules: DASHBOARD_RULES });
 
-  const data = txns.map((t) => ({
-    Date: t.date,
-    Description: t.description,
-    Amount: t.amount,
-    Category: t.category ?? '',
-    Bank: t.bank ?? '',
-    'Account Last4': t.account_last4 ?? '',
-  }));
-
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(data);
-  XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  // String cells are formula-neutralised inside the writer.
+  return xlsxToBuffer([
+    {
+      name: 'Transactions',
+      header: ['Date', 'Description', 'Amount', 'Category', 'Bank', 'Account Last4'],
+      rows: txns.map((t) => [t.date, t.description, t.amount, t.category ?? '', t.bank ?? '', t.account_last4 ?? '']),
+      widths: [12, 48, 14, 22, 18, 14],
+      currencyColumns: ['Amount'],
+    },
+  ]);
 }
 
 export function apiExportPnlCsv(db: Database, params: URLSearchParams): string {
   const { startDate, endDate } = parseDateRange(params);
   const accountId = parseAccountId(params);
   const entityId = parseEntityId(params);
-  const pnl = getProfitLoss(db, startDate, endDate, accountId, entityId);
+  // Same rules as the P&L card so the export matches what the dashboard shows.
+  const pnl = getProfitLoss(db, startDate, endDate, accountId, entityId, parseDashboardOptions(params));
 
   const lines = ['Type,Category,Amount,Count'];
   for (const r of pnl.incomeByCategory) {
-    lines.push(['Income', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+    lines.push(['Income', csvText(r.category), String(r.total), String(r.count)].join(','));
   }
   for (const r of pnl.expensesByCategory) {
-    lines.push(['Expense', escapeCsv(r.category), String(r.total), String(r.count)].join(','));
+    lines.push(['Expense', csvText(r.category), String(r.total), String(r.count)].join(','));
   }
   lines.push(['','Total Income', String(pnl.totalIncome), ''].join(','));
   lines.push(['','Total Expenses', String(pnl.totalExpenses), ''].join(','));
@@ -396,10 +599,10 @@ export function apiExportNetWorthCsv(db: Database): string {
   const lines = ['Name,Type,Subtype,Institution,Balance'];
   for (const a of nw.accounts) {
     lines.push([
-      escapeCsv(a.name),
-      a.account_type,
-      a.account_subtype,
-      escapeCsv(a.institution ?? ''),
+      csvText(a.name),
+      csvText(a.account_type),
+      csvText(a.account_subtype),
+      csvText(a.institution ?? ''),
       String(a.current_balance),
     ].join(','));
   }
@@ -411,20 +614,25 @@ export function apiExportNetWorthCsv(db: Database): string {
 
 // ── Spending by Institution ──────────────────────────────────────────────────
 
+/**
+ * Spending grouped by institution, under the dashboard rules: SPEND rule (no
+ * card payments / transfers / negative income), 'Uncategorized' matches blank
+ * rows, and ?entityId scopes rows (the default entity owns NULL-entity rows).
+ * Honors accountId, category, entityId. Dashboard-only endpoint.
+ */
 export function apiSpendingByInstitution(db: Database, params: URLSearchParams) {
   const { startDate, endDate } = parseDateRange(params);
-  const accountId = parseAccountId(params);
-  const category = params.get('category');
-  const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
-  const sqlParams: Record<string, unknown> = { startDate, endDate };
-  if (accountId !== undefined) {
-    conditions.push('account_id = @accountId');
-    sqlParams.accountId = accountId;
-  }
-  if (category) {
-    conditions.push('category = @category');
-    sqlParams.category = category;
-  }
+  const { conditions, params: sqlParams } = buildTransactionConditions(
+    {
+      dateStart: startDate,
+      dateEnd: endDate,
+      accountId: parseAccountId(params),
+      entityId: parseEntityId(params),
+      category: params.get('category') || undefined,
+      spendOnly: true,
+    },
+    DASHBOARD_RULES
+  );
   const rows = db.prepare(`
     SELECT
       COALESCE(bank, 'Unknown') AS institution,
@@ -440,9 +648,16 @@ export function apiSpendingByInstitution(db: Database, params: URLSearchParams) 
 
 // ── Goals ────────────────────────────────────────────────────────────────────
 
-export function apiGoals(db: Database) {
+/**
+ * GET /api/goals: goals of every status (the Goals tab counts completed ones, and its edit form needs paused,
+ * completed and abandoned ones too, so a goal that was paused can be picked again). `?status=active` lists
+ * active goals only; `?status=all` is the explicit form of the default.
+ */
+export function apiGoals(db: Database, params?: URLSearchParams) {
   try {
-    return getActiveGoals(db).map((g: GoalRow) => {
+    // Every status by default (the Goals tab counts completed goals); `?status=active` narrows to active ones.
+    const goals = params?.get('status') === 'active' ? getActiveGoals(db) : getAllGoals(db);
+    return goals.map((g: GoalRow) => {
       if (g.target_percent != null) {
         const resolved = resolveGoalTarget(db, g);
         return {
@@ -478,8 +693,7 @@ export function apiNetWorth(db: Database) {
 }
 
 export function apiNetWorthTrend(db: Database, params: URLSearchParams) {
-  const months = parseInt(params.get('months') ?? '12', 10);
-  return getNetWorthTrend(db, months);
+  return getNetWorthTrend(db, parseNetWorthMonths(params));
 }
 
 export function apiAccountTransactions(db: Database, accountId: number, params: URLSearchParams) {
@@ -631,6 +845,11 @@ export function apiSetTaskModel(body: SetTaskModelBody): SetTaskModelResult {
   return { error: `Unknown task: ${task || '(missing)'}` };
 }
 
+/** Longest chat query the API accepts (a few thousand words is normal; the scan cap for stored prompts is 2M). */
+export const MAX_CHAT_QUERY_CHARS = 100_000;
+/** Longest locally-generated answer recorded: a small on-device model emits a few hundred tokens, so this is generous. */
+export const MAX_LOCAL_ANSWER_CHARS = 20_000;
+
 export interface LocalChatRecordBody {
   query?: string;
   answer?: string;
@@ -654,6 +873,13 @@ export function apiRecordLocalChatMessage(
   const answer = typeof body?.answer === 'string' ? body.answer.trim() : '';
   if (!query || !answer) {
     return { error: 'query and answer are required' };
+  }
+  // Recorded verbatim in chat history (and later replayed into prompts): same bound as POST /api/chat.
+  if (query.length > MAX_CHAT_QUERY_CHARS) {
+    return { error: `query must be a string of at most ${MAX_CHAT_QUERY_CHARS} characters` };
+  }
+  if (answer.length > MAX_LOCAL_ANSWER_CHARS) {
+    return { error: `answer must be a string of at most ${MAX_LOCAL_ANSWER_CHARS} characters` };
   }
 
   const supplied = typeof body?.sessionId === 'string' && body.sessionId ? body.sessionId : null;
@@ -799,14 +1025,20 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   const model = params.get('model');
   const rating = params.get('rating');
   const annotated = params.get('annotated');
+  const judged = params.get('judged');
 
+  // `a` is the CURRENT human row (one per interaction), so versioned annotations never multiply the list.
+  // `judge_status` is the newest judge row that is still in play (superseded ones are history).
   let sql = `
     SELECT i.id, i.run_id, i.sequence_num, i.call_type, i.model, i.provider,
       i.input_tokens, i.output_tokens, i.total_tokens, i.duration_ms,
       i.status, i.created_at,
-      a.rating, a.preference
+      a.rating, a.preference, a.created_via AS annotation_via,
+      (SELECT j.status FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status != 'superseded'
+         ORDER BY j.id DESC LIMIT 1) AS judge_status
     FROM llm_interactions i
-    LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+    LEFT JOIN v_current_human_annotations a ON a.interaction_id = i.id
   `;
   const conditions: string[] = [];
   const sqlParams: Record<string, unknown> = {};
@@ -816,6 +1048,17 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   if (rating) { conditions.push('a.rating = @rating'); sqlParams.rating = parseInt(rating, 10); }
   if (annotated === 'true') { conditions.push('a.id IS NOT NULL'); }
   if (annotated === 'false') { conditions.push('a.id IS NULL'); }
+  if (judged === 'proposed') {
+    conditions.push(`(SELECT j.status FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status != 'superseded'
+         ORDER BY j.id DESC LIMIT 1) = 'proposed'`);
+  }
+  // "accepted" is ANY accepted judge row, not just the newest one in play: an accepted row can sit behind a newer
+  // proposal, and it stays exportable (with the opt-in) and revocable, so it must stay findable.
+  if (judged === 'accepted') {
+    conditions.push(`EXISTS (SELECT 1 FROM interaction_annotations j
+         WHERE j.interaction_id = i.id AND j.source = 'judge' AND j.status = 'accepted')`);
+  }
 
   if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY i.id DESC LIMIT @limit OFFSET @offset';
@@ -829,6 +1072,33 @@ export function apiInteractions(db: Database, params: URLSearchParams) {
   }
 }
 
+/** A judge row as the human's dashboard shows it: JSON columns parsed, nothing else changed. */
+export function apiJudgementView(row: AnnotationRow & { human_rating?: number | null }) {
+  const parse = (json: string | null): unknown => {
+    if (json === null) return null;
+    try { return JSON.parse(json); } catch { return null; }
+  };
+  return {
+    id: row.id,
+    interaction_id: row.interaction_id,
+    rating: row.rating,
+    preference: row.preference,
+    tags: parse(row.tags) ?? [],
+    rationale: row.rationale,
+    criteria: parse(row.criteria_json),
+    judge_model: row.judge_model,
+    rubric_version: row.rubric_version,
+    created_via: row.created_via,
+    version: row.version,
+    status: row.status,
+    annotated_at: row.annotated_at,
+    reviewed_at: row.reviewed_at,
+    // True when a person reviewed it while an agent had live access: the opt-in export treats it like an agent-present rating.
+    review_agent_present: row.review_agent_present === 1,
+    ...(row.human_rating !== undefined ? { human_rating: row.human_rating } : {}),
+  };
+}
+
 export function apiInteractionDetail(db: Database, id: number) {
   try {
     const interaction = db.prepare(`
@@ -840,11 +1110,21 @@ export function apiInteractionDetail(db: Database, id: number) {
       SELECT * FROM llm_tool_results WHERE interaction_id = @id ORDER BY id
     `).all({ id });
 
-    const annotations = db.prepare(`
-      SELECT * FROM interaction_annotations WHERE interaction_id = @id ORDER BY id DESC LIMIT 1
-    `).all({ id });
+    const annotation = currentHuman(db, id);
+    const all = annotationHistory(db, id);
+    const history = all.filter((r) => r.source === 'human');
+    const judgements = all.filter((r) => r.source === 'judge').map(apiJudgementView);
 
-    return { ...interaction, toolResults, annotations };
+    return {
+      ...interaction,
+      toolResults,
+      // `annotations` keeps the shape the legacy dashboard page reads: the current human row, in an array.
+      annotations: annotation ? [annotation] : [],
+      annotation,
+      history,
+      judgements,
+      handoff: analyzeHandoff(interaction.user_prompt as string | null, detectorFromDb(db, interaction.created_at as string | null)).kind !== 'none',
+    };
   } catch {
     return null;
   }
@@ -855,7 +1135,7 @@ export function apiRunInteractions(db: Database, runId: string) {
     return db.prepare(`
       SELECT i.*, a.rating, a.preference, a.pair_id
       FROM llm_interactions i
-      LEFT JOIN interaction_annotations a ON a.interaction_id = i.id
+      LEFT JOIN v_current_human_annotations a ON a.interaction_id = i.id
       WHERE i.run_id = @runId
       ORDER BY i.sequence_num
     `).all({ runId });
@@ -864,31 +1144,65 @@ export function apiRunInteractions(db: Database, runId: string) {
   }
 }
 
-export function apiAnnotateInteraction(db: Database, id: number, annotation: {
-  rating?: number;
-  preference?: 'chosen' | 'rejected' | 'neutral';
-  pairId?: string;
-  tags?: string[];
-  notes?: string;
-}) {
-  try {
-    // Upsert: delete existing annotation for this interaction, then insert
-    db.prepare('DELETE FROM interaction_annotations WHERE interaction_id = @id').run({ id });
-    db.prepare(`
-      INSERT INTO interaction_annotations (interaction_id, rating, preference, pair_id, tags, notes)
-      VALUES (@interaction_id, @rating, @preference, @pair_id, @tags, @notes)
-    `).run({
-      interaction_id: id,
-      rating: annotation.rating ?? null,
-      preference: annotation.preference ?? null,
-      pair_id: annotation.pairId ?? null,
-      tags: annotation.tags ? JSON.stringify(annotation.tags) : null,
-      notes: annotation.notes ?? null,
-    });
-    return { success: true, id };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+const AnnotateBody = z
+  .object({
+    rating: z.number().int().min(1).max(5).nullable().optional(),
+    preference: z.enum(['chosen', 'rejected', 'neutral']).nullable().optional(),
+    // Kept for the existing free-text pair input; a later phase replaces it with server-generated pairs.
+    pairId: z.string().max(64).nullable().optional(),
+    tags: z.array(z.string().min(1).max(32)).max(10).nullable().optional(),
+    notes: z.string().max(2000).nullable().optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, 'Provide at least one of rating, preference, pairId, tags, notes');
+
+export type AnnotateResult =
+  | { ok: true; annotation: AnnotationRow }
+  | { ok: false; status: 400 | 404 | 500; error: { code: 'invalid_args' | 'not_found' | 'internal'; message: string } };
+
+/**
+ * Write a human annotation as a new version (the previous current row is superseded, never deleted or edited;
+ * fields you do not send are kept, `null` clears one). A bad body is a 400 and an unknown interaction a 404:
+ * nothing answers `200 {success:false}` any more. `agentPresent` is computed by the route on the server (a live
+ * agent grant or pending operation for this user); the label then stays out of the default training export.
+ */
+export function apiAnnotateInteraction(db: Database, id: number, body: unknown, ctx: { agentPresent?: boolean } = {}): AnnotateResult {
+  const parsed = AnnotateBody.safeParse(body);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .slice(0, 3)
+      .map((i) => (i.code === 'unrecognized_keys' ? `unknown field ${(i as { keys: string[] }).keys.map((k) => `"${k.slice(0, 30)}"`).join(', ')}` : `${i.path.join('.') || 'body'}: ${i.message}`))
+      .join('; ');
+    return { ok: false, status: 400, error: { code: 'invalid_args', message } };
   }
+  const exists = db.prepare('SELECT 1 AS ok FROM llm_interactions WHERE id = @id').get({ id });
+  if (!exists) return { ok: false, status: 404, error: { code: 'not_found', message: `Interaction #${id} not found.` } };
+  try {
+    const annotation = writeHumanVersion(db, id, parsed.data, { createdVia: ctx.agentPresent ? 'dashboard_agent_present' : 'dashboard' });
+    return { ok: true, annotation };
+  } catch (err) {
+    console.error('[annotate] failed to write a human annotation:', err);
+    return { ok: false, status: 500, error: { code: 'internal', message: 'Could not save the annotation.' } };
+  }
+}
+
+/** `GET /api/judgements?status=proposed&cursor&limit`: the human's queue. A cursor is just the next offset. */
+export function apiJudgements(db: Database, params: URLSearchParams) {
+  const status = params.get('status') ?? 'proposed';
+  if (status !== 'proposed' && status !== 'accepted' && status !== 'rejected') {
+    return { error: 'status must be proposed, accepted or rejected' } as const;
+  }
+  const limit = Math.max(1, Math.min(50, parseInt(params.get('limit') ?? '50', 10) || 50));
+  const cursor = parseInt(params.get('cursor') ?? '0', 10);
+  const offset = Number.isInteger(cursor) && cursor > 0 ? cursor : 0;
+  const { rows, total } = listJudgements(db, { status, offset, limit });
+  const next = offset + rows.length;
+  return {
+    judgements: rows.map(apiJudgementView),
+    total,
+    ...(next < total ? { nextCursor: String(next) } : {}),
+    agreement: judgeAgreement(db),
+  };
 }
 
 // ── Daily / Gamification ─────────────────────────────────────────────────────
@@ -898,15 +1212,19 @@ export function apiDailySpending(db: Database, params: URLSearchParams) {
   if ('error' in range) {
     return range;
   }
-  return getDailySpending(db, range.startDate, range.endDate);
+  const accountId = parseAccountId(params);
+  const entityId = parseEntityId(params);
+  return getDailySpending(db, range.startDate, range.endDate, accountId, entityId, parseDashboardOptions(params));
 }
 
-export function apiStreak(db: Database) {
-  return getStreak(db);
+/** Streak (dashboard rules; optional ?entityId scopes the days — the daily budget stays all-budgets). */
+export function apiStreak(db: Database, params: URLSearchParams = new URLSearchParams()) {
+  return getStreak(db, undefined, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
 }
 
-export function apiWeeklySummary(db: Database) {
-  return getWeeklySummary(db);
+/** This week vs last week (dashboard rules; optional ?entityId). */
+export function apiWeeklySummary(db: Database, params: URLSearchParams = new URLSearchParams()) {
+  return getWeeklySummary(db, undefined, { ...DASHBOARD_RULES, entityId: parseEntityId(params) });
 }
 
 export function apiBudgetCountdown(db: Database, params: URLSearchParams) {
@@ -992,22 +1310,32 @@ export function apiDeleteEntity(db: Database, id: number) {
 
 export function apiAnnotationStats(db: Database) {
   try {
-    const total = (db.prepare('SELECT COUNT(*) AS c FROM llm_interactions').get() as { c: number })?.c ?? 0;
-    const annotated = (db.prepare('SELECT COUNT(DISTINCT interaction_id) AS c FROM interaction_annotations').get() as { c: number })?.c ?? 0;
+    const readiness = trainingReadiness(db);
     const ratingCounts = db.prepare(`
-      SELECT rating, COUNT(*) AS count FROM interaction_annotations
+      SELECT rating, COUNT(*) AS count FROM v_current_human_annotations
       WHERE rating IS NOT NULL GROUP BY rating ORDER BY rating
     `).all() as { rating: number; count: number }[];
-    const dpoPairs = (db.prepare(`
-      SELECT COUNT(DISTINCT pair_id) AS c FROM interaction_annotations WHERE pair_id IS NOT NULL
-    `).get() as { c: number })?.c ?? 0;
-    const sftReady = (db.prepare(`
-      SELECT COUNT(*) AS c FROM interaction_annotations WHERE rating >= 4
-    `).get() as { c: number })?.c ?? 0;
-
-    return { total, annotated, ratingCounts, dpoPairs, sftReady };
+    return {
+      total: readiness.totalInteractions,
+      annotated: readiness.annotated,
+      ratingCounts,
+      dpoPairs: readiness.dpoPairs,
+      sftReady: readiness.sftReady,
+      judge: readiness.judge,
+      agreement: readiness.agreement,
+      handoffExcluded: readiness.handoffExcluded,
+    };
   } catch {
-    return { total: 0, annotated: 0, ratingCounts: [], dpoPairs: 0, sftReady: 0 };
+    return {
+      total: 0,
+      annotated: 0,
+      ratingCounts: [],
+      dpoPairs: 0,
+      sftReady: 0,
+      judge: { proposed: 0, accepted: 0, rejected: 0 },
+      agreement: { n: 0, within1Pct: null },
+      handoffExcluded: { sft: 0, dpo: 0 },
+    };
   }
 }
 

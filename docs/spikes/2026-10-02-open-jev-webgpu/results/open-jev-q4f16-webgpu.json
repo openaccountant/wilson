@@ -1,0 +1,3402 @@
+{
+ "tag": "open-jev-q4f16-webgpu",
+ "cfg": {
+  "model": "open-jev",
+  "dtype": "q4f16",
+  "device": "webgpu"
+ },
+ "date": "2026-10-03T02:12:46.947Z",
+ "headed": false,
+ "unsafe_webgpu": false,
+ "browser": "153.0.8010.12",
+ "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+ "adapter": {
+  "webgpu": true,
+  "vendor": "apple",
+  "architecture": "metal-3",
+  "device": "",
+  "description": "",
+  "is_fallback_adapter": null,
+  "shader_f16": true,
+  "features": [
+   "bgra8unorm-storage",
+   "clip-distances",
+   "core-features-and-limits",
+   "depth-clip-control",
+   "depth32float-stencil8",
+   "dual-source-blending",
+   "float32-blendable",
+   "float32-filterable",
+   "indirect-first-instance",
+   "primitive-index",
+   "rg11b10ufloat-renderable",
+   "shader-f16",
+   "subgroup-size-control",
+   "subgroups",
+   "texture-component-swizzle",
+   "texture-compression-astc",
+   "texture-compression-astc-sliced-3d",
+   "texture-compression-bc",
+   "texture-compression-bc-sliced-3d",
+   "texture-compression-etc2",
+   "texture-formats-tier1",
+   "texture-formats-tier2",
+   "timestamp-query"
+  ],
+  "maxBufferSize": 4294967292,
+  "maxStorageBufferBindingSize": 4294967292
+ },
+ "versions": {
+  "transformers": "4.3.0",
+  "ort": {
+   "common": "1.31.0-dev.20260911-2a43ec07e",
+   "web": "1.31.0-dev.20260914-8d85527a0"
+  },
+  "crossOriginIsolated": true
+ },
+ "info_cold": {
+  "isCached": false,
+  "downloadSize": 357050727,
+  "files": [
+   "config.json",
+   "onnx/model_q4f16.onnx",
+   "onnx/model_q4f16.onnx_data",
+   "tokenizer.json",
+   "tokenizer_config.json"
+  ],
+  "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "family": "open-jev",
+  "device": "webgpu",
+  "dtype": "q4f16"
+ },
+ "load_cold": {
+  "ok": true,
+  "load_ms": 18238.924999952316,
+  "runtime": {
+   "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+   "family": "open-jev",
+   "device": "webgpu",
+   "dtype": "q4f16"
+  },
+  "progress_loaded": 346752814,
+  "progress_total": 348391650,
+  "wall_ms": 18241
+ },
+ "network_cold": {
+  "hf_bytes": 350631305,
+  "jsdelivr_bytes": 5574273,
+  "total_bytes": 363516153,
+  "n_requests": 41
+ },
+ "workloads": {
+  "categorize": {
+   "n": 49,
+   "first_decision_ms": 211.6449999809265,
+   "p50_ms": 174.75,
+   "p95_ms": 287.4449999332428,
+   "min_ms": 114.30499994754791,
+   "max_ms": 302.4450000524521,
+   "mean_ms": 175.8918367453984,
+   "accuracy": 0.2653061224489796,
+   "correct": 13,
+   "margin_p10": 0.030795105957787533,
+   "margin_p50": 0.11163390249881838,
+   "margin_p90": 0.1546280094049098,
+   "results": [
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.21101643708388182,
+     "margin": 0.12288382344195838,
+     "top3": [
+      [
+       "Other",
+       0.211
+      ],
+      [
+       "Income",
+       0.0881
+      ],
+      [
+       "Transfer",
+       0.0692
+      ]
+     ],
+     "ms": 117.79000008106232,
+     "state_tokens": 24,
+     "label": "CLIENT PAYMT - STONEBRIDGE CONSULTING"
+    },
+    {
+     "expected": "Home",
+     "pred": "Other",
+     "conf": 0.21657733084910866,
+     "margin": 0.09399887983280807,
+     "top3": [
+      [
+       "Other",
+       0.2166
+      ],
+      [
+       "Home",
+       0.1226
+      ],
+      [
+       "Income",
+       0.08
+      ]
+     ],
+     "ms": 114.95500004291534,
+     "state_tokens": 19,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.31756541766825697,
+     "margin": 0.1546280094049098,
+     "top3": [
+      [
+       "Groceries",
+       0.3176
+      ],
+      [
+       "Other",
+       0.1629
+      ],
+      [
+       "Income",
+       0.0665
+      ]
+     ],
+     "ms": 114.78999996185303,
+     "state_tokens": 21,
+     "label": "WHOLE FOODS MARKET"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Other",
+     "conf": 0.22957838692189583,
+     "margin": 0.10579059486949124,
+     "top3": [
+      [
+       "Other",
+       0.2296
+      ],
+      [
+       "Transfer",
+       0.1238
+      ],
+      [
+       "Income",
+       0.0895
+      ]
+     ],
+     "ms": 115.77499997615814,
+     "state_tokens": 25,
+     "label": "TRANSFER TO CREDIT CARD XXXX-4471"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Other",
+     "conf": 0.21066808856962407,
+     "margin": 0.05791359245583794,
+     "top3": [
+      [
+       "Other",
+       0.2107
+      ],
+      [
+       "Income",
+       0.1528
+      ],
+      [
+       "Dining",
+       0.0619
+      ]
+     ],
+     "ms": 114.30499994754791,
+     "state_tokens": 21,
+     "label": "ADOBE CREATIVE CLOUD"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Other",
+     "conf": 0.21066808856962407,
+     "margin": 0.05791359245583794,
+     "top3": [
+      [
+       "Other",
+       0.2107
+      ],
+      [
+       "Income",
+       0.1528
+      ],
+      [
+       "Dining",
+       0.0619
+      ]
+     ],
+     "ms": 121.0900000333786,
+     "state_tokens": 21,
+     "label": "ADOBE CREATIVE CLOUD"
+    },
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.2069787144937994,
+     "margin": 0.03590919604813955,
+     "top3": [
+      [
+       "Other",
+       0.207
+      ],
+      [
+       "Income",
+       0.1711
+      ],
+      [
+       "Dining",
+       0.061
+      ]
+     ],
+     "ms": 117.85000002384186,
+     "state_tokens": 24,
+     "label": "PAYROLL DEP - DAYJOB INC"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Utilities",
+     "conf": 0.2600098813716835,
+     "margin": 0.06746863274019838,
+     "top3": [
+      [
+       "Utilities",
+       0.26
+      ],
+      [
+       "Other",
+       0.1925
+      ],
+      [
+       "Income",
+       0.0818
+      ]
+     ],
+     "ms": 117.5699999332428,
+     "state_tokens": 21,
+     "label": "CONED UTILITY"
+    },
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.23037484620256884,
+     "margin": 0.14245737065613154,
+     "top3": [
+      [
+       "Other",
+       0.2304
+      ],
+      [
+       "Transfer",
+       0.0879
+      ],
+      [
+       "Dining",
+       0.0587
+      ]
+     ],
+     "ms": 122.36500000953674,
+     "state_tokens": 25,
+     "label": "CLIENT PAYMT - HARBOR LOGISTICS"
+    },
+    {
+     "expected": "Health",
+     "pred": "Other",
+     "conf": 0.19158883084287007,
+     "margin": 0.050200143019428295,
+     "top3": [
+      [
+       "Other",
+       0.1916
+      ],
+      [
+       "Health",
+       0.1414
+      ],
+      [
+       "Subscriptions",
+       0.0676
+      ]
+     ],
+     "ms": 123.2150000333786,
+     "state_tokens": 19,
+     "label": "GYM MEMBERSHIP"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Other",
+     "conf": 0.21967929542998108,
+     "margin": 0.13448767222950117,
+     "top3": [
+      [
+       "Other",
+       0.2197
+      ],
+      [
+       "Income",
+       0.0852
+      ],
+      [
+       "Dining",
+       0.0739
+      ]
+     ],
+     "ms": 126.67500007152557,
+     "state_tokens": 24,
+     "label": "TRADER JOE'S #229"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.291275075752869,
+     "margin": 0.11352002360780403,
+     "top3": [
+      [
+       "Groceries",
+       0.2913
+      ],
+      [
+       "Other",
+       0.1778
+      ],
+      [
+       "Dining",
+       0.0616
+      ]
+     ],
+     "ms": 130.2300000190735,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Other",
+     "conf": 0.1996380074050231,
+     "margin": 0.12184848927743025,
+     "top3": [
+      [
+       "Other",
+       0.1996
+      ],
+      [
+       "Dining",
+       0.0778
+      ],
+      [
+       "Income",
+       0.0687
+      ]
+     ],
+     "ms": 136.54000008106232,
+     "state_tokens": 24,
+     "label": "STAPLES BUSINESS ADVANTAGE"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Dining",
+     "conf": 0.32665349441302205,
+     "margin": 0.15062552658881545,
+     "top3": [
+      [
+       "Dining",
+       0.3267
+      ],
+      [
+       "Other",
+       0.176
+      ],
+      [
+       "Income",
+       0.0815
+      ]
+     ],
+     "ms": 142.40500009059906,
+     "state_tokens": 23,
+     "label": "UNION SQUARE CAFE - CLIENT DINNER"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Other",
+     "conf": 0.19209913493793063,
+     "margin": 0.052165755983251766,
+     "top3": [
+      [
+       "Other",
+       0.1921
+      ],
+      [
+       "Gifts",
+       0.1399
+      ],
+      [
+       "Dining",
+       0.0651
+      ]
+     ],
+     "ms": 149.86500000953674,
+     "state_tokens": 23,
+     "label": "AMEX EPAYMENT - THANK YOU"
+    },
+    {
+     "expected": "Travel",
+     "pred": "Other",
+     "conf": 0.20040710629872904,
+     "margin": 0.02990409009823225,
+     "top3": [
+      [
+       "Other",
+       0.2004
+      ],
+      [
+       "Travel",
+       0.1705
+      ],
+      [
+       "Income",
+       0.093
+      ]
+     ],
+     "ms": 169.4100000858307,
+     "state_tokens": 24,
+     "label": "DELTA AIR LINES - CONF TRAVEL"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Subscriptions",
+     "conf": 0.20556112827513615,
+     "margin": 0.030795105957787533,
+     "top3": [
+      [
+       "Subscriptions",
+       0.2056
+      ],
+      [
+       "Other",
+       0.1748
+      ],
+      [
+       "Entertainment",
+       0.0769
+      ]
+     ],
+     "ms": 173.2850000858307,
+     "state_tokens": 22,
+     "label": "NETFLIX.COM"
+    },
+    {
+     "expected": "Transport",
+     "pred": "Other",
+     "conf": 0.22631228932585046,
+     "margin": 0.12620388378376585,
+     "top3": [
+      [
+       "Other",
+       0.2263
+      ],
+      [
+       "Transport",
+       0.1001
+      ],
+      [
+       "Income",
+       0.0899
+      ]
+     ],
+     "ms": 192.50999999046326,
+     "state_tokens": 26,
+     "label": "UBER TRIP HELP.UBER.COM"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Other",
+     "conf": 0.20077859679354293,
+     "margin": 0.11163390249881838,
+     "top3": [
+      [
+       "Other",
+       0.2008
+      ],
+      [
+       "Subscriptions",
+       0.0891
+      ],
+      [
+       "Shopping",
+       0.0715
+      ]
+     ],
+     "ms": 218.29500007629395,
+     "state_tokens": 23,
+     "label": "APPLE.COM/BILL"
+    },
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.2057637516444419,
+     "margin": 0.11972499353505338,
+     "top3": [
+      [
+       "Other",
+       0.2058
+      ],
+      [
+       "Shopping",
+       0.086
+      ],
+      [
+       "Income",
+       0.0826
+      ]
+     ],
+     "ms": 251.61000001430511,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - BRIGHTPATH RETAIL"
+    },
+    {
+     "expected": "Home",
+     "pred": "Other",
+     "conf": 0.21540147773660445,
+     "margin": 0.09514956459256489,
+     "top3": [
+      [
+       "Other",
+       0.2154
+      ],
+      [
+       "Home",
+       0.1203
+      ],
+      [
+       "Income",
+       0.0873
+      ]
+     ],
+     "ms": 287.4449999332428,
+     "state_tokens": 19,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Other",
+     "conf": 0.21806586296025682,
+     "margin": 0.12883361902795512,
+     "top3": [
+      [
+       "Other",
+       0.2181
+      ],
+      [
+       "Income",
+       0.0892
+      ],
+      [
+       "Dining",
+       0.0738
+      ]
+     ],
+     "ms": 302.4450000524521,
+     "state_tokens": 24,
+     "label": "TRADER JOE'S #118"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Other",
+     "conf": 0.21433670527525375,
+     "margin": 0.11883979186935961,
+     "top3": [
+      [
+       "Other",
+       0.2143
+      ],
+      [
+       "Income",
+       0.0955
+      ],
+      [
+       "Dining",
+       0.077
+      ]
+     ],
+     "ms": 289.13499999046326,
+     "state_tokens": 22,
+     "label": "CHIPOTLE 2291"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Other",
+     "conf": 0.20536426371799152,
+     "margin": 0.11475418668080037,
+     "top3": [
+      [
+       "Other",
+       0.2054
+      ],
+      [
+       "Subscriptions",
+       0.0906
+      ],
+      [
+       "Utilities",
+       0.0899
+      ]
+     ],
+     "ms": 267.15000009536743,
+     "state_tokens": 22,
+     "label": "VERIZON WIRELESS"
+    },
+    {
+     "expected": "Health",
+     "pred": "Other",
+     "conf": 0.2059322716983545,
+     "margin": 0.08091471955362411,
+     "top3": [
+      [
+       "Other",
+       0.2059
+      ],
+      [
+       "Health",
+       0.125
+      ],
+      [
+       "Income",
+       0.1002
+      ]
+     ],
+     "ms": 246.91999995708466,
+     "state_tokens": 19,
+     "label": "PLANET FITNESS"
+    },
+    {
+     "expected": "Entertainment",
+     "pred": "Other",
+     "conf": 0.20176189850386703,
+     "margin": 0.01932409021716569,
+     "top3": [
+      [
+       "Other",
+       0.2018
+      ],
+      [
+       "Entertainment",
+       0.1824
+      ],
+      [
+       "Income",
+       0.0995
+      ]
+     ],
+     "ms": 228.3199999332428,
+     "state_tokens": 21,
+     "label": "TICKETMASTER - CONCERT"
+    },
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.20642395373872421,
+     "margin": 0.120389652365954,
+     "top3": [
+      [
+       "Other",
+       0.2064
+      ],
+      [
+       "Shopping",
+       0.086
+      ],
+      [
+       "Income",
+       0.0833
+      ]
+     ],
+     "ms": 219.28999996185303,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - BRIGHTPATH RETAIL"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Other",
+     "conf": 0.21483606169306008,
+     "margin": 0.10843503105777205,
+     "top3": [
+      [
+       "Other",
+       0.2148
+      ],
+      [
+       "Income",
+       0.1064
+      ],
+      [
+       "Utilities",
+       0.0602
+      ]
+     ],
+     "ms": 206.75499999523163,
+     "state_tokens": 20,
+     "label": "RAMEN HOUSE"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Other",
+     "conf": 0.2170339732823719,
+     "margin": 0.12371486586701592,
+     "top3": [
+      [
+       "Other",
+       0.217
+      ],
+      [
+       "Income",
+       0.0933
+      ],
+      [
+       "Gifts",
+       0.0719
+      ]
+     ],
+     "ms": 196.99000000953674,
+     "state_tokens": 18,
+     "label": "TARGET"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Other",
+     "conf": 0.21451377439373967,
+     "margin": 0.1288521271012456,
+     "top3": [
+      [
+       "Other",
+       0.2145
+      ],
+      [
+       "Income",
+       0.0857
+      ],
+      [
+       "Dining",
+       0.0754
+      ]
+     ],
+     "ms": 192.01499998569489,
+     "state_tokens": 22,
+     "label": "CHIPOTLE 2291"
+    },
+    {
+     "expected": "Income",
+     "pred": "Other",
+     "conf": 0.2127735466895527,
+     "margin": 0.11650706660755279,
+     "top3": [
+      [
+       "Other",
+       0.2128
+      ],
+      [
+       "Income",
+       0.0963
+      ],
+      [
+       "Health",
+       0.093
+      ]
+     ],
+     "ms": 187.44000005722046,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - RIVERSIDE MEDICAL"
+    },
+    {
+     "expected": "Home",
+     "pred": "Other",
+     "conf": 0.21493522852863167,
+     "margin": 0.09065590261745103,
+     "top3": [
+      [
+       "Other",
+       0.2149
+      ],
+      [
+       "Home",
+       0.1243
+      ],
+      [
+       "Income",
+       0.0811
+      ]
+     ],
+     "ms": 183.8550000190735,
+     "state_tokens": 20,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.29151100234682925,
+     "margin": 0.11286585705476651,
+     "top3": [
+      [
+       "Groceries",
+       0.2915
+      ],
+      [
+       "Other",
+       0.1786
+      ],
+      [
+       "Dining",
+       0.0611
+      ]
+     ],
+     "ms": 181.42000007629395,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Education",
+     "pred": "Education",
+     "conf": 0.3271682009413763,
+     "margin": 0.16789701152027608,
+     "top3": [
+      [
+       "Education",
+       0.3272
+      ],
+      [
+       "Other",
+       0.1593
+      ],
+      [
+       "Income",
+       0.0636
+      ]
+     ],
+     "ms": 181.29999995231628,
+     "state_tokens": 24,
+     "label": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY"
+    },
+    {
+     "expected": "Fees & Interest",
+     "pred": "Fees & Interest",
+     "conf": 0.23401616463938638,
+     "margin": 0.061968251097073795,
+     "top3": [
+      [
+       "Fees & Interest",
+       0.234
+      ],
+      [
+       "Other",
+       0.172
+      ],
+      [
+       "Income",
+       0.0799
+      ]
+     ],
+     "ms": 175.87000000476837,
+     "state_tokens": 21,
+     "label": "OVERDRAFT FEE"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Other",
+     "conf": 0.2217334187481477,
+     "margin": 0.13390640973887774,
+     "top3": [
+      [
+       "Other",
+       0.2217
+      ],
+      [
+       "Income",
+       0.0878
+      ],
+      [
+       "Shopping",
+       0.0651
+      ]
+     ],
+     "ms": 174.75,
+     "state_tokens": 19,
+     "label": "DOLLAR GENERAL"
+    },
+    {
+     "expected": "Health",
+     "pred": "Other",
+     "conf": 0.19907897840016203,
+     "margin": 0.049482603442233375,
+     "top3": [
+      [
+       "Other",
+       0.1991
+      ],
+      [
+       "Health",
+       0.1496
+      ],
+      [
+       "Income",
+       0.0968
+      ]
+     ],
+     "ms": 176.97000002861023,
+     "state_tokens": 23,
+     "label": "PEDIATRIC CO-PAY"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.2796639851357798,
+     "margin": 0.09810580017391896,
+     "top3": [
+      [
+       "Groceries",
+       0.2797
+      ],
+      [
+       "Other",
+       0.1816
+      ],
+      [
+       "Income",
+       0.0647
+      ]
+     ],
+     "ms": 177.71000003814697,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Insurance",
+     "pred": "Insurance",
+     "conf": 0.3564308432497111,
+     "margin": 0.20313897650297322,
+     "top3": [
+      [
+       "Insurance",
+       0.3564
+      ],
+      [
+       "Other",
+       0.1533
+      ],
+      [
+       "Income",
+       0.0707
+      ]
+     ],
+     "ms": 187.17499995231628,
+     "state_tokens": 21,
+     "label": "MEDIGAP INSURANCE PREMIUM"
+    },
+    {
+     "expected": "Health",
+     "pred": "Other",
+     "conf": 0.2128583088428728,
+     "margin": 0.10513234385490582,
+     "top3": [
+      [
+       "Other",
+       0.2129
+      ],
+      [
+       "Health",
+       0.1077
+      ],
+      [
+       "Income",
+       0.0999
+      ]
+     ],
+     "ms": 186.1949999332428,
+     "state_tokens": 20,
+     "label": "CVS PHARMACY"
+    },
+    {
+     "expected": "Other",
+     "pred": "Other",
+     "conf": 0.2594845303960844,
+     "margin": 0.18610270794803502,
+     "top3": [
+      [
+       "Other",
+       0.2595
+      ],
+      [
+       "Income",
+       0.0734
+      ],
+      [
+       "Dining",
+       0.069
+      ]
+     ],
+     "ms": 186.55000007152557,
+     "state_tokens": 27,
+     "label": "UNKNOWN MERCHANT INTL*7719402"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Subscriptions",
+     "conf": 0.19383785836289674,
+     "margin": 0.019621546697025954,
+     "top3": [
+      [
+       "Subscriptions",
+       0.1938
+      ],
+      [
+       "Other",
+       0.1742
+      ],
+      [
+       "Utilities",
+       0.1029
+      ]
+     ],
+     "ms": 177.88999998569489,
+     "state_tokens": 20,
+     "label": "COMCAST CABLE"
+    },
+    {
+     "expected": "Gifts",
+     "pred": "Gifts",
+     "conf": 0.3280357503551144,
+     "margin": 0.16443351728959973,
+     "top3": [
+      [
+       "Gifts",
+       0.328
+      ],
+      [
+       "Other",
+       0.1636
+      ],
+      [
+       "Shopping",
+       0.0807
+      ]
+     ],
+     "ms": 172.76499998569489,
+     "state_tokens": 25,
+     "label": "AMAZON.COM - GRANDKIDS GIFT"
+    },
+    {
+     "expected": "Home",
+     "pred": "Other",
+     "conf": 0.2229121928392993,
+     "margin": 0.1242390024681554,
+     "top3": [
+      [
+       "Other",
+       0.2229
+      ],
+      [
+       "Home",
+       0.0987
+      ],
+      [
+       "Insurance",
+       0.0758
+      ]
+     ],
+     "ms": 172.1050000190735,
+     "state_tokens": 26,
+     "label": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS"
+    },
+    {
+     "expected": "Insurance",
+     "pred": "Other",
+     "conf": 0.19449405341220666,
+     "margin": 0.02747559397652688,
+     "top3": [
+      [
+       "Other",
+       0.1945
+      ],
+      [
+       "Insurance",
+       0.167
+      ],
+      [
+       "Income",
+       0.0858
+      ]
+     ],
+     "ms": 165.35000002384186,
+     "state_tokens": 20,
+     "label": "STATE FARM INSURANCE"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Other",
+     "conf": 0.22244918864060254,
+     "margin": 0.08573004070630993,
+     "top3": [
+      [
+       "Other",
+       0.2224
+      ],
+      [
+       "Transfer",
+       0.1367
+      ],
+      [
+       "Income",
+       0.0828
+      ]
+     ],
+     "ms": 162.88499999046326,
+     "state_tokens": 23,
+     "label": "TRANSFER TO SAVINGS HOUSE FUND"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Utilities",
+     "conf": 0.32154065695391915,
+     "margin": 0.15173779428711032,
+     "top3": [
+      [
+       "Utilities",
+       0.3215
+      ],
+      [
+       "Other",
+       0.1698
+      ],
+      [
+       "Income",
+       0.0717
+      ]
+     ],
+     "ms": 156.68999993801117,
+     "state_tokens": 23,
+     "label": "CITY POWER AND WATER UTILITY"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Other",
+     "conf": 0.21368775081739086,
+     "margin": 0.10856665917892153,
+     "top3": [
+      [
+       "Other",
+       0.2137
+      ],
+      [
+       "Income",
+       0.1051
+      ],
+      [
+       "Gifts",
+       0.0807
+      ]
+     ],
+     "ms": 150.9099999666214,
+     "state_tokens": 18,
+     "label": "TARGET"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Other",
+     "conf": 0.2227049075525524,
+     "margin": 0.09056626379243476,
+     "top3": [
+      [
+       "Other",
+       0.2227
+      ],
+      [
+       "Transfer",
+       0.1321
+      ],
+      [
+       "Income",
+       0.0831
+      ]
+     ],
+     "ms": 153.875,
+     "state_tokens": 23,
+     "label": "TRANSFER TO SAVINGS HOUSE FUND"
+    }
+   ]
+  },
+  "categorize-bare": {
+   "n": 49,
+   "first_decision_ms": 80.71499991416931,
+   "p50_ms": 85.76499998569489,
+   "p95_ms": 88.49500000476837,
+   "min_ms": 79.8050000667572,
+   "max_ms": 89.06499993801117,
+   "mean_ms": 85.07959183868097,
+   "accuracy": 0.6122448979591837,
+   "correct": 30,
+   "margin_p10": 0.018366453117684006,
+   "margin_p50": 0.19177188932197678,
+   "margin_p90": 0.5285295804582337,
+   "results": [
+    {
+     "expected": "Income",
+     "pred": "Transfer",
+     "conf": 0.1307840269376685,
+     "margin": 0.03230149826236893,
+     "top3": [
+      [
+       "Transfer",
+       0.1308
+      ],
+      [
+       "Shopping",
+       0.0985
+      ],
+      [
+       "Income",
+       0.0867
+      ]
+     ],
+     "ms": 79.8050000667572,
+     "state_tokens": 24,
+     "label": "CLIENT PAYMT - STONEBRIDGE CONSULTING"
+    },
+    {
+     "expected": "Home",
+     "pred": "Home",
+     "conf": 0.40043442574188015,
+     "margin": 0.04527302236488906,
+     "top3": [
+      [
+       "Home",
+       0.4004
+      ],
+      [
+       "Utilities",
+       0.3552
+      ],
+      [
+       "Groceries",
+       0.0352
+      ]
+     ],
+     "ms": 80.2849999666214,
+     "state_tokens": 19,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.4014768179713887,
+     "margin": 0.1619335062952233,
+     "top3": [
+      [
+       "Groceries",
+       0.4015
+      ],
+      [
+       "Shopping",
+       0.2395
+      ],
+      [
+       "Dining",
+       0.0627
+      ]
+     ],
+     "ms": 81.21999990940094,
+     "state_tokens": 21,
+     "label": "WHOLE FOODS MARKET"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Transfer",
+     "conf": 0.4639363262015743,
+     "margin": 0.34691816343932513,
+     "top3": [
+      [
+       "Transfer",
+       0.4639
+      ],
+      [
+       "Shopping",
+       0.117
+      ],
+      [
+       "Groceries",
+       0.0555
+      ]
+     ],
+     "ms": 80.78500008583069,
+     "state_tokens": 25,
+     "label": "TRANSFER TO CREDIT CARD XXXX-4471"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Subscriptions",
+     "conf": 0.13259216236774463,
+     "margin": 0.022812434378366553,
+     "top3": [
+      [
+       "Subscriptions",
+       0.1326
+      ],
+      [
+       "Fees & Interest",
+       0.1098
+      ],
+      [
+       "Shopping",
+       0.1013
+      ]
+     ],
+     "ms": 80.25499999523163,
+     "state_tokens": 21,
+     "label": "ADOBE CREATIVE CLOUD"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Subscriptions",
+     "conf": 0.13259216236774463,
+     "margin": 0.022812434378366553,
+     "top3": [
+      [
+       "Subscriptions",
+       0.1326
+      ],
+      [
+       "Fees & Interest",
+       0.1098
+      ],
+      [
+       "Shopping",
+       0.1013
+      ]
+     ],
+     "ms": 80.9650000333786,
+     "state_tokens": 21,
+     "label": "ADOBE CREATIVE CLOUD"
+    },
+    {
+     "expected": "Income",
+     "pred": "Income",
+     "conf": 0.41222086595454577,
+     "margin": 0.31138953109062534,
+     "top3": [
+      [
+       "Income",
+       0.4122
+      ],
+      [
+       "Transfer",
+       0.1008
+      ],
+      [
+       "Fees & Interest",
+       0.0667
+      ]
+     ],
+     "ms": 81.04499995708466,
+     "state_tokens": 24,
+     "label": "PAYROLL DEP - DAYJOB INC"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Utilities",
+     "conf": 0.6146415827242309,
+     "margin": 0.5673247928351032,
+     "top3": [
+      [
+       "Utilities",
+       0.6146
+      ],
+      [
+       "Groceries",
+       0.0473
+      ],
+      [
+       "Shopping",
+       0.0471
+      ]
+     ],
+     "ms": 81.72500002384186,
+     "state_tokens": 21,
+     "label": "CONED UTILITY"
+    },
+    {
+     "expected": "Income",
+     "pred": "Transfer",
+     "conf": 0.22358919266866822,
+     "margin": 0.12745150707041586,
+     "top3": [
+      [
+       "Transfer",
+       0.2236
+      ],
+      [
+       "Shopping",
+       0.0961
+      ],
+      [
+       "Fees & Interest",
+       0.0821
+      ]
+     ],
+     "ms": 82.08500003814697,
+     "state_tokens": 25,
+     "label": "CLIENT PAYMT - HARBOR LOGISTICS"
+    },
+    {
+     "expected": "Health",
+     "pred": "Subscriptions",
+     "conf": 0.4029285815548504,
+     "margin": 0.19177188932197678,
+     "top3": [
+      [
+       "Subscriptions",
+       0.4029
+      ],
+      [
+       "Health",
+       0.2112
+      ],
+      [
+       "Personal Care",
+       0.0638
+      ]
+     ],
+     "ms": 82.22500002384186,
+     "state_tokens": 19,
+     "label": "GYM MEMBERSHIP"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Shopping",
+     "conf": 0.15768786785899544,
+     "margin": 0.0493912946758273,
+     "top3": [
+      [
+       "Shopping",
+       0.1577
+      ],
+      [
+       "Groceries",
+       0.1083
+      ],
+      [
+       "Fees & Interest",
+       0.103
+      ]
+     ],
+     "ms": 82.69000005722046,
+     "state_tokens": 24,
+     "label": "TRADER JOE'S #229"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.645540341352607,
+     "margin": 0.5285295804582337,
+     "top3": [
+      [
+       "Groceries",
+       0.6455
+      ],
+      [
+       "Shopping",
+       0.117
+      ],
+      [
+       "Utilities",
+       0.0316
+      ]
+     ],
+     "ms": 83.31000006198883,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Fees & Interest",
+     "conf": 0.14700616353942297,
+     "margin": 0.002036627816787623,
+     "top3": [
+      [
+       "Fees & Interest",
+       0.147
+      ],
+      [
+       "Shopping",
+       0.145
+      ],
+      [
+       "Groceries",
+       0.0897
+      ]
+     ],
+     "ms": 83.6599999666214,
+     "state_tokens": 24,
+     "label": "STAPLES BUSINESS ADVANTAGE"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Dining",
+     "conf": 0.7025614888259681,
+     "margin": 0.6392118669550979,
+     "top3": [
+      [
+       "Dining",
+       0.7026
+      ],
+      [
+       "Entertainment",
+       0.0633
+      ],
+      [
+       "Groceries",
+       0.041
+      ]
+     ],
+     "ms": 85.07999992370605,
+     "state_tokens": 23,
+     "label": "UNION SQUARE CAFE - CLIENT DINNER"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Gifts",
+     "conf": 0.16609906701906013,
+     "margin": 0.013621280475297037,
+     "top3": [
+      [
+       "Gifts",
+       0.1661
+      ],
+      [
+       "Shopping",
+       0.1525
+      ],
+      [
+       "Transfer",
+       0.0801
+      ]
+     ],
+     "ms": 88.9099999666214,
+     "state_tokens": 23,
+     "label": "AMEX EPAYMENT - THANK YOU"
+    },
+    {
+     "expected": "Travel",
+     "pred": "Travel",
+     "conf": 0.37183219985633753,
+     "margin": 0.20371911564222484,
+     "top3": [
+      [
+       "Travel",
+       0.3718
+      ],
+      [
+       "Transport",
+       0.1681
+      ],
+      [
+       "Shopping",
+       0.0586
+      ]
+     ],
+     "ms": 84.86500000953674,
+     "state_tokens": 24,
+     "label": "DELTA AIR LINES - CONF TRAVEL"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Entertainment",
+     "conf": 0.42403361084793056,
+     "margin": 0.15682272817845805,
+     "top3": [
+      [
+       "Entertainment",
+       0.424
+      ],
+      [
+       "Subscriptions",
+       0.2672
+      ],
+      [
+       "Shopping",
+       0.0428
+      ]
+     ],
+     "ms": 84.88999998569489,
+     "state_tokens": 22,
+     "label": "NETFLIX.COM"
+    },
+    {
+     "expected": "Transport",
+     "pred": "Transport",
+     "conf": 0.3894299199937101,
+     "margin": 0.21676602996332564,
+     "top3": [
+      [
+       "Transport",
+       0.3894
+      ],
+      [
+       "Travel",
+       0.1727
+      ],
+      [
+       "Fees & Interest",
+       0.0774
+      ]
+     ],
+     "ms": 86.35500001907349,
+     "state_tokens": 26,
+     "label": "UBER TRIP HELP.UBER.COM"
+    },
+    {
+     "expected": "Subscriptions",
+     "pred": "Shopping",
+     "conf": 0.148722561400574,
+     "margin": 0.030524953876139224,
+     "top3": [
+      [
+       "Shopping",
+       0.1487
+      ],
+      [
+       "Entertainment",
+       0.1182
+      ],
+      [
+       "Gifts",
+       0.098
+      ]
+     ],
+     "ms": 87.49500000476837,
+     "state_tokens": 23,
+     "label": "APPLE.COM/BILL"
+    },
+    {
+     "expected": "Income",
+     "pred": "Shopping",
+     "conf": 0.20298059572542215,
+     "margin": 0.10132291162136131,
+     "top3": [
+      [
+       "Shopping",
+       0.203
+      ],
+      [
+       "Groceries",
+       0.1017
+      ],
+      [
+       "Transfer",
+       0.0819
+      ]
+     ],
+     "ms": 87.51499998569489,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - BRIGHTPATH RETAIL"
+    },
+    {
+     "expected": "Home",
+     "pred": "Home",
+     "conf": 0.40329822770637963,
+     "margin": 0.04907297997253801,
+     "top3": [
+      [
+       "Home",
+       0.4033
+      ],
+      [
+       "Utilities",
+       0.3542
+      ],
+      [
+       "Groceries",
+       0.0356
+      ]
+     ],
+     "ms": 89.06499993801117,
+     "state_tokens": 19,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Shopping",
+     "conf": 0.15491868887370605,
+     "margin": 0.04252251960393598,
+     "top3": [
+      [
+       "Shopping",
+       0.1549
+      ],
+      [
+       "Groceries",
+       0.1124
+      ],
+      [
+       "Fees & Interest",
+       0.0989
+      ]
+     ],
+     "ms": 86.82499992847443,
+     "state_tokens": 24,
+     "label": "TRADER JOE'S #118"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Shopping",
+     "conf": 0.1777043788745023,
+     "margin": 0.015480792989120945,
+     "top3": [
+      [
+       "Shopping",
+       0.1777
+      ],
+      [
+       "Groceries",
+       0.1622
+      ],
+      [
+       "Fees & Interest",
+       0.0694
+      ]
+     ],
+     "ms": 88.49500000476837,
+     "state_tokens": 22,
+     "label": "CHIPOTLE 2291"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Transport",
+     "conf": 0.33523713354966106,
+     "margin": 0.23910071567762464,
+     "top3": [
+      [
+       "Transport",
+       0.3352
+      ],
+      [
+       "Subscriptions",
+       0.0961
+      ],
+      [
+       "Transfer",
+       0.0942
+      ]
+     ],
+     "ms": 87.27999997138977,
+     "state_tokens": 22,
+     "label": "VERIZON WIRELESS"
+    },
+    {
+     "expected": "Health",
+     "pred": "Health",
+     "conf": 0.3390205581992828,
+     "margin": 0.21155188359538163,
+     "top3": [
+      [
+       "Health",
+       0.339
+      ],
+      [
+       "Personal Care",
+       0.1275
+      ],
+      [
+       "Shopping",
+       0.1266
+      ]
+     ],
+     "ms": 87.86500000953674,
+     "state_tokens": 19,
+     "label": "PLANET FITNESS"
+    },
+    {
+     "expected": "Entertainment",
+     "pred": "Entertainment",
+     "conf": 0.6043864260904452,
+     "margin": 0.5328177692828587,
+     "top3": [
+      [
+       "Entertainment",
+       0.6044
+      ],
+      [
+       "Travel",
+       0.0716
+      ],
+      [
+       "Shopping",
+       0.047
+      ]
+     ],
+     "ms": 86.72000002861023,
+     "state_tokens": 21,
+     "label": "TICKETMASTER - CONCERT"
+    },
+    {
+     "expected": "Income",
+     "pred": "Shopping",
+     "conf": 0.21117304143866816,
+     "margin": 0.11031181188056996,
+     "top3": [
+      [
+       "Shopping",
+       0.2112
+      ],
+      [
+       "Groceries",
+       0.1009
+      ],
+      [
+       "Transfer",
+       0.082
+      ]
+     ],
+     "ms": 87.48000001907349,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - BRIGHTPATH RETAIL"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Groceries",
+     "conf": 0.14749189135369037,
+     "margin": 0.025942484676571953,
+     "top3": [
+      [
+       "Groceries",
+       0.1475
+      ],
+      [
+       "Home",
+       0.1215
+      ],
+      [
+       "Shopping",
+       0.1096
+      ]
+     ],
+     "ms": 86.05999994277954,
+     "state_tokens": 20,
+     "label": "RAMEN HOUSE"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Transfer",
+     "conf": 0.1579112936907538,
+     "margin": 0.011867221127424554,
+     "top3": [
+      [
+       "Transfer",
+       0.1579
+      ],
+      [
+       "Shopping",
+       0.146
+      ],
+      [
+       "Groceries",
+       0.1088
+      ]
+     ],
+     "ms": 85.86000001430511,
+     "state_tokens": 18,
+     "label": "TARGET"
+    },
+    {
+     "expected": "Dining",
+     "pred": "Shopping",
+     "conf": 0.1818143985371529,
+     "margin": 0.018366453117684006,
+     "top3": [
+      [
+       "Shopping",
+       0.1818
+      ],
+      [
+       "Groceries",
+       0.1634
+      ],
+      [
+       "Subscriptions",
+       0.0675
+      ]
+     ],
+     "ms": 86.66000008583069,
+     "state_tokens": 22,
+     "label": "CHIPOTLE 2291"
+    },
+    {
+     "expected": "Income",
+     "pred": "Health",
+     "conf": 0.33081675756892326,
+     "margin": 0.25390232061784673,
+     "top3": [
+      [
+       "Health",
+       0.3308
+      ],
+      [
+       "Personal Care",
+       0.0769
+      ],
+      [
+       "Transfer",
+       0.0719
+      ]
+     ],
+     "ms": 85.82000005245209,
+     "state_tokens": 23,
+     "label": "PAYROLL DEP - RIVERSIDE MEDICAL"
+    },
+    {
+     "expected": "Home",
+     "pred": "Home",
+     "conf": 0.40428663036829937,
+     "margin": 0.05864272227320122,
+     "top3": [
+      [
+       "Home",
+       0.4043
+      ],
+      [
+       "Utilities",
+       0.3456
+      ],
+      [
+       "Groceries",
+       0.0356
+      ]
+     ],
+     "ms": 84.60000002384186,
+     "state_tokens": 20,
+     "label": "RENT PAYMENT"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.6448492791788092,
+     "margin": 0.5256029802602746,
+     "top3": [
+      [
+       "Groceries",
+       0.6448
+      ],
+      [
+       "Shopping",
+       0.1192
+      ],
+      [
+       "Utilities",
+       0.0332
+      ]
+     ],
+     "ms": 85.99500000476837,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Education",
+     "pred": "Education",
+     "conf": 0.4691192680637449,
+     "margin": 0.31242182051497425,
+     "top3": [
+      [
+       "Education",
+       0.4691
+      ],
+      [
+       "Fees & Interest",
+       0.1567
+      ],
+      [
+       "Shopping",
+       0.0738
+      ]
+     ],
+     "ms": 87.33500003814697,
+     "state_tokens": 24,
+     "label": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY"
+    },
+    {
+     "expected": "Fees & Interest",
+     "pred": "Fees & Interest",
+     "conf": 0.583549489378227,
+     "margin": 0.5060012569907371,
+     "top3": [
+      [
+       "Fees & Interest",
+       0.5835
+      ],
+      [
+       "Transfer",
+       0.0775
+      ],
+      [
+       "Shopping",
+       0.0751
+      ]
+     ],
+     "ms": 85.23500001430511,
+     "state_tokens": 21,
+     "label": "OVERDRAFT FEE"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Shopping",
+     "conf": 0.1693559941075918,
+     "margin": 0.03229659092001427,
+     "top3": [
+      [
+       "Shopping",
+       0.1694
+      ],
+      [
+       "Groceries",
+       0.1371
+      ],
+      [
+       "Fees & Interest",
+       0.0999
+      ]
+     ],
+     "ms": 85.76499998569489,
+     "state_tokens": 19,
+     "label": "DOLLAR GENERAL"
+    },
+    {
+     "expected": "Health",
+     "pred": "Health",
+     "conf": 0.5875249624189302,
+     "margin": 0.4980929894112134,
+     "top3": [
+      [
+       "Health",
+       0.5875
+      ],
+      [
+       "Personal Care",
+       0.0894
+      ],
+      [
+       "Groceries",
+       0.0457
+      ]
+     ],
+     "ms": 86.65499997138977,
+     "state_tokens": 23,
+     "label": "PEDIATRIC CO-PAY"
+    },
+    {
+     "expected": "Groceries",
+     "pred": "Groceries",
+     "conf": 0.636149004468381,
+     "margin": 0.5131123061916,
+     "top3": [
+      [
+       "Groceries",
+       0.6361
+      ],
+      [
+       "Shopping",
+       0.123
+      ],
+      [
+       "Utilities",
+       0.0321
+      ]
+     ],
+     "ms": 86.20500004291534,
+     "state_tokens": 22,
+     "label": "GROCERY OUTLET"
+    },
+    {
+     "expected": "Insurance",
+     "pred": "Insurance",
+     "conf": 0.5258371393993914,
+     "margin": 0.37469106456437395,
+     "top3": [
+      [
+       "Insurance",
+       0.5258
+      ],
+      [
+       "Health",
+       0.1511
+      ],
+      [
+       "Fees & Interest",
+       0.0391
+      ]
+     ],
+     "ms": 86.15500009059906,
+     "state_tokens": 21,
+     "label": "MEDIGAP INSURANCE PREMIUM"
+    },
+    {
+     "expected": "Health",
+     "pred": "Groceries",
+     "conf": 0.5127271095209018,
+     "margin": 0.3855199363621031,
+     "top3": [
+      [
+       "Groceries",
+       0.5127
+      ],
+      [
+       "Health",
+       0.1272
+      ],
+      [
+       "Shopping",
+       0.0765
+      ]
+     ],
+     "ms": 84.88999998569489,
+     "state_tokens": 20,
+     "label": "CVS PHARMACY"
+    },
+    {
+     "expected": "Other",
+     "pred": "Shopping",
+     "conf": 0.2308239877037517,
+     "margin": 0.1286248419424489,
+     "top3": [
+      [
+       "Shopping",
+       0.2308
+      ],
+      [
+       "Groceries",
+       0.1022
+      ],
+      [
+       "Transfer",
+       0.0856
+      ]
+     ],
+     "ms": 86.45500004291534,
+     "state_tokens": 27,
+     "label": "UNKNOWN MERCHANT INTL*7719402"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Utilities",
+     "conf": 0.38316746395959106,
+     "margin": 0.05267208671180407,
+     "top3": [
+      [
+       "Utilities",
+       0.3832
+      ],
+      [
+       "Subscriptions",
+       0.3305
+      ],
+      [
+       "Entertainment",
+       0.0548
+      ]
+     ],
+     "ms": 84.5349999666214,
+     "state_tokens": 20,
+     "label": "COMCAST CABLE"
+    },
+    {
+     "expected": "Gifts",
+     "pred": "Gifts",
+     "conf": 0.6461184591080966,
+     "margin": 0.5020940135172114,
+     "top3": [
+      [
+       "Gifts",
+       0.6461
+      ],
+      [
+       "Shopping",
+       0.144
+      ],
+      [
+       "Groceries",
+       0.0307
+      ]
+     ],
+     "ms": 86.09500002861023,
+     "state_tokens": 25,
+     "label": "AMAZON.COM - GRANDKIDS GIFT"
+    },
+    {
+     "expected": "Home",
+     "pred": "Home",
+     "conf": 0.46463641814132894,
+     "margin": 0.3697358403471318,
+     "top3": [
+      [
+       "Home",
+       0.4646
+      ],
+      [
+       "Fees & Interest",
+       0.0949
+      ],
+      [
+       "Utilities",
+       0.0747
+      ]
+     ],
+     "ms": 85.75,
+     "state_tokens": 26,
+     "label": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS"
+    },
+    {
+     "expected": "Insurance",
+     "pred": "Insurance",
+     "conf": 0.5191228191690441,
+     "margin": 0.43801805600003696,
+     "top3": [
+      [
+       "Insurance",
+       0.5191
+      ],
+      [
+       "Health",
+       0.0811
+      ],
+      [
+       "Shopping",
+       0.0506
+      ]
+     ],
+     "ms": 85.26499998569489,
+     "state_tokens": 20,
+     "label": "STATE FARM INSURANCE"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Transfer",
+     "conf": 0.46715592109079784,
+     "margin": 0.41377081709416896,
+     "top3": [
+      [
+       "Transfer",
+       0.4672
+      ],
+      [
+       "Shopping",
+       0.0534
+      ],
+      [
+       "Fees & Interest",
+       0.0523
+      ]
+     ],
+     "ms": 86.81499993801117,
+     "state_tokens": 23,
+     "label": "TRANSFER TO SAVINGS HOUSE FUND"
+    },
+    {
+     "expected": "Utilities",
+     "pred": "Utilities",
+     "conf": 0.730611077301035,
+     "margin": 0.69921886495808,
+     "top3": [
+      [
+       "Utilities",
+       0.7306
+      ],
+      [
+       "Shopping",
+       0.0314
+      ],
+      [
+       "Groceries",
+       0.0304
+      ]
+     ],
+     "ms": 85.68999993801117,
+     "state_tokens": 23,
+     "label": "CITY POWER AND WATER UTILITY"
+    },
+    {
+     "expected": "Shopping",
+     "pred": "Shopping",
+     "conf": 0.16935028529430904,
+     "margin": 0.02530339022516659,
+     "top3": [
+      [
+       "Shopping",
+       0.1694
+      ],
+      [
+       "Transfer",
+       0.144
+      ],
+      [
+       "Groceries",
+       0.1107
+      ]
+     ],
+     "ms": 85.65499997138977,
+     "state_tokens": 18,
+     "label": "TARGET"
+    },
+    {
+     "expected": "Transfer",
+     "pred": "Transfer",
+     "conf": 0.4627127991256772,
+     "margin": 0.40763948194813654,
+     "top3": [
+      [
+       "Transfer",
+       0.4627
+      ],
+      [
+       "Income",
+       0.0551
+      ],
+      [
+       "Fees & Interest",
+       0.0542
+      ]
+     ],
+     "ms": 86.50999999046326,
+     "state_tokens": 23,
+     "label": "TRANSFER TO SAVINGS HOUSE FUND"
+    }
+   ]
+  },
+  "route": {
+   "n": 42,
+   "first_decision_ms": 120.05499994754791,
+   "p50_ms": 107.0900000333786,
+   "p95_ms": 126.20500004291534,
+   "min_ms": 87.9300000667572,
+   "max_ms": 127.57000005245209,
+   "mean_ms": 108.62761905363628,
+   "accuracy": 0.8333333333333334,
+   "correct": 35,
+   "margin_p10": 0.039826442471472545,
+   "margin_p50": 0.16166423024952065,
+   "margin_p90": 0.42199708220784116,
+   "results": [
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4787893049466761,
+     "margin": 0.2417714119337271,
+     "top3": [
+      [
+       "transaction_search",
+       0.4788
+      ],
+      [
+       "spending_summary",
+       0.237
+      ],
+      [
+       "profit_loss",
+       0.1061
+      ]
+     ],
+     "ms": 122.74500000476837,
+     "state_tokens": 8,
+     "label": "Show me every Whole Foods charge last month"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.6278736983408209,
+     "margin": 0.5091871269726519,
+     "top3": [
+      [
+       "transaction_search",
+       0.6279
+      ],
+      [
+       "spending_summary",
+       0.1187
+      ],
+      [
+       "profit_loss",
+       0.0795
+      ]
+     ],
+     "ms": 124.22500002384186,
+     "state_tokens": 8,
+     "label": "Find all transactions over $200 in June"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4012966527972064,
+     "margin": 0.2539148040719206,
+     "top3": [
+      [
+       "transaction_search",
+       0.4013
+      ],
+      [
+       "none",
+       0.1474
+      ],
+      [
+       "spending_summary",
+       0.1429
+      ]
+     ],
+     "ms": 122.67000007629395,
+     "state_tokens": 7,
+     "label": "When did I last pay Comcast?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.45045568480167303,
+     "margin": 0.2536387144782368,
+     "top3": [
+      [
+       "transaction_search",
+       0.4505
+      ],
+      [
+       "spending_summary",
+       0.1968
+      ],
+      [
+       "none",
+       0.1244
+      ]
+     ],
+     "ms": 124.12999999523163,
+     "state_tokens": 6,
+     "label": "List my Uber rides this year"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.3100601906147237,
+     "margin": 0.13317948614679906,
+     "top3": [
+      [
+       "transaction_search",
+       0.3101
+      ],
+      [
+       "none",
+       0.1769
+      ],
+      [
+       "spending_summary",
+       0.1669
+      ]
+     ],
+     "ms": 126.36500000953674,
+     "state_tokens": 8,
+     "label": "Did I get charged twice by Adobe?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.47077167537168985,
+     "margin": 0.3297355497059496,
+     "top3": [
+      [
+       "transaction_search",
+       0.4708
+      ],
+      [
+       "spending_summary",
+       0.141
+      ],
+      [
+       "none",
+       0.1283
+      ]
+     ],
+     "ms": 127.57000005245209,
+     "state_tokens": 5,
+     "label": "Search for anything from Ticketmaster"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.3270514308707443,
+     "margin": 0.025421080911662952,
+     "top3": [
+      [
+       "spending_summary",
+       0.3271
+      ],
+      [
+       "transaction_search",
+       0.3016
+      ],
+      [
+       "profit_loss",
+       0.1287
+      ]
+     ],
+     "ms": 124.93999993801117,
+     "state_tokens": 8,
+     "label": "Where did my money go this month?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.7171892739865592,
+     "margin": 0.6124947691705241,
+     "top3": [
+      [
+       "spending_summary",
+       0.7172
+      ],
+      [
+       "transaction_search",
+       0.1047
+      ],
+      [
+       "profit_loss",
+       0.0677
+      ]
+     ],
+     "ms": 123.46999990940094,
+     "state_tokens": 9,
+     "label": "Break down my spending by category for the quarter"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.33553578727791133,
+     "margin": 0.06310208615270729,
+     "top3": [
+      [
+       "spending_summary",
+       0.3355
+      ],
+      [
+       "transaction_search",
+       0.2724
+      ],
+      [
+       "profit_loss",
+       0.1349
+      ]
+     ],
+     "ms": 125.00499999523163,
+     "state_tokens": 12,
+     "label": "How much did I spend on dining compared to last month?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.4366535099032652,
+     "margin": 0.2564317016804337,
+     "top3": [
+      [
+       "spending_summary",
+       0.4367
+      ],
+      [
+       "transaction_search",
+       0.1802
+      ],
+      [
+       "profit_loss",
+       0.152
+      ]
+     ],
+     "ms": 125.3199999332428,
+     "state_tokens": 9,
+     "label": "What are my biggest expense categories this year?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.2604056699697901,
+     "margin": 0.0010272876422971478,
+     "top3": [
+      [
+       "spending_summary",
+       0.2604
+      ],
+      [
+       "transaction_search",
+       0.2594
+      ],
+      [
+       "none",
+       0.1543
+      ]
+     ],
+     "ms": 126.20500004291534,
+     "state_tokens": 9,
+     "label": "Am I spending more on groceries than before?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.5472893656764857,
+     "margin": 0.3967055147344455,
+     "top3": [
+      [
+       "profit_loss",
+       0.5473
+      ],
+      [
+       "transaction_search",
+       0.1506
+      ],
+      [
+       "spending_summary",
+       0.1115
+      ]
+     ],
+     "ms": 125.54499995708466,
+     "state_tokens": 9,
+     "label": "Give me a profit and loss for last quarter"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.38324053583205336,
+     "margin": 0.17556309482440563,
+     "top3": [
+      [
+       "profit_loss",
+       0.3832
+      ],
+      [
+       "transaction_search",
+       0.2077
+      ],
+      [
+       "spending_summary",
+       0.1906
+      ]
+     ],
+     "ms": 125.63999998569489,
+     "state_tokens": 11,
+     "label": "How much did my business make versus spend in May?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.3295620049102163,
+     "margin": 0.1270339632464212,
+     "top3": [
+      [
+       "profit_loss",
+       0.3296
+      ],
+      [
+       "transaction_search",
+       0.2025
+      ],
+      [
+       "spending_summary",
+       0.1798
+      ]
+     ],
+     "ms": 122.66999995708466,
+     "state_tokens": 8,
+     "label": "Income vs expenses for the year so far"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.29970646066835843,
+     "margin": 0.07063905026094608,
+     "top3": [
+      [
+       "profit_loss",
+       0.2997
+      ],
+      [
+       "transaction_search",
+       0.2291
+      ],
+      [
+       "spending_summary",
+       0.1755
+      ]
+     ],
+     "ms": 119.42499995231628,
+     "state_tokens": 8,
+     "label": "Did I come out ahead last month?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.38940208649859664,
+     "margin": 0.19587060309948823,
+     "top3": [
+      [
+       "profit_loss",
+       0.3894
+      ],
+      [
+       "spending_summary",
+       0.1935
+      ],
+      [
+       "transaction_search",
+       0.1894
+      ]
+     ],
+     "ms": 119.16999995708466,
+     "state_tokens": 8,
+     "label": "P&L by category for this month"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.6457737900577943,
+     "margin": 0.532416984189204,
+     "top3": [
+      [
+       "net_worth",
+       0.6458
+      ],
+      [
+       "transaction_search",
+       0.1134
+      ],
+      [
+       "none",
+       0.0819
+      ]
+     ],
+     "ms": 116.25999999046326,
+     "state_tokens": 6,
+     "label": "What is my net worth?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.7325288602078626,
+     "margin": 0.6418747426665258,
+     "top3": [
+      [
+       "net_worth",
+       0.7325
+      ],
+      [
+       "transaction_search",
+       0.0907
+      ],
+      [
+       "none",
+       0.0567
+      ]
+     ],
+     "ms": 115.22000002861023,
+     "state_tokens": 10,
+     "label": "Show my net worth trend over the last 12 months"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.511996032665646,
+     "margin": 0.33919797603772284,
+     "top3": [
+      [
+       "net_worth",
+       0.512
+      ],
+      [
+       "transaction_search",
+       0.1728
+      ],
+      [
+       "none",
+       0.1028
+      ]
+     ],
+     "ms": 111.46000003814697,
+     "state_tokens": 9,
+     "label": "Give me my balance sheet with assets and liabilities"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.5608749480502514,
+     "margin": 0.42199708220784116,
+     "top3": [
+      [
+       "net_worth",
+       0.5609
+      ],
+      [
+       "transaction_search",
+       0.1389
+      ],
+      [
+       "none",
+       0.1068
+      ]
+     ],
+     "ms": 110.36500000953674,
+     "state_tokens": 11,
+     "label": "Am I worth more than I was six months ago?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.3045900348370129,
+     "margin": 0.11559326365891714,
+     "top3": [
+      [
+       "forecast",
+       0.3046
+      ],
+      [
+       "transaction_search",
+       0.189
+      ],
+      [
+       "spending_summary",
+       0.1749
+      ]
+     ],
+     "ms": 112.37999999523163,
+     "state_tokens": 10,
+     "label": "What will my savings look like in three months?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.31956040802661523,
+     "margin": 0.13812697091316128,
+     "top3": [
+      [
+       "forecast",
+       0.3196
+      ],
+      [
+       "transaction_search",
+       0.1814
+      ],
+      [
+       "spending_summary",
+       0.1665
+      ]
+     ],
+     "ms": 107.0900000333786,
+     "state_tokens": 14,
+     "label": "If I cancel Netflix, how much will I save by year end?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27557154114181254,
+     "margin": 0.06539088336116483,
+     "top3": [
+      [
+       "forecast",
+       0.2756
+      ],
+      [
+       "transaction_search",
+       0.2102
+      ],
+      [
+       "spending_summary",
+       0.158
+      ]
+     ],
+     "ms": 103.60000002384186,
+     "state_tokens": 9,
+     "label": "Project my cash flow for the next six months"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27572573433959985,
+     "margin": 0.0806967078625152,
+     "top3": [
+      [
+       "forecast",
+       0.2757
+      ],
+      [
+       "spending_summary",
+       0.195
+      ],
+      [
+       "transaction_search",
+       0.1853
+      ]
+     ],
+     "ms": 102.86000001430511,
+     "state_tokens": 12,
+     "label": "What if I cut dining out by $100 a month?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.3065277799435643,
+     "margin": 0.10247211715065521,
+     "top3": [
+      [
+       "forecast",
+       0.3065
+      ],
+      [
+       "transaction_search",
+       0.2041
+      ],
+      [
+       "spending_summary",
+       0.1623
+      ]
+     ],
+     "ms": 101.66999995708466,
+     "state_tokens": 12,
+     "label": "Will I have enough cash by September at my current pace?"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.28870131447756037,
+     "margin": 0.06143220326873486,
+     "top3": [
+      [
+       "transaction_search",
+       0.2887
+      ],
+      [
+       "none",
+       0.2273
+      ],
+      [
+       "spending_summary",
+       0.2007
+      ]
+     ],
+     "ms": 100.57000005245209,
+     "state_tokens": 8,
+     "label": "Recategorize that Starbucks charge as Dining"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.295001037707259,
+     "margin": 0.10198843733286636,
+     "top3": [
+      [
+       "transaction_search",
+       0.295
+      ],
+      [
+       "none",
+       0.193
+      ],
+      [
+       "spending_summary",
+       0.1834
+      ]
+     ],
+     "ms": 98.64999997615814,
+     "state_tokens": 7,
+     "label": "Hi, what can you do?"
+    },
+    {
+     "expected": "none",
+     "pred": "none",
+     "conf": 0.2619886275203382,
+     "margin": 0.024871977914108223,
+     "top3": [
+      [
+       "none",
+       0.262
+      ],
+      [
+       "transaction_search",
+       0.2371
+      ],
+      [
+       "net_worth",
+       0.1415
+      ]
+     ],
+     "ms": 98.4650000333786,
+     "state_tokens": 6,
+     "label": "Explain what a Roth IRA is"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.4635490202004842,
+     "margin": 0.293066440014498,
+     "top3": [
+      [
+       "transaction_search",
+       0.4635
+      ],
+      [
+       "none",
+       0.1705
+      ],
+      [
+       "spending_summary",
+       0.1225
+      ]
+     ],
+     "ms": 96.19500005245209,
+     "state_tokens": 5,
+     "label": "Delete the duplicate Adobe transaction"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.28015832597145773,
+     "margin": 0.0689429446802301,
+     "top3": [
+      [
+       "transaction_search",
+       0.2802
+      ],
+      [
+       "spending_summary",
+       0.2112
+      ],
+      [
+       "none",
+       0.1547
+      ]
+     ],
+     "ms": 95.33000004291534,
+     "state_tokens": 5,
+     "label": "Import my new bank statement"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.2376638696941856,
+     "margin": 0.04559121078544209,
+     "top3": [
+      [
+       "transaction_search",
+       0.2377
+      ],
+      [
+       "spending_summary",
+       0.1921
+      ],
+      [
+       "none",
+       0.1855
+      ]
+     ],
+     "ms": 95.69999992847443,
+     "state_tokens": 8,
+     "label": "Help me write an email to my accountant"
+    },
+    {
+     "expected": "none",
+     "pred": "transaction_search",
+     "conf": 0.3364114767704344,
+     "margin": 0.16166423024952065,
+     "top3": [
+      [
+       "transaction_search",
+       0.3364
+      ],
+      [
+       "spending_summary",
+       0.1747
+      ],
+      [
+       "none",
+       0.1745
+      ]
+     ],
+     "ms": 94.55000007152557,
+     "state_tokens": 6,
+     "label": "Flag this charge as tax deductible"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "spending_summary",
+     "conf": 0.29677215084203923,
+     "margin": 0.001376874906138359,
+     "top3": [
+      [
+       "spending_summary",
+       0.2968
+      ],
+      [
+       "transaction_search",
+       0.2954
+      ],
+      [
+       "profit_loss",
+       0.1426
+      ]
+     ],
+     "ms": 94.39499998092651,
+     "state_tokens": 12,
+     "label": "How much did I pay in total to Costco this year?"
+    },
+    {
+     "expected": "transaction_search",
+     "pred": "transaction_search",
+     "conf": 0.4308031526130153,
+     "margin": 0.26789968963052235,
+     "top3": [
+      [
+       "transaction_search",
+       0.4308
+      ],
+      [
+       "spending_summary",
+       0.1629
+      ],
+      [
+       "none",
+       0.1243
+      ]
+     ],
+     "ms": 93.25999999046326,
+     "state_tokens": 10,
+     "label": "Pull up my rent payments from the last three months"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.3969164326150487,
+     "margin": 0.1318236393374898,
+     "top3": [
+      [
+       "spending_summary",
+       0.3969
+      ],
+      [
+       "transaction_search",
+       0.2651
+      ],
+      [
+       "profit_loss",
+       0.1268
+      ]
+     ],
+     "ms": 92.73000001907349,
+     "state_tokens": 12,
+     "label": "What did I spend per category in the last 30 days?"
+    },
+    {
+     "expected": "spending_summary",
+     "pred": "spending_summary",
+     "conf": 0.29577176303318703,
+     "margin": 0.039826442471472545,
+     "top3": [
+      [
+       "spending_summary",
+       0.2958
+      ],
+      [
+       "transaction_search",
+       0.2559
+      ],
+      [
+       "profit_loss",
+       0.1632
+      ]
+     ],
+     "ms": 92.08500003814697,
+     "state_tokens": 11,
+     "label": "Which category grew the most compared to the previous period?"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.5063859825049561,
+     "margin": 0.34060849142830163,
+     "top3": [
+      [
+       "profit_loss",
+       0.5064
+      ],
+      [
+       "transaction_search",
+       0.1658
+      ],
+      [
+       "spending_summary",
+       0.114
+      ]
+     ],
+     "ms": 91.47000002861023,
+     "state_tokens": 8,
+     "label": "Show income minus expenses for the previous quarter"
+    },
+    {
+     "expected": "profit_loss",
+     "pred": "profit_loss",
+     "conf": 0.4120779738297912,
+     "margin": 0.2216963377265283,
+     "top3": [
+      [
+       "profit_loss",
+       0.4121
+      ],
+      [
+       "transaction_search",
+       0.1904
+      ],
+      [
+       "spending_summary",
+       0.1432
+      ]
+     ],
+     "ms": 91.82000005245209,
+     "state_tokens": 7,
+     "label": "What was my profit last year?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.4115782327539729,
+     "margin": 0.20074787770246216,
+     "top3": [
+      [
+       "net_worth",
+       0.4116
+      ],
+      [
+       "transaction_search",
+       0.2108
+      ],
+      [
+       "spending_summary",
+       0.1198
+      ]
+     ],
+     "ms": 92.14499998092651,
+     "state_tokens": 12,
+     "label": "How have my assets and debts changed over the past year?"
+    },
+    {
+     "expected": "net_worth",
+     "pred": "net_worth",
+     "conf": 0.4469663634779302,
+     "margin": 0.2780491784318426,
+     "top3": [
+      [
+       "net_worth",
+       0.447
+      ],
+      [
+       "transaction_search",
+       0.1689
+      ],
+      [
+       "none",
+       0.1223
+      ]
+     ],
+     "ms": 89.33000004291534,
+     "state_tokens": 10,
+     "label": "What do my total assets minus liabilities come to?"
+    },
+    {
+     "expected": "forecast",
+     "pred": "forecast",
+     "conf": 0.27334535758620815,
+     "margin": 0.04502047828864067,
+     "top3": [
+      [
+       "forecast",
+       0.2733
+      ],
+      [
+       "spending_summary",
+       0.2283
+      ],
+      [
+       "transaction_search",
+       0.1785
+      ]
+     ],
+     "ms": 91.73500001430511,
+     "state_tokens": 15,
+     "label": "Estimate my savings at the end of the year if I keep spending like this"
+    },
+    {
+     "expected": "none",
+     "pred": "none",
+     "conf": 0.2448654189019076,
+     "margin": 0.04182237156523905,
+     "top3": [
+      [
+       "none",
+       0.2449
+      ],
+      [
+       "spending_summary",
+       0.203
+      ],
+      [
+       "transaction_search",
+       0.194
+      ]
+     ],
+     "ms": 87.9300000667572,
+     "state_tokens": 9,
+     "label": "Change my budget goal to $500 a month"
+    }
+   ]
+  }
+ },
+ "status": "measured",
+ "console_tail": [
+  "debug: [vite] connecting...",
+  "debug: [vite] connected.",
+  "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "error: Failed to load resource: the server responded with a status of 404 ()"
+ ],
+ "info_warm": {
+  "isCached": true,
+  "downloadSize": 357050727,
+  "files": [
+   "config.json",
+   "onnx/model_q4f16.onnx",
+   "onnx/model_q4f16.onnx_data",
+   "tokenizer.json",
+   "tokenizer_config.json"
+  ],
+  "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+  "family": "open-jev",
+  "device": "webgpu",
+  "dtype": "q4f16"
+ },
+ "load_warmcache": {
+  "ok": true,
+  "load_ms": 1393.4950000047684,
+  "runtime": {
+   "model": "onnx-community/open-jev-deberta-v3-large-ONNX",
+   "family": "open-jev",
+   "device": "webgpu",
+   "dtype": "q4f16"
+  },
+  "progress_loaded": 346832866,
+  "progress_total": 348391650,
+  "wall_ms": 1396
+ },
+ "network_warmcache": {
+  "hf_bytes": 685,
+  "jsdelivr_bytes": 0,
+  "total_bytes": 1697,
+  "n_requests": 30
+ }
+}

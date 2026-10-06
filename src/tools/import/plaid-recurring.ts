@@ -8,6 +8,7 @@ import { toolUpsell } from '../../licensing/upsell.js';
 
 export const plaidRecurringTool = defineTool({
   name: 'plaid_recurring',
+  mutates: false, // audited read-only (#152, src/__tests__/mutation-audit.ts)
   description: 'Show recurring transactions (subscriptions, bills, income) for linked bank accounts via Plaid.',
   schema: z.object({}),
   func: async () => {

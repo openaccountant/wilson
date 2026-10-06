@@ -2,10 +2,10 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import {
-  apiSummary, apiPnl, apiBudgets, apiBudgetLimits, apiCategories, apiSavings, apiCashflowMonthly, apiAlerts,
+  apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
   apiLogs, apiChatHistory, apiChatSessions, apiChatSessionHistory,
-  apiLocalChatConfig, apiRecordLocalChatMessage, apiModels, apiSetTaskModel,
+  apiLocalChatConfig, apiRecordLocalChatMessage, MAX_CHAT_QUERY_CHARS, apiModels, apiSetTaskModel,
   type SetTaskModelBody,
   apiDemoShowdownSamples, apiDemoShowdownCloud, apiDemoShowdownLocal, apiDemoShowdownBrowserTrace,
   apiUpdateTransaction, apiDeleteTransaction,
@@ -19,27 +19,47 @@ import {
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
-  apiReviewQueue, apiConfirmReview, apiCorrectReview,
+  apiReviewQueue, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
+  apiSkills, apiMerchants,
 } from './api.js';
+import { validateMentions, resolveMentionContext } from './mentions.js';
+import { isBadRequest } from './spending-params.js';
+import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
-import { exportSftJsonl, exportDpoJsonl, getTrainingStats } from '../training/export.js';
-import { initChatSession, handleChatMessage } from './chat.js';
+import { exportSftJsonl, exportDpoJsonl, getTrainingStats, exportProvenance, type ExportQualifyOptions } from '../training/export.js';
+import { annotateAgentPresent, handleJudgementRoute } from './judgement-routes.js';
+import { buildScheduleC, scheduleCToCsv, scheduleCToXlsxBuffer } from '../tools/tax/schedule-c.js';
+import { hasLicense } from '../licensing/license.js';
+import { getCheckoutUrl } from '../licensing/upsell.js';
+import { initChatSession, handleChatMessage, getCategorizeProgress, cancelChatRunForUser } from './chat.js';
 import {
-  isAuthEnabled, enableAuth, disableAuth,
-  createUser, listUsers, getUserCount, deactivateUser,
-  verifyLogin, validateToken, revokeToken, cleanExpiredSessions,
+  isAuthEnabled, enableAuth, disableAuth, lanAuthReady, hasActiveAdmin,
+  listUsers, getUserCount, deactivateUser, hashPassword, insertUser, createFirstAdmin,
+  verifyLogin, validateToken, revokeToken, cleanExpiredSessions, canWrite,
   type DashboardUser,
 } from './auth.js';
 import {
-  getActiveDb, switchProfile, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
+  getActiveDb, getOpenDbs, switchProfile, peekProfileDb, getAvailableProfiles, getCurrentProfileName, setInitialProfile,
 } from './db-manager.js';
+import {
+  checkHost, checkStateChange, corsHeaders, isAllowedOrigin, isLoopbackBind, isLoopbackPeer, requireBrowserProof,
+} from './origin-gate.js';
+import { getGlobalAgentState } from '../mcp/global-state.js';
 import { handleMcpRoute } from './mcp-routes.js';
+import { isStateChanging, readBodyThenRecheck } from './write-recheck.js';
+import { handleSyncRoute, syncCorsHeaders } from './sync-routes.js';
 import { handleMcpHttpRequest } from '../mcp/http-server.js';
-import { revokeGrantsForUser } from '../mcp/store.js';
+import { isAgentPresent, revokeGrantsForUser } from '../mcp/store.js';
+import { runMcpMaintenance, runMcpMaintenanceAll, MAINTENANCE_INTERVAL_MS } from '../mcp/maintenance.js';
+import { appendRestExportAudit, appendRestWriteAudit } from '../mcp/audit.js';
+import { handlePrelabelRoute } from '../prelabel/routes.js';
 
 const DEFAULT_PORT = 3141;
+
+/** The 6-hourly MCP housekeeping timer for each running server, so stopDashboardServer can clear it. */
+const maintenanceTimers = new WeakMap<object, ReturnType<typeof setInterval>>();
 
 /**
  * Paths whose own auth model replaces the dashboard bearer-token check:
@@ -50,19 +70,18 @@ const DEFAULT_PORT = 3141;
 const MCP_HTTP_PATH = '/mcp';
 
 /**
- * `/api/mcp/*` and `/mcp` carry grant tokens and mutation approvals — never
- * safe to hand to `*`. A request with no Origin header (a non-browser HTTP
- * client, e.g. Hronaut hitting `/mcp` directly) isn't a CORS-relevant
- * request at all, so there's nothing to restrict; a browser request gets
- * reflected only when it already matches this server's own origin.
+ * Bun's idle timeout is per connection and its maximum is 255 s. A `/mcp` tool
+ * call that waits for a human to approve a card holds its connection open for up
+ * to 240 s (see MUTATION_APPROVAL_WAIT_MS in src/mcp/http-server.ts), so the
+ * default 10 s would cut it off.
  */
-function mcpCorsHeaders(port: number, requestOrigin: string | null): Record<string, string> {
-  if (!requestOrigin) return {};
-  const ownOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
-  if (ownOrigins.includes(requestOrigin)) {
-    return { 'Access-Control-Allow-Origin': requestOrigin, Vary: 'Origin' };
-  }
-  return {};
+export const DASHBOARD_IDLE_TIMEOUT_S = 255;
+
+const LOOPBACK_DEFAULT = '127.0.0.1';
+
+/** `WILSON_DASHBOARD_HOST`, else `dashboardHost` in agent-access.json, else loopback. Read once at startup. */
+function resolveBindHost(): string {
+  return process.env.WILSON_DASHBOARD_HOST?.trim() || getGlobalAgentState().dashboardHost || LOOPBACK_DEFAULT;
 }
 
 /** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
@@ -133,16 +152,46 @@ export async function serveDashboardAsset(
   return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
 }
 
+// Profile names become path segments (see resolveProfile in profile/context.ts),
+// so the HTTP API validates them — unlike the CLI's --profile flag, this accepts
+// arbitrary input over the network and must not allow "../" traversal.
+const PROFILE_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 // ── RBAC ────────────────────────────────────────────────────────────────────
 
 type Role = 'admin' | 'viewer';
 
-function canWrite(role: Role): boolean {
-  return role === 'admin';
+/** Auth routes that need no token (they establish or report a login, so there is none to re-check). */
+const PUBLIC_AUTH_PATHS = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
+function isPublicAuthPath(path: string): boolean {
+  return PUBLIC_AUTH_PATHS.includes(path);
 }
 
 function canManageUsers(role: Role): boolean {
   return role === 'admin';
+}
+
+/**
+ * A hostile page must not be able to frame the dashboard: a framed page is same-origin
+ * with itself, so it would pass the browser-proof gate and could show the user's approval
+ * cards and kill-switch controls under an attacker's overlay (clickjacking). Sent on every
+ * response, API and static assets included.
+ */
+export const ANTI_FRAMING_HEADERS: Record<string, string> = {
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "frame-ancestors 'none'",
+};
+
+function withAntiFraming(res: Response): Response {
+  try {
+    for (const [k, v] of Object.entries(ANTI_FRAMING_HEADERS)) res.headers.set(k, v);
+    return res;
+  } catch {
+    // Immutable headers (a proxied or already-sent response): rebuild around the same body.
+    const headers = new Headers(res.headers);
+    for (const [k, v] of Object.entries(ANTI_FRAMING_HEADERS)) headers.set(k, v);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  }
 }
 
 // ── Server ──────────────────────────────────────────────────────────────────
@@ -158,11 +207,47 @@ export interface DashboardServerOptions {
    * Production default is the local embedTexts engine.
    */
   traceEmbed?: EmbedFn;
+  /**
+   * Bind address. Defaults to `WILSON_DASHBOARD_HOST`, then `dashboardHost` in
+   * `~/.openaccountant/agent-access.json`, then 127.0.0.1. A non-loopback bind
+   * is the "LAN mode": it refuses to start, and answers 503, while the active
+   * profile has dashboard auth off.
+   */
+  hostname?: string;
+}
+
+/** A request's JSON body, or `null` when it is missing or malformed (the route's schema then answers 400). */
+async function readJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
+
+/** Each of these is a separate, explicit per-export opt-in; anything but the literal "true" is off. */
+function trainingExportFlags(url: URL): ExportQualifyOptions {
+  return {
+    includeJudge: url.searchParams.get('includeJudge') === 'true',
+    includeAgentPresent: url.searchParams.get('includeAgentPresent') === 'true',
+    includeHandoff: url.searchParams.get('includeHandoff') === 'true',
+  };
 }
 
 export async function startDashboardServer(db: Database, preferredPort?: number, options?: DashboardServerOptions) {
   const traceEmbed = options?.traceEmbed;
   const port = preferredPort ?? DEFAULT_PORT;
+
+  // The bind address is read once, here: a profile switch cannot change it.
+  const hostname = options?.hostname ?? resolveBindHost();
+  const lanMode = !isLoopbackBind(hostname);
+  if (lanMode && !lanAuthReady(db)) {
+    throw new Error(
+      `Refusing to bind the dashboard to ${hostname} until dashboard auth is on AND an active admin user exists for this profile. ` +
+      'Start on 127.0.0.1, create the admin account (the dashboard asks on first visit) and enable auth, then bind to the network. ' +
+      'Turning auth on with no users is not enough: the first caller of /api/auth/setup would become admin.'
+    );
+  }
 
   // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
   let reactDashboardHtml: string | null = null;
@@ -186,12 +271,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
   // Clean expired sessions on startup
   try { cleanExpiredSessions(db); } catch { /* table may not exist yet */ }
 
-  const server = Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
-      const path = url.pathname;
+  // WebMCP housekeeping (expired grants, tokens, old operations, audit retention) at startup and every 6 h.
+  runMcpMaintenance(db);
 
+  const handleRequest = async (req: Request, bunServer: { requestIP(req: Request): { address: string } | null; timeout(req: Request, seconds: number): void }): Promise<Response> => {
       // `port` may be 0 (ephemeral, e.g. in tests) — server.port is the actual
       // bound port once Bun.serve has returned, which is what a real request's
       // Origin header will contain. `server` is safe to reference here even
@@ -199,25 +282,66 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
       // ever runs after that assignment has completed.
       const actualPort = server.port ?? port;
 
-      const isMcpPath = path === MCP_HTTP_PATH || path.startsWith('/api/mcp');
+      // DNS rebinding: only our own loopback names (or an allowlisted Host) may address this server.
+      // Applies to every path, the HTML page and the bridge script included.
+      // This runs before the URL is parsed: a malformed Host makes `req.url` unparseable.
+      const hostDenied = checkHost(req, actualPort);
+      if (hostDenied) return hostDenied;
+
+      let url: URL;
+      try {
+        url = new URL(req.url);
+      } catch {
+        return new Response(null, { status: 400 });
+      }
+      const path = url.pathname;
+
+      // CORS reflects an allowlisted Origin and nothing else. There is no wildcard.
+      const requestOrigin = req.headers.get('Origin');
       const headers: Record<string, string> = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+        // The reflected origin differs per request, so a cache must key on it.
+        Vary: 'Origin',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, X-Wilson-Agent-Session',
+        ...corsHeaders(actualPort, requestOrigin),
       };
-      if (isMcpPath) {
-        // Never the wildcard for grant/approval/mutation traffic — see mcpCorsHeaders.
-        delete headers['Access-Control-Allow-Origin'];
-        Object.assign(headers, mcpCorsHeaders(actualPort, req.headers.get('Origin')));
+      if (path.startsWith('/api/sync/')) {
+        // Raw ledger rows for the mirror: never the wildcard (see sync-routes.ts).
+        for (const k of Object.keys(headers)) delete headers[k];
+        Object.assign(headers, syncCorsHeaders(actualPort, req.headers.get('Origin')));
       }
 
       if (req.method === 'OPTIONS') {
         return new Response(null, { status: 204, headers });
       }
 
+      // `/mcp` authenticates with a client token, so the state-change rule below does not apply
+      // to it, but a browser page from another origin must not be able to reach it either.
+      if (path === MCP_HTTP_PATH && requestOrigin !== null && !isAllowedOrigin(requestOrigin, actualPort)) {
+        return Response.json(
+          { jsonrpc: '2.0', error: { code: -32000, message: 'Origin not allowed' }, id: null },
+          { status: 403, headers }
+        );
+      }
+
+      const stateDenied = checkStateChange(req, path, actualPort);
+      if (stateDenied) {
+        for (const [k, v] of Object.entries(headers)) stateDenied.headers.set(k, v);
+        return stateDenied;
+      }
+
       try {
         // Get active DB (may change after profile switch)
         const activeDb = getActiveDb();
+
+        // LAN rule, checked on EVERY request: auth is per profile, so a switch (or an admin turning
+        // auth off) can leave the served profile open while the socket is reachable from the network.
+        if (lanMode && !lanAuthReady(activeDb)) {
+          return Response.json(
+            { error: { code: 'lan_auth_required', message: 'This profile needs dashboard auth enabled and an active admin user before it can be used over the network.' } },
+            { status: 503, headers }
+          );
+        }
 
         // ── Static hybrid-chat assets (public) ────────────────────────
         // Module scripts and ORT's own wasm fetches cannot send auth headers,
@@ -229,22 +353,26 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── Auth middleware ──────────────────────────────────────────
         let currentUser: DashboardUser | null = null;
+        let bearerToken: string | null = null;
         const authEnabled = isAuthEnabled(activeDb);
 
         if (authEnabled) {
-          // Extract token from header or query param
+          // The bearer comes from the Authorization header. A `?token=` query token is accepted
+          // only for GET /api/export/* downloads (an <a href> cannot send a header); anywhere else
+          // it would put a credential in logs and Referer headers for no reason.
           const authHeader = req.headers.get('Authorization');
+          const isExportDownload = req.method === 'GET' && path.startsWith('/api/export/');
           const token = authHeader?.startsWith('Bearer ')
             ? authHeader.slice(7)
-            : url.searchParams.get('token');
+            : isExportDownload ? url.searchParams.get('token') : null;
 
+          bearerToken = token;
           if (token) {
             currentUser = validateToken(activeDb, token);
           }
 
           // Public auth routes (no token required)
-          const publicPaths = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
-          const isPublicAuth = publicPaths.includes(path);
+          const isPublicAuth = isPublicAuthPath(path);
           const isHtmlPage = path === '/' || path === '/index.html' || path === '/webmcp-bridge.js';
           // /mcp authenticates each call with its own grant-bound bearer token
           // (see src/mcp/http-server.ts) — an external MCP client has no
@@ -259,10 +387,88 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           }
         }
 
+        // `authEnabled` is what the middleware saw when this request arrived.
+        // A route that awaits its body (or a password hash) before writing
+        // can find auth turned on by another request in between; one that
+        // got past the middleware with no login must then be refused.
+        const authTurnedOnMidRequest = () => !authEnabled && isAuthEnabled(activeDb);
+        const unauthorized = () => Response.json({ error: 'Unauthorized' }, { status: 401, headers });
+        const profileChanged = () => Response.json(
+          { error: 'The active profile changed while this request was in flight, so it was not run. Nothing was changed; send it again on the current profile.' },
+          { status: 409, headers },
+        );
+
+        // What this request arrived with. A login-less request (auth off, or a public auth route)
+        // has nothing to re-validate beyond the profile and the auth flag.
+        const arrivedUser = currentUser;
+        const arrivedToken = bearerToken;
+        const hasLogin = authEnabled && arrivedUser !== null && arrivedToken !== null && !isPublicAuthPath(path);
+
+        /**
+         * Is this request still what it was when its headers arrived? Anything that awaits between the
+         * middleware and a write (the body, a password hash, a handoff build) asks again before writing:
+         *  - The active profile changed: the middleware authenticated against `activeDb`, but the chat runner
+         *    and the agent tools follow the CURRENT profile, so a request that outlives a switch would run on
+         *    a profile whose login it never presented ('profile_changed', 409).
+         *  - It arrived with auth off and auth is on now: it carries no login ('unauthorized').
+         *  - It arrived with a login that is gone or belongs to someone else now (deactivated, logged out,
+         *    expired): an offboarded admin must not finish a held write ('unauthorized'). A still-valid login
+         *    replaces `currentUser`, so a role change mid-request is honoured by the route's own canWrite checks.
+         */
+        const recheck = (): 'profile_changed' | 'unauthorized' | null => {
+          if (getActiveDb() !== activeDb) return 'profile_changed';
+          if (authTurnedOnMidRequest()) return 'unauthorized';
+          if (hasLogin) {
+            const fresh = validateToken(activeDb, arrivedToken!);
+            if (!fresh || fresh.id !== arrivedUser!.id) return 'unauthorized';
+            currentUser = fresh;
+          }
+          return null;
+        };
+        const refusal = (reason: 'profile_changed' | 'unauthorized') => (reason === 'profile_changed' ? profileChanged() : unauthorized());
+
+        // One write-time re-check for every state-changing route (#157): the body is read here, once,
+        // before any route sees it, and the request is refused if its authority changed meanwhile.
+        // `/mcp` is excluded because it authenticates each call with its own client token and reads its
+        // own body; the public auth routes (status, setup, login) carry no login to re-check.
+        if (isStateChanging(req.method) && path !== MCP_HTTP_PATH && (!authEnabled || hasLogin)) {
+          const refused = await readBodyThenRecheck(req, recheck);
+          if (refused) return refusal(refused);
+        }
+
+        // Export downloads are the one REST read path the audit log covers.
+        // Every request that reaches an export route is audited whatever its
+        // method, and only GET is served: a POST used to return the ledger
+        // with no audit row.
+        if (path.startsWith('/api/export/')) {
+          try {
+            const exportUserId = authEnabled && currentUser ? currentUser.id : null;
+            // A training export says what it may contain (human, judge, agent-present, handoff) and whether an agent had
+            // live access, so a download with opt-ins never looks like a default one in the log.
+            const detail = path.startsWith('/api/export/training/')
+              ? `provenance=${exportProvenance(trainingExportFlags(url))} agent_present=${isAgentPresent(activeDb, exportUserId, getCurrentProfileName())}`
+              : undefined;
+            appendRestExportAudit(activeDb, {
+              route: path,
+              userId: exportUserId,
+              role: authEnabled && currentUser ? currentUser.role : 'admin',
+              origin: req.headers.get('Origin') ?? 'direct',
+              detail,
+            });
+          } catch (err) {
+            console.error('[mcp-audit] failed to audit export:', err);
+          }
+          if (req.method !== 'GET') {
+            return Response.json({ error: 'Method Not Allowed' }, { status: 405, headers: { ...headers, Allow: 'GET' } });
+          }
+        }
+
         // ── WebMCP bridge (Streamable-HTTP fallback + browser-facing API) ──
 
         if (path === MCP_HTTP_PATH) {
-          return handleMcpHttpRequest(activeDb, req);
+          return handleMcpHttpRequest(activeDb, req, bunServer.requestIP(req)?.address, getCurrentProfileName(), {
+            setIdleTimeout: (seconds) => bunServer.timeout(req, seconds),
+          });
         }
 
         if (path.startsWith('/api/mcp/')) {
@@ -275,6 +481,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           });
           if (mcpResponse) return mcpResponse;
         }
+
+        // Raw rows for the offline mirror's v4 sync (behind the auth gate above).
+        const syncResponse = handleSyncRoute(req, path, { activeDb, headers, port: actualPort });
+        if (syncResponse) return syncResponse;
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
@@ -301,7 +511,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/auth/setup' && req.method === 'POST') {
-          // Only allowed when 0 users exist
+          // Only allowed when 0 users exist, and in LAN mode only from this machine
+          // (defense in depth: the LAN rule above already refuses a profile with no admin).
+          if (lanMode && !isLoopbackPeer(bunServer.requestIP(req)?.address)) {
+            return Response.json({ error: 'First-admin setup is only allowed from this machine while the dashboard is on the network.' }, { status: 403, headers });
+          }
           if (getUserCount(activeDb) > 0) {
             return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
           }
@@ -309,8 +523,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
-          const user = await createUser(activeDb, body.username, body.password, 'admin');
-          enableAuth(activeDb);
+          // Decide at write time: another setup may have created the admin
+          // while this one awaited its body or the hash.
+          const user = createFirstAdmin(activeDb, body.username, await hashPassword(body.password));
+          if (!user) {
+            return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
+          }
           const login = await verifyLogin(activeDb, body.username, body.password);
           return Response.json({ user, token: login?.token }, { headers });
         }
@@ -355,7 +573,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
-          const user = await createUser(activeDb, body.username, body.password, body.role ?? 'viewer');
+          const passwordHash = await hashPassword(body.password);
+          // The hash awaited: same profile, live login (not deactivated or logged out meanwhile), auth not
+          // switched on under a login-less request. Otherwise an offboarded admin finishes a backdoor account.
+          const stale = recheck();
+          if (stale) return refusal(stale);
+          const user = insertUser(activeDb, body.username, passwordHash, body.role ?? 'viewer');
           return Response.json(user, { headers });
         }
 
@@ -366,6 +589,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           }
           const id = parseInt(userDeleteMatch[1], 10);
           const success = deactivateUser(activeDb, id);
+          // A deactivated user's WebMCP grants die with the account, not at the grant's TTL.
+          if (success) {
+            revokeGrantsForUser(activeDb, id);
+            // ...and so does a chat run they have in flight (and its pending card).
+            cancelChatRunForUser(activeDb, id);
+          }
           return Response.json({ success, id }, { headers });
         }
 
@@ -374,6 +603,19 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const body = await req.json() as { auth_enabled?: boolean };
+          // Auth on with no active admin is a bootstrap hijack (#157): /api/auth/setup stays public
+          // while no users exist, so whoever called it first would become admin. The first enable
+          // goes through /api/auth/setup, which creates the admin and flips the flag in one
+          // transaction. This check and enableAuth run with no await between them.
+          if (body.auth_enabled === true && !isAuthEnabled(activeDb) && !hasActiveAdmin(activeDb)) {
+            return Response.json(
+              { error: 'Cannot enable auth: no active admin user exists. Create the first admin through /api/auth/setup, which also enables auth.' },
+              { status: 409, headers },
+            );
+          }
+          // Write-time backstop: a request that arrived with auth off carries no login, so if auth came on
+          // since (a concurrent /api/auth/setup) it must not enable, and above all must not DISABLE, it.
+          if (authTurnedOnMidRequest()) return unauthorized();
           if (body.auth_enabled === true) enableAuth(activeDb);
           else if (body.auth_enabled === false) disableAuth(activeDb);
           return Response.json({ auth_enabled: isAuthEnabled(activeDb) }, { headers });
@@ -396,9 +638,44 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!body.name) {
             return Response.json({ error: 'name required' }, { status: 400, headers });
           }
+          if (!PROFILE_NAME_RE.test(body.name)) {
+            return Response.json(
+              { error: 'name must be 1-64 characters of letters, numbers, "-" or "_"' },
+              { status: 400, headers },
+            );
+          }
+          // In LAN mode a switch must not expose a profile that has no dashboard auth.
+          if (lanMode) {
+            const target = peekProfileDb(body.name);
+            if (!target || !lanAuthReady(target)) {
+              return Response.json(
+                { error: 'That profile has no dashboard auth and admin user; set them up before switching while the dashboard is on the network.' },
+                { status: 409, headers }
+              );
+            }
+          }
           switchProfile(body.name);
           return Response.json({ active: getCurrentProfileName() }, { headers });
         }
+
+        // A human REST write that an agent could also drive through the page (budget, goal, review confirm and
+        // correct) leaves a `transport='rest'` audit row saying whether an agent had live access at the time,
+        // computed here from server state. A failed write changed nothing and is not recorded.
+        const auditRestWrite = (route: string, success: boolean, agentPresentOverride?: boolean): void => {
+          if (!success) return;
+          try {
+            const userId = authEnabled && currentUser ? currentUser.id : null;
+            appendRestWriteAudit(activeDb, {
+              route,
+              userId,
+              role: authEnabled && currentUser ? currentUser.role : 'admin',
+              origin: req.headers.get('Origin') ?? 'direct',
+              agentPresent: agentPresentOverride ?? isAgentPresent(activeDb, userId, getCurrentProfileName()),
+            });
+          } catch (err) {
+            console.error('[mcp-audit] failed to audit a REST write:', err);
+          }
+        };
 
         // ── Data API routes ─────────────────────────────────────────
 
@@ -411,6 +688,26 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/budgets') {
           return Response.json(apiBudgets(activeDb, url.searchParams), { headers });
         }
+        if (path === '/api/coverage') {
+          return Response.json(apiCoverage(activeDb), { headers });
+        }
+        // Set one category's monthly limit (admin only). The Goals tab's budget form; an agent reaches the same
+        // change through the `set_budget` tool and its confirmation card.
+        const budgetPutMatch = path.match(/^\/api\/budgets\/([^/]+)$/);
+        if (budgetPutMatch && budgetPutMatch[1] !== 'limits' && req.method === 'PUT') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          let category: string;
+          try {
+            category = decodeURIComponent(budgetPutMatch[1]);
+          } catch {
+            return Response.json({ error: 'malformed category' }, { status: 400, headers });
+          }
+          const result = apiSetBudget(activeDb, category, await readJsonBody(req));
+          auditRestWrite('/api/budgets/:category', result.success);
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
+        }
         if (path === '/api/budgets/limits') {
           // Raw budget rows (sync feed for the offline mirror) — distinct from
           // /api/budgets, the vs-actual aggregation. Exact-match check, so the
@@ -420,6 +717,31 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/categories') {
           // Raw category rows (sync feed for the offline mirror).
           return Response.json(apiCategories(activeDb), { headers });
+        }
+        if (path === '/api/category-options') {
+          // Header category filter options (every label in transactions).
+          return Response.json(apiCategoryOptions(activeDb), { headers });
+        }
+        if (path === '/api/spending/breakdown' || path === '/api/spending/series') {
+          // Spending drill (mirrored). A bad param is a 400 { error }, never a 500.
+          const result = path === '/api/spending/breakdown'
+            ? await apiSpendingBreakdown(activeDb, url.searchParams)
+            : await apiSpendingSeries(activeDb, url.searchParams);
+          if (isBadRequest(result)) {
+            return Response.json({ error: result.error }, { status: 400, headers });
+          }
+          return Response.json(result, { headers });
+        }
+        if (path === '/api/skills') {
+          // Chat "/" menu source. Name/description/tier/source only — never the SKILL.md path.
+          return Response.json(apiSkills(), { headers });
+        }
+        if (path === '/api/merchants') {
+          // Chat "@" menu source: distinct merchants with txn counts (read-only aggregate).
+          return Response.json(
+            apiMerchants(activeDb, url.searchParams.get('q'), url.searchParams.get('limit')),
+            { headers },
+          );
         }
         if (path === '/api/savings') {
           return Response.json(apiSavings(activeDb, url.searchParams), { headers });
@@ -434,10 +756,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           return Response.json(apiDailySpending(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/streak') {
-          return Response.json(apiStreak(activeDb), { headers });
+          return Response.json(apiStreak(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/weekly-summary') {
-          return Response.json(apiWeeklySummary(activeDb), { headers });
+          return Response.json(apiWeeklySummary(activeDb, url.searchParams), { headers });
         }
         if (path === '/api/budget-countdown') {
           return Response.json(apiBudgetCountdown(activeDb, url.searchParams), { headers });
@@ -485,13 +807,29 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const result = reviewMatch[2] === 'confirm'
             ? apiConfirmReview(activeDb, id)
             : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+          auditRestWrite(`/api/reviews/:id/${reviewMatch[2]}`, result.success);
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
+
+        // ── open-jev pre-labeler (own origin gate, specs/open-jev-labeler.md §9.0) ──
+        const pre = await handlePrelabelRoute(req, url, { db: activeDb, headers, authEnabled, currentUser, canWrite, port: actualPort, profile: getCurrentProfileName(), peerAddress: server.requestIP(req)?.address }); if (pre) return pre;
 
         // ── Goals ──────────────────────────────────────────────────
 
         if (path === '/api/goals') {
-          return Response.json(apiGoals(activeDb), { headers });
+          return Response.json(apiGoals(activeDb, url.searchParams), { headers });
+        }
+        // Edit a goal's target amount, date or status (admin only). The Goals tab's edit form; an agent reaches
+        // the same change through the `update_goal` tool and its confirmation card, never through this route.
+        const goalPatchMatch = path.match(/^\/api\/goals\/(\d+)$/);
+        if (goalPatchMatch && req.method === 'PATCH') {
+          if (authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          const body = await readJsonBody(req);
+          const result = apiUpdateGoal(activeDb, parseInt(goalPatchMatch[1], 10), body);
+          auditRestWrite('/api/goals/:id', result.success);
+          return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
         const goalSnapshotMatch = path.match(/^\/api\/goals\/(\d+)\/snapshots$/);
         if (goalSnapshotMatch) {
@@ -634,7 +972,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
         if (path === '/api/export/xlsx') {
           try {
-            const buf = apiExportXlsx(activeDb, url.searchParams);
+            const buf = await apiExportXlsx(activeDb, url.searchParams);
             return new Response(new Uint8Array(buf), {
               headers: {
                 ...headers,
@@ -644,7 +982,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             });
           } catch {
             return Response.json(
-              { error: 'XLSX export requires the xlsx package. Install with: bun add xlsx' },
+              { error: 'XLSX export failed.' },
               { status: 500, headers }
             );
           }
@@ -669,6 +1007,39 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             },
           });
         }
+        if (path === '/api/export/tax') {
+          // Schedule C export of flagged deductions — Pro, like tax_flag itself.
+          if (!hasLicense('pro')) {
+            return Response.json(
+              { error: 'Tax export is a Pro feature.', upgradeUrl: getCheckoutUrl('annual') },
+              { status: 402, headers },
+            );
+          }
+          const yearParam = url.searchParams.get('year');
+          const year = yearParam ? Number(yearParam) : new Date().getFullYear();
+          const format = url.searchParams.get('format') ?? 'xlsx';
+          if (!Number.isInteger(year) || year < 1900 || year > 9999 || (format !== 'csv' && format !== 'xlsx')) {
+            return Response.json({ error: 'year must be a 4-digit year and format csv or xlsx' }, { status: 400, headers });
+          }
+          const report = buildScheduleC(activeDb, year);
+          const filename = `schedule-c-${year}.${format}`;
+          if (format === 'csv') {
+            return new Response(scheduleCToCsv(report), {
+              headers: {
+                ...headers,
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="${filename}"`,
+              },
+            });
+          }
+          return new Response(new Uint8Array(await scheduleCToXlsxBuffer(report)), {
+            headers: {
+              ...headers,
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'Content-Disposition': `attachment; filename="${filename}"`,
+            },
+          });
+        }
 
         // ── Logs & Traces ───────────────────────────────────────────
 
@@ -687,6 +1058,9 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         if (path === '/api/chat/history') {
           return Response.json(apiChatHistory(activeDb), { headers });
         }
+        if (path === '/api/chat/progress') {
+          return Response.json({ progress: getCategorizeProgress() }, { headers });
+        }
         if (path === '/api/chat/sessions') {
           return Response.json(apiChatSessions(activeDb), { headers });
         }
@@ -696,11 +1070,48 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string };
+          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
+          // The body was read and auth re-checked centrally (readBodyThenRecheck).
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
           }
-          const result = await handleChatMessage(body.query, body.sessionId);
+          // Recorded verbatim in the interaction store and later normalised by training/judge reads: bound it here.
+          if (typeof body.query !== 'string' || body.query.length > MAX_CHAT_QUERY_CHARS) {
+            return Response.json({ error: `query must be a string of at most ${MAX_CHAT_QUERY_CHARS} characters` }, { status: 400, headers });
+          }
+          // "@" mentions: shape-checked here, then every entity is re-read from
+          // the DB (client labels are never trusted) into a context block.
+          const mentions = validateMentions(body.mentions);
+          if (!mentions.ok) {
+            return Response.json({ error: mentions.error }, { status: 400, headers });
+          }
+          const contextBlock = resolveMentionContext(activeDb, mentions.mentions);
+          // On-device subagent handoff (advisory): validated, its steps re-run
+          // on this DB, rendered as a framed untrusted block after the mention
+          // block. Invalid or oversized payloads render '' and never fail the chat.
+          // Honoured only while subagent.enabled is on: with the flag off the field
+          // is not even parsed, so a forged handoff cannot inject a block or make the
+          // server run tools on a path the feature does not expose.
+          const handoffBlock = apiLocalChatConfig().subagent.enabled
+            ? await buildHandoffContext(body.localHandoff, { exec: serverReadExecutor(activeDb), db: activeDb })
+            : '';
+          // The handoff build awaited: ask the whole question again (same profile, same live login, auth
+          // not switched on under a login-less request) before a run starts on the shared runner.
+          const stale = recheck();
+          if (stale) return refusal(stale);
+          // The run belongs to this user: its approval cards are theirs alone,
+          // and a user who cannot write gets every write denied (#156). `db` is the profile this request
+          // was authenticated against; the chat session refuses to run for any other.
+          const result = await handleChatMessage(body.query, body.sessionId, (contextBlock + handoffBlock) || undefined, {
+            user: authEnabled && currentUser ? { id: currentUser.id, role: currentUser.role } : null,
+            db: activeDb,
+          });
+          if (result.stale) return profileChanged();
+          // One chat run at a time (chat.ts activeChatRun): a concurrent
+          // message is refused, never queued behind another run's approval.
+          if (result.busy) {
+            return Response.json({ error: result.answer, sessionId: result.sessionId }, { status: 409, headers });
+          }
           return Response.json(result, { headers });
         }
 
@@ -837,12 +1248,45 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         const annotateMatch = path.match(/^\/api\/interactions\/(\d+)\/annotate$/);
         if (annotateMatch && req.method === 'POST') {
+          // A label is a human's act, and it feeds the training export: it needs the dashboard page's browser proof,
+          // exactly like the judge queue (a token-bearing script or a cross-origin page must not be able to write one).
+          const proof = requireBrowserProof(req, actualPort);
+          if (proof) {
+            for (const [k, v] of Object.entries(headers)) proof.headers.set(k, v);
+            return proof;
+          }
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
           const id = parseInt(annotateMatch[1], 10);
-          const body = await req.json() as Record<string, unknown>;
-          return Response.json(apiAnnotateInteraction(activeDb, id, body), { headers });
+          let body: unknown;
+          try {
+            body = await req.json();
+          } catch {
+            return Response.json({ error: { code: 'invalid_args', message: 'Request body must be valid JSON' } }, { status: 400, headers });
+          }
+          // Whether an agent had live access is computed here from server state (a header could be left out): a label
+          // written then stays out of the default training export.
+          const annotateUserId = authEnabled && currentUser ? currentUser.id : null;
+          const agentPresent = annotateAgentPresent(activeDb, annotateUserId, getCurrentProfileName());
+          const result = apiAnnotateInteraction(activeDb, id, body, { agentPresent });
+          // The audit row records the same flag the stored label got (window rule), not a fresh live-only check.
+          auditRestWrite('/api/interactions/:id/annotate', result.ok, agentPresent);
+          if (!result.ok) return Response.json({ error: result.error }, { status: result.status, headers });
+          return Response.json({ annotation: result.annotation }, { headers });
+        }
+
+        // ── Judge queue: a person accepts, rejects or revokes what an agent proposed ─────────────────
+        if (path === '/api/judgements' || path.startsWith('/api/judgements/')) {
+          const judgementResponse = await handleJudgementRoute(req, url, path, {
+            activeDb,
+            currentUser,
+            authEnabled,
+            port: actualPort,
+            headers,
+            profile: getCurrentProfileName(),
+          });
+          if (judgementResponse) return judgementResponse;
         }
 
         const runMatch = path.match(/^\/api\/runs\/(.+)$/);
@@ -856,34 +1300,42 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── Training Export ──────────────────────────────────────────
 
+        // Each of these is a separate, explicit per-export opt-in; anything but the literal "true" is off. The default
+        // export is human labels only. The provenance header says what the file may contain.
+        const exportFlags = (): ExportQualifyOptions => trainingExportFlags(url);
+
         if (path === '/api/export/training/sft') {
           const minRating = parseInt(url.searchParams.get('minRating') ?? '4', 10);
           const callTypesParam = url.searchParams.get('callTypes');
           const callTypes = callTypesParam ? callTypesParam.split(',') : ['agent'];
           const model = url.searchParams.get('model') ?? undefined;
-          const jsonl = exportSftJsonl(activeDb, { minRating, callTypes, model });
+          const flags = exportFlags();
+          const jsonl = exportSftJsonl(activeDb, { minRating, callTypes, model, ...flags });
           return new Response(jsonl, {
             headers: {
               ...headers,
               'Content-Type': 'application/x-ndjson',
-              'Content-Disposition': 'attachment; filename="wilson-sft.jsonl"',
+              'Content-Disposition': `attachment; filename="${flags.includeJudge ? 'wilson-sft-with-judge.jsonl' : 'wilson-sft.jsonl'}"`,
+              'X-Wilson-Export-Provenance': exportProvenance(flags),
             },
           });
         }
 
         if (path === '/api/export/training/dpo') {
-          const jsonl = exportDpoJsonl(activeDb);
+          const flags = exportFlags();
+          const jsonl = exportDpoJsonl(activeDb, flags);
           return new Response(jsonl, {
             headers: {
               ...headers,
               'Content-Type': 'application/x-ndjson',
-              'Content-Disposition': 'attachment; filename="wilson-dpo.jsonl"',
+              'Content-Disposition': `attachment; filename="${flags.includeJudge ? 'wilson-dpo-with-judge.jsonl' : 'wilson-dpo.jsonl'}"`,
+              'X-Wilson-Export-Provenance': exportProvenance(flags),
             },
           });
         }
 
         if (path === '/api/export/training/stats') {
-          return Response.json(getTrainingStats(activeDb), { headers });
+          return Response.json(getTrainingStats(activeDb, exportFlags()), { headers });
         }
 
         return new Response('Not Found', { status: 404, headers });
@@ -893,8 +1345,32 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           { status: 500, headers }
         );
       }
+  };
+
+  const server = Bun.serve({
+    hostname,
+    port,
+    idleTimeout: DASHBOARD_IDLE_TIMEOUT_S,
+    // Never Bun's development error page: it prints source and absolute paths.
+    development: false,
+    error() {
+      return new Response('Internal Server Error', { status: 500, headers: { 'Content-Type': 'text/plain', ...ANTI_FRAMING_HEADERS } });
+    },
+    async fetch(req, bunServer) {
+      return withAntiFraming(await handleRequest(req, bunServer));
     },
   });
+
+  const maintenanceTimer = setInterval(() => {
+    try {
+      getActiveDb(); // make sure the active profile is open and so included
+      runMcpMaintenanceAll(getOpenDbs(), getCurrentProfileName());
+    } catch (err) {
+      console.error('[mcp-maintenance] sweep failed:', err);
+    }
+  }, MAINTENANCE_INTERVAL_MS);
+  maintenanceTimer.unref?.();
+  maintenanceTimers.set(server, maintenanceTimer);
 
   return { server, url: `http://localhost:${port}` };
 }
@@ -903,5 +1379,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
  * Stop the dashboard server.
  */
 export function stopDashboardServer(server: ReturnType<typeof Bun.serve>): void {
+  const timer = maintenanceTimers.get(server);
+  if (timer) {
+    clearInterval(timer);
+    maintenanceTimers.delete(server);
+  }
   server.stop();
 }

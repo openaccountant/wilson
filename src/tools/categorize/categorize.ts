@@ -9,6 +9,9 @@ import { callLlm } from '../../model/llm.js';
 import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.js';
 import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
 import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
+import { resolveProvider } from '../../providers.js';
+import { isConstrainedDecodingActive } from '../../model/providers/transformers.js';
+import { numberLiteralUnion } from '../literal-union.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -17,6 +20,11 @@ let db: Database | null = null;
  * Initialize the categorize tool with a database connection.
  * Must be called before the agent starts.
  */
+/** Narrow only when decoding is really constrained: local provider and no EOS-mismatch fallback. */
+function isNarrowingSafe(model: string): boolean {
+  return resolveProvider(model).id === 'transformers' && isConstrainedDecodingActive(model);
+}
+
 export function initCategorizeTool(database: Database): void {
   db = database;
 }
@@ -36,18 +44,70 @@ function getDb(): Database {
 export const CATEGORIZER_SYSTEM_PROMPT =
   'You are a precise financial transaction categorizer. Respond only with valid JSON.';
 
-/** Zod schema for LLM structured output */
-const categorizationOutputSchema = z.object({
-  transactions: z.array(
-    z.object({
-      id: z.number(),
-      category: z.string(),
-      confidence: z.number().min(0).max(1),
-    })
-  ),
-});
+/**
+ * The category names the prompt offers: roots and their children for DB
+ * categories (what buildCategoryListFromDb renders), else the hardcoded list.
+ * 'Other' is always allowed: it is the backstop for anything unresolved.
+ */
+export function offeredCategoryNames(dbCategories: CategoryRow[] | undefined): string[] {
+  const names = dbCategories
+    ? dbCategories
+        .filter((c) => c.parent_id === null || dbCategories.some((p) => p.id === c.parent_id && p.parent_id === null))
+        .map((c) => c.name)
+    : CATEGORIES;
+  return [...new Set([...names, 'Other'])];
+}
+
+/**
+ * Zod schema for LLM structured output, built per batch. With `narrow` (only
+ * where decoding is constrained, i.e. local Transformers.js) category is limited
+ * to the names offered and id to this batch's ids, so the model cannot name
+ * anything else. Otherwise the schema stays loose: providers that do not enforce
+ * it would fail the whole batch on one near-miss, and the 'Other' fallback and
+ * batch-id guard below handle those rows instead. A fresh schema per call means
+ * a cold token-mask cache; the WeakMap memo in toConstraintSchema lets the old
+ * one be collected.
+ */
+export function buildCategorizationOutputSchema(batchIds: number[], categoryNames: string[], narrow: boolean) {
+  return z.object({
+    transactions: narrow
+      ? z
+          .array(
+            z.object({
+              id: numberLiteralUnion(batchIds),
+              category: z.enum(categoryNames as [string, ...string[]]),
+              confidence: z.number().min(0).max(1),
+            })
+          )
+          // An empty array would pass as "success" while categorizing nothing.
+          .min(1)
+          .max(batchIds.length)
+      : z
+          .array(
+            z.object({
+              id: z.number(),
+              category: z.string(),
+              confidence: z.number().min(0).max(1),
+            })
+          ),
+  });
+}
 
 const BATCH_SIZE = 50;
+/**
+ * Local Transformers.js models generate a few dozen tokens a second, so a
+ * 50-row batch means a minute-plus per call; small batches keep each call
+ * short and progress steady.
+ */
+const LOCAL_BATCH_SIZE = 10;
+/** Output tokens per {"id","category","confidence"} row (~20–25), with headroom. */
+const OUTPUT_TOKENS_PER_ROW = 40;
+const OUTPUT_TOKENS_OVERHEAD = 64;
+/**
+ * Consecutive failed batches before giving up: the same model on the same
+ * kind of prompt fails the same way, and each failure can cost a minute.
+ */
+const MAX_CONSECUTIVE_BATCH_FAILURES = 2;
 
 /**
  * Categorize tool — uses LLM to categorize uncategorized transactions.
@@ -55,6 +115,7 @@ const BATCH_SIZE = 50;
  */
 export const categorizeTool = defineTool({
   name: 'categorize',
+  mutates: true,
   description:
     'Categorize uncategorized transactions using AI. ' +
     'Assigns each transaction to a spending category with a confidence score. ' +
@@ -68,10 +129,21 @@ export const categorizeTool = defineTool({
       .number()
       .optional()
       .describe('Optional entity ID to assign to categorized transactions'),
+    skipPendingReview: z
+      .boolean()
+      .optional()
+      .describe('Skip transactions already waiting in the review queue (default: false)'),
   }),
-  func: async ({ limit, entityId }) => {
+  func: async ({ limit, entityId, skipPendingReview }, config) => {
     const database = getDb();
     const threshold = getCategorizationConfidenceThreshold();
+    // A caller that can be cancelled (the dashboard's /categorize: its owner deactivated, or auth switched on
+    // under an anonymous run) passes a signal; the run then stops before writing anything more.
+    const signal = config?.signal;
+    const throwIfAborted = () => {
+      if (signal?.aborted) throw new DOMException('Categorization cancelled', 'AbortError');
+    };
+    throwIfAborted();
 
     // Load dynamic categories from DB (with fallback)
     let dbCategories: CategoryRow[] | undefined;
@@ -83,12 +155,19 @@ export const categorizeTool = defineTool({
     }
 
     // 1. Get uncategorized transactions
-    const uncategorized = getUncategorizedTransactions(database, limit);
+    const uncategorized = getUncategorizedTransactions(database, limit, { excludePendingReview: skipPendingReview });
 
     if (uncategorized.length === 0) {
+      const stillUncategorized = countUncategorized(database);
+      const pendingReview = skipPendingReview ? countUncategorizedPendingReview(database) : 0;
       return formatToolResult({
-        message: 'All transactions are already categorized.',
+        // Only held rows remain: "all categorized" would be false.
+        message: pendingReview > 0
+          ? `No new transactions to categorize — ${pendingReview} are waiting for your review in the Review tab.`
+          : 'All transactions are already categorized.',
         categorized: 0,
+        stillUncategorized,
+        ...(skipPendingReview ? { pendingReview } : {}),
       });
     }
 
@@ -124,8 +203,20 @@ export const categorizeTool = defineTool({
     }
 
     // 2. Process remaining in batches via LLM
-    for (let i = 0; i < needsLlm.length; i += BATCH_SIZE) {
-      const batch = needsLlm.slice(i, i + BATCH_SIZE);
+    const batchSize = resolveProvider(getTaskModel('categorization')).id === 'transformers' ? LOCAL_BATCH_SIZE : BATCH_SIZE;
+    const batches = Math.ceil(needsLlm.length / batchSize);
+    const reportProgress = (batch: number, llmRowsHandled: number) =>
+      config?.onProgress?.({ done: ruleMatchCount + llmRowsHandled, total: uncategorized.length, batch, batches });
+    if (batches > 0) reportProgress(0, 0);
+    let consecutiveFailures = 0;
+    let notAttempted = 0;
+    for (let i = 0; i < needsLlm.length; i += batchSize) {
+      if (consecutiveFailures >= MAX_CONSECUTIVE_BATCH_FAILURES) {
+        notAttempted = needsLlm.length - i;
+        break;
+      }
+      throwIfAborted();
+      const batch = needsLlm.slice(i, i + batchSize);
       const inputs: CategorizationInput[] = batch.map((t: TransactionRow) => ({
         id: t.id,
         description: t.description,
@@ -134,6 +225,12 @@ export const categorizeTool = defineTool({
       }));
 
       const prompt = buildCategorizationPrompt(inputs, dbCategories);
+      const batchIds = new Set(batch.map((t) => t.id));
+      const outputSchema = buildCategorizationOutputSchema(
+        [...batchIds],
+        offeredCategoryNames(dbCategories),
+        isNarrowingSafe(getTaskModel('categorization')),
+      );
 
       try {
         // 3. Call LLM with structured output. Resolved per batch so a pinned
@@ -141,19 +238,30 @@ export const categorizeTool = defineTool({
         const model = getTaskModel('categorization');
         const result = await callLlm(prompt, {
           systemPrompt: CATEGORIZER_SYSTEM_PROMPT,
-          outputSchema: categorizationOutputSchema,
+          outputSchema,
           model,
           callType: CALL_TYPE_CATEGORIZATION,
+          // Room for every row's JSON: the local adapter otherwise caps output
+          // at 512 tokens, truncating a 50-row reply into invalid JSON.
+          maxTokens: OUTPUT_TOKENS_OVERHEAD + OUTPUT_TOKENS_PER_ROW * batch.length,
+          signal,
         });
+        // Cancelled while the model was answering: its answer must not be applied.
+        throwIfAborted();
 
-        // callLlm validated the structured output against categorizationOutputSchema
+        // callLlm validated the structured output against the per-batch schema
         // (with one repair re-prompt) or threw — result.response.structured is guaranteed
         // to satisfy the schema, so a rejected batch lands in the catch below and this
         // batch's transactions stay uncategorized.
-        const categorizations = result.response.structured as z.infer<typeof categorizationOutputSchema>;
+        const categorizations = result.response.structured as { transactions: { id: number; category: string; confidence: number }[] };
 
         // 4. Update categories in database
         for (const cat of categorizations.transactions) {
+          // Whatever the provider enforced, an id outside this batch is never written.
+          if (!batchIds.has(cat.id)) {
+            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ignored id ${cat.id} not in batch`);
+            continue;
+          }
           // Validate category: try DB lookup first, fall back to hardcoded list, then 'Other'
           let validCategory: string;
           if (dbCategories) {
@@ -181,11 +289,16 @@ export const categorizeTool = defineTool({
             totalRoutedForReview++;
           }
         }
+        consecutiveFailures = 0;
       } catch (err) {
+        // A cancel is not a failed batch: stop the run (the caller reports it) instead of counting it.
+        if (signal?.aborted) throw err;
+        consecutiveFailures++;
         errors.push(
-          `Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${err instanceof Error ? err.message : String(err)}`
+          `Batch ${Math.floor(i / batchSize) + 1}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
+      reportProgress(Math.floor(i / batchSize) + 1, i + batch.length);
     }
 
     return formatToolResult({
@@ -197,11 +310,30 @@ export const categorizeTool = defineTool({
       categoriesApplied: categoryCounts,
       routedForReview: totalRoutedForReview,
       errors: errors.length > 0 ? errors : undefined,
+      notAttempted: notAttempted > 0 ? notAttempted : undefined,
+      stillUncategorized: countUncategorized(database),
+      ...(skipPendingReview ? { pendingReview: countUncategorizedPendingReview(database) } : {}),
       message:
         `Categorized ${totalCategorized} of ${uncategorized.length} transactions` +
         (ruleMatchCount > 0 ? ` (${ruleMatchCount} by rules, ${totalCategorized - ruleMatchCount} by LLM)` : '') +
         `. ${totalRoutedForReview} routed for human review (below threshold ${threshold}).` +
-        (errors.length > 0 ? ` ${errors.length} batch errors occurred.` : ''),
+        (errors.length > 0 ? ` ${errors.length} batch errors occurred.` : '') +
+        (notAttempted > 0
+          ? ` Stopped after ${MAX_CONSECUTIVE_BATCH_FAILURES} failed batches in a row; ${notAttempted} transactions were not attempted.`
+          : ''),
     });
   },
 });
+
+/** Transactions with no category (those held in the review queue included). */
+function countUncategorized(database: Database): number {
+  return (database.prepare('SELECT COUNT(*) AS n FROM transactions WHERE category IS NULL').get() as { n: number }).n;
+}
+
+/** Uncategorized transactions that are waiting in the review queue. */
+function countUncategorizedPendingReview(database: Database): number {
+  return (database.prepare(
+    `SELECT COUNT(*) AS n FROM transactions WHERE category IS NULL
+     AND id IN (SELECT transaction_id FROM categorization_reviews WHERE status = 'pending')`
+  ).get() as { n: number }).n;
+}

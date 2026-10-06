@@ -4,6 +4,8 @@ import { discoverSkills } from '../skills/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
 import { getOrchestrationTools } from '../orchestration/registry.js';
 import { getCachedMcpTools } from '../mcp/adapter.js';
+import { mayMutate } from './mutation.js';
+import { logger } from '../utils/logger.js';
 
 const require = createRequire(import.meta.url);
 
@@ -243,6 +245,7 @@ Export transactions to CSV or XLSX files.
 
 - When the user is asking about or querying transactions (use transaction_search)
 - When the user wants to import data (use csv_import or monarch_import)
+- When the user wants a tax / Schedule C export of flagged deductions (use tax_flag with action: export)
 
 ## Usage Notes
 
@@ -445,6 +448,7 @@ const TAX_FLAG_DESCRIPTION = `
 - When the user wants to flag a transaction as tax-deductible
 - When the user asks about tax deductions, Schedule C, or business expenses
 - When the user wants a tax summary or list of flagged deductions
+- When the user wants a Schedule C export / file for taxes, tax software, or their accountant (action: export)
 
 ## When NOT to Use
 
@@ -454,8 +458,10 @@ const TAX_FLAG_DESCRIPTION = `
 ## Usage Notes
 
 - Uses official IRS Schedule C categories (22 categories)
-- Actions: flag, unflag, summary, list
+- Actions: flag, unflag, summary, list, export
 - Summary shows total deductions by IRS category
+- export writes a Schedule C file to filePath: xlsx (default) has a per-line Summary sheet plus a Transactions sheet; csv is the per-line summary only
+- export filePath must end in .xlsx or .csv to match the format
 `.trim();
 
 const SAVINGS_RATE_DESCRIPTION = `
@@ -1060,15 +1066,6 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     tools.push({ name: 'link_transactions', tool: linkMod.linkTransactionsTool, description: LINK_TRANSACTIONS_DESCRIPTION });
   }
 
-  // MCP tools (loaded at startup from ~/.openaccountant/mcp.json)
-  for (const mcpTool of getCachedMcpTools()) {
-    tools.push({
-      name: mcpTool.name,
-      tool: mcpTool,
-      description: mcpTool.description,
-    });
-  }
-
   // Conditional: web_search (if any search API key is configured)
   if (process.env.EXASEARCH_API_KEY) {
     const mod = safeRequire<{ exaSearch: ToolDef }>('./search/exa.js');
@@ -1118,7 +1115,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  // Orchestration: chains + teams registered as tools
+  // Orchestration: chains + teams registered as tools.
   for (const orchTool of await getOrchestrationTools()) {
     tools.push({
       name: orchTool.name,
@@ -1127,7 +1124,71 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  return tools;
+  // MCP tools (loaded at startup from ~/.openaccountant/mcp.json) go after
+  // every built-in, conditional and orchestration tool: names are unique and
+  // the first registration wins, so an external tool can never shadow one of
+  // ours (see dedupeToolNames).
+  for (const mcpTool of getCachedMcpTools()) {
+    tools.push({
+      name: mcpTool.name,
+      tool: mcpTool,
+      description: mcpTool.description,
+    });
+  }
+
+  // Last, once every tool is registered (conditional, MCP and orchestration
+  // tools included), so no tool a chain names is missed for being pushed later.
+  return resolveOrchestrationMutation(dedupeToolNames(tools));
+}
+
+/**
+ * Tool names are unique: the executor, the chain/team resolver and the
+ * approval flags all look tools up by name, so a second tool with a taken
+ * name could run in place of — or be approved as — the first. The first
+ * registration wins (built-ins and orchestration tools are registered before
+ * MCP tools); every later duplicate is dropped with a warning.
+ */
+export function dedupeToolNames(tools: RegisteredTool[]): RegisteredTool[] {
+  const seen = new Set<string>();
+  const kept: RegisteredTool[] = [];
+  for (const entry of tools) {
+    const names = new Set([entry.name, entry.tool.name]);
+    const taken = [...names].find((n) => seen.has(n));
+    if (taken !== undefined) {
+      logger.warn(`Tool registry: dropped duplicate tool "${taken}" — a tool with that name is already registered`, {
+        tool: taken,
+      });
+      continue;
+    }
+    for (const n of names) seen.add(n);
+    kept.push(entry);
+  }
+  return kept;
+}
+
+/**
+ * Set the mutation flag of every chain/team tool (#152). Each tool call their
+ * steps/members make is gated on its own (orchestration/tool-calls.ts); on
+ * top of that the chain/team call is asked once per run when any tool it names:
+ *   - can write,
+ *   - is itself a chain or team (nested orchestration), or
+ *   - is not registered at all (a typo, or a tool behind a missing env var):
+ *     what it would run cannot be shown to be read-only.
+ */
+export function resolveOrchestrationMutation(tools: RegisteredTool[]): RegisteredTool[] {
+  const byName = new Map(tools.map((t) => [t.name, t.tool]));
+  const toolMutates = (name: string): boolean => {
+    const target = byName.get(name);
+    if (!target) return true;
+    if (target.usesTools !== undefined) return true;
+    return mayMutate(target);
+  };
+  return tools.map((entry) => {
+    const uses = entry.tool.usesTools;
+    if (uses === undefined) return entry;
+    const mutates = uses.some(toolMutates);
+    return { ...entry, tool: { ...entry.tool, mutates } };
+  });
 }
 
 /**
@@ -1149,8 +1210,13 @@ export async function getTools(model: string): Promise<ToolDef[]> {
 export async function getToolsByNames(names: string[]): Promise<ToolDef[]> {
   // Use a default model since tool availability is mostly API-key based
   const registry = await getToolRegistry('gpt-5.2');
-  const nameSet = new Set(names);
-  return registry.filter((t) => nameSet.has(t.name)).map((t) => t.tool);
+  const byName = new Map(registry.map((t) => [t.name, t.tool]));
+  // Exactly one tool per requested name (registry names are unique); names
+  // nothing registers are left out.
+  return [...new Set(names)].flatMap((name) => {
+    const tool = byName.get(name);
+    return tool ? [tool] : [];
+  });
 }
 
 /**

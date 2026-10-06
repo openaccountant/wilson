@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ApprovalDecision, ToolApprovalRequest } from '../agent/types.js';
 
 /**
  * Open Accountant's own LLM response type — replaces LangChain's AIMessage.
@@ -32,13 +33,48 @@ export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
   description: string;
   schema: TSchema;
   func: (args: z.infer<TSchema>, config?: ToolInvokeConfig) => Promise<string>;
+  /**
+   * Whether a call writes to the DB, the filesystem, or an external service.
+   * `true` for every call, or a predicate over the (unvalidated) call args for
+   * tools that mix reads and writes. The agent executor asks the user to
+   * approve every mutating call before it runs (#152). Read-only tools declare
+   * `false`; omitted = treated as mutating (fail closed).
+   * Helpers: src/tools/mutation.ts.
+   */
+  mutates?: MutationFlag;
+  /**
+   * Orchestration (chain/team) tools only: the tool names their steps or
+   * members may call. The registry flags the orchestration tool as mutating
+   * when any of them is.
+   */
+  usesTools?: readonly string[];
+}
+
+export type MutationFlag = boolean | ((args: Record<string, unknown>) => boolean);
+
+/** Batch progress of a long-running tool (categorize): rows handled and batches finished. */
+export interface ToolProgress {
+  done: number;
+  total: number;
+  batch: number;
+  batches: number;
 }
 
 export interface ToolInvokeConfig {
   metadata?: Record<string, unknown>;
   signal?: AbortSignal;
+  /** Optional progress sink for tools that work in batches; callers that don't render progress omit it. */
+  onProgress?: (progress: ToolProgress) => void;
   /** Active model from the parent agent — tools like chains should inherit this. */
   model?: string;
+  /**
+   * The parent agent's approval handler. Chains and teams pass every tool call
+   * their steps/members make through the approval gate with it
+   * (src/agent/approval-gate.ts); absent = mutating inner calls are denied.
+   */
+  requestToolApproval?: (request: ToolApprovalRequest) => Promise<ApprovalDecision>;
+  /** The parent agent's session approvals (SessionApprovalScope.key), shared with inner calls. */
+  sessionApprovedTools?: Set<string>;
 }
 
 /**
@@ -53,6 +89,11 @@ export interface ProviderCallOptions {
   systemPrompt: string;
   userPrompt: string;
   tools?: ToolDef[];
+  /**
+   * Registered tools whose schemas are not in `tools` (local tool selection):
+   * listed by name and still callable. Only the Transformers adapter reads it.
+   */
+  toolIndex?: string[];
   outputSchema?: z.ZodType;
   signal?: AbortSignal;
   /** Generation cap. Honored by the Transformers adapter; other adapters ignore it in this slice. */

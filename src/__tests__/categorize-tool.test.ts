@@ -316,6 +316,57 @@ describe('categorize tool', () => {
     expect(result.data.totalUncategorized).toBe(2);
   });
 
+  test('skipPendingReview leaves held-for-review transactions out of the run', async () => {
+    insertTransactions(db, [
+      { date: '2026-03-01', description: 'HELD VENDOR', amount: -50 },
+      { date: '2026-02-01', description: 'AMAZON OLD', amount: -20 },
+    ]);
+    addRule(db, '*AMAZON*', 'Shopping');
+    const txns = getTransactions(db);
+    const held = txns.find((t) => t.description === 'HELD VENDOR')!;
+    addPendingCategorizationReview(db, held.id, 'Other', 0.5);
+    initCategorizeTool(db);
+
+    // limit 1 would pick the newest (held) row without the flag
+    const raw = await categorizeTool.func({ limit: 1, skipPendingReview: true });
+    const result = JSON.parse(raw as string);
+    expect(result.data.totalUncategorized).toBe(1);
+    expect(result.data.categorized).toBe(1);
+    expect(result.data.stillUncategorized).toBe(1);
+    expect(result.data.pendingReview).toBe(1);
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('skipPendingReview with only held transactions left reports the backlog', async () => {
+    insertTransactions(db, [{ date: '2026-03-01', description: 'HELD VENDOR', amount: -50 }]);
+    const [t] = getTransactions(db);
+    addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    initCategorizeTool(db);
+
+    const result = JSON.parse((await categorizeTool.func({ skipPendingReview: true })) as string);
+    expect(result.data.categorized).toBe(0);
+    expect(result.data.stillUncategorized).toBe(1);
+    expect(result.data.pendingReview).toBe(1);
+    expect(result.data.message).toBe('No new transactions to categorize — 1 are waiting for your review in the Review tab.');
+    expect(result.data.message).not.toContain('already categorized');
+    expect(llmSpy).not.toHaveBeenCalled();
+  });
+
+  test('without skipPendingReview held transactions are retried and no pendingReview field is returned', async () => {
+    insertTransactions(db, [{ date: '2026-03-01', description: 'HELD VENDOR', amount: -50 }]);
+    const [t] = getTransactions(db);
+    addPendingCategorizationReview(db, t.id, 'Other', 0.5);
+    llmSpy.mockResolvedValue({
+      response: { content: '', structured: { transactions: [{ id: t.id, category: 'Other', confidence: 0.95 }] } },
+      metadata: {},
+    });
+    initCategorizeTool(db);
+
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    expect(result.data.categorized).toBe(1);
+    expect(result.data.pendingReview).toBeUndefined();
+  });
+
   test('LLM error is reported in errors array', async () => {
     insertTransactions(db, [
       { date: '2026-02-15', description: 'Mystery Store', amount: -50 },
@@ -361,6 +412,51 @@ describe('categorize tool', () => {
       expect(txn.category).toBeNull();
       expect(txn.category_confidence).toBeNull();
       expect(Number.isNaN(txn.category_confidence as number)).toBe(false);
+    }
+  });
+
+  test('every batch asks for enough output tokens for its rows', async () => {
+    insertTransactions(db, Array.from({ length: 3 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+    initCategorizeTool(db);
+    llmSpy.mockRejectedValue(new Error('boom'));
+    await categorizeTool.func({});
+    const opts = llmSpy.mock.calls[0][1] as { maxTokens?: number };
+    // ~25 tokens per {"id","category","confidence"} row, plus the wrapper.
+    expect(opts.maxTokens).toBeGreaterThanOrEqual(3 * 30);
+  });
+
+  test('local transformers models get small batches', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 25 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+      initCategorizeTool(db);
+      llmSpy.mockImplementation(async () => ({ response: { content: '', structured: { transactions: [] } }, metadata: {} }));
+      await categorizeTool.func({});
+      expect(llmSpy.mock.calls.length).toBe(3); // 10 + 10 + 5
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('stops after two consecutive failed batches instead of grinding through the rest', async () => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      insertTransactions(db, Array.from({ length: 50 }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+      initCategorizeTool(db);
+      llmSpy.mockRejectedValue(new Error('LLM structured output failed schema validation after one repair attempt'));
+      const result = JSON.parse((await categorizeTool.func({})) as string);
+      expect(llmSpy.mock.calls.length).toBe(2);
+      expect(result.data.categorized).toBe(0);
+      expect(result.data.message).toContain('Stopped after 2 failed batches in a row');
+      expect(result.data.message).toContain('30 transactions were not attempted');
+    } finally {
+      saveConfig({});
     }
   });
 
@@ -421,5 +517,56 @@ describe('categorize tool', () => {
     } finally {
       saveConfig({});
     }
+  });
+
+  test('per-batch schema is narrowed only for local transformers models', async () => {
+    insertTransactions(db, [
+      { date: '2026-02-15', description: 'Mystery Store', amount: -50 },
+      { date: '2026-02-16', description: 'Other Store', amount: -20 },
+    ]);
+    initCategorizeTool(db);
+    const txns = getTransactions(db);
+    llmSpy.mockResolvedValue({ response: { content: '', structured: { transactions: [{ id: txns[0].id, category: 'Shopping', confidence: 0.1 }] } }, metadata: {} });
+    const schemaOf = () => (llmSpy.mock.calls.at(-1)![1] as { outputSchema: import('zod').ZodType }).outputSchema;
+    const check = (schema: import('zod').ZodType) => (id: number, category: string) =>
+      schema.safeParse({ transactions: [{ id, category, confidence: 0.9 }] }).success;
+
+    // Providers that do not enforce the schema keep a loose one, so a near-miss
+    // row falls back to 'Other' instead of failing the whole batch.
+    await categorizeTool.func({});
+    const loose = check(schemaOf());
+    expect(loose(txns[0].id, 'Shopping')).toBe(true);
+    expect(loose(txns[0].id + 9999, 'Totally Made Up')).toBe(true);
+
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    try {
+      await categorizeTool.func({});
+      const schema = schemaOf();
+      const ok = check(schema);
+      expect(ok(txns[0].id, 'Shopping')).toBe(true);
+      expect(ok(txns[0].id + 9999, 'Shopping')).toBe(false);
+      expect(ok(txns[0].id, 'Totally Made Up')).toBe(false);
+      expect(schema.safeParse({ transactions: [] }).success).toBe(false);
+    } finally {
+      saveConfig({});
+    }
+  });
+
+  test('an id outside the batch is never written, whatever the provider enforced', async () => {
+    insertTransactions(db, [{ date: '2026-02-15', description: 'Mystery Store', amount: -50 }]);
+    initCategorizeTool(db);
+    const txns = getTransactions(db);
+    const strayId = txns[0].id + 5000;
+    llmSpy.mockResolvedValue({
+      response: { content: '', structured: { transactions: [{ id: strayId, category: 'Shopping', confidence: 0.9 }] } },
+      metadata: {},
+    });
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    expect(result.data.categorized).toBe(0);
+    expect(result.data.errors[0]).toContain(`ignored id ${strayId}`);
+    expect(getTransactions(db)[0].category).toBeNull();
   });
 });

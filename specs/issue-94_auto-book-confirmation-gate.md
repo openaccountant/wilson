@@ -1,5 +1,7 @@
 # Plan: Auto-book executes only through the visible confirmation gate
 
+> Tool names: 15 catalog tools were renamed in 0.10.0 (map in `specs/webmcp-tool-naming.md` §2, for example `tax_flag` is now `set_tax_flag`, `transaction_search` is `search_transactions`). This record keeps the names it was written with; read old names through that map. Chat tool names did not change.
+
 **Repo:** `/home/jd/.spf/watch/wilson/worktrees/issue-94` (branch `spf-watch/94-auto-book-executes-only-through-the`, base = `origin/main` HEAD `ec75bff` — **#93 and #92 are already landed on this branch**, so the Demo tab and the agent trace exist here).
 **Issue:** #94, decomposed from #58; parent artifact #91. Blocked-by #93 is satisfied (commit `ec75bff`).
 **Outcome:** On a predicted transaction in the Demo tab's agent trace, an explicit **"Auto-book this"** action opens a visible confirmation naming the exact change (which transaction, from/to category); the booking write — through the existing transaction update path — executes **only** after explicit approval through the dashboard's WebMCP tool-gate substrate (spec-50). Denying leaves the data untouched and says so. Never silently, including demo mode.

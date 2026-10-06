@@ -9,3 +9,6 @@ data/api/debug/
 
 # Prebuilt hybrid chat chunk + ort binaries (npm run build:hybrid output)
 src/dashboard/ui/dist-hybrid/
+
+# open-jev latency harness (scratch build + browser profile)
+scripts/openjev-latency/.build/

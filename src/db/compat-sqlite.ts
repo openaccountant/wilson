@@ -51,6 +51,13 @@ class CompatStatement {
     return p ? (this.stmt as any).all(p) : this.stmt.all();
   }
 
+  /** Rows one at a time, so a caller that stops early (or reads big rows) never holds the whole result set. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  iterate(params?: Record<string, unknown>): IterableIterator<any> {
+    const p = prefixParams(params);
+    return (p ? (this.stmt as any).iterate(p) : this.stmt.iterate()) as IterableIterator<any>;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get(params?: Record<string, unknown>): any {
     const p = prefixParams(params);

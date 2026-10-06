@@ -12,6 +12,7 @@ export function initBudgetSetTool(database: Database) {
 
 export const budgetSetTool = defineTool({
   name: 'budget_set',
+  mutates: true,
   description: 'Set or update a monthly spending budget for a category.',
   schema: z.object({
     category: z.string().describe('Spending category (e.g., Dining, Groceries, Shopping)'),

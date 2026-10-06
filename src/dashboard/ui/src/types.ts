@@ -1,5 +1,7 @@
 /** Shared API response types for the Wilson dashboard. */
 
+import type { LocalHandoffV1 } from '../../local-handoff-format.js';
+
 export interface Transaction {
   id: number;
   date: string;
@@ -162,6 +164,10 @@ export interface PnlResponse {
 export interface BudgetVsActualRow {
   category: string;
   monthly_limit: number;
+  /** monthly_limit × months in the requested range (what percent_used compares against). */
+  limit?: number;
+  /** Budget months in the requested range, prorated by day (2 days of a 31-day month → 2/31). */
+  months?: number;
   actual: number;
   remaining: number;
   percent_used: number;
@@ -218,6 +224,62 @@ export interface ChatResponse {
   sessionId: string | null;
 }
 
+// "@" mention wire format for POST /api/chat (validated + re-resolved from the
+// DB server-side in src/dashboard/mentions.ts). Max 10 per message.
+export type MentionType = 'account' | 'category' | 'merchant' | 'goal' | 'entity';
+
+export interface Mention {
+  type: MentionType;
+  /** DB id — required for every type except merchant. */
+  id?: number;
+  /** Merchant raw key (TRIM(merchant_name) or description from /api/merchants) — matched exactly server-side. */
+  key?: string;
+  /** ≤ 120 chars; display only — the server uses DB labels. */
+  label: string;
+}
+
+export interface ChatRequest {
+  query: string;
+  sessionId?: string;
+  mentions?: Mention[];
+  /**
+   * On-device browser-subagent notes for the server agent (specs/browser-subagent.md
+   * section 8). Optional; the server validates, re-executes and frames it as untrusted.
+   */
+  localHandoff?: LocalHandoffV1;
+}
+
+// Matches GET /api/skills
+export interface SkillListItem {
+  name: string;
+  description: string;
+  tier: 'free' | 'paid';
+  source: string;
+}
+
+// Matches GET /api/merchants?q=&limit=
+export interface MerchantListItem {
+  label: string;
+  n: number;
+  last: string;
+}
+
+// Matches GET /api/categories (CategoryRow in src/db/queries.ts)
+export interface CategoryListItem {
+  id: number;
+  name: string;
+  slug: string;
+  parent_id: number | null;
+  description: string | null;
+}
+
+// Matches GET /api/budgets/limits (BudgetRow in src/db/queries.ts)
+export interface BudgetLimitRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
+}
+
 export interface LogRow {
   ts: string;
   level: string;
@@ -263,16 +325,71 @@ export interface InteractionRow {
   duration_ms: number;
   status: string;
   created_at: string;
+  /** The current human rating (one row per interaction; older versions are history). */
   rating: number | null;
   preference: string | null;
+  /** `dashboard_agent_present` when the current human label was made while an agent had live access. */
+  annotation_via?: string | null;
+  /** The newest judge row still in play, or null. */
+  judge_status?: 'proposed' | 'accepted' | 'rejected' | null;
+}
+
+/** A judge's proposal as `GET /api/judgements` and the interaction detail return it. */
+export interface JudgementRow {
+  id: number;
+  interaction_id: number;
+  rating: number | null;
+  preference: string | null;
+  tags: string[];
+  /** Agent-written. Render as plain text with links removed. */
+  rationale: string | null;
+  criteria: Record<string, number> | null;
+  /** Declared by the agent: cannot be verified. */
+  judge_model: string | null;
+  rubric_version: string | null;
+  created_via: string;
+  version: number;
+  status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+  annotated_at: string;
+  reviewed_at: string | null;
+  /** A person reviewed it while an agent had live access. */
+  review_agent_present?: boolean;
+  /** Present in the queue only: the current human rating for the same interaction. */
+  human_rating?: number | null;
+}
+
+export interface JudgementList {
+  judgements: JudgementRow[];
+  total: number;
+  nextCursor?: string;
+  agreement: { n: number; within1Pct: number | null };
+}
+
+/** One version of a human annotation, from the interaction detail's `history`. */
+export interface AnnotationVersion {
+  id: number;
+  rating: number | null;
+  preference: string | null;
+  pair_id: string | null;
+  notes: string | null;
+  version: number;
+  status: string;
+  created_via: string;
+  annotated_at: string;
 }
 
 export interface AnnotationStats {
   total: number;
   annotated: number;
   ratingCounts: { rating: number; count: number }[];
+  /** Complete DPO pairs (both sides qualify), as the export counts them. */
   dpoPairs: number;
+  /** Runs, i.e. SFT lines the default export emits. */
   sftReady: number;
+  judge?: { proposed: number; accepted: number; rejected: number };
+  agreement?: { n: number; within1Pct: number | null };
+  /** Runs and pairs the default export leaves out because their prompt carries an on-device handoff block. */
+  handoffExcluded?: { sft: number; dpo: number };
 }
 
 // Matches GET /api/net-worth/trend response (NetWorthTrendPoint in src/db/net-worth-queries.ts)
@@ -281,6 +398,21 @@ export interface NetWorthTrendPoint {
   totalAssets: number;
   totalLiabilities: number;
   netWorth: number;
+}
+
+/** A row of `GET /api/categories` (the categories table, raw). */
+export interface CategoryRow {
+  id: number;
+  name: string;
+  is_system: number;
+  sort_order: number;
+}
+
+/** A row of `GET /api/budgets/limits` (the budgets table, raw). */
+export interface BudgetLimitRow {
+  id: number;
+  category: string;
+  monthly_limit: number;
 }
 
 export interface DateRange {
@@ -383,4 +515,91 @@ export interface CatalogModel {
 export interface ModelsPanel {
   tasks: ModelTaskRow[];
   catalog: CatalogModel[];
+}
+
+// Matches GET /api/coverage response (CoverageResult in src/db/overview-sql.ts):
+// months that have ANY imported transactions, unfiltered.
+export interface CoverageResponse {
+  start: string | null;
+  end: string | null;
+  months: string[];
+}
+
+// ── Spending drill (GET /api/spending/breakdown, GET /api/spending/series) ──
+// Matches SpendingBreakdownResult / SpendingSeriesResult in
+// src/db/spending-drill-sql.ts (both endpoints are mirrored). All amounts are
+// POSITIVE spend under the dashboard spend rules. A bad param answers
+// 400 { error } online and offline alike.
+
+export type SpendingBreakdownBy = 'category' | 'merchant' | 'detailed';
+
+export interface SpendingBreakdownRow {
+  /** Group key: category label (→ cat), merchant key (→ merchant), or category_detailed ('' = none). */
+  key: string;
+  /** Display label (PFC detailed codes humanized; '' detail → 'No detail'). */
+  label: string;
+  total: number;
+  count: number;
+  /** Latest transaction date in the group (YYYY-MM-DD). */
+  last: string;
+  /** Spend in the comparison window: null = not requested or no coverage there; 0 = covered, no spend. */
+  prevTotal: number | null;
+}
+
+export interface SpendingBreakdownResponse {
+  /** Grouping applied: the `by` param, else 'merchant' when cat is set, else 'category'. */
+  by: SpendingBreakdownBy;
+  total: number;
+  count: number;
+  /** Distinct groups in the whole range. */
+  groupCount: number;
+  /** Outflows excluded as transfers & card payments (Income is not counted). */
+  excludedTotal: number;
+  /** Total spend in the comparison window: null = not requested or no coverage there. */
+  prevTotal: number | null;
+  rows: SpendingBreakdownRow[];
+  /** Spend of the groups ranked after this page (offset + limit onward). */
+  otherTotal: number;
+  /** Number of groups ranked after this page. */
+  otherCount: number;
+  /** Transactions in the groups ranked after this page. */
+  otherTxnCount: number;
+  /** More than one distinct non-blank category_detailed: show the by=detailed toggle. */
+  hasDetailed: boolean;
+}
+
+export interface SpendingSeriesResponse {
+  /** YYYY-MM, every month of the requested window. */
+  periods: string[];
+  /** null = month outside unfiltered coverage ('no data'); 0 = covered, no spend. */
+  values: (number | null)[];
+  coverageStart: string | null;
+  coverageEnd: string | null;
+}
+
+// ── open-jev pre-labeler (specs/open-jev-labeler.md §9.1) ───────────────────
+
+// Matches PRELABEL_MODEL in src/prelabel/config.ts, as served in /api/prelabel/config
+export interface PrelabelPins {
+  repo: string;
+  dtype: 'q4f16';
+  device: 'webgpu';
+  temperature: number;
+  templateVersion: 'prelabel-tmpl-v1';
+  modelId: string;
+  revision: string;
+  configSha: string;
+  approxDownloadBytes: number;
+}
+
+// Matches GET /api/prelabel/config (see src/prelabel/routes.ts)
+export interface PrelabelConfig {
+  enabled: boolean;
+  profile: string;
+  pins: PrelabelPins;
+  labels: string[];
+  labelSetVersion: string;
+  marginCut: number;
+  maxRowsPerRun: number;
+  approxDownloadBytes: number;
 }

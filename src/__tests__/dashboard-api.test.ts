@@ -33,14 +33,22 @@ import {
   apiReviewQueue,
   apiConfirmReview,
   apiCorrectReview,
+  apiSetBudget,
+  apiUpdateGoal,
+  apiGoals,
 } from '../dashboard/api.js';
 import { createChatSession, insertChatMessage, insertTransactions, getBudgets, getCategories } from '../db/queries.js';
 import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
+import { upsertGoal, updateGoalStatus } from '../db/goal-queries.js';
 import { traceStore } from '../utils/trace-store.js';
 import { apiModels, apiSetTaskModel } from '../dashboard/api.js';
 import { setSetting, saveConfig, getConfiguredModel } from '../utils/config.js';
 import { getTaskOverride } from '../model/task-models.js';
+import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
+import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
+import { createUser, enableAuth } from '../dashboard/auth.js';
+import { grantTools, testScope } from './mcp-helpers.js';
 
 describe('apiTransactions', () => {
   test('returns transactions with filters', () => {
@@ -832,38 +840,167 @@ describe('apiInteractionDetail', () => {
 });
 
 describe('apiAnnotateInteraction', () => {
+  function addInteraction(db: ReturnType<typeof createTestDb>, runId = 'r1'): number {
+    const res = db.prepare(`
+      INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+      VALUES (@runId, 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
+    `).run({ runId });
+    return (res as { lastInsertRowid: number }).lastInsertRowid as number;
+  }
+
   test('annotates an interaction successfully', () => {
     const db = createTestDb();
-    const res = db.prepare(`
-      INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
-      VALUES ('r1', 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
-    `).run();
-    const id = (res as { lastInsertRowid: number }).lastInsertRowid as number;
+    const id = addInteraction(db);
 
     const result = apiAnnotateInteraction(db, id, { rating: 5, notes: 'Great answer' });
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
 
     // Verify annotation persisted
-    const ann = db.prepare('SELECT rating, notes FROM interaction_annotations WHERE interaction_id = @id').get({ id }) as any;
-    expect(ann.rating).toBe(5);
-    expect(ann.notes).toBe('Great answer');
+    const ann = db.prepare('SELECT rating, notes, source, status, version FROM interaction_annotations WHERE interaction_id = @id').get({ id }) as any;
+    expect(ann).toEqual({ rating: 5, notes: 'Great answer', source: 'human', status: 'accepted', version: 1 });
   });
 
-  test('upserts annotation (replaces existing)', () => {
+  test('creates v2 and supersedes v1 (rows are never deleted)', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+
+    apiAnnotateInteraction(db, id, { rating: 3 });
+    const second = apiAnnotateInteraction(db, id, { rating: 5 });
+
+    const rows = db.prepare('SELECT rating, status, version, supersedes_id FROM interaction_annotations WHERE interaction_id = @id ORDER BY id').all({ id }) as any[];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ rating: 3, status: 'superseded', version: 1 });
+    expect(rows[1]).toMatchObject({ rating: 5, status: 'accepted', version: 2 });
+    expect(second.ok && second.annotation.supersedes_id).toBe((db.prepare('SELECT id FROM interaction_annotations WHERE rating = 3').get() as { id: number }).id);
+  });
+
+  test('a rating-only update keeps notes, preference and pair id (v2 merges v1)', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+    apiAnnotateInteraction(db, id, { rating: 2, notes: 'keep me', preference: 'chosen', pairId: 'pair-9', tags: ['x'] });
+    apiAnnotateInteraction(db, id, { rating: 4 });
+    const current = db.prepare("SELECT * FROM interaction_annotations WHERE interaction_id = @id AND status = 'accepted'").get({ id }) as any;
+    expect(current).toMatchObject({ rating: 4, notes: 'keep me', preference: 'chosen', pair_id: 'pair-9', tags: '["x"]' });
+  });
+
+  test('null clears a field; an absent field keeps it', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+    apiAnnotateInteraction(db, id, { rating: 2, notes: 'drop me', pairId: 'p' });
+    apiAnnotateInteraction(db, id, { notes: null });
+    const current = db.prepare("SELECT rating, notes, pair_id FROM interaction_annotations WHERE interaction_id = @id AND status = 'accepted'").get({ id }) as any;
+    expect(current).toEqual({ rating: 2, notes: null, pair_id: 'p' });
+  });
+
+  test('rating 9 is a 400 with a message, not a 200 {success:false}', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+    const result = apiAnnotateInteraction(db, id, { rating: 9 });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(400);
+    expect(result.error.code).toBe('invalid_args');
+    expect(result.error.message).toContain('rating');
+    expect((db.prepare('SELECT COUNT(*) AS c FROM interaction_annotations').get() as { c: number }).c).toBe(0);
+  });
+
+  test('unknown fields, an empty body and bad preferences are 400', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+    for (const body of [{}, { status: 'accepted' }, { source: 'judge' }, { preference: 'best' }, { notes: 'x'.repeat(2001) }, { tags: new Array(11).fill('t') }, 'nope', null]) {
+      const result = apiAnnotateInteraction(db, id, body);
+      expect(result.ok, JSON.stringify(body)).toBe(false);
+      if (!result.ok) expect(result.status).toBe(400);
+    }
+  });
+
+  test('an unknown interaction is a 404', () => {
+    const db = createTestDb();
+    const result = apiAnnotateInteraction(db, 99999, { rating: 3 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(404);
+      expect(result.error.code).toBe('not_found');
+    }
+  });
+
+  test('annotating while an agent is present records created_via dashboard_agent_present', () => {
+    const db = createTestDb();
+    const id = addInteraction(db);
+    apiAnnotateInteraction(db, id, { rating: 5 }, { agentPresent: true });
+    const row = db.prepare("SELECT created_via FROM interaction_annotations WHERE interaction_id = @id AND status = 'accepted'").get({ id }) as any;
+    expect(row.created_via).toBe('dashboard_agent_present');
+    apiAnnotateInteraction(db, id, { rating: 4 }, { agentPresent: false });
+    const next = db.prepare("SELECT created_via FROM interaction_annotations WHERE interaction_id = @id AND status = 'accepted'").get({ id }) as any;
+    expect(next.created_via).toBe('dashboard');
+  });
+});
+
+describe('interaction readers with versioned annotations', () => {
+  test('the list joins only the current human row, with the latest judge status', () => {
     const db = createTestDb();
     const res = db.prepare(`
       INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
       VALUES ('r1', 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
     `).run();
     const id = (res as { lastInsertRowid: number }).lastInsertRowid as number;
-
-    apiAnnotateInteraction(db, id, { rating: 3 });
+    apiAnnotateInteraction(db, id, { rating: 2 });
     apiAnnotateInteraction(db, id, { rating: 5 });
+    db.prepare(`INSERT INTO interaction_annotations (interaction_id, rating, source, status, judge_model, rationale, rubric_version, created_via, principal_id)
+                VALUES (@id, 3, 'judge', 'proposed', 'm', 'grounded: the totals match the tool output', 'rv', 'webmcp', 'p')`).run({ id });
 
-    const count = (db.prepare('SELECT COUNT(*) AS c FROM interaction_annotations WHERE interaction_id = @id').get({ id }) as { c: number }).c;
-    expect(count).toBe(1);
-    const ann = db.prepare('SELECT rating FROM interaction_annotations WHERE interaction_id = @id').get({ id }) as { rating: number };
-    expect(ann.rating).toBe(5);
+    const rows = apiInteractions(db, new URLSearchParams()) as any[];
+    expect(rows).toHaveLength(1); // not one row per annotation version
+    expect(rows[0]).toMatchObject({ id, rating: 5, judge_status: 'proposed' });
+    expect(apiInteractions(db, new URLSearchParams({ judged: 'proposed' }))).toHaveLength(1);
+    expect(apiInteractions(db, new URLSearchParams({ judged: 'accepted' }))).toHaveLength(0);
+    expect(apiRunInteractions(db, 'r1')).toHaveLength(1);
+  });
+
+  test('A3: judged=accepted matches any accepted judge row, even one hidden behind a newer proposal; revoked ones drop out', () => {
+    const db = createTestDb();
+    const interaction = (run: string) =>
+      ((db.prepare(`INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status) VALUES (@run, 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')`).run({ run }) as { lastInsertRowid: number }).lastInsertRowid as number);
+    const judgeRow = (id: number, model: string) =>
+      ((db.prepare(`INSERT INTO interaction_annotations (interaction_id, rating, source, status, judge_model, rationale, rubric_version, created_via, principal_id)
+                    VALUES (@id, 3, 'judge', 'proposed', @model, 'grounded: the totals match the tool output', 'rv', 'webmcp', 'p')`).run({ id, model }) as { lastInsertRowid: number }).lastInsertRowid as number);
+    const accept = (rowId: number) => db.prepare("UPDATE interaction_annotations SET status = 'accepted', reviewed_by = NULL, reviewed_at = '2026-01-01T00:00:00.000Z' WHERE id = @rowId").run({ rowId });
+    const hidden = interaction('r-hidden');
+    const plain = interaction('r-plain');
+    const none = interaction('r-none');
+    accept(judgeRow(hidden, 'm-a'));
+    judgeRow(hidden, 'm-b'); // newer proposal now shadows the accepted row in judge_status
+    const plainRow = judgeRow(plain, 'm-a');
+    accept(plainRow);
+
+    const ids = (qs: Record<string, string>) => (apiInteractions(db, new URLSearchParams(qs)) as any[]).map((r) => r.id).sort((a, b) => a - b);
+    expect((apiInteractions(db, new URLSearchParams()) as any[]).find((r) => r.id === hidden).judge_status).toBe('proposed');
+    expect(ids({ judged: 'accepted' })).toEqual([hidden, plain].sort((a, b) => a - b));
+    expect(ids({ judged: 'proposed' })).toEqual([hidden]);
+    // Revoking (accepted -> rejected) takes the interaction back out.
+    db.prepare("UPDATE interaction_annotations SET status = 'rejected', reviewed_at = '2026-01-02T00:00:00.000Z' WHERE id = @plainRow").run({ plainRow });
+    expect(ids({ judged: 'accepted' })).toEqual([hidden]);
+    expect(none).toBeGreaterThan(0);
+  });
+
+  test('the detail returns the current annotation, every version, and the judge rows', () => {
+    const db = createTestDb();
+    const res = db.prepare(`
+      INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+      VALUES ('r1', 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
+    `).run();
+    const id = (res as { lastInsertRowid: number }).lastInsertRowid as number;
+    apiAnnotateInteraction(db, id, { rating: 2 });
+    apiAnnotateInteraction(db, id, { rating: 5 });
+    db.prepare(`INSERT INTO interaction_annotations (interaction_id, rating, source, status, judge_model, rationale, rubric_version, created_via, principal_id)
+                VALUES (@id, 3, 'judge', 'proposed', 'm', 'grounded: the totals match the tool output', 'rv', 'webmcp', 'p')`).run({ id });
+
+    const detail = apiInteractionDetail(db, id) as any;
+    expect(detail.annotation.rating).toBe(5);
+    expect(detail.annotations).toHaveLength(1); // legacy shape the old dashboard reads
+    expect(detail.history.map((h: any) => h.rating)).toEqual([5, 2]);
+    expect(detail.judgements).toHaveLength(1);
+    expect(detail.judgements[0]).toMatchObject({ rating: 3, status: 'proposed', judge_model: 'm' });
   });
 });
 
@@ -875,6 +1012,22 @@ describe('apiAnnotationStats', () => {
     expect(stats.annotated).toBe(0);
     expect(stats.sftReady).toBe(0);
     expect(stats.dpoPairs).toBe(0);
+  });
+
+  test('uses the export readiness: sftReady counts runs, not annotation rows', () => {
+    const db = createTestDb();
+    for (let seq = 1; seq <= 3; seq++) {
+      const res = db.prepare(`
+        INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+        VALUES ('one-run', @seq, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
+      `).run({ seq });
+      apiAnnotateInteraction(db, (res as { lastInsertRowid: number }).lastInsertRowid as number, { rating: 5 });
+    }
+    const stats = apiAnnotationStats(db);
+    expect(stats.annotated).toBe(3);
+    expect(stats.sftReady).toBe(1);
+    expect(stats.ratingCounts).toEqual([{ rating: 5, count: 3 }]);
+    expect(stats.judge).toEqual({ proposed: 0, accepted: 0, rejected: 0 });
   });
 });
 
@@ -902,10 +1055,10 @@ describe('apiRunInteractions', () => {
 });
 
 describe('apiExportXlsx', () => {
-  test('returns buffer with data', () => {
+  test('returns buffer with data', async () => {
     const db = createTestDb();
     seedTestData(db);
-    const buf = apiExportXlsx(db, new URLSearchParams());
+    const buf = await apiExportXlsx(db, new URLSearchParams());
     expect(buf).toBeDefined();
     expect(buf.length).toBeGreaterThan(0);
   });
@@ -1047,5 +1200,160 @@ describe('apiSetTaskModel', () => {
     // Nothing was persisted.
     expect(getTaskOverride('categorization')).toBeNull();
     expect(getTaskOverride('entity-classification')).toBeNull();
+  });
+});
+
+describe('apiGoals', () => {
+  test('returns goals of every status, not just active', () => {
+    const db = createTestDb();
+    upsertGoal(db, { title: 'Active', goalType: 'financial', targetAmount: 1000 });
+    const doneId = upsertGoal(db, { title: 'Done', goalType: 'financial', targetAmount: 500 });
+    const pausedId = upsertGoal(db, { title: 'Paused', goalType: 'behavioral' });
+    updateGoalStatus(db, doneId, 'completed');
+    updateGoalStatus(db, pausedId, 'paused');
+
+    const result = apiGoals(db);
+    expect(result.map((g) => g.status).sort()).toEqual(['active', 'completed', 'paused']);
+    expect(result.every((g) => 'effective_target' in g)).toBe(true);
+  });
+});
+
+
+// ── Budget and goal writes for the declarative forms (P2) ───────────────────
+
+describe('apiSetBudget', () => {
+  test('sets and replaces a monthly limit, resolving the category case-insensitively', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const first = apiSetBudget(db, 'utilities', { monthlyLimit: 150 });
+    expect(first).toEqual({ success: true, category: 'Utilities', monthlyLimit: 150 });
+    expect(apiSetBudget(db, 'Utilities', { monthlyLimit: 175.5 })).toMatchObject({ success: true, monthlyLimit: 175.5 });
+    expect(getBudgets(db).find((b) => b.category === 'Utilities')?.monthly_limit).toBe(175.5);
+  });
+
+  test('rejects a missing, negative, huge or non-numeric limit, extra keys, and an unknown category', () => {
+    const db = createTestDb();
+    seedTestData(db);
+    for (const body of [{}, { monthlyLimit: -1 }, { monthlyLimit: 10_000_001 }, { monthlyLimit: '5' }, { monthlyLimit: Number.NaN }, { monthlyLimit: 5, extra: 1 }, null]) {
+      expect(apiSetBudget(db, 'Groceries', body)).toMatchObject({ success: false, status: 400 });
+    }
+    expect(apiSetBudget(db, 'No Such Category', { monthlyLimit: 5 })).toMatchObject({ success: false, status: 404 });
+    expect(getBudgets(db).find((b) => b.category === 'Groceries')?.monthly_limit).toBe(200);
+  });
+});
+
+describe('apiUpdateGoal', () => {
+  const goal = (db: ReturnType<typeof createTestDb>, over: Record<string, unknown> = {}) =>
+    Number(upsertGoal(db, { title: 'Emergency fund', goalType: 'financial', targetAmount: 5000, ...over } as never));
+
+  test('PATCH validation: needs a field, a valid status, a real date, a bounded amount, and no extra keys → 400', () => {
+    const db = createTestDb();
+    const id = goal(db);
+    for (const body of [{}, { status: 'deleted' }, { targetDate: '2027-02-30' }, { targetDate: 'soon' }, { targetAmount: -5 }, { targetAmount: 1e12 }, { title: 'renamed' }, null, []]) {
+      expect(apiUpdateGoal(db, id, body), JSON.stringify(body)).toMatchObject({ success: false, status: 400 });
+    }
+  });
+
+  test('updates the amount, date and status it is given and nothing else', () => {
+    const db = createTestDb();
+    const id = goal(db, { notes: 'keep me' });
+    expect(apiUpdateGoal(db, id, { targetAmount: 6000, targetDate: '2027-06-01', status: 'paused' })).toEqual({ success: true, id });
+    const row = db.prepare('SELECT * FROM goals WHERE id = @id').get({ id }) as any;
+    expect(row).toMatchObject({ target_amount: 6000, target_date: '2027-06-01', status: 'paused', title: 'Emergency fund', notes: 'keep me' });
+  });
+
+  test('a missing goal is a 404, and a target amount on a behavioral goal is a 400', () => {
+    const db = createTestDb();
+    expect(apiUpdateGoal(db, 4242, { status: 'paused' })).toMatchObject({ success: false, status: 404 });
+    const behavioral = goal(db, { goalType: 'behavioral', targetAmount: undefined });
+    expect(apiUpdateGoal(db, behavioral, { targetAmount: 10 })).toMatchObject({ success: false, status: 400 });
+    expect(apiUpdateGoal(db, behavioral, { status: 'completed' })).toMatchObject({ success: true });
+  });
+});
+
+describe('PUT /api/budgets/:category and PATCH /api/goals/:id over HTTP', () => {
+  const servers: Awaited<ReturnType<typeof startDashboardServer>>['server'][] = [];
+  afterEach(() => {
+    for (const s of servers) {
+      try { stopDashboardServer(s); } catch { /* */ }
+    }
+    servers.length = 0;
+    closeAll();
+  });
+
+  async function start() {
+    const db = createTestDb();
+    seedTestData(db);
+    setInitialProfile('test', db);
+    const result = await startDashboardServer(db, 0);
+    servers.push(result.server);
+    return { db, base: `http://localhost:${result.server.port}` };
+  }
+
+  async function login(base: string, username: string, password: string): Promise<string> {
+    const res = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    return ((await res.json()) as { token: string }).token;
+  }
+
+  test('PUT /api/budgets/:category: a viewer is 403, an admin writes it', async () => {
+    const { db, base } = await start();
+    await createUser(db, 'boss', 'bosspass', 'admin');
+    await createUser(db, 'guest', 'guestpass', 'viewer');
+    enableAuth(db);
+    const viewerToken = await login(base, 'guest', 'guestpass');
+    const adminToken = await login(base, 'boss', 'bosspass');
+    const put = (token: string, category: string, body: unknown) =>
+      fetch(`${base}/api/budgets/${encodeURIComponent(category)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    expect((await put(viewerToken, 'Groceries', { monthlyLimit: 400 })).status).toBe(403);
+    expect(getBudgets(db).find((b) => b.category === 'Groceries')?.monthly_limit).toBe(200);
+    const ok = await put(adminToken, 'Groceries', { monthlyLimit: 400 });
+    expect(ok.status).toBe(200);
+    expect(getBudgets(db).find((b) => b.category === 'Groceries')?.monthly_limit).toBe(400);
+    expect((await put(adminToken, 'Groceries', { monthlyLimit: -4 })).status).toBe(400);
+    expect((await put(adminToken, 'Nope', { monthlyLimit: 4 })).status).toBe(404);
+  });
+
+  test('PATCH /api/goals/:id: a viewer is 403, validation is 400, success is 200', async () => {
+    const { db, base } = await start();
+    const id = Number(upsertGoal(db, { title: 'Trip', goalType: 'financial', targetAmount: 1000 } as never));
+    await createUser(db, 'boss', 'bosspass', 'admin');
+    await createUser(db, 'guest', 'guestpass', 'viewer');
+    enableAuth(db);
+    const viewerToken = await login(base, 'guest', 'guestpass');
+    const adminToken = await login(base, 'boss', 'bosspass');
+    const patch = (token: string, goalId: number, body: unknown) =>
+      fetch(`${base}/api/goals/${goalId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+    expect((await patch(viewerToken, id, { status: 'paused' })).status).toBe(403);
+    expect((await patch(adminToken, id, { status: 'bogus' })).status).toBe(400);
+    expect((await patch(adminToken, id, {})).status).toBe(400);
+    expect((await patch(adminToken, 9999, { status: 'paused' })).status).toBe(404);
+    expect((await patch(adminToken, id, { status: 'paused' })).status).toBe(200);
+    expect((db.prepare('SELECT status FROM goals WHERE id = @id').get({ id }) as any).status).toBe('paused');
+  });
+
+  test('with auth off an unauthenticated local call is allowed, like the other write routes', async () => {
+    const { db, base } = await start();
+    const res = await fetch(`${base}/api/budgets/Dining`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthlyLimit: 120 }) });
+    expect(res.status).toBe(200);
+    expect(getBudgets(db).find((b) => b.category === 'Dining')?.monthly_limit).toBe(120);
+  });
+
+  test('budget, goal and review writes record agent_present in a transport=rest audit row, computed on the server', async () => {
+    const { db, base } = await start();
+    const id = Number(upsertGoal(db, { title: 'Trip', goalType: 'financial', targetAmount: 1000 } as never));
+    const txn = (db.prepare("SELECT id FROM transactions WHERE description = 'Unknown Purchase'").get() as { id: number }).id;
+    addPendingCategorizationReview(db, txn, 'Dining', 0.5);
+    const reviewId = (db.prepare('SELECT id FROM categorization_reviews WHERE transaction_id = @txn').get({ txn }) as { id: number }).id;
+    const json = { 'Content-Type': 'application/json' };
+    await fetch(`${base}/api/budgets/Dining`, { method: 'PUT', headers: json, body: JSON.stringify({ monthlyLimit: 120 }) });
+    grantTools(db, testScope(), ['list_transactions']); // a live tab grant for this user and profile
+    await fetch(`${base}/api/goals/${id}`, { method: 'PATCH', headers: json, body: JSON.stringify({ status: 'paused' }) });
+    await fetch(`${base}/api/reviews/${reviewId}/confirm`, { method: 'POST', headers: json });
+    const rows = db.prepare("SELECT transport, principal_kind, tool_name, args_preview FROM mcp_audit_log WHERE decision = 'rest_write' ORDER BY id").all() as any[];
+    expect(rows).toEqual([
+      { transport: 'rest', principal_kind: 'user', tool_name: '/api/budgets/:category', args_preview: 'agent_present=false' },
+      { transport: 'rest', principal_kind: 'user', tool_name: '/api/goals/:id', args_preview: 'agent_present=true' },
+      { transport: 'rest', principal_kind: 'user', tool_name: '/api/reviews/:id/confirm', args_preview: 'agent_present=true' },
+    ]);
   });
 });

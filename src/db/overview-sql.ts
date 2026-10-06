@@ -8,10 +8,27 @@
 // and helpers, so the two implementations can only drift in their trivial
 // .all()/.get() glue — which the overview parity test pins by deep-equality.
 //
-// ZERO imports: this module must stay safe for the dashboard UI bundle (same
-// constraint as transaction-where.ts). No `bun:sqlite`, no src/db/* imports,
-// no browser APIs. Row interfaces are COPIED here as the single source; the
-// server modules re-export them for compatibility.
+// Import-safe for the dashboard UI bundle: it imports ONLY the bundle-safe
+// siblings spend-rules.ts (zero imports) and transaction-where.ts (imports
+// only spend-rules). No `bun:sqlite`, no other src/db/* imports, no browser
+// APIs. Row interfaces are COPIED here as the single source; the server
+// modules re-export them for compatibility.
+//
+// Dashboard rules (spend-rules.ts) are OPT-IN: each composer takes an
+// optional trailing `opts`; with no opts (every CLI/report/goal caller) the
+// historical SQL is returned byte-for-byte — pinned by spend-rules.test.ts.
+
+import {
+  categoryLabelSql,
+  incomeAmountSql,
+  incomeSql as incomeRuleSql,
+  spendSql,
+  entityFilterSql,
+  hasDashboardRules,
+  INCOME_CATEGORY,
+  type DashboardRules,
+} from './spend-rules.js';
+import { buildTransactionConditions } from './transaction-where.js';
 
 // ── Minimal structural queryable ─────────────────────────────────────────────
 //
@@ -31,6 +48,68 @@ export interface OverviewStatement {
 
 export interface OverviewQueryable {
   prepare(sql: string): OverviewStatement;
+}
+
+// ── Dashboard options (opt-in rules + dashboard-only category filter) ───────
+
+/**
+ * Optional trailing argument of the overview composers: the dashboard rule
+ * flags plus the dashboard-only category filter. Omitted → historical SQL.
+ */
+export interface OverviewOptions extends DashboardRules {
+  /** Exact category filter ('Uncategorized' matches NULL/blank under uncategorizedMatchesBlank). */
+  category?: string;
+}
+
+/**
+ * Options for the all-time / fixed-window cards (streak, weekly summary) that
+ * have no account/date params of their own: the dashboard rules plus an
+ * optional entity scope (`@entityId`).
+ */
+export interface EntityScopedOptions extends OverviewOptions {
+  entityId?: number;
+}
+
+/** The entity condition for EntityScopedOptions (null when unscoped). */
+function entityConditionSql(opts: EntityScopedOptions | undefined): string | null {
+  if (opts?.entityId === undefined) return null;
+  return opts.defaultEntityIncludesNull ? entityFilterSql(opts.entityId).sql : 'entity_id = @entityId';
+}
+
+/** Bind params for the entity condition (merge into the statement's params). */
+export function entityScopeParams(opts: EntityScopedOptions | undefined): SqlParams {
+  return opts?.entityId === undefined ? {} : { entityId: opts.entityId };
+}
+
+/** True when opts change anything (otherwise the legacy SQL path runs). */
+function isActive(opts: OverviewOptions | undefined): opts is OverviewOptions {
+  return !!opts && (hasDashboardRules(opts) || !!opts.category);
+}
+
+/** Shared dashboard WHERE conditions: date window + account/entity/category. */
+function dashboardConditions(
+  startDate: string,
+  endDate: string,
+  accountId: number | undefined,
+  entityId: number | undefined,
+  opts: OverviewOptions
+): { conditions: string[]; params: SqlParams } {
+  return buildTransactionConditions(
+    { dateStart: startDate, dateEnd: endDate, accountId, entityId, category: opts.category || undefined },
+    opts
+  );
+}
+
+function expenseConditionSql(opts: OverviewOptions): string {
+  return opts.excludeNonSpend ? spendSql() : 'amount < 0';
+}
+
+function labelSelectSql(opts: OverviewOptions): string {
+  return opts.labelGrouping ? categoryLabelSql() : "COALESCE(category, 'Uncategorized')";
+}
+
+function labelGroupSql(opts: OverviewOptions): string {
+  return opts.labelGrouping ? categoryLabelSql() : 'category';
 }
 
 // ── Row interfaces (single source; server modules re-export these) ──────────
@@ -98,10 +177,21 @@ export interface MonthlyIncomeExpense {
 export interface BudgetVsActualRow {
   category: string;
   monthly_limit: number;
+  /** Range mode only (dashboard): monthly_limit × months — what remaining/percent/over compare against. */
+  limit?: number;
+  /** Range mode only (dashboard): day-prorated months in the requested range (spend-rules monthsInRange). */
+  months?: number;
   actual: number;
   remaining: number;
   percent_used: number;
   over: boolean;
+}
+
+/** GET /api/coverage — months that have ANY imported transactions (unfiltered). */
+export interface CoverageResult {
+  start: string | null;
+  end: string | null;
+  months: string[];
 }
 
 /** Minimal shape the budget-vs-actual loop consumes from a budgets row. */
@@ -125,6 +215,82 @@ export const DAILY_SPENDING_SQL = `
     GROUP BY date
     ORDER BY date
   `;
+
+/**
+ * getDailySpending — DAILY_SPENDING_SQL with no filters/opts; otherwise the
+ * account/entity/category filters (and, with dashboard opts, the spend rule)
+ * apply.
+ */
+export function composeDailySpendingSql(
+  startDate: string,
+  endDate: string,
+  accountId?: number,
+  entityId?: number,
+  opts?: OverviewOptions
+): { sql: string; params: SqlParams } {
+  if (!isActive(opts) && accountId === undefined && entityId === undefined) {
+    return { sql: DAILY_SPENDING_SQL, params: { startDate, endDate } };
+  }
+  const o = opts ?? {};
+  const { conditions, params } = dashboardConditions(startDate, endDate, accountId, entityId, o);
+  conditions.push(expenseConditionSql(o));
+  const sql = `
+    SELECT
+      date,
+      SUM(ABS(amount)) AS spending,
+      COUNT(*) AS count
+    FROM transactions
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY date
+    ORDER BY date
+  `;
+  return { sql, params };
+}
+
+/** getCoverage — first/last transaction date (well-formed dates only). */
+export const COVERAGE_RANGE_SQL = `
+    SELECT MIN(date) AS first_date, MAX(date) AS last_date
+    FROM transactions
+    WHERE date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]*'
+  `;
+
+/** getCoverage — every YYYY-MM with at least one transaction, ascending. */
+export const COVERAGE_MONTHS_SQL = `
+    SELECT DISTINCT substr(date, 1, 7) AS month
+    FROM transactions
+    WHERE date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]*'
+    ORDER BY month
+  `;
+
+/** Shape the coverage rows into the /api/coverage contract. */
+export function toCoverage(
+  range: { first_date?: unknown; last_date?: unknown } | undefined,
+  monthRows: { month?: unknown }[]
+): CoverageResult {
+  const day = (v: unknown) => (typeof v === 'string' && v.length >= 10 ? v.slice(0, 10) : null);
+  return {
+    start: day(range?.first_date),
+    end: day(range?.last_date),
+    months: monthRows.map((r) => String(r.month)),
+  };
+}
+
+/**
+ * Dashboard header category filter options: every distinct category LABEL in
+ * transactions (NULL/blank/'Uncategorized' are one 'Uncategorized' bucket).
+ * Deliberately NOT spend-filtered — Transfer, Credit Card, Payment and Income
+ * are valid filters even though the spending summary excludes them.
+ */
+export const CATEGORY_OPTIONS_SQL = `
+    SELECT DISTINCT ${categoryLabelSql()} AS category
+    FROM transactions
+    ORDER BY category
+  `;
+
+/** Shape CATEGORY_OPTIONS_SQL rows into the /api/category-options contract. */
+export function toCategoryOptions(rows: { category?: unknown }[]): string[] {
+  return rows.map((r) => String(r.category));
+}
 
 /** getStreak — SUM(monthly_limit) across all budgets (the daily-budget basis). */
 export const STREAK_BUDGET_TOTAL_SQL = `
@@ -175,6 +341,76 @@ export const WEEK_TOP_MERCHANT_SQL = `
     LIMIT 1
   `;
 
+/**
+ * getStreak — STREAK_DAILY_SQL verbatim without dashboard opts; with
+ * `excludeNonSpend` the per-day total uses the SPEND rule, so the streak
+ * agrees with the dashboard heatmap (composeDailySpendingSql). An `entityId`
+ * scopes the days to that entity (bind entityScopeParams(opts)).
+ */
+export function composeStreakDailySql(opts?: EntityScopedOptions): string {
+  const entity = entityConditionSql(opts);
+  const spendRule = isActive(opts) && !!opts.excludeNonSpend;
+  if (!spendRule && !entity) return STREAK_DAILY_SQL;
+  const conditions = [spendRule ? spendSql() : 'amount < 0'];
+  if (entity) conditions.push(entity);
+  return `
+    SELECT date, COALESCE(SUM(ABS(amount)), 0) AS spending
+    FROM transactions
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY date
+    ORDER BY date DESC
+  `;
+}
+
+/** The three getWeekData statements (params: @startDate, @endDate). */
+export interface WeekSql {
+  total: string;
+  byCategory: string;
+  topMerchant: string;
+}
+
+/**
+ * getWeekData — the WEEK_* constants verbatim without dashboard opts. With
+ * opts, spending uses the SPEND rule (excludeNonSpend) and categories group
+ * into one Uncategorized bucket (labelGrouping), matching the summary card.
+ * An `entityId` scopes every statement (bind entityScopeParams(opts)).
+ */
+export function composeWeekSql(opts?: EntityScopedOptions): WeekSql {
+  const entity = entityConditionSql(opts);
+  if (!isActive(opts) && !entity) {
+    return { total: WEEK_TOTAL_SQL, byCategory: WEEK_BY_CATEGORY_SQL, topMerchant: WEEK_TOP_MERCHANT_SQL };
+  }
+  const o: EntityScopedOptions = opts ?? {};
+  const spend = expenseConditionSql(o);
+  const window = `${spend}
+      AND date >= @startDate
+      AND date <= @endDate${entity ? `\n      AND ${entity}` : ''}`;
+  return {
+    total: `
+    SELECT COALESCE(SUM(ABS(amount)), 0) AS total
+    FROM transactions
+    WHERE ${window}
+  `,
+    byCategory: `
+    SELECT
+      ${labelSelectSql(o)} AS category,
+      SUM(ABS(amount)) AS total
+    FROM transactions
+    WHERE ${window}
+    GROUP BY ${labelGroupSql(o)}
+    ORDER BY total DESC
+  `,
+    topMerchant: `
+    SELECT COALESCE(merchant_name, description) AS merchant
+    FROM transactions
+    WHERE ${window}
+    GROUP BY merchant
+    ORDER BY SUM(ABS(amount)) DESC
+    LIMIT 1
+  `,
+  };
+}
+
 /** getBudgetCountdown — the budgets the countdown iterates. */
 export const BUDGET_COUNTDOWN_BUDGETS_SQL = `
     SELECT category, monthly_limit
@@ -208,8 +444,24 @@ export function composeSpendingSummarySql(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): { sql: string; params: SqlParams } {
+  if (isActive(opts)) {
+    const { conditions, params } = dashboardConditions(startDate, endDate, accountId, entityId, opts);
+    conditions.push(expenseConditionSql(opts));
+    const sql = `
+    SELECT
+      ${labelSelectSql(opts)} AS category,
+      SUM(amount) AS total,
+      COUNT(*) AS count
+    FROM transactions
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY ${labelGroupSql(opts)}
+    ORDER BY total ASC
+  `;
+    return { sql, params };
+  }
   const conditions = ['date >= @startDate', 'date <= @endDate', 'amount < 0'];
   const params: SqlParams = { startDate, endDate };
   if (accountId !== undefined) {
@@ -237,13 +489,44 @@ export function composeSpendingSummarySql(
  * getProfitLoss — income and expense category breakdowns with optional
  * account/entity filters. Income counts positives plus 'Income'-tagged rows;
  * expenses exclude 'Income'/'Transfer' so transfers are never double-counted.
+ *
+ * Dashboard opts: income follows the INCOME rule summed as ABS(amount)
+ * (negative-stored paychecks count), expenses follow the SPEND rule.
+ * Under a category filter the P&L is EXPENSE-ONLY for that category — income
+ * appears only when the filter is 'Income' itself — so a refund inside a
+ * spending category never shows up as income for it.
  */
 export function composePnlSql(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): { incomeSql: string; expensesSql: string; params: SqlParams } {
+  if (isActive(opts)) {
+    const { conditions, params } = dashboardConditions(startDate, endDate, accountId, entityId, opts);
+    const incomeConds = [...conditions];
+    incomeConds.push(opts.normalizedIncome ? incomeRuleSql() : "(amount > 0 OR category = 'Income')");
+    if (opts.category) incomeConds.push(`category = '${INCOME_CATEGORY}'`);
+    const incomeTotal = opts.normalizedIncome ? `SUM(${incomeAmountSql()})` : 'SUM(amount)';
+    const expenseConds = [...conditions];
+    expenseConds.push(
+      opts.excludeNonSpend ? spendSql() : "amount < 0 AND COALESCE(category, '') NOT IN ('Income', 'Transfer')"
+    );
+    const incomeSqlText = `
+    SELECT ${labelSelectSql(opts)} AS category, ${incomeTotal} AS total, COUNT(*) AS count
+    FROM transactions
+    WHERE ${incomeConds.join(' AND ')}
+    GROUP BY ${labelGroupSql(opts)} ORDER BY total DESC
+  `;
+    const expensesSqlText = `
+    SELECT ${labelSelectSql(opts)} AS category, SUM(amount) AS total, COUNT(*) AS count
+    FROM transactions
+    WHERE ${expenseConds.join(' AND ')}
+    GROUP BY ${labelGroupSql(opts)} ORDER BY total ASC
+  `;
+    return { incomeSql: incomeSqlText, expensesSql: expensesSqlText, params };
+  }
   const baseParams: SqlParams = { startDate, endDate };
   const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
   if (accountId !== undefined) baseParams.accountId = accountId;
@@ -274,8 +557,24 @@ export function composeSavingsSql(
   startDate: string,
   endDate: string,
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: OverviewOptions
 ): { sql: string; params: SqlParams } {
+  if (isActive(opts)) {
+    const { conditions, params } = dashboardConditions(startDate, endDate, accountId, entityId, opts);
+    const incomeCase = opts.normalizedIncome
+      ? `CASE WHEN ${incomeRuleSql()} THEN ${incomeAmountSql()} ELSE 0 END`
+      : 'CASE WHEN amount > 0 THEN amount ELSE 0 END';
+    const expenseCase = `CASE WHEN ${expenseConditionSql(opts)} THEN ABS(amount) ELSE 0 END`;
+    const sql = `
+    SELECT strftime('%Y-%m', date) AS month,
+      COALESCE(SUM(${incomeCase}), 0) AS income,
+      COALESCE(SUM(${expenseCase}), 0) AS expenses
+    FROM transactions WHERE ${conditions.join(' AND ')}
+    GROUP BY strftime('%Y-%m', date) ORDER BY month
+  `;
+    return { sql, params };
+  }
   const params: SqlParams = { startDate, endDate };
   const acctFilter = accountId !== undefined ? ' AND account_id = @accountId' : '';
   if (accountId !== undefined) params.accountId = accountId;
@@ -297,11 +596,16 @@ export function composeSavingsSql(
  */
 export function composeBudgetActualClauses(
   accountId?: number,
-  entityId?: number
+  entityId?: number,
+  opts?: Pick<DashboardRules, 'defaultEntityIncludesNull'>
 ): { acctFilter: string; entityFilter: string } {
+  let entityFilter = entityId !== undefined ? ' AND t.entity_id = @entityId' : '';
+  if (entityId !== undefined && opts?.defaultEntityIncludesNull) {
+    entityFilter = ` AND ${entityFilterSql(entityId, 't').sql}`;
+  }
   return {
     acctFilter: accountId !== undefined ? ' AND t.account_id = @accountId' : '',
-    entityFilter: entityId !== undefined ? ' AND t.entity_id = @entityId' : '',
+    entityFilter,
   };
 }
 
@@ -582,5 +886,27 @@ export function budgetActualRow(budget: BudgetLimitRow, actual: number): BudgetV
     remaining,
     percent_used: percentUsed,
     over: actual > budget.monthly_limit,
+  };
+}
+
+/**
+ * Range-mode budget row (dashboard): the limit is monthly_limit × the number
+ * of day-prorated months in the requested range, and remaining / percent_used /
+ * over compare against that scaled limit. `monthly_limit` stays the raw
+ * monthly figure; `limit` and `months` label the scaling.
+ */
+export function budgetActualRangeRow(budget: BudgetLimitRow, actual: number, months: number): BudgetVsActualRow {
+  const limit = budget.monthly_limit * months;
+  const remaining = limit - actual;
+  const percentUsed = limit > 0 ? Math.round((actual / limit) * 100) : 0;
+  return {
+    category: budget.category,
+    monthly_limit: budget.monthly_limit,
+    limit,
+    months,
+    actual,
+    remaining,
+    percent_used: percentUsed,
+    over: actual > limit,
   };
 }

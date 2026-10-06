@@ -1,38 +1,28 @@
-import { describe, expect, test, beforeEach, afterAll, mock, spyOn } from 'bun:test';
+import { describe, expect, test, beforeEach, afterAll, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
 import * as skillsIndex from '../skills/index.js';
 import * as licenseModule from '../licensing/license.js';
 
-// Link the real modules BEFORE mock.module below so bun mutates them in place
-// instead of wholesale-replacing them and their re-export graph — keeping
-// ../skills/loader.js real for skills-loader.test.ts.
-void skillsIndex;
+// Spy (not mock.module) on the skills layer: a module mock is never undone, and
+// restoring another file's spy over it (tool-registry.test.ts) left
+// discoverSkills() returning undefined for every later registry build
+// (tool-selection-recall) when run without --isolate. Spies restore cleanly.
+const mockGetSkill = spyOn(skillsIndex, 'getSkill').mockResolvedValue(undefined);
+const mockDiscoverSkills = spyOn(skillsIndex, 'discoverSkills').mockReturnValue([] as any[]);
 
-// Mock the skills module before importing the skill tool
-const mockGetSkill = mock(() => Promise.resolve(null as any));
-const mockDiscoverSkills = mock(() => [] as any[]);
-
-mock.module('../skills/index.js', () => ({
-  getSkill: mockGetSkill,
-  discoverSkills: mockDiscoverSkills,
-  buildSkillMetadataSection: mock(() => ''),
-  clearSkillCache: mock(() => {}),
-  parseSkillFile: skillsIndex.parseSkillFile,
-  loadSkillFromPath: skillsIndex.loadSkillFromPath,
-  extractSkillMetadata: skillsIndex.extractSkillMetadata,
-}));
-
-// Spy (not mock.module) on hasLicense so license.test.ts keeps the real
-// implementation after mockRestore().
+// Likewise for hasLicense, so license.test.ts keeps the real implementation
+// after mockRestore().
 const mockHasLicense = spyOn(licenseModule, 'hasLicense').mockReturnValue(false);
 
-// Import after mocks are set up
+// Import after the spies are set up
 const { skillTool } = await import('../tools/skill.js');
 
 afterAll(() => {
-  // Undo the license spy so later-loading test files (license.test.ts)
-  // exercise the real implementation.
+  // Undo the spies so later-loading test files exercise the real
+  // implementations.
   mockHasLicense.mockRestore();
+  mockGetSkill.mockRestore();
+  mockDiscoverSkills.mockRestore();
 });
 
 describe('skillTool', () => {
@@ -68,7 +58,7 @@ describe('skillTool', () => {
   });
 
   test('invalid skill returns error with available skills', async () => {
-    mockGetSkill.mockResolvedValue(null);
+    mockGetSkill.mockResolvedValue(undefined);
     mockDiscoverSkills.mockReturnValue([
       { name: 'budget-audit', description: 'Audit', path: '/tmp', source: 'builtin', tier: 'free' },
       { name: 'tax-prep', description: 'Tax', path: '/tmp', source: 'builtin', tier: 'paid' },

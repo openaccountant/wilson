@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool } from '../define-tool.js';
+import { mutatesUnlessAction } from '../mutation.js';
 import { formatToolResult } from '../types.js';
 import type { Database } from '../../db/compat-sqlite.js';
 import {
@@ -48,6 +49,7 @@ function validateTargets(
 
 export const goalManageTool = defineTool({
   name: 'goal_manage',
+  mutates: mutatesUnlessAction('list'),
   description: 'Manage financial and behavioral goals — add, update, track progress, list, or change status. Financial goals support a fixed targetAmount or a percentage-of-income targetPercent that is computed from actual income each period.',
   schema: z.object({
     action: z.enum(['add', 'update', 'progress', 'list', 'complete', 'pause', 'abandon']).describe('Action to perform'),

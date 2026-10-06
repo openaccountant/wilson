@@ -1,14 +1,15 @@
 import { useApi } from '@/hooks/useApi';
 import { useFilterParams } from '@/hooks/useFilterParams';
+import { useAppState } from '@/state';
+import { FilteredBadge } from '@/components/FilteredBadge';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
+import { money } from '@/format';
 import type { PnlResponse } from '@/types';
-
-function fmt(n: number): string {
-  return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 export function PnlCard() {
   const params = useFilterParams();
+  // /api/pnl honors the category filter (expense-only for that category).
+  const { category } = useAppState();
   const { data, loading, offline } = useApi<PnlResponse>(`/api/pnl?${params}`, [params]);
 
   if (loading) {
@@ -30,23 +31,26 @@ export function PnlCard() {
 
   return (
     <div className="bg-surface-raised border border-border rounded-lg p-4">
-      <h3 className="text-xs text-text-secondary uppercase tracking-wide mb-3">Profit & Loss</h3>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="text-xs text-text-secondary uppercase tracking-wide m-0">Profit & Loss</h3>
+        <FilteredBadge category={category} />
+      </div>
       <div className="grid grid-cols-3 gap-3 text-center">
         <div>
           <div className="text-xs text-text-muted">Income</div>
-          <div className="text-xl font-bold font-mono text-green mt-1">{fmt(income)}</div>
+          <div className="text-xl font-bold font-mono tabular-nums text-green mt-1">{money(Math.abs(income))}</div>
         </div>
         <div>
           <div className="text-xs text-text-muted">Expenses</div>
-          <div className="text-xl font-bold font-mono text-red mt-1">{fmt(expenses)}</div>
+          <div className="text-xl font-bold font-mono tabular-nums text-red mt-1">{money(Math.abs(expenses))}</div>
         </div>
         <div>
           <div className="text-xs text-text-muted">Net</div>
           <div
-            className="text-xl font-bold font-mono mt-1"
+            className="text-xl font-bold font-mono tabular-nums mt-1"
             style={{ color: net >= 0 ? '#22c55e' : '#ef4444' }}
           >
-            {net >= 0 ? '+' : '-'}{fmt(net)}
+            {net > 0 ? '+' : ''}{money(net)}
           </div>
         </div>
       </div>

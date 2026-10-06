@@ -1,0 +1,380 @@
+[
+ {
+  "set": "gold",
+  "q": "Show me every Whole Foods charge last month",
+  "tool": "transaction_search",
+  "rows": 1,
+  "text": "No results found."
+ },
+ {
+  "set": "gold",
+  "q": "List my Uber rides this year",
+  "tool": "transaction_search",
+  "rows": 1,
+  "text": "1 transaction found. #15 2026-05-02 -$18.50 Transport Uber trip."
+ },
+ {
+  "set": "gold",
+  "q": "Did I get charged twice by Adobe?",
+  "tool": "transaction_search",
+  "rows": 2,
+  "text": "Need more data."
+ },
+ {
+  "set": "gold",
+  "q": "Where did my money go this month?",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "- **Groceries**: -$88.50 (1 item, +13%)  \n- **Transport**: -$45.50 (1 item)  \n- **Dining**: -$41.25 (1 item, +25%)  \n- **Subscriptions**: -$15.50 (1 item, +79%)  \n\n**Total**: -$190.75 (49% increase)"
+ },
+ {
+  "set": "gold",
+  "q": "Break down my spending by category for the quarter",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "- **Groceries**: -$88.50 (51%)\n- **Transport**: -$45.50 (146%)\n- **Dining**: -$41.25 (25%)\n- **Subscriptions**: -$15.50 (91%)\n- **Total**: -$190.75 (76%)\n\n**Breakdown by category for the quarter (2026):**  \n- Groceries: -$88.50  \n- Transport: -$45.50  \n- Dining: -$41.25  \n- Subscriptions: -$15.50  \n- Total: -$190.75"
+ },
+ {
+  "set": "gold",
+  "q": "What are my biggest expense categories this year?",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "- Transfer: -$500.00  \n- Dining: -$347.25  \n- Utilities: -$270.75  \n- Shopping: -$204.50  \n- Subscriptions: -$197.00  \n\n$ amounts."
+ },
+ {
+  "set": "gold",
+  "q": "Am I spending more on groceries than before?",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "No, you are not spending more on groceries than before."
+ },
+ {
+  "set": "gold",
+  "q": "Give me a profit and loss for last quarter",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "Profit & Loss: Q2 2026  \nIncome: $ 11725.00  \nExpenses: $ 786.00  \nNet Profit: $ 10939.00"
+ },
+ {
+  "set": "gold",
+  "q": "Income vs expenses for the year so far",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "- **Income**: $ 18725.00  \n- **Expenses**: $ 1475.75  \n\n**Net Profit**: $ 17249.25"
+ },
+ {
+  "set": "gold",
+  "q": "Did I come out ahead last month?",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "$4352.75."
+ },
+ {
+  "set": "gold",
+  "q": "P&L by category for this month",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "$190.75 spent in July 2026, compared to $190.75 in June 2026."
+ },
+ {
+  "set": "gold",
+  "q": "What is my net worth?",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "Net worth: $222,050.25."
+ },
+ {
+  "set": "gold",
+  "q": "Give me my balance sheet with assets and liabilities",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "Net worth: $222050.25  \nTotal assets: $481251.50  \nTotal liabilities: $259201.25  \nAssets:  \n- Wallet (Cash): $250.00  \n- Everyday Checking (Checking): $4000.50  \n- Brokerage (Investment): $50000.75  \n- House (Real Estate): $400000.00  \n- Rainy Day (Savings): $12000.25  \n- Car (Vehicle): $15000.00  \n\nLiabilities:  \n- Car Loan (Auto Loan): $8000.00  \n- Visa (Credit Card): $1200.75  \n- Home Loan (Mortgage): $250000.50"
+ },
+ {
+  "set": "gold",
+  "q": "What will my savings look like in three months?",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Based on the provided data, your savings will be $27282.50 in three months."
+ },
+ {
+  "set": "gold",
+  "q": "If I cancel Netflix, how much will I save by year end?",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Need more data."
+ },
+ {
+  "set": "gold",
+  "q": "Project my cash flow for the next six months",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$3677.25 (Average monthly net) for 2026-08, $23605.25 (2026-09), $27282.50 (2026-10), $30959.75 (2026-11), $34637.00 (2026-12), and $38314.25 (2027-01)."
+ },
+ {
+  "set": "gold",
+  "q": "What if I cut dining out by $100 a month?",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$3777.25."
+ },
+ {
+  "set": "gold",
+  "q": "Will I have enough cash by September at my current pace?",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Based on the provided data, with an average monthly net of $3677.25 and a cash amount of $23605.25 at the end of the horizon, you will have enough cash by September."
+ },
+ {
+  "set": "gold",
+  "q": "Which category grew the most compared to the previous period?",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "$41.25 (Dining) grew the most compared to the previous period."
+ },
+ {
+  "set": "gold",
+  "q": "What was my profit last year?",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "+$3137.00"
+ },
+ {
+  "set": "gold",
+  "q": "What do my total assets minus liabilities come to?",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "$222,050.25 - $259,201.25 = $-37,151.00."
+ },
+ {
+  "set": "gold",
+  "q": "Estimate my savings at the end of the year if I keep spending like this",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$34637.00."
+ },
+ {
+  "set": "heldout",
+  "q": "did I get charged twice by Netflix?",
+  "tool": "transaction_search",
+  "rows": 5,
+  "text": "No, I did not get charged twice by Netflix."
+ },
+ {
+  "set": "heldout",
+  "q": "pull up every transaction with Whole Foods this year",
+  "tool": "transaction_search",
+  "rows": 4,
+  "text": "No results found."
+ },
+ {
+  "set": "heldout",
+  "q": "find the adobe charges",
+  "tool": "transaction_search",
+  "rows": 2,
+  "text": "$59.75"
+ },
+ {
+  "set": "heldout",
+  "q": "how much did I spend on dining out this month",
+  "tool": "transaction_search",
+  "rows": 1,
+  "text": "-$41.25"
+ },
+ {
+  "set": "heldout",
+  "q": "break down my spending by category",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "- **Groceries**: -$88.50 (1 item, +13%)\n- **Transport**: -$45.50 (1 item)\n- **Dining**: -$41.25 (1 item, +25%)\n- **Subscriptions**: -$15.50 (1 item, +79%)\n- **Total**: -$190.75 (49% increase)"
+ },
+ {
+  "set": "heldout",
+  "q": "what are my top spending categories this quarter",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "- Groceries: -$88.50  \n- Transportation: -$45.50  \n- Dining: -$41.25"
+ },
+ {
+  "set": "heldout",
+  "q": "am I spending more on groceries than last month",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "Based on the spending summary, you are spending **$41.25 more on dining** than last month."
+ },
+ {
+  "set": "heldout",
+  "q": "what's my biggest expense category ytd",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "$1975.75."
+ },
+ {
+  "set": "heldout",
+  "q": "compare my spending this month vs the usual",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "Need more data."
+ },
+ {
+  "set": "heldout",
+  "q": "what's my P&L for Q3",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "$3309.25."
+ },
+ {
+  "set": "heldout",
+  "q": "income vs expenses this year",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "- **Income**: $ 18725.00  \n- **Expenses**: $ 1475.75  \n\n**Net Profit**: $ 17249.25"
+ },
+ {
+  "set": "heldout",
+  "q": "did I make a profit last month",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "$4352.75 profit."
+ },
+ {
+  "set": "heldout",
+  "q": "profit/loss ytd",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "$17249.25"
+ },
+ {
+  "set": "heldout",
+  "q": "what's my net worth",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "Net worth: $222,050.25."
+ },
+ {
+  "set": "heldout",
+  "q": "what is my networth today",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "Net worth: $222050.25."
+ },
+ {
+  "set": "heldout",
+  "q": "balance sheet as of end of last quarter",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "$222050.25."
+ },
+ {
+  "set": "heldout",
+  "q": "give me my assets and liabilities",
+  "tool": "net_worth",
+  "rows": null,
+  "text": "Net worth: $222050.25  \nTotal assets: $481251.50  \nTotal liabilities: $259201.25"
+ },
+ {
+  "set": "heldout",
+  "q": "what will my balance be in 3 months",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$3677.25"
+ },
+ {
+  "set": "heldout",
+  "q": "project my cash flow for next quarter",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Need more data."
+ },
+ {
+  "set": "heldout",
+  "q": "will I run out of money before December",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Need more data."
+ },
+ {
+  "set": "heldout",
+  "q": "forecast my spending for next month",
+  "tool": "forecast",
+  "rows": null,
+  "text": "- Forecast: 3 months ahead, based on the last 3 months  \n  - Starting cash: $16250.75  \n  - Average monthly income: $3908.33  \n  - Average monthly expenses: $231.08  \n  - Average monthly net: $3677.25  \n\nCash at the end of the horizon: $27282.50"
+ },
+ {
+  "set": "heldout",
+  "q": "how much will I have saved by next summer",
+  "tool": "forecast",
+  "rows": null,
+  "text": "By next summer, you will have saved $27282.50."
+ },
+ {
+  "set": "heldout",
+  "q": "how much will i spend on groceries next month",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$231.08."
+ },
+ {
+  "set": "bench",
+  "q": "Show me every Whole Foods charge in June",
+  "tool": "transaction_search",
+  "rows": 1,
+  "text": "No results found."
+ },
+ {
+  "set": "bench",
+  "q": "Did I get charged twice by Netflix?",
+  "tool": "transaction_search",
+  "rows": 5,
+  "text": "No, I did not get charged twice by Netflix."
+ },
+ {
+  "set": "bench",
+  "q": "List my Adobe charges this year",
+  "tool": "transaction_search",
+  "rows": 2,
+  "text": "2 transactions found."
+ },
+ {
+  "set": "bench",
+  "q": "When did I last pay the Electric Company?",
+  "tool": "transaction_search",
+  "rows": 2,
+  "text": "Need more data."
+ },
+ {
+  "set": "bench",
+  "q": "How much did I spend by category this month?",
+  "tool": "spending_summary",
+  "rows": null,
+  "text": "-$190.75."
+ },
+ {
+  "set": "bench",
+  "q": "What was my profit and loss this month?",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "$3309.25."
+ },
+ {
+  "set": "bench",
+  "q": "Income vs expenses last month",
+  "tool": "profit_loss",
+  "rows": null,
+  "text": "- **Income**: $4725.00  \n- **Expenses**: $372.25  \n\n**Net Profit**: $4352.75"
+ },
+ {
+  "set": "bench",
+  "q": "Forecast my cash for the next 3 months",
+  "tool": "forecast",
+  "rows": null,
+  "text": "$27282.50."
+ },
+ {
+  "set": "bench",
+  "q": "Will I have enough cash in 3 months?",
+  "tool": "forecast",
+  "rows": null,
+  "text": "Based on the provided data, the average monthly net is $3677.25, which is more than $27282.50 in 3 months. Therefore, you will have enough cash in 3 months."
+ }
+]

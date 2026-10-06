@@ -1,0 +1,212 @@
+{
+ "gold": {
+  "set": "gold",
+  "routedToTransactionSearch": 10,
+  "tally": {
+   "rows": 4,
+   "empty-result": 3,
+   "args-unfillable": 3
+  },
+  "rows": [
+   {
+    "q": "Show me every Whole Foods charge last month",
+    "bucket": "rows",
+    "query": "Whole Foods last month",
+    "count": 1
+   },
+   {
+    "q": "Find all transactions over $200 in June",
+    "bucket": "rows",
+    "query": "in June over $200",
+    "count": 4
+   },
+   {
+    "q": "When did I last pay Comcast?",
+    "bucket": "empty-result",
+    "query": "Comcast",
+    "count": 0
+   },
+   {
+    "q": "List my Uber rides this year",
+    "bucket": "rows",
+    "query": "Uber this year",
+    "count": 1
+   },
+   {
+    "q": "Did I get charged twice by Adobe?",
+    "bucket": "rows",
+    "query": "Adobe",
+    "count": 2
+   },
+   {
+    "q": "Search for anything from Ticketmaster",
+    "bucket": "empty-result",
+    "query": "Ticketmaster",
+    "count": 0
+   },
+   {
+    "q": "How much did I spend on dining compared to last month?",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "How much did I pay in total to Costco this year?",
+    "bucket": "empty-result",
+    "query": "Costco this year",
+    "count": 0
+   },
+   {
+    "q": "Pull up my rent payments from the last three months",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "Show income minus expenses for the previous quarter",
+    "bucket": "args-unfillable"
+   }
+  ]
+ },
+ "heldout": {
+  "set": "heldout",
+  "routedToTransactionSearch": 27,
+  "tally": {
+   "args-unfillable": 14,
+   "empty-result": 10,
+   "rows": 3
+  },
+  "rows": [
+   {
+    "q": "find all my uber charges from last week",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "show me anything over $200 at Amazon in September",
+    "bucket": "empty-result",
+    "query": "Amazon in September over $200",
+    "count": 0
+   },
+   {
+    "q": "did I get charged twice by Netflix?",
+    "bucket": "rows",
+    "query": "Netflix",
+    "count": 1
+   },
+   {
+    "q": "pull up every transaction with Whole Foods this year",
+    "bucket": "rows",
+    "query": "Whole Foods this year",
+    "count": 1
+   },
+   {
+    "q": "what was that $47.12 charge on the 3rd",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "list my deposits from yesterday",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "show transactons at starbcks since august",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "which purchases did I make at Target 2 weeks ago",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "find the venmo payment to Dave",
+    "bucket": "empty-result",
+    "query": "venmo Dave",
+    "count": 0
+   },
+   {
+    "q": "search for refunds in the last 30 days",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "show me my largest 10 transactions this quarter",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "find the adobe charges",
+    "bucket": "rows",
+    "query": "adobe",
+    "count": 2
+   },
+   {
+    "q": "show pending charges from today",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "what did I pay Comcast in the last three months, each bill",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "how much did I spend on dining out this month",
+    "bucket": "empty-result",
+    "query": "Dining this month",
+    "count": 0
+   },
+   {
+    "q": "total spent on subscriptions this year",
+    "bucket": "empty-result",
+    "query": "Subscriptions this year recurring",
+    "count": 0
+   },
+   {
+    "q": "how much have i spent on food so frist",
+    "bucket": "empty-result",
+    "query": "food frist",
+    "count": 0
+   },
+   {
+    "q": "what percent of my spend goes to transportation",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "give me a rundown of this month's expenses",
+    "bucket": "empty-result",
+    "query": "rundown this month",
+    "count": 0
+   },
+   {
+    "q": "how much did entertainment cost me this quarter",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "what did I spend on travel in 2026",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "how much are utilities costing me per month",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "show me profit and loss for the first half of 2026",
+    "bucket": "args-unfillable"
+   },
+   {
+    "q": "how much more did I earn than spend in September",
+    "bucket": "empty-result",
+    "query": "earn in September",
+    "count": 0
+   },
+   {
+    "q": "show my balance sheet",
+    "bucket": "empty-result",
+    "query": "balance sheet",
+    "count": 0
+   },
+   {
+    "q": "show me my overall financial position",
+    "bucket": "empty-result",
+    "query": "overall financial position",
+    "count": 0
+   },
+   {
+    "q": "show me my credit score",
+    "bucket": "empty-result",
+    "query": "credit score",
+    "count": 0
+   }
+  ]
+ }
+}

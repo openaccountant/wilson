@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDef, ToolInvokeConfig } from '../model/types.js';
+import type { MutationFlag, ToolDef, ToolInvokeConfig } from '../model/types.js';
 
 /**
  * Format zod issues as a compact field-first list, e.g.
@@ -20,7 +20,7 @@ function formatZodIssues(error: z.ZodError): string {
  * Every ToolDef in the repo is created here, so this is the single choke point
  * for argument validation: each invocation parses its arguments against the
  * tool's own zod schema before the tool function runs. That covers the agent
- * executor, orchestration chain/team members (which call tools directly), and
+ * executor, orchestration chain/team members (src/orchestration/tool-calls.ts), and
  * programmatic callers — a malformed tool call from the model is rejected with
  * a field-naming error and never reaches the tool function.
  *
@@ -33,6 +33,13 @@ export function defineTool<T extends z.ZodType>(config: {
   description: string;
   schema: T;
   func: (args: z.infer<T>, config?: ToolInvokeConfig) => Promise<string>;
+  /**
+   * Whether calls write (DB, files, external services) — see src/tools/mutation.ts.
+   * Declare `false` on read-only tools; omitted is treated as mutating.
+   */
+  mutates?: MutationFlag;
+  /** Orchestration tools only — see ToolDef.usesTools. */
+  usesTools?: readonly string[];
 }): ToolDef<T> {
   const { name, schema, func } = config;
 

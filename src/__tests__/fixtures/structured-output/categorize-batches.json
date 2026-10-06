@@ -1,0 +1,3819 @@
+{
+  "source": "scripts/demos/personas",
+  "poolSize": 72,
+  "batches": [
+    {
+      "id": "batch-01",
+      "transactions": [
+        {
+          "id": 1000,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1001,
+          "description": "UNION SQUARE CAFE - CLIENT DINNER",
+          "amount": -156.4,
+          "date": "2026-06-03",
+          "expected": "Dining"
+        },
+        {
+          "id": 1002,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 1003,
+          "description": "APPLE.COM/BILL",
+          "amount": -2.99,
+          "date": "2026-06-19",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 1004,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1005,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 1006,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        }
+      ]
+    },
+    {
+      "id": "batch-02",
+      "transactions": [
+        {
+          "id": 1100,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 1101,
+          "description": "AMAZON.COM - GRANDKIDS GIFT",
+          "amount": -64.99,
+          "date": "2026-06-28",
+          "expected": "Gifts"
+        },
+        {
+          "id": 1102,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 1103,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1104,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 1105,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 1106,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1107,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 1108,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 1109,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1110,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        }
+      ]
+    },
+    {
+      "id": "batch-03",
+      "transactions": [
+        {
+          "id": 1200,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1201,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 1202,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1203,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 1204,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 1205,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 1206,
+          "description": "PLANET FITNESS",
+          "amount": -24.99,
+          "date": "2026-06-11",
+          "expected": "Health"
+        },
+        {
+          "id": 1207,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 1208,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        }
+      ]
+    },
+    {
+      "id": "batch-04",
+      "transactions": [
+        {
+          "id": 1300,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 1301,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1302,
+          "description": "AUTO LOAN PAYMENT - CARMAX FINANCIAL",
+          "amount": -265,
+          "date": "2026-06-12",
+          "expected": "Transport"
+        },
+        {
+          "id": 1303,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1304,
+          "description": "RENT PAYMENT",
+          "amount": -1150,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 1305,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 1306,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 598,
+          "date": "2026-06-29",
+          "expected": "Income"
+        },
+        {
+          "id": 1307,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 1308,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-05",
+      "transactions": [
+        {
+          "id": 1400,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 1401,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 1402,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1403,
+          "description": "SUNSHINE DAYCARE",
+          "amount": -980,
+          "date": "2026-06-06",
+          "expected": "Other"
+        },
+        {
+          "id": 1404,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-06",
+      "transactions": [
+        {
+          "id": 1500,
+          "description": "CLIENT PAYMT - HARBOR LOGISTICS",
+          "amount": 1800,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 1501,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 1502,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1503,
+          "description": "DELTA AIR LINES - CONF TRAVEL",
+          "amount": -412,
+          "date": "2026-06-06",
+          "expected": "Travel"
+        },
+        {
+          "id": 1504,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 1505,
+          "description": "UBER TRIP HELP.UBER.COM",
+          "amount": -22.1,
+          "date": "2026-06-13",
+          "expected": "Transport"
+        },
+        {
+          "id": 1506,
+          "description": "GROCERY OUTLET",
+          "amount": -63.55,
+          "date": "2026-06-27",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1507,
+          "description": "STATE QUARTERLY TAX PMT",
+          "amount": -1200,
+          "date": "2026-06-24",
+          "expected": "Other"
+        },
+        {
+          "id": 1508,
+          "description": "TRADER JOE'S #229",
+          "amount": -88.1,
+          "date": "2026-06-20",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1509,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1510,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1511,
+          "description": "UNION SQUARE CAFE - CLIENT DINNER",
+          "amount": -156.4,
+          "date": "2026-06-03",
+          "expected": "Dining"
+        },
+        {
+          "id": 1512,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 1513,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        }
+      ]
+    },
+    {
+      "id": "batch-07",
+      "transactions": [
+        {
+          "id": 1600,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1601,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        },
+        {
+          "id": 1602,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 1603,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1604,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 1605,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 1606,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1607,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 1608,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 1609,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 1610,
+          "description": "AMAZON.COM - GRANDKIDS GIFT",
+          "amount": -64.99,
+          "date": "2026-06-28",
+          "expected": "Gifts"
+        }
+      ]
+    },
+    {
+      "id": "batch-08",
+      "transactions": [
+        {
+          "id": 1700,
+          "description": "RAMEN HOUSE",
+          "amount": -9.4,
+          "date": "2026-06-18",
+          "expected": "Dining"
+        },
+        {
+          "id": 1701,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 1702,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        },
+        {
+          "id": 1703,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 1704,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 1705,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 1706,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 1707,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1708,
+          "description": "CHIPOTLE 2291",
+          "amount": -12.3,
+          "date": "2026-06-27",
+          "expected": "Dining"
+        },
+        {
+          "id": 1709,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 1710,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1711,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 1712,
+          "description": "PLANET FITNESS",
+          "amount": -24.99,
+          "date": "2026-06-11",
+          "expected": "Health"
+        }
+      ]
+    },
+    {
+      "id": "batch-09",
+      "transactions": [
+        {
+          "id": 1800,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 1801,
+          "description": "GROCERY OUTLET",
+          "amount": -71.3,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1802,
+          "description": "AUTO LOAN PAYMENT - CARMAX FINANCIAL",
+          "amount": -265,
+          "date": "2026-06-12",
+          "expected": "Transport"
+        },
+        {
+          "id": 1803,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 1804,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1805,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 1806,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 598,
+          "date": "2026-06-29",
+          "expected": "Income"
+        },
+        {
+          "id": 1807,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1808,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        }
+      ]
+    },
+    {
+      "id": "batch-10",
+      "transactions": [
+        {
+          "id": 1900,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 1901,
+          "description": "SUNSHINE DAYCARE",
+          "amount": -980,
+          "date": "2026-06-06",
+          "expected": "Other"
+        },
+        {
+          "id": 1902,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 1903,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 1904,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1905,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 1906,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 1907,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        },
+        {
+          "id": 1908,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 1909,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 1910,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 1911,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 1912,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        }
+      ]
+    },
+    {
+      "id": "batch-11",
+      "transactions": [
+        {
+          "id": 2000,
+          "description": "CLIENT PAYMT - HARBOR LOGISTICS",
+          "amount": 1800,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 2001,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 2002,
+          "description": "DELTA AIR LINES - CONF TRAVEL",
+          "amount": -412,
+          "date": "2026-06-06",
+          "expected": "Travel"
+        },
+        {
+          "id": 2003,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 2004,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 2005,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 2006,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2007,
+          "description": "NETFLIX.COM",
+          "amount": -15.49,
+          "date": "2026-06-09",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-12",
+      "transactions": [
+        {
+          "id": 2100,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2101,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 2102,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2103,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2104,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        },
+        {
+          "id": 2105,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 2106,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 2107,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 2108,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 2109,
+          "description": "AMAZON.COM - GRANDKIDS GIFT",
+          "amount": -64.99,
+          "date": "2026-06-28",
+          "expected": "Gifts"
+        },
+        {
+          "id": 2110,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        }
+      ]
+    },
+    {
+      "id": "batch-13",
+      "transactions": [
+        {
+          "id": 2200,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2201,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 2202,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        },
+        {
+          "id": 2203,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        },
+        {
+          "id": 2204,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 2205,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 2206,
+          "description": "CHIPOTLE 2291",
+          "amount": -12.3,
+          "date": "2026-06-27",
+          "expected": "Dining"
+        },
+        {
+          "id": 2207,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 2208,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 2209,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 2210,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        }
+      ]
+    },
+    {
+      "id": "batch-14",
+      "transactions": [
+        {
+          "id": 2300,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2301,
+          "description": "GROCERY OUTLET",
+          "amount": -71.3,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2302,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 2303,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 2304,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 2305,
+          "description": "AUTO LOAN PAYMENT - CARMAX FINANCIAL",
+          "amount": -265,
+          "date": "2026-06-12",
+          "expected": "Transport"
+        },
+        {
+          "id": 2306,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 2307,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 2308,
+          "description": "RENT PAYMENT",
+          "amount": -1150,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 2309,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        }
+      ]
+    },
+    {
+      "id": "batch-15",
+      "transactions": [
+        {
+          "id": 2400,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 2401,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 2402,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 2403,
+          "description": "SUNSHINE DAYCARE",
+          "amount": -980,
+          "date": "2026-06-06",
+          "expected": "Other"
+        },
+        {
+          "id": 2404,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-16",
+      "transactions": [
+        {
+          "id": 2500,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 2501,
+          "description": "UBER TRIP HELP.UBER.COM",
+          "amount": -22.1,
+          "date": "2026-06-13",
+          "expected": "Transport"
+        },
+        {
+          "id": 2502,
+          "description": "GROCERY OUTLET",
+          "amount": -63.55,
+          "date": "2026-06-27",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2503,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -142.33,
+          "date": "2026-06-03",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2504,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 2505,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 2506,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2507,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 2508,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        }
+      ]
+    },
+    {
+      "id": "batch-17",
+      "transactions": [
+        {
+          "id": 2600,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 2601,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 2602,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 2603,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 2604,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2605,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2606,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2607,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-18",
+      "transactions": [
+        {
+          "id": 2700,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 2701,
+          "description": "RAMEN HOUSE",
+          "amount": -9.4,
+          "date": "2026-06-18",
+          "expected": "Dining"
+        },
+        {
+          "id": 2702,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 2703,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 2704,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        }
+      ]
+    },
+    {
+      "id": "batch-19",
+      "transactions": [
+        {
+          "id": 2800,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 2801,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 2802,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 2803,
+          "description": "GROCERY OUTLET",
+          "amount": -71.3,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2804,
+          "description": "AUTO LOAN PAYMENT - CARMAX FINANCIAL",
+          "amount": -265,
+          "date": "2026-06-12",
+          "expected": "Transport"
+        },
+        {
+          "id": 2805,
+          "description": "RENT PAYMENT",
+          "amount": -1150,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 2806,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 2807,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2808,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 598,
+          "date": "2026-06-29",
+          "expected": "Income"
+        },
+        {
+          "id": 2809,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 2810,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 2811,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        },
+        {
+          "id": 2812,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        }
+      ]
+    },
+    {
+      "id": "batch-20",
+      "transactions": [
+        {
+          "id": 2900,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 2901,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2902,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 2903,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 2904,
+          "description": "SUNSHINE DAYCARE",
+          "amount": -980,
+          "date": "2026-06-06",
+          "expected": "Other"
+        },
+        {
+          "id": 2905,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 2906,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 2907,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 2908,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 2909,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        }
+      ]
+    },
+    {
+      "id": "batch-21",
+      "transactions": [
+        {
+          "id": 3000,
+          "description": "TRADER JOE'S #229",
+          "amount": -88.1,
+          "date": "2026-06-20",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3001,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 3002,
+          "description": "GROCERY OUTLET",
+          "amount": -63.55,
+          "date": "2026-06-27",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3003,
+          "description": "TRANSFER TO CREDIT CARD XXXX-4471",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3004,
+          "description": "UBER TRIP HELP.UBER.COM",
+          "amount": -22.1,
+          "date": "2026-06-13",
+          "expected": "Transport"
+        },
+        {
+          "id": 3005,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3006,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 3007,
+          "description": "NETFLIX.COM",
+          "amount": -15.49,
+          "date": "2026-06-09",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 3008,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 3009,
+          "description": "STATE QUARTERLY TAX PMT",
+          "amount": -1200,
+          "date": "2026-06-24",
+          "expected": "Other"
+        },
+        {
+          "id": 3010,
+          "description": "DELTA AIR LINES - CONF TRAVEL",
+          "amount": -412,
+          "date": "2026-06-06",
+          "expected": "Travel"
+        },
+        {
+          "id": 3011,
+          "description": "UNION SQUARE CAFE - CLIENT DINNER",
+          "amount": -156.4,
+          "date": "2026-06-03",
+          "expected": "Dining"
+        },
+        {
+          "id": 3012,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 3013,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 3014,
+          "description": "APPLE.COM/BILL",
+          "amount": -2.99,
+          "date": "2026-06-19",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-22",
+      "transactions": [
+        {
+          "id": 3100,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 3101,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 3102,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        },
+        {
+          "id": 3103,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3104,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 3105,
+          "description": "AMAZON.COM - GRANDKIDS GIFT",
+          "amount": -64.99,
+          "date": "2026-06-28",
+          "expected": "Gifts"
+        },
+        {
+          "id": 3106,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 3107,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 3108,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3109,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3110,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-23",
+      "transactions": [
+        {
+          "id": 3200,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 3201,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 3202,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 3203,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        },
+        {
+          "id": 3204,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 3205,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3206,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3207,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 3208,
+          "description": "PLANET FITNESS",
+          "amount": -24.99,
+          "date": "2026-06-11",
+          "expected": "Health"
+        },
+        {
+          "id": 3209,
+          "description": "RAMEN HOUSE",
+          "amount": -9.4,
+          "date": "2026-06-18",
+          "expected": "Dining"
+        },
+        {
+          "id": 3210,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 3211,
+          "description": "CHIPOTLE 2291",
+          "amount": -12.3,
+          "date": "2026-06-27",
+          "expected": "Dining"
+        }
+      ]
+    },
+    {
+      "id": "batch-24",
+      "transactions": [
+        {
+          "id": 3300,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3301,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        },
+        {
+          "id": 3302,
+          "description": "GROCERY OUTLET",
+          "amount": -71.3,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3303,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3304,
+          "description": "AUTO LOAN PAYMENT - CARMAX FINANCIAL",
+          "amount": -265,
+          "date": "2026-06-12",
+          "expected": "Transport"
+        },
+        {
+          "id": 3305,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 598,
+          "date": "2026-06-29",
+          "expected": "Income"
+        },
+        {
+          "id": 3306,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 3307,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 3308,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3309,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 3310,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 3311,
+          "description": "RENT PAYMENT",
+          "amount": -1150,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 3312,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 3313,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-25",
+      "transactions": [
+        {
+          "id": 3400,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3401,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3402,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 3403,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3404,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 3405,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        }
+      ]
+    },
+    {
+      "id": "batch-26",
+      "transactions": [
+        {
+          "id": 3500,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3501,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 3502,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3503,
+          "description": "TRANSFER TO CREDIT CARD XXXX-4471",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3504,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3505,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3506,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3507,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3508,
+          "description": "GOLF CLUB DUES",
+          "amount": -150,
+          "date": "2026-06-12",
+          "expected": "Health"
+        },
+        {
+          "id": 3509,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 3510,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        }
+      ]
+    },
+    {
+      "id": "batch-27",
+      "transactions": [
+        {
+          "id": 3600,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 3601,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 3602,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3603,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3604,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3605,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3606,
+          "description": "SOCIAL SECURITY ADMIN",
+          "amount": 2100,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3607,
+          "description": "RAMEN HOUSE",
+          "amount": -9.4,
+          "date": "2026-06-18",
+          "expected": "Dining"
+        },
+        {
+          "id": 3608,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3609,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 3610,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 3611,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3612,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 3613,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3614,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        }
+      ]
+    },
+    {
+      "id": "batch-28",
+      "transactions": [
+        {
+          "id": 3700,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 3701,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3702,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 3703,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3704,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3705,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 3706,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 3707,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 3708,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 3709,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3710,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3711,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3712,
+          "description": "GROCERY OUTLET",
+          "amount": -63.55,
+          "date": "2026-06-27",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3713,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3714,
+          "description": "GROCERY OUTLET",
+          "amount": -71.3,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        }
+      ]
+    },
+    {
+      "id": "batch-29",
+      "transactions": [
+        {
+          "id": 3800,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3801,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3802,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3803,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3804,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3805,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        }
+      ]
+    },
+    {
+      "id": "batch-30",
+      "transactions": [
+        {
+          "id": 3900,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3901,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 3902,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3903,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3904,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 3905,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 3906,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 3907,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3908,
+          "description": "UBER TRIP HELP.UBER.COM",
+          "amount": -22.1,
+          "date": "2026-06-13",
+          "expected": "Transport"
+        },
+        {
+          "id": 3909,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 3910,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 3911,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        },
+        {
+          "id": 3912,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 3913,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 3914,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        }
+      ]
+    },
+    {
+      "id": "batch-31",
+      "transactions": [
+        {
+          "id": 4000,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4001,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4002,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 4003,
+          "description": "RENT PAYMENT",
+          "amount": -1800,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 4004,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 4005,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 4006,
+          "description": "TRADER JOE'S #118",
+          "amount": -54.2,
+          "date": "2026-06-05",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4007,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 4008,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4009,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -142.33,
+          "date": "2026-06-03",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4010,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4011,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 4012,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 4013,
+          "description": "RENT PAYMENT",
+          "amount": -1150,
+          "date": "2026-06-02",
+          "expected": "Home"
+        },
+        {
+          "id": 4014,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        }
+      ]
+    },
+    {
+      "id": "batch-32",
+      "transactions": [
+        {
+          "id": 4100,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4101,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 4102,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 4103,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4104,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4105,
+          "description": "TRADER JOE'S #229",
+          "amount": -88.1,
+          "date": "2026-06-20",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4106,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4107,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 4108,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 4109,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 4110,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4111,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4112,
+          "description": "STATE QUARTERLY TAX PMT",
+          "amount": -1200,
+          "date": "2026-06-24",
+          "expected": "Other"
+        },
+        {
+          "id": 4113,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        }
+      ]
+    },
+    {
+      "id": "batch-33",
+      "transactions": [
+        {
+          "id": 4200,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 4201,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        },
+        {
+          "id": 4202,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 4203,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 4204,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4205,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        },
+        {
+          "id": 4206,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 4207,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4208,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        }
+      ]
+    },
+    {
+      "id": "batch-34",
+      "transactions": [
+        {
+          "id": 4300,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 4301,
+          "description": "UNKNOWN MERCHANT INTL*7719402",
+          "amount": -412.6,
+          "date": "2026-06-15",
+          "expected": null
+        },
+        {
+          "id": 4302,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4303,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 4304,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 4305,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4306,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4307,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4308,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 4309,
+          "description": "TRANSFER TO CREDIT CARD XXXX-4471",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4310,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 4311,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4312,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-35",
+      "transactions": [
+        {
+          "id": 4400,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 4401,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 4402,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4403,
+          "description": "UNION SQUARE CAFE - CLIENT DINNER",
+          "amount": -156.4,
+          "date": "2026-06-03",
+          "expected": "Dining"
+        },
+        {
+          "id": 4404,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4405,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 4406,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4407,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4408,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4409,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 4410,
+          "description": "RENT PAYMENT",
+          "amount": -975,
+          "date": "2026-06-03",
+          "expected": "Home"
+        },
+        {
+          "id": 4411,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4412,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4413,
+          "description": "NETFLIX.COM",
+          "amount": -15.49,
+          "date": "2026-06-09",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-36",
+      "transactions": [
+        {
+          "id": 4500,
+          "description": "RAMEN HOUSE",
+          "amount": -9.4,
+          "date": "2026-06-18",
+          "expected": "Dining"
+        },
+        {
+          "id": 4501,
+          "description": "UNION SQUARE CAFE - CLIENT DINNER",
+          "amount": -156.4,
+          "date": "2026-06-03",
+          "expected": "Dining"
+        },
+        {
+          "id": 4502,
+          "description": "DOLLAR GENERAL",
+          "amount": -42.6,
+          "date": "2026-06-18",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4503,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4504,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 4505,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4506,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4507,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 4508,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 4509,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4510,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4511,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4512,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 4513,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -92.1,
+          "date": "2026-06-07",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4514,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-37",
+      "transactions": [
+        {
+          "id": 4600,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4601,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4602,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4603,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 4604,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4605,
+          "description": "TRADER JOE'S #229",
+          "amount": -88.1,
+          "date": "2026-06-20",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4606,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4607,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4608,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 4609,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4610,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-38",
+      "transactions": [
+        {
+          "id": 4700,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 4701,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4702,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4703,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 4704,
+          "description": "TRADER JOE'S #118",
+          "amount": -71.4,
+          "date": "2026-06-21",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4705,
+          "description": "TARGET",
+          "amount": -63.12,
+          "date": "2026-06-20",
+          "expected": "Shopping"
+        }
+      ]
+    },
+    {
+      "id": "batch-39",
+      "transactions": [
+        {
+          "id": 4800,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4801,
+          "description": "PAYROLL DEP - DAYJOB INC",
+          "amount": 3100,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 4802,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4803,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4804,
+          "description": "PLANET FITNESS",
+          "amount": -24.99,
+          "date": "2026-06-11",
+          "expected": "Health"
+        },
+        {
+          "id": 4805,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        }
+      ]
+    },
+    {
+      "id": "batch-40",
+      "transactions": [
+        {
+          "id": 4900,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 4901,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 4902,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 4903,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4904,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 4905,
+          "description": "MORTGAGE PAYMENT LAKEVIEW HOME LOANS",
+          "amount": -2100,
+          "date": "2026-06-05",
+          "expected": "Home"
+        },
+        {
+          "id": 4906,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 4907,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 4908,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 4909,
+          "description": "TRANSFER TO CREDIT CARD XXXX-4471",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 4910,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-41",
+      "transactions": [
+        {
+          "id": 5000,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5001,
+          "description": "DELTA AIR LINES - CONF TRAVEL",
+          "amount": -412,
+          "date": "2026-06-06",
+          "expected": "Travel"
+        },
+        {
+          "id": 5002,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 5003,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5004,
+          "description": "CVS PHARMACY",
+          "amount": -38.55,
+          "date": "2026-06-09",
+          "expected": "Health"
+        }
+      ]
+    },
+    {
+      "id": "batch-42",
+      "transactions": [
+        {
+          "id": 5100,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 5101,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 5102,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5103,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 5104,
+          "description": "SUNRISE CHILDCARE CENTER",
+          "amount": -620,
+          "date": "2026-06-03",
+          "expected": "Other"
+        }
+      ]
+    },
+    {
+      "id": "batch-43",
+      "transactions": [
+        {
+          "id": 5200,
+          "description": "GROCERY OUTLET",
+          "amount": -68.9,
+          "date": "2026-06-23",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5201,
+          "description": "CHIPOTLE 2291",
+          "amount": -12.3,
+          "date": "2026-06-27",
+          "expected": "Dining"
+        },
+        {
+          "id": 5202,
+          "description": "COSTCO WHOLESALE",
+          "amount": -212.44,
+          "date": "2026-06-08",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5203,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 5204,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-44",
+      "transactions": [
+        {
+          "id": 5300,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 5301,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 845,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 5302,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5303,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 5304,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 780,
+          "date": "2026-06-01",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-45",
+      "transactions": [
+        {
+          "id": 5400,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5401,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5402,
+          "description": "PAYROLL DEP - RIVERSIDE MEDICAL",
+          "amount": 612,
+          "date": "2026-06-08",
+          "expected": "Income"
+        },
+        {
+          "id": 5403,
+          "description": "GYM MEMBERSHIP",
+          "amount": -45,
+          "date": "2026-06-18",
+          "expected": "Health"
+        },
+        {
+          "id": 5404,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 5405,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 5406,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5407,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5408,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5409,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 5410,
+          "description": "OVERDRAFT FEE",
+          "amount": -35,
+          "date": "2026-06-14",
+          "expected": "Fees & Interest"
+        },
+        {
+          "id": 5411,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        }
+      ]
+    },
+    {
+      "id": "batch-46",
+      "transactions": [
+        {
+          "id": 5500,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 5501,
+          "description": "CHILD SUPPORT - STATE DISBURSEMENT UNIT",
+          "amount": 400,
+          "date": "2026-06-09",
+          "expected": "Income"
+        },
+        {
+          "id": 5502,
+          "description": "GROCERY OUTLET",
+          "amount": -63.55,
+          "date": "2026-06-27",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5503,
+          "description": "VERIZON WIRELESS",
+          "amount": -65,
+          "date": "2026-06-09",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5504,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        }
+      ]
+    },
+    {
+      "id": "batch-47",
+      "transactions": [
+        {
+          "id": 5600,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5601,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5602,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 5603,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5604,
+          "description": "STAPLES BUSINESS ADVANTAGE",
+          "amount": -89.2,
+          "date": "2026-06-01",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5605,
+          "description": "CHIPOTLE 2291",
+          "amount": -12.3,
+          "date": "2026-06-27",
+          "expected": "Dining"
+        },
+        {
+          "id": 5606,
+          "description": "MEDIGAP INSURANCE PREMIUM",
+          "amount": -245,
+          "date": "2026-06-05",
+          "expected": "Insurance"
+        },
+        {
+          "id": 5607,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5608,
+          "description": "FEDEX OFFICE PRINT & SHIP",
+          "amount": -34.75,
+          "date": "2026-06-23",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5609,
+          "description": "PEDIATRIC CO-PAY",
+          "amount": -35,
+          "date": "2026-06-21",
+          "expected": "Health"
+        },
+        {
+          "id": 5610,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-16",
+          "expected": "Income"
+        },
+        {
+          "id": 5611,
+          "description": "SCHOOL SUPPLY FEE - LINCOLN ELEMENTARY",
+          "amount": -85,
+          "date": "2026-06-10",
+          "expected": "Education"
+        },
+        {
+          "id": 5612,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 5613,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 5614,
+          "description": "PLANET FITNESS",
+          "amount": -24.99,
+          "date": "2026-06-11",
+          "expected": "Health"
+        }
+      ]
+    },
+    {
+      "id": "batch-48",
+      "transactions": [
+        {
+          "id": 5700,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-04",
+          "expected": "Education"
+        },
+        {
+          "id": 5701,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5702,
+          "description": "NAVIENT STUDENT LOAN",
+          "amount": -210,
+          "date": "2026-06-24",
+          "expected": "Education"
+        },
+        {
+          "id": 5703,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 5704,
+          "description": "CHIPOTLE 2291",
+          "amount": -11.85,
+          "date": "2026-06-07",
+          "expected": "Dining"
+        },
+        {
+          "id": 5705,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5706,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5707,
+          "description": "TRADER JOE'S #229",
+          "amount": -88.1,
+          "date": "2026-06-20",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5708,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5709,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5710,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 5711,
+          "description": "ADOBE CREATIVE CLOUD",
+          "amount": -54.99,
+          "date": "2026-06-05",
+          "expected": "Subscriptions"
+        }
+      ]
+    },
+    {
+      "id": "batch-49",
+      "transactions": [
+        {
+          "id": 5800,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        },
+        {
+          "id": 5801,
+          "description": "PROPERTY TAX INSTALLMENT",
+          "amount": -890,
+          "date": "2026-06-25",
+          "expected": "Home"
+        },
+        {
+          "id": 5802,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-03",
+          "expected": "Income"
+        },
+        {
+          "id": 5803,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-13",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5804,
+          "description": "PAYROLL DEP MERIDIAN HEALTH",
+          "amount": 2600,
+          "date": "2026-06-17",
+          "expected": "Income"
+        },
+        {
+          "id": 5805,
+          "description": "TRANSFER TO SAVINGS HOUSE FUND",
+          "amount": -500,
+          "date": "2026-06-29",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5806,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5807,
+          "description": "TARGET",
+          "amount": -95.1,
+          "date": "2026-06-26",
+          "expected": "Shopping"
+        },
+        {
+          "id": 5808,
+          "description": "COMCAST CABLE",
+          "amount": -128,
+          "date": "2026-06-18",
+          "expected": "Subscriptions"
+        },
+        {
+          "id": 5809,
+          "description": "WHOLE FOODS MARKET",
+          "amount": -168.3,
+          "date": "2026-06-19",
+          "expected": "Groceries"
+        },
+        {
+          "id": 5810,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-15",
+          "expected": "Income"
+        },
+        {
+          "id": 5811,
+          "description": "CITY POWER AND WATER UTILITY",
+          "amount": -210.55,
+          "date": "2026-06-22",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5812,
+          "description": "PAYROLL DEP - BRIGHTPATH RETAIL",
+          "amount": 1450,
+          "date": "2026-06-02",
+          "expected": "Income"
+        },
+        {
+          "id": 5813,
+          "description": "CLIENT PAYMT - STONEBRIDGE CONSULTING",
+          "amount": 2400,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 5814,
+          "description": "PENSION DISBURSEMENT - STATE TEACHERS FUND",
+          "amount": 1800,
+          "date": "2026-06-03",
+          "expected": "Income"
+        }
+      ]
+    },
+    {
+      "id": "batch-50",
+      "transactions": [
+        {
+          "id": 5900,
+          "description": "CONED UTILITY",
+          "amount": -96.4,
+          "date": "2026-06-10",
+          "expected": "Utilities"
+        },
+        {
+          "id": 5901,
+          "description": "AMEX EPAYMENT - THANK YOU",
+          "amount": -600,
+          "date": "2026-06-04",
+          "expected": "Transfer"
+        },
+        {
+          "id": 5902,
+          "description": "TICKETMASTER - CONCERT",
+          "amount": -185,
+          "date": "2026-06-14",
+          "expected": "Entertainment"
+        },
+        {
+          "id": 5903,
+          "description": "PAYROLL DEP HARBOR STEEL CO",
+          "amount": 2850,
+          "date": "2026-06-01",
+          "expected": "Income"
+        },
+        {
+          "id": 5904,
+          "description": "STATE FARM INSURANCE",
+          "amount": -145,
+          "date": "2026-06-10",
+          "expected": "Insurance"
+        }
+      ]
+    }
+  ]
+}

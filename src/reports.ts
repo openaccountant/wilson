@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import { writeXlsxFile, sheetToCsv, type XlsxSheet } from './utils/xlsx-writer.js';
 import { writeFileSync } from 'fs';
 import { initDatabase } from './db/database.js';
 import type { Database } from './db/compat-sqlite.js';
@@ -140,7 +140,8 @@ export async function printBudget(args: string[], injectedDb?: Database): Promis
 
   try {
     const monthArg = getArgValue(args, '--month');
-    const month = monthArg ?? new Date().toISOString().slice(0, 7); // YYYY-MM
+    const now = new Date();
+    const month = monthArg ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; // YYYY-MM (local)
 
     const rows = getBudgetVsActual(db, month);
 
@@ -376,19 +377,18 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
       return;
     }
 
-    const rows = transactions.map((t) => ({
-      date: t.date,
-      description: t.description,
-      amount: t.amount,
-      category: t.category ?? '',
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+    // String cells are formula-neutralised inside the writer.
+    const sheet: XlsxSheet = {
+      name: 'Transactions',
+      header: ['date', 'description', 'amount', 'category'],
+      rows: transactions.map((t) => [t.date, t.description, t.amount, t.category ?? '']),
+      widths: [12, 48, 14, 22],
+      currencyColumns: ['amount'],
+    };
 
     try {
-      XLSX.writeFile(wb, resolvedPath, { bookType: format });
+      if (format === 'xlsx') await writeXlsxFile([sheet], resolvedPath);
+      else writeFileSync(resolvedPath, sheetToCsv(sheet));
       console.log(`Exported ${transactions.length} transactions to ${resolvedPath} (${format.toUpperCase()}).`);
     } catch (err) {
       console.error(`Failed to write file: ${err instanceof Error ? err.message : String(err)}`);
@@ -412,7 +412,7 @@ export async function printNetWorth(_args: string[], injectedDb?: Database): Pro
       return;
     }
 
-    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     console.log('Net Worth Summary');
     console.log('='.repeat(40));
@@ -459,7 +459,7 @@ export async function printBalanceSheet(_args: string[], injectedDb?: Database):
       return;
     }
 
-    const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const fmt = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     console.log('Balance Sheet');
     console.log('='.repeat(60));

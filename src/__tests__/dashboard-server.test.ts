@@ -1,12 +1,14 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { createTestDb } from './helpers.js';
+import { bfetch } from './mcp-helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import { createUser, enableAuth } from '../dashboard/auth.js';
 import { insertTransactions } from '../db/queries.js';
 import { addPendingCategorizationReview } from '../db/categorization-review-queries.js';
 import { insertAccount, insertBalanceSnapshot } from '../db/net-worth-queries.js';
-import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly } from '../dashboard/api.js';
+import { apiAccounts, apiNetWorth, apiNetWorthTrend, apiCashflowMonthly, apiMerchants } from '../dashboard/api.js';
+import { validateMentions } from '../dashboard/mentions.js';
 import type { Account, NetWorthResponse, NetWorthTrendPoint, MonthlyCashflowRow } from '../dashboard/ui/src/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 
@@ -62,11 +64,12 @@ describe('dashboard server', () => {
       expect(res.status).toBe(404);
     });
 
-    test('OPTIONS returns 204 with CORS headers', async () => {
+    test('OPTIONS returns 204 with CORS headers, reflecting the dashboard\'s own origin (never a wildcard)', async () => {
       const { base } = await start();
-      const res = await fetch(base + '/api/summary', { method: 'OPTIONS' });
+      const origin = new URL(base).origin;
+      const res = await fetch(base + '/api/summary', { method: 'OPTIONS', headers: { Origin: origin } });
       expect(res.status).toBe(204);
-      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(origin);
       expect(res.headers.get('Access-Control-Allow-Methods')).toContain('GET');
     });
   });
@@ -420,10 +423,12 @@ describe('dashboard server', () => {
       expect(res.status).toBe(403);
     });
 
-    test('token via query param works', async () => {
+    test('token via query param works for export downloads only', async () => {
       const { base, viewerToken } = await setupRbac();
+      const download = await fetch(base + `/api/export/csv?token=${viewerToken}`);
+      expect(download.status).toBe(200);
       const res = await fetch(base + `/api/summary?token=${viewerToken}`);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
     });
 
     test('public auth routes accessible without token when auth enabled', async () => {
@@ -810,7 +815,9 @@ describe('dashboard server', () => {
     });
 
     test('PATCH /api/auth/config toggles auth', async () => {
-      const { base } = await start();
+      const { base, db } = await start();
+      // Enabling auth needs an active admin (#157); first-time setup goes through /api/auth/setup.
+      await createUser(db, 'toggler', 'password123', 'admin');
       const res = await fetch(base + '/api/auth/config', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -843,6 +850,34 @@ describe('dashboard server', () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.error).toContain('name required');
+    });
+
+    test('POST /api/profiles/switch rejects path-traversal names', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/profiles/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: '../../etc' }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain('letters, numbers');
+    });
+
+    test('POST /api/profiles/switch creates a new profile by name', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/profiles/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'brand-new-profile' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.active).toBe('brand-new-profile');
+
+      const list = await fetch(base + '/api/profiles');
+      const listData = await list.json();
+      expect(listData.profiles).toContain('brand-new-profile');
     });
   });
 
@@ -946,6 +981,99 @@ describe('dashboard server', () => {
       const data = await res.json();
       expect(data.error).toContain('query is required');
     });
+
+    test('POST /api/chat rejects non-array mentions with 400', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: '/help', mentions: { type: 'account', id: 1 } }),
+      });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain('mentions must be an array');
+    });
+
+    test('POST /api/chat drops invalid mention entries and answers slash help without the LLM', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: '/help',
+          sessionId: 'sess-typeahead',
+          mentions: [{ type: 'bogus', id: 1, label: 'x' }, { type: 'account', id: 'nope', label: 'y' }, 7],
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.sessionId).toBe('sess-typeahead');
+      expect(data.answer).toContain('/categorize');
+    });
+
+    test('validateMentions keeps only well-formed entries (used by POST /api/chat)', () => {
+      const r = validateMentions([
+        { type: 'bogus', id: 1, label: 'x' },
+        { type: 'account', id: 'nope', label: 'y' },
+        { type: 'category', id: 3, label: 'Dining' },
+      ]);
+      expect(r).toEqual({ ok: true, mentions: [{ type: 'category', id: 3, label: 'Dining' }] });
+    });
+  });
+
+  // ── Chat typeahead sources ───────────────────────────────────────────────
+
+  describe('chat typeahead sources', () => {
+    test('GET /api/skills returns name/description/tier/source — never the SKILL.md path', async () => {
+      const { base } = await start();
+      const res = await fetch(base + '/api/skills');
+      expect(res.status).toBe(200);
+      const data = await res.json() as Array<Record<string, unknown>>;
+      expect(Array.isArray(data)).toBe(true);
+      // No count assertion: other files mock.module the skills layer
+      // process-wide in a full `bun test` run, so discovery can be empty here.
+      expect(JSON.stringify(data)).not.toContain('"path"');
+      for (const s of data) {
+        expect(Object.keys(s).sort()).toEqual(['description', 'name', 'source', 'tier']);
+        expect(s.path).toBeUndefined();
+      }
+    });
+
+    test('GET /api/merchants filters by q, counts txns and clamps the limit', async () => {
+      const { db, base } = await start();
+      insertTransactions(db, [
+        { date: '2026-09-01', description: 'AMZN Mktp', amount: -10, merchant_name: 'Amazon' },
+        { date: '2026-09-03', description: 'AMZN Mktp', amount: -12, merchant_name: 'Amazon' },
+        { date: '2026-09-02', description: 'Corner Cafe', amount: -5 },
+        { date: '2026-09-02', description: 'Blank merchant', amount: -5, merchant_name: '  ' },
+      ]);
+
+      const all = await (await fetch(base + '/api/merchants')).json() as Array<{ label: string; n: number; last: string }>;
+      expect(all[0]).toEqual({ label: 'Amazon', n: 2, last: '2026-09-03' });
+      expect(all.map((m) => m.label)).toContain('Corner Cafe');
+      expect(all.map((m) => m.label)).toContain('Blank merchant');
+
+      const q = await (await fetch(base + '/api/merchants?q=caf')).json() as Array<{ label: string }>;
+      expect(q.map((m) => m.label)).toEqual(['Corner Cafe']);
+
+      const one = await (await fetch(base + '/api/merchants?limit=1')).json() as unknown[];
+      expect(one).toHaveLength(1);
+      expect(apiMerchants(db, null, '9999').length).toBeLessThanOrEqual(50);
+      expect(apiMerchants(db, null, 'junk').length).toBe(3);
+    });
+
+    test('GET /api/merchants escapes LIKE wildcards', async () => {
+      const { db, base } = await start();
+      insertTransactions(db, [
+        { date: '2026-09-01', description: '100% Juice', amount: -4 },
+        { date: '2026-09-01', description: 'Snake_Case Shop', amount: -4 },
+        { date: '2026-09-01', description: 'Plain Store', amount: -4 },
+      ]);
+      const pct = await (await fetch(base + '/api/merchants?q=' + encodeURIComponent('%'))).json() as Array<{ label: string }>;
+      expect(pct.map((m) => m.label)).toEqual(['100% Juice']);
+      const us = await (await fetch(base + '/api/merchants?q=' + encodeURIComponent('_'))).json() as Array<{ label: string }>;
+      expect(us.map((m) => m.label)).toEqual(['Snake_Case Shop']);
+    });
   });
 
   describe('interactions and training', () => {
@@ -964,13 +1092,28 @@ describe('dashboard server', () => {
     });
 
     test('POST /api/interactions/:id/annotate creates annotation', async () => {
-      const { base } = await start();
-      const res = await fetch(base + '/api/interactions/1/annotate', {
+      const { base, db } = await start();
+      const id = (db.prepare(`
+        INSERT INTO llm_interactions (run_id, sequence_num, call_type, model, provider, user_prompt, status)
+        VALUES ('r1', 1, 'agent', 'gpt-4', 'openai', 'Q', 'ok')
+      `).run() as { lastInsertRowid: number }).lastInsertRowid;
+      const res = await bfetch(base + `/api/interactions/${id}/annotate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating: 5, notes: 'Great' }),
       });
       expect(res.status).toBe(200);
+      expect((await res.json()).annotation.rating).toBe(5);
+    });
+
+    test('POST /api/interactions/:id/annotate is a 404 for a missing interaction, not a 200 {success:false}', async () => {
+      const { base } = await start();
+      const res = await bfetch(base + '/api/interactions/99999/annotate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 5 }),
+      });
+      expect(res.status).toBe(404);
     });
 
     test('GET /api/runs/:id returns data', async () => {
@@ -1065,11 +1208,11 @@ describe('dashboard server', () => {
       expect(rows.find((r) => r.month === monthYm(0))).toBeUndefined();
     });
 
-    test('income-side P&L parity: a positive Transfer row counts as income (deliberate pin)', () => {
-      // This mirrors getProfitLoss's income rule (amount > 0 OR category =
-      // 'Income') exactly, by design. With two-sided transfer data the two
-      // legs can net out imperfectly for cash purposes — accepted for this
-      // slice; changing it is a conscious later decision, not a bug fix.
+    test('dashboard P&L parity: a positive Transfer row is NOT income (dashboard spend rules)', () => {
+      // The series follows the dashboard P&L classification (spend-rules.ts
+      // DASHBOARD_RULES): a transfer leg is neither income nor spending, in
+      // either direction. (Before the dashboard rules this pinned the legacy
+      // P&L rule, under which a positive Transfer counted as income.)
       const db = createTestDb();
       insertTransactions(db, [
         { date: monthYMD(1, 5), description: 'Transfer in from broker', amount: 250, category: 'Transfer' },
@@ -1079,7 +1222,7 @@ describe('dashboard server', () => {
       const rows = apiCashflowMonthly(db, new URLSearchParams());
       const prev = rows.find((r) => r.month === monthYm(1));
       expect(prev).toBeDefined();
-      expect(prev!.income).toBe(250);
+      expect(prev!.income).toBe(0);
       expect(prev!.expenses).toBe(80);
     });
 

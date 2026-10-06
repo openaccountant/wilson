@@ -8,6 +8,7 @@ import {
   WHATIF_MAX_PCT,
   WHATIF_STEP,
 } from '@/lib/cashflowForecast';
+import { moneyCompact, moneyWhole } from '@/format';
 import type { MonthlyCashflowRow, Account } from '@/types';
 
 // Liquid asset subtypes from the account taxonomy
@@ -27,12 +28,7 @@ interface ChartDatum {
   band90: number;
 }
 
-function fmtUsd(n: number): string {
-  const rounded = Math.round(n);
-  return rounded < 0
-    ? `-$${Math.abs(rounded).toLocaleString('en-US')}`
-    : `$${rounded.toLocaleString('en-US')}`;
-}
+const fmtUsd = moneyWhole;
 
 function FanTooltip({
   active,
@@ -66,7 +62,8 @@ function FanTooltip({
 }
 
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** Signed what-if label: '+25%', '-25%', '0%'. */
@@ -265,9 +262,7 @@ export function CashflowForecast() {
               tick={{ fontSize: 10, fill: '#a1a1aa' }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) =>
-                Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${Math.round(v)}`
-              }
+              tickFormatter={(v: number) => moneyCompact(v)}
             />
             <Tooltip content={<FanTooltip />} />
             <Area dataKey="p10" stackId="fan" stroke="none" fill="transparent" isAnimationActive={false} />

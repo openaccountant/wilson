@@ -273,7 +273,7 @@ describe('buildModelCatalog', () => {
     // The CPU/WASM transformers entries are always offered.
     const cpu = catalog.find((m) => m.id === 'transformers:HuggingFaceTB/SmolLM3-3B-ONNX');
     expect(cpu).toBeDefined();
-    expect(cpu!.downloadSize).toBe('~2.0GB');
+    expect(cpu!.downloadSize).toBe('~2.8GB');
     expect(cpu!.isLocal).toBe(true);
   });
 
@@ -286,7 +286,7 @@ describe('buildModelCatalog', () => {
     }
     const webgpuEntry = catalog.find((m) => m.id === 'transformers:onnx-community/Qwen3-0.6B-ONNX');
     expect(webgpuEntry).toBeDefined();
-    expect(webgpuEntry!.downloadSize).toBe('~600MB');
+    expect(webgpuEntry!.downloadSize).toBe('~570MB');
   });
 
   test('every entry carries the full shape, with provider-registry-backed isLocal and cached/downloadSize truth', async () => {

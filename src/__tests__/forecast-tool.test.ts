@@ -3,6 +3,7 @@ import { createTestDb, daysAgoThisMonth } from './helpers.js';
 import { insertTransactions } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { computeForecast } from '../tools/query/forecast.js';
+import { executeRead } from '../mcp/tool-catalog.js';
 
 describe('forecast tool', () => {
   test('projects flat cash forward when income equals expenses', () => {
@@ -72,5 +73,19 @@ describe('forecast tool', () => {
     const result = computeForecast(db);
     expect(result.startingCash).toBe(0);
     expect(result.projection).toHaveLength(3);
+  });
+
+  test('the horizon is capped at 24 months for every caller unless the caller raises the cap', () => {
+    const db = createTestDb();
+    expect(computeForecast(db, { horizonMonths: 60 }).horizonMonths).toBe(24);
+    expect(computeForecast(db, { horizonMonths: 60 }).projection).toHaveLength(24);
+    expect(computeForecast(db, { horizonMonths: 60, maxHorizonMonths: 60 }).projection).toHaveLength(60);
+    expect(computeForecast(db, { horizonMonths: 100, maxHorizonMonths: 60 }).horizonMonths).toBe(60);
+  });
+
+  test('the MCP forecast tool is the one path that allows 60 months', async () => {
+    const db = createTestDb();
+    const out = (await executeRead(db, 'get_cash_forecast', { horizonMonths: 60 })) as { horizonMonths: number };
+    expect(out.horizonMonths).toBe(60);
   });
 });
