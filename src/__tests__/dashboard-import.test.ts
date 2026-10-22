@@ -479,13 +479,13 @@ describe('POST /api/import', () => {
     const { db, base } = await start();
     const res = await post(base, { filename: 'x.csv', transactions: [row({ description: 'A'.repeat(3 * 1024 * 1024) })] });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('transactions[1].description must be at most 1000 characters');
+    expect((await res.json()).error).toBe('transactions[1].description must be at most 200 characters');
     expect(getTransactions(db, {})).toHaveLength(0);
   });
 
   test('description at the cap is accepted', async () => {
     const { base } = await start();
-    const res = await post(base, { filename: 'x.csv', transactions: [row({ description: 'A'.repeat(1000) })] });
+    const res = await post(base, { filename: 'x.csv', transactions: [row({ description: 'A'.repeat(200) })] });
     expect(res.status).toBe(200);
   });
 
@@ -504,5 +504,39 @@ describe('POST /api/import', () => {
     const r2 = await post(base, { filename: 'x.csv', transactions: [row({ pending: 'no' })] });
     expect(r2.status).toBe(400);
     expect((await r2.json()).error).toBe('transactions[1].pending must be a boolean');
+  });
+
+  test('category over the 64-char agent-tool cap returns 400; 64 is accepted', async () => {
+    const { base } = await start();
+    const bad = await post(base, { filename: 'x.csv', transactions: [row({ category: 'C'.repeat(65) })] });
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error).toBe('transactions[1].category must be at most 64 characters');
+    const ok = await post(base, { filename: 'x.csv', transactions: [row({ category: 'C'.repeat(64) })] });
+    expect(ok.status).toBe(200);
+  });
+
+  test('3 MB top-level bank returns 400 and stores nothing', async () => {
+    const { db, base } = await start();
+    const res = await post(base, { filename: 'x.csv', bank: 'B'.repeat(3 * 1024 * 1024), transactions: [ROWS[0]] });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bank must be at most 200 characters');
+    expect(getTransactions(db, {})).toHaveLength(0);
+  });
+
+  test('non-string top-level bank returns 400, not 500', async () => {
+    const { base } = await start();
+    const res = await post(base, { filename: 'x.csv', bank: { x: 1 }, transactions: [ROWS[0]] });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('bank must be a string');
+  });
+
+  test('3 MB filename returns 400 and is not echoed', async () => {
+    const { db, base } = await start();
+    const res = await post(base, { filename: 'f'.repeat(3 * 1024 * 1024), transactions: [ROWS[0]] });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe('filename must be at most 255 characters');
+    expect(data.message.length).toBeLessThan(100);
+    expect(getTransactions(db, {})).toHaveLength(0);
   });
 });

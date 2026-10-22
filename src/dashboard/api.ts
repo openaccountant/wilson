@@ -1,4 +1,5 @@
 import type { Database } from '../db/compat-sqlite.js';
+import { MAX_CATEGORY_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_TEXT_FIELD_LENGTH, MAX_FILENAME_LENGTH } from '../db/field-limits.js';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 import {
@@ -1387,23 +1388,22 @@ export interface ImportResult {
 }
 
 /**
- * Per-field caps for /api/import rows. No shared constants existed, so these are
- * chosen to sit well above real statement data (bank descriptions/memos are
- * typically <256 chars) while rejecting abuse such as a multi-MB description.
+ * Per-field caps for /api/import rows, shared with the agent tool validators (src/db/field-limits.ts)
+ * so imported values stay editable through update_transaction / categorize_transaction.
+ * description 200, category and category_detailed 64, other text fields 200, filename 255.
  */
-export const IMPORT_MAX_DESCRIPTION = 1000;
-export const IMPORT_MAX_TEXT_FIELD = 200; // bank, merchant_name, category*, payment_channel, external_id, account_last4
+export const IMPORT_MAX_DESCRIPTION = MAX_DESCRIPTION_LENGTH;
+export const IMPORT_MAX_CATEGORY = MAX_CATEGORY_LENGTH;
+export const IMPORT_MAX_TEXT_FIELD = MAX_TEXT_FIELD_LENGTH; // bank, merchant_name, payment_channel, external_id, account_last4
+export const IMPORT_MAX_FILENAME = MAX_FILENAME_LENGTH;
 const IMPORT_MIN_YEAR = 1900;
 const IMPORT_MAX_YEAR = 2100;
 
-/** True only for a real calendar date written YYYY-MM-DD (rejects 2026-13-45, 2026-02-30, 0000-00-00). */
-function isCalendarDate(s: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return false;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (y < IMPORT_MIN_YEAR || y > IMPORT_MAX_YEAR) return false;
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+/** Real calendar date (see isRealCalendarDate) within a sane statement-year range. */
+function isImportDate(s: string): boolean {
+  if (!isRealCalendarDate(s)) return false;
+  const y = Number(s.slice(0, 4));
+  return y >= IMPORT_MIN_YEAR && y <= IMPORT_MAX_YEAR;
 }
 
 function failedImport(error: string): ImportResult {
@@ -1422,6 +1422,15 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
   // 1. Validate the payload
   if (!body.filename || typeof body.filename !== 'string' || body.filename.trim() === '') {
     return failedImport('filename is required');
+  }
+  if (body.filename.length > IMPORT_MAX_FILENAME) {
+    return failedImport(`filename must be at most ${IMPORT_MAX_FILENAME} characters`);
+  }
+  if (body.bank !== undefined && body.bank !== null) {
+    if (typeof body.bank !== 'string') return failedImport('bank must be a string');
+    if (body.bank.length > IMPORT_MAX_TEXT_FIELD) {
+      return failedImport(`bank must be at most ${IMPORT_MAX_TEXT_FIELD} characters`);
+    }
   }
   if (!body.transactions) {
     return failedImport('transactions is required');
@@ -1444,10 +1453,10 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
       return failedImport(`transactions[${i + 1}] must include date, description, and amount`);
     }
     const n = i + 1;
-    if (!isCalendarDate(row.date)) {
+    if (!isImportDate(row.date)) {
       return failedImport(`transactions[${n}].date must be a real YYYY-MM-DD date`);
     }
-    if (row.authorized_date !== undefined && (typeof row.authorized_date !== 'string' || !isCalendarDate(row.authorized_date))) {
+    if (row.authorized_date !== undefined && (typeof row.authorized_date !== 'string' || !isImportDate(row.authorized_date))) {
       return failedImport(`transactions[${n}].authorized_date must be a real YYYY-MM-DD date`);
     }
     if (row.description.length > IMPORT_MAX_DESCRIPTION) {
@@ -1460,8 +1469,9 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
       const v = row[f];
       if (v === undefined) continue;
       if (typeof v !== 'string') return failedImport(`transactions[${n}].${f} must be a string`);
-      if (v.length > IMPORT_MAX_TEXT_FIELD) {
-        return failedImport(`transactions[${n}].${f} must be at most ${IMPORT_MAX_TEXT_FIELD} characters`);
+      const cap = f === 'category' || f === 'category_detailed' ? IMPORT_MAX_CATEGORY : IMPORT_MAX_TEXT_FIELD;
+      if (v.length > cap) {
+        return failedImport(`transactions[${n}].${f} must be at most ${cap} characters`);
       }
     }
     // Categories render in dashboard filters; markup characters have no place in a category name.

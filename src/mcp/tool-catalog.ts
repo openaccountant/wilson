@@ -49,6 +49,7 @@ import { CATEGORIES } from '../tools/categorize/categories.js';
 import { embedTransactionIds } from '../utils/embed-on-write.js';
 import { hasLicense } from '../licensing/license.js';
 import { getCheckoutUrl } from '../licensing/upsell.js';
+import { MAX_CATEGORY_LENGTH, MAX_DESCRIPTION_LENGTH } from '../db/field-limits.js';
 import { NotFoundError, PrepareError, RubricChangedError, ToolNotFoundError } from './errors.js';
 import {
   argsHash,
@@ -204,7 +205,7 @@ export const MCP_TOOL_CATALOG: McpToolDef[] = [
     defaultPolicy: 'ask',
     zodShape: {
       id: transactionId,
-      category: z.string().min(1).max(64).describe('Existing category name, e.g. Groceries'),
+      category: z.string().min(1).max(MAX_CATEGORY_LENGTH).describe('Existing category name, e.g. Groceries'),
       entityId: z.number().int().positive().optional().describe('Optional entity ID to assign'),
     },
     example: { id: 42, category: 'Groceries' },
@@ -244,9 +245,9 @@ export const MCP_TOOL_CATALOG: McpToolDef[] = [
     zodShape: {
       id: transactionId,
       date: dateString.optional().describe('New date, YYYY-MM-DD'),
-      description: z.string().max(200).optional().describe('New description, up to 200 characters'),
+      description: z.string().max(MAX_DESCRIPTION_LENGTH).optional().describe('New description, up to 200 characters'),
       amount: z.number().min(-1e9).max(1e9).optional().describe('New amount (negative=expense, positive=income)'),
-      category: z.string().max(64).optional().describe('New category (existing category name)'),
+      category: z.string().max(MAX_CATEGORY_LENGTH).optional().describe('New category (existing category name)'),
       notes: z.string().max(1000).optional().describe('New notes, up to 1000 characters'),
     },
     example: { id: 42, amount: -12.5 },
