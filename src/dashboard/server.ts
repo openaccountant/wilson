@@ -1,6 +1,7 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
+import { compressBytes, negotiateEncoding, varyWithEncoding, type Encoding } from './compression.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
@@ -119,6 +120,12 @@ const ASSET_MIME_TYPES: Record<string, string> = {
   '.json': 'application/json',
 };
 
+/** Types worth compressing; fonts and images are already compressed, so they go out as-is. */
+const COMPRESSIBLE_ASSET_EXTS = new Set(['.js', '.mjs', '.wasm', '.json']);
+
+/** Compressed asset bodies, keyed by path + encoding and stamped with the file's mtime/size so a rebuild is picked up. */
+const assetCompressionCache = new Map<string, { stamp: string; body: Uint8Array<ArrayBuffer> }>();
+
 /**
  * Serve a file from the hybrid build output under /assets/.
  *
@@ -134,6 +141,7 @@ export async function serveDashboardAsset(
   pathname: string,
   dir: string,
   headers: Record<string, string>,
+  acceptEncoding?: string | null,
 ): Promise<Response> {
   const notFound = () => new Response('Not Found', { status: 404, headers });
 
@@ -149,7 +157,24 @@ export async function serveDashboardAsset(
 
   const ext = resolved.slice(resolved.lastIndexOf('.'));
   const contentType = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
-  return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+  const encoding = COMPRESSIBLE_ASSET_EXTS.has(ext) ? negotiateEncoding(acceptEncoding) : null;
+  if (!encoding) return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+
+  const cacheKey = `${resolved}\0${encoding}`;
+  const stamp = `${file.lastModified}:${file.size}`;
+  let cached = assetCompressionCache.get(cacheKey);
+  if (!cached || cached.stamp !== stamp) {
+    cached = { stamp, body: compressBytes(new Uint8Array(await file.arrayBuffer()), encoding) };
+    assetCompressionCache.set(cacheKey, cached);
+  }
+  return new Response(cached.body, {
+    headers: {
+      ...headers,
+      'Content-Type': contentType,
+      'Content-Encoding': encoding,
+      Vary: varyWithEncoding(headers.Vary),
+    },
+  });
 }
 
 // Profile names become path segments (see resolveProfile in profile/context.ts),
@@ -259,6 +284,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
     // React build not available — fall back to legacy getDashboardHtml()
   }
 
+  // The served page (HTML + bridge tag) and its compressed bodies, filled on first request.
+  let pageHtml: string | null = null;
+  const pageBodies = new Map<Encoding, Uint8Array<ArrayBuffer>>();
+
   // Bundle the WebMCP bridge once at startup — deliberately independent of
   // the React dashboard build so the bridge works whether or not `ui/dist`
   // exists. Injected into whichever HTML the page route returns below.
@@ -348,7 +377,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // so /assets/* is served without the auth middleware (same treatment
         // as the HTML page). Contents are build artifacts only.
         if (path.startsWith('/assets/')) {
-          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers);
+          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers, req.headers.get('Accept-Encoding'));
         }
 
         // ── Auth middleware ──────────────────────────────────────────
@@ -488,10 +517,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
-          const html = injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
-          return new Response(html, {
-            headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
-          });
+          // The bridge tag is per-port, so compress after injecting; each variant is built once and reused.
+          pageHtml ??= injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
+          const encoding = negotiateEncoding(req.headers.get('Accept-Encoding'));
+          const pageHeaders = { ...headers, 'Content-Type': 'text/html; charset=utf-8', Vary: varyWithEncoding(headers.Vary) };
+          if (!encoding) return new Response(pageHtml, { headers: pageHeaders });
+          let body = pageBodies.get(encoding);
+          if (!body) {
+            body = compressBytes(new TextEncoder().encode(pageHtml), encoding);
+            pageBodies.set(encoding, body);
+          }
+          return new Response(body, { headers: { ...pageHeaders, 'Content-Encoding': encoding } });
         }
 
         if (path === '/webmcp-bridge.js') {
