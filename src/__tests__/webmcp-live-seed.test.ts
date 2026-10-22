@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Database } from 'bun:sqlite';
 import {
   CHAIN_ITERATION_CLOSING,
@@ -42,7 +44,8 @@ describe('the live-check seed script', () => {
 
   test('keeps the real-HOME guard and the scratch-dir requirement (source guard)', () => {
     expect(guardSource).toContain("export const REAL_HOME = '/Users/jdfiscus';");
-    expect(guardSource).toMatch(/home === REAL_HOME \|\| envHome === REAL_HOME \|\| !home\.includes\('\/private\/tmp\/'\)/);
+    expect(guardSource).toMatch(/realpathSync/);
+    expect(guardSource).toMatch(/startsWith\('\/private\/tmp\/'\)/);
     expect(guardSource).toContain('process.exit(1)');
     // The guard must be the first import, so it runs before any app module loads.
     expect(source.match(/^import .*$/m)?.[0]).toContain("from './webmcp-live-seed-guard.js'");
@@ -106,9 +109,9 @@ describe('the live-check seed script', () => {
     expect(second.stderr).toContain('already has transactions');
 
     // A HOME outside /private/tmp is refused before anything is opened.
-    // A fresh dir per run, so a leftover from an earlier run can't fail the check. The literal
-    // "/tmp/..." path (not "/private/tmp/...") is what the guard refuses.
-    const notScratchHome = mkdtempSync('/tmp/oa-not-scratch-home-');
+    // A fresh dir per run, so a leftover from an earlier run can't fail the check. os.tmpdir() (/var/folders/...)
+    // is outside /private/tmp; a literal "/tmp/..." HOME is fine, since it resolves into /private/tmp.
+    const notScratchHome = mkdtempSync(join(tmpdir(), 'oa-not-scratch-home-'));
     try {
       const notScratch = await runSeed(home!, notScratchHome);
       expect(notScratch.code).toBe(1);
@@ -118,6 +121,22 @@ describe('the live-check seed script', () => {
       rmSync(notScratchHome, { recursive: true, force: true });
     }
   }, 60_000);
+
+  // FINDING seed-guard: a `..` path that merely contains /private/tmp/ but resolves outside it must be refused.
+  test.skipIf(!home)('refuses a HOME that contains /private/tmp/ but resolves outside it', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'oa-escape-home-'));
+    try {
+      const real = realpathSync(outside);
+      if (real.startsWith('/private/tmp/') || !real.startsWith('/private/')) return;
+      const escaping = `/private/tmp/../${relative('/private', real)}`;
+      const res = await runSeed(home!, escaping);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain('Refusing to seed');
+      expect(existsSync(join(outside, '.openaccountant'))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 
   test.skipIf(!home)('cleanup', () => {
     if (home) rmSync(home, { recursive: true, force: true });
