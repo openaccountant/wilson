@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -132,30 +132,53 @@ describe('compression stays off the event loop', () => {
     expect((await p).length).toBeGreaterThan(0);
   });
 
-  test('timers keep firing while a large asset compresses, and concurrent first requests share one job', async () => {
+  test('timers keep firing while a large asset compresses', async () => {
     dir = mkdtempSync(join(tmpdir(), 'oa-assets-'));
-    writeFileSync(join(dir, 'big.wasm'), noise(8 * 1024 * 1024));
+    writeFileSync(join(dir, 'big.wasm'), noise(32 * 1024 * 1024));
 
+    // One job only: if compression blocked the loop, the single stall would span the whole request.
+    // (With several jobs a blocking implementation stalls for only one job's length, ~elapsed/N, and slips through.)
     let maxGap = 0;
+    let ticks = 0;
     let last = performance.now();
     const timer = setInterval(() => {
       const now = performance.now();
       maxGap = Math.max(maxGap, now - last);
       last = now;
-    }, 5);
+      ticks++;
+    }, 2);
 
     const t0 = performance.now();
-    const responses = await Promise.all(
-      [1, 2, 3].map(() => serveDashboardAsset('/assets/big.wasm', dir, {}, 'br')),
-    );
+    const res = await serveDashboardAsset('/assets/big.wasm', dir, {}, 'br');
     const elapsed = performance.now() - t0;
     clearInterval(timer);
 
-    const bodies = await Promise.all(responses.map((r) => r.arrayBuffer()));
-    expect(responses.every((r) => r.headers.get('content-encoding') === 'br')).toBe(true);
-    expect(new Set(bodies.map((b) => b.byteLength)).size).toBe(1);
-    // Synchronous compression would show a gap about as long as the whole job; async leaves the loop free.
-    expect(elapsed).toBeGreaterThan(20); // sanity: the job really was heavy
-    expect(maxGap).toBeLessThan(elapsed / 2);
+    expect(res.headers.get('content-encoding')).toBe('br');
+    expect(elapsed).toBeGreaterThan(50); // sanity: the job really was heavy
+    expect(maxGap).toBeLessThan(elapsed / 4);
+    expect(ticks).toBeGreaterThan(elapsed / 2 / 4); // at least a quarter of the expected ticks fired
+  });
+
+  test('concurrent first requests for one asset share a single compression job', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'oa-assets-'));
+    writeFileSync(join(dir, 'shared.js'), 'export const x = 1;\n'.repeat(5000));
+
+    const mod = await import('../dashboard/compression.js');
+    const spy = spyOn(mod, 'compressBytes');
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: 8 }, () => serveDashboardAsset('/assets/shared.js', dir, {}, 'gzip')),
+      );
+      expect(spy).toHaveBeenCalledTimes(1);
+      const bodies = await Promise.all(responses.map((r) => r.arrayBuffer()));
+      expect(responses.every((r) => r.headers.get('content-encoding') === 'gzip')).toBe(true);
+      expect(new Set(bodies.map((b) => Buffer.from(b).toString('base64'))).size).toBe(1);
+
+      // A later request is a cache hit, not a second job.
+      await serveDashboardAsset('/assets/shared.js', dir, {}, 'gzip');
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
