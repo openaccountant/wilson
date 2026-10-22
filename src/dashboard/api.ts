@@ -131,7 +131,7 @@ import {
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
 import { discoverSkills } from '../skills/registry.js';
-import { csvText } from '../utils/spreadsheet-safe.js';
+import { csvText, csvCell } from '../utils/spreadsheet-safe.js';
 import { xlsxToBuffer } from '../utils/xlsx-writer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -541,7 +541,7 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
 
   const header = 'Date,Description,Amount,Category';
   const rows = txns.map((t) =>
-    [t.date, csvText(t.description), String(t.amount), csvText(t.category ?? '')].join(',')
+    [csvCell(t.date), csvText(t.description), csvCell(t.amount), csvText(t.category ?? '')].join(',')
   );
   return [header, ...rows].join('\n');
 }
@@ -603,7 +603,7 @@ export function apiExportNetWorthCsv(db: Database): string {
       csvText(a.account_type),
       csvText(a.account_subtype),
       csvText(a.institution ?? ''),
-      String(a.current_balance),
+      csvCell(a.current_balance),
     ].join(','));
   }
   lines.push(['','','','Total Assets', String(nw.totalAssets)].join(','));
