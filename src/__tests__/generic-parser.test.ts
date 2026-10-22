@@ -233,6 +233,67 @@ describe('parseGenericCSV', () => {
     });
   });
 
+  describe('Debit/Credit edge cases (review findings)', () => {
+    // @invariant NN-07
+    test('unsigned Amount column: fallback rows are expenses (negative), not income', () => {
+      // Amount repeats the debit/credit magnitude unsigned (positive = expense), so a
+      // row with only an Amount must follow that convention.
+      const csv = [
+        'Date,Description,Amount,Debit,Credit',
+        '2026-02-01,FAKE PURCHASE (dummy),50.00,50.00,',
+        '2026-02-02,FAKE PAYCHECK (dummy),1200.00,,1200.00',
+        '2026-02-03,FAKE AMOUNT ONLY (dummy),30.00,,',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-50, 1200, -30]);
+    });
+
+    test('"0.00" placeholder in the unused column does not win over the real value', () => {
+      const csv = [
+        'Date,Description,Debit,Credit',
+        '2026-02-01,FAKE PURCHASE (dummy),50.00,0.00',
+        '2026-02-02,FAKE PAYCHECK (dummy),0.00,1200.00',
+        '2026-02-03,FAKE REFUND (dummy),$0.00,"$20.00"',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-50, 1200, 20]);
+    });
+
+    test('"0.00" placeholders in both split cells fall back to the Amount column', () => {
+      const csv = [
+        'Date,Description,Amount,Debit,Credit',
+        '2026-02-01,FAKE A (dummy),-5.00,0.00,0.00',
+        '2026-02-02,FAKE B (dummy),10.00,0.00,0.00',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-5, 10]);
+    });
+
+    test('blank rows (no debit, no credit, no amount) are skipped, not emitted as zero', () => {
+      const csv = [
+        'Date,Description,Debit,Credit',
+        '2026-02-01,FAKE PURCHASE (dummy),50.00,',
+        '2026-02-02,FAKE BLANK (dummy),,',
+        '2026-02-03,FAKE ZERO (dummy),0.00,0.00',
+        '2026-02-04,FAKE PAYCHECK (dummy),,1200.00',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns.map((t) => t.description)).toEqual(['FAKE PURCHASE (dummy)', 'FAKE PAYCHECK (dummy)']);
+      expect(txns.map((t) => t.amount)).toEqual([-50, 1200]);
+    });
+
+    test('blank rows are skipped when an Amount column exists but is empty too', () => {
+      const csv = [
+        'Date,Description,Amount,Debit,Credit',
+        '2026-02-01,FAKE BLANK (dummy),,,',
+        '2026-02-02,FAKE PURCHASE (dummy),-5.00,5.00,',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-5]);
+    });
+  });
+
   describe('date format normalization', () => {
     test('handles YYYY-MM-DD as-is', () => {
       const csv = 'Date,Description,Amount\n2026-02-15,TEST,-10\n';
