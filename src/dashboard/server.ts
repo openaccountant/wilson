@@ -125,7 +125,7 @@ const ASSET_MIME_TYPES: Record<string, string> = {
 const COMPRESSIBLE_ASSET_EXTS = new Set(['.js', '.mjs', '.wasm', '.json']);
 
 /** Compressed asset bodies, keyed by path + encoding and stamped with the file's mtime/size so a rebuild is picked up. */
-const assetCompressionCache = new Map<string, { stamp: string; body: Uint8Array<ArrayBuffer> }>();
+const assetCompressionCache = new Map<string, { stamp: string; body: Promise<Uint8Array<ArrayBuffer>> }>();
 
 /**
  * Serve a file from the hybrid build output under /assets/.
@@ -165,10 +165,13 @@ export async function serveDashboardAsset(
   const stamp = `${file.lastModified}:${file.size}`;
   let cached = assetCompressionCache.get(cacheKey);
   if (!cached || cached.stamp !== stamp) {
-    cached = { stamp, body: compressBytes(new Uint8Array(await file.arrayBuffer()), encoding) };
+    // Cache the in-flight promise so concurrent first requests share one job; drop it on failure so a retry can succeed.
+    const job = file.arrayBuffer().then((buf) => compressBytes(new Uint8Array(buf), encoding));
+    cached = { stamp, body: job };
     assetCompressionCache.set(cacheKey, cached);
+    job.catch(() => { if (assetCompressionCache.get(cacheKey)?.body === job) assetCompressionCache.delete(cacheKey); });
   }
-  return new Response(cached.body, {
+  return new Response(await cached.body, {
     headers: {
       ...headers,
       'Content-Type': contentType,
@@ -287,7 +290,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
   // The served page (HTML + bridge tag) and its compressed bodies, filled on first request.
   let pageHtml: string | null = null;
-  const pageBodies = new Map<Encoding, Uint8Array<ArrayBuffer>>();
+  const pageBodies = new Map<Encoding, Promise<Uint8Array<ArrayBuffer>>>();
 
   // Bundle the WebMCP bridge once at startup — deliberately independent of
   // the React dashboard build so the bridge works whether or not `ui/dist`
@@ -525,10 +528,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!encoding) return new Response(pageHtml, { headers: pageHeaders });
           let body = pageBodies.get(encoding);
           if (!body) {
-            body = compressBytes(new TextEncoder().encode(pageHtml), encoding);
-            pageBodies.set(encoding, body);
+            const job = compressBytes(new TextEncoder().encode(pageHtml), encoding);
+            body = job;
+            pageBodies.set(encoding, job);
+            job.catch(() => { if (pageBodies.get(encoding) === job) pageBodies.delete(encoding); });
           }
-          return new Response(body, { headers: { ...pageHeaders, 'Content-Encoding': encoding } });
+          return new Response(await body, { headers: { ...pageHeaders, 'Content-Encoding': encoding } });
         }
 
         if (path === '/webmcp-bridge.js') {

@@ -110,3 +110,52 @@ describe('serveDashboardAsset compression', () => {
     expect(gunzipSync(new Uint8Array(await res.arrayBuffer())).toString('utf8')).toBe(next);
   });
 });
+
+// @invariant NN-10
+describe('compression stays off the event loop', () => {
+  let dir: string;
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Incompressible-ish bytes make brotli q9 take long enough to be measurable.
+  const noise = (n: number) => {
+    const b = new Uint8Array(n);
+    for (let o = 0; o < n; o += 65536) crypto.getRandomValues(b.subarray(o, Math.min(n, o + 65536)));
+    return b;
+  };
+
+  test('compressBytes returns a promise', async () => {
+    const { compressBytes } = await import('../dashboard/compression.js');
+    const p = compressBytes(new Uint8Array(1024), 'gzip');
+    expect(p).toBeInstanceOf(Promise);
+    expect((await p).length).toBeGreaterThan(0);
+  });
+
+  test('timers keep firing while a large asset compresses, and concurrent first requests share one job', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'oa-assets-'));
+    writeFileSync(join(dir, 'big.wasm'), noise(8 * 1024 * 1024));
+
+    let maxGap = 0;
+    let last = performance.now();
+    const timer = setInterval(() => {
+      const now = performance.now();
+      maxGap = Math.max(maxGap, now - last);
+      last = now;
+    }, 5);
+
+    const t0 = performance.now();
+    const responses = await Promise.all(
+      [1, 2, 3].map(() => serveDashboardAsset('/assets/big.wasm', dir, {}, 'br')),
+    );
+    const elapsed = performance.now() - t0;
+    clearInterval(timer);
+
+    const bodies = await Promise.all(responses.map((r) => r.arrayBuffer()));
+    expect(responses.every((r) => r.headers.get('content-encoding') === 'br')).toBe(true);
+    expect(new Set(bodies.map((b) => b.byteLength)).size).toBe(1);
+    // Synchronous compression would show a gap about as long as the whole job; async leaves the loop free.
+    expect(elapsed).toBeGreaterThan(100); // sanity: the job really was heavy
+    expect(maxGap).toBeLessThan(elapsed / 2);
+  });
+});
