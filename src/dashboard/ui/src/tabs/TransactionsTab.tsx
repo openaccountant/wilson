@@ -472,7 +472,8 @@ export function TransactionsTab() {
     setBanner(result.message);
   }
 
-  const coveragePartial = semanticData != null && semanticData.indexed < semanticData.total;
+  const modelMissing = semanticData != null && semanticData.modelReady === false;
+  const coveragePartial = !modelMissing && semanticData != null && semanticData.indexed < semanticData.total;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -591,6 +592,15 @@ export function TransactionsTab() {
           </div>
         )}
 
+        {modelMissing && (
+          <p className="text-xs text-text-muted">
+            Semantic search needs the on-device embedding model (~90 MB, one-time download) — run{' '}
+            <code className="font-mono bg-surface-raised border border-border rounded px-1 py-0.5">
+              wilson --index
+            </code>{' '}
+            to download it and index your transactions.
+          </p>
+        )}
         {coveragePartial && (
           <p className="text-xs text-text-muted">
             Semantic index covers {semanticData!.indexed} of {semanticData!.total} transactions — run{' '}

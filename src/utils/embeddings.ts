@@ -12,6 +12,7 @@
  * out — so storage and search are testable without any model.
  */
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Database } from '../db/compat-sqlite.js';
@@ -95,6 +96,17 @@ export async function getEmbeddingPipeline(
 
   embeddingPipelineCache.set(modelId, load);
   return load;
+}
+
+/**
+ * True when the embedding model's weights are already in the on-device cache,
+ * so loading it makes no network request. transformers.js's file cache keys
+ * files by `<repo>/<file>` under the cache dir, and the engine loads the fp32
+ * `onnx/model.onnx`. Only `wilson --index` (an explicit command) downloads the
+ * model; implicit paths (embed-on-write, dashboard search) check this first.
+ */
+export function isEmbeddingModelCached(modelId: string = DEFAULT_EMBEDDING_MODEL): boolean {
+  return existsSync(join(homedir(), '.openaccountant', 'models', modelId, 'onnx', 'model.onnx'));
 }
 
 /** Point transformers.js at the shared on-device model cache dir. */

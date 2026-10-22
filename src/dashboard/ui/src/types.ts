@@ -441,6 +441,8 @@ export interface SemanticSearchResponse {
   /** Total transaction count. */
   total: number;
   model: string;
+  /** False when the embedding model is not downloaded yet (search did not run). */
+  modelReady: boolean;
 }
 
 export interface Entity {
