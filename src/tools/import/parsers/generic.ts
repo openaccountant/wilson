@@ -7,7 +7,7 @@ const DATE_PATTERNS = /^(date|transaction\s*date|trans\s*date|posted?\s*date)$/i
 // Quicken's "Transaction Report" CSV labels its description column
 // "Payee/Security" (it covers investment-security transactions too).
 const DESCRIPTION_PATTERNS = /^(description|merchant|payee(\s*\/\s*security)?|memo|name|transaction\s*description)$/i;
-const AMOUNT_PATTERNS = /^(amount|debit|credit|transaction\s*amount)$/i;
+const AMOUNT_PATTERNS = /^(amount|transaction\s*amount)$/i;
 const DEBIT_PATTERNS = /^(debit|withdrawal|payment)$/i;
 const CREDIT_PATTERNS = /^(credit|deposit)$/i;
 // Some exports (e.g. Quicken's combined "Transaction Report" CSV) cover
@@ -81,7 +81,9 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     );
   }
 
-  const hasSeparateDebitCredit = !!(debitCol || creditCol) && !amountCol;
+  // A full Debit+Credit pair wins over a stray amount-like column (NN-07: credits
+  // must not be dropped); a lone debit/credit-ish column only counts without an amount.
+  const hasSeparateDebitCredit = !!((debitCol && creditCol) || ((debitCol || creditCol) && !amountCol));
 
   // First pass: parse raw amounts to detect sign convention
   const rawTransactions: { date: string; description: string; amount: number; accountName?: string }[] = [];

@@ -154,6 +154,31 @@ describe('parseGenericCSV', () => {
     });
   });
 
+  describe('Debit/Credit headers', () => {
+    // @invariant NN-07
+    test('Debit and Credit columns keep credit rows (debit negative, credit positive)', () => {
+      const csv = [
+        'Date,Description,Debit,Credit',
+        '2026-02-01,PURCHASE,50.00,',
+        '2026-02-02,PAYCHECK,,1200.00',
+        '2026-02-03,REFUND,,20.00',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns.map((t) => t.amount)).toEqual([-50, 1200, 20]);
+    });
+
+    test('Debit/Credit take precedence over an Amount column', () => {
+      const csv = [
+        'Date,Description,Amount,Debit,Credit',
+        '2026-02-01,PURCHASE,50.00,50.00,',
+        '2026-02-02,PAYCHECK,1200.00,,1200.00',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-50, 1200]);
+    });
+  });
+
   describe('date format normalization', () => {
     test('handles YYYY-MM-DD as-is', () => {
       const csv = 'Date,Description,Amount\n2026-02-15,TEST,-10\n';
