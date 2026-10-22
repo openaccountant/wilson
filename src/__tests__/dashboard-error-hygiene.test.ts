@@ -83,7 +83,14 @@ describe('dashboard error hygiene', () => {
     const { db, base } = await start();
     insertTransactions(db, [{ date: '2026-01-15', description: 'X', amount: -1 }]);
     const row = db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number };
-    const res = await send(base, 'PATCH', `/api/transactions/${row.id}`, JSON.stringify({ entity_id: 999999 }));
+    // A missing entity is now a validated 400 (PATCH body validation), not a FOREIGN KEY 500.
+    const missing = await send(base, 'PATCH', `/api/transactions/${row.id}`, JSON.stringify({ entity_id: 999999 }));
+    expect(missing.status).toBe(400);
+    expect(JSON.stringify(await missing.json())).not.toMatch(/FOREIGN KEY|constraint|SQLITE/i);
+
+    // A genuinely unexpected SQLite failure still answers the generic 500.
+    db.exec('DROP TABLE entities');
+    const res = await send(base, 'POST', '/api/entities', JSON.stringify({ name: 'x' }));
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'Internal server error' });
   });
