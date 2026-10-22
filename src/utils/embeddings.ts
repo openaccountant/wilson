@@ -4,7 +4,12 @@
  *
  * Runs entirely on-device: inference is in-process ONNX (CPU/WASM backend) and
  * models cache to ~/.openaccountant/models/ — the only network traffic ever
- * involved is the model's one-time download. Per the local-memory design doc,
+ * involved is the model's one-time download, and that happens ONLY when a
+ * caller passes `allowDownload: true` (the explicit `wilson --index` command,
+ * via pullEmbeddingModel). Every other path — embed-on-write, dashboard and
+ * agent semantic search, local-model tool selection, the demo statement trace
+ * — gets EmbeddingModelNotDownloadedError on a fresh profile instead of a
+ * silent ~97 MB fetch from huggingface.co (NN-01). Per the local-memory design doc,
  * CPU/WASM matches or beats WebGPU on single short strings, so there is no
  * WebGPU dispatch and no adapter check on this path.
  *
@@ -49,15 +54,54 @@ type FeatureExtractionPipeline = any;
 const embeddingPipelineCache = new Map<string, Promise<FeatureExtractionPipeline>>();
 
 /**
+/** Options for the local embedding engine. */
+export interface EmbeddingEngineOptions {
+  /**
+   * Permit fetching the model from huggingface.co when it is not cached.
+   * Only the explicit `wilson --index` backfill sets this; everything else
+   * runs strictly from the on-device cache.
+   */
+  allowDownload?: boolean;
+}
+
+/**
+ * Thrown when the engine is asked to embed with a model that is not on disk
+ * and the caller did not pass `allowDownload`. Callers degrade on it (skip
+ * embed-on-write, keyword tool selection, "run --index" in the UI).
+ */
+export class EmbeddingModelNotDownloadedError extends Error {
+  readonly modelId: string;
+  constructor(modelId: string) {
+    super(
+      `Embedding model ${modelId} is not downloaded. Run \`wilson --index\` to download it ` +
+        `(one-time, ~97 MB from huggingface.co) and index your transactions.`
+    );
+    this.name = 'EmbeddingModelNotDownloadedError';
+    this.modelId = modelId;
+  }
+}
+
+/**
  * Get (or create) the feature-extraction pipeline for a model id.
- * The in-flight load is cached, so concurrent callers share one download/load.
+ * The in-flight load is cached, so concurrent callers share one load.
+ *
+ * Without `allowDownload`, an uncached model throws
+ * EmbeddingModelNotDownloadedError before transformers.js is even imported,
+ * and the load itself runs with `local_files_only` so the library can never
+ * reach the network on this path.
  */
 export async function getEmbeddingPipeline(
-  modelId: string = DEFAULT_EMBEDDING_MODEL
+  modelId: string = DEFAULT_EMBEDDING_MODEL,
+  opts: EmbeddingEngineOptions = {}
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
   const cached = embeddingPipelineCache.get(modelId);
   if (cached) return cached;
+
+  const allowDownload = opts.allowDownload === true;
+  if (!allowDownload && !isEmbeddingModelCached(modelId)) {
+    throw new EmbeddingModelNotDownloadedError(modelId);
+  }
 
   const load = (async () => {
     const { env, pipeline } = await import('@huggingface/transformers');
@@ -80,7 +124,11 @@ export async function getEmbeddingPipeline(
       // also the library's implicit wasm default — requesting it (explicitly or
       // implicitly) fails with "Could not locate file". fp32 is the docs'
       // fallback; dim and behavior are identical to the quantized variants.
-      pipe = await pipeline('feature-extraction', modelId, { device: 'cpu', dtype: 'fp32' });
+      pipe = await pipeline('feature-extraction', modelId, {
+        device: 'cpu',
+        dtype: 'fp32',
+        local_files_only: !allowDownload,
+      });
     } finally {
       console.log = origLog;
       console.warn = origWarn;
@@ -102,8 +150,9 @@ export async function getEmbeddingPipeline(
  * True when the embedding model's weights are already in the on-device cache,
  * so loading it makes no network request. transformers.js's file cache keys
  * files by `<repo>/<file>` under the cache dir, and the engine loads the fp32
- * `onnx/model.onnx`. Only `wilson --index` (an explicit command) downloads the
- * model; implicit paths (embed-on-write, dashboard search) check this first.
+ * `onnx/model.onnx`. getEmbeddingPipeline enforces it for every caller; the
+ * embed-on-write and dashboard-search paths also check it up front so they can
+ * skip work / report `modelReady: false` without building an error.
  */
 export function isEmbeddingModelCached(modelId: string = DEFAULT_EMBEDDING_MODEL): boolean {
   return existsSync(join(homedir(), '.openaccountant', 'models', modelId, 'onnx', 'model.onnx'));
@@ -153,14 +202,18 @@ export function transactionEmbedText(t: {
  * Embed texts locally with the feature-extraction pipeline
  * (`pooling: 'mean', normalize: true`), returning one L2-normalized
  * Float32Array per input, in input order.
+ *
+ * Throws EmbeddingModelNotDownloadedError when the model is not cached and
+ * `opts.allowDownload` is not set (see getEmbeddingPipeline).
  */
 export async function embedTexts(
   texts: string[],
-  modelId: string = DEFAULT_EMBEDDING_MODEL
+  modelId: string = DEFAULT_EMBEDDING_MODEL,
+  opts: EmbeddingEngineOptions = {}
 ): Promise<Float32Array[]> {
   if (texts.length === 0) return [];
 
-  const extractor = await getEmbeddingPipeline(modelId);
+  const extractor = await getEmbeddingPipeline(modelId, opts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const output: any = await extractor(texts, { pooling: 'mean', normalize: true });
 
@@ -190,7 +243,8 @@ export async function embedTexts(
 /**
  * Convenience wrapper: embed `queryText` locally, then run the dot-product
  * top-k search in the DB layer (which applies the hard filters as a SQL
- * prefilter). The DB layer itself never embeds.
+ * prefilter). The DB layer itself never embeds. Never downloads the model:
+ * throws EmbeddingModelNotDownloadedError until `wilson --index` has run.
  */
 export async function semanticSearchTransactions(
   db: Database,

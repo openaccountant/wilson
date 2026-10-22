@@ -63,6 +63,9 @@ let defaultEmbedder: EmbedFn | null = null;
 /**
  * The process-wide card embedder: local MiniLM through `embedTexts` (CPU/WASM,
  * so it never competes with a WebGPU chat model), cached by content hash.
+ * Never downloads the model: on a profile without it, embedTexts throws
+ * EmbeddingModelNotDownloadedError and the agent's withEmbedTimeout wrapper
+ * falls back to keyword tool groups (NN-01).
  */
 export function getCardEmbedder(): EmbedFn {
   defaultEmbedder ??= createCachedEmbedder(async (texts) => {

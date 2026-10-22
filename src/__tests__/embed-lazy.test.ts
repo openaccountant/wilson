@@ -18,7 +18,15 @@ import type { Database } from '../db/compat-sqlite.js';
 import { createTestDb, seedTestData } from './helpers.js';
 import { fakeEmbedText } from './fake-embedder.js';
 import { setEmbedOnWriteEmbedder, embedTransactionIds } from '../utils/embed-on-write.js';
-import { DEFAULT_EMBEDDING_MODEL, isEmbeddingModelCached } from '../utils/embeddings.js';
+import {
+  DEFAULT_EMBEDDING_MODEL,
+  EmbeddingModelNotDownloadedError,
+  embedTexts,
+  getEmbeddingPipeline,
+  isEmbeddingModelCached,
+  semanticSearchTransactions,
+} from '../utils/embeddings.js';
+import { getCardEmbedder } from '../agent/tool-cards.js';
 import { apiImport, apiSemanticSearch, apiUpdateTransaction } from '../dashboard/api.js';
 
 // Restore the plain deterministic fake for every file that runs after this one.
@@ -76,6 +84,49 @@ describe('embed-on-write: no model download unless the model is already local', 
   test('an injected embedder still runs (tests and the backfill own their model)', async () => {
     const res = await apiSemanticSearch(db, new URLSearchParams({ q: 'coffee' }), async (t) => t.map(fakeEmbedText));
     expect(res.modelReady).toBe(true);
+  });
+});
+
+describe('local embedding engine: downloads only on an explicit allowDownload', () => {
+  let db: Database;
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    db = createTestDb();
+    seedTestData(db);
+    rmSync(modelDir, { recursive: true, force: true });
+    fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () => {
+      throw new Error('test: network is off');
+    }) as unknown as typeof fetch);
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    rmSync(modelDir, { recursive: true, force: true });
+  });
+
+  test('embedTexts refuses an uncached model without a network request', async () => {
+    await expect(embedTexts(['coffee'])).rejects.toBeInstanceOf(EmbeddingModelNotDownloadedError);
+    await expect(getEmbeddingPipeline()).rejects.toBeInstanceOf(EmbeddingModelNotDownloadedError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('the error says how to get the model', async () => {
+    await expect(embedTexts(['coffee'])).rejects.toThrow(/wilson --index/);
+  });
+
+  test('local-model tool selection (getCardEmbedder) never fetches the model', async () => {
+    await expect(getCardEmbedder()(['import a bank statement'])).rejects.toBeInstanceOf(
+      EmbeddingModelNotDownloadedError
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('semanticSearchTransactions never fetches the model', async () => {
+    await expect(semanticSearchTransactions(db, 'coffee')).rejects.toBeInstanceOf(
+      EmbeddingModelNotDownloadedError
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

@@ -22,7 +22,11 @@ import {
  *  - import      → apiImport (the exact /api/import substrate: file-hash dedup,
  *                  external_id row dedup, insert, imports ledger)
  *  - embed       → embedTexts (the local MiniLM engine behind --index and search)
- *                  matched against the KNOWN_MERCHANTS reference vectors
+ *                  matched against the KNOWN_MERCHANTS reference vectors.
+ *                  Like every non---index caller it never downloads the model:
+ *                  on a profile without it the embed/predict steps report
+ *                  status 'error' (EmbeddingModelNotDownloadedError) and the
+ *                  rest of the trace still runs (NN-01)
  *  - predict     → the same local embedding lookup, one row, top match as the
  *                  predicted category with its cosine similarity as confidence —
  *                  strictly display-only, nothing is written anywhere

@@ -66,7 +66,10 @@ export async function runEmbeddingIndex(
   const model = opts.model ?? DEFAULT_EMBEDDING_MODEL;
   const batchSize = opts.batchSize ?? 32;
   const embed =
-    opts.embed ?? ((texts: string[]) => embedTexts(texts, model));
+    opts.embed ??
+    // The only download-permitted path: --index is the explicit,
+    // user-invoked command that fetches the model (pullEmbeddingModel below).
+    ((texts: string[]) => embedTexts(texts, model, { allowDownload: true }));
 
   // ── Orphan sweep (structural safety net) ────────────────────────────────
   // Runs on every invocation — including no-op runs — so vectors whose

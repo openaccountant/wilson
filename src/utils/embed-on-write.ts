@@ -92,9 +92,10 @@ export async function embedTransactionIds(
   const batchSize = opts.batchSize ?? DEFAULT_BATCH_SIZE;
   const injected = opts.embed ?? overrideEmbed;
 
-  // The real engine never downloads from here: an implicit write must not
-  // trigger a ~90MB fetch (NN-01) or wait on one (NN-10). Until `wilson
-  // --index` has fetched the model, rows are left for that backfill.
+  // The engine itself refuses to download without allowDownload (NN-01);
+  // this up-front check just skips the row re-select and logs a clear reason.
+  // Until `wilson --index` has fetched the model, rows are left for that
+  // backfill.
   if (!injected && !isEmbeddingModelCached(model)) {
     logger.info('embed:on-write:skipped', { model, rows: unique.length, reason: 'model not downloaded' });
     return { embedded: 0, failed: unique.length };
