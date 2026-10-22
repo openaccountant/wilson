@@ -208,6 +208,29 @@ describe('parseGenericCSV', () => {
 
       expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-50, 1200]);
     });
+
+    // @invariant NN-07
+    test('falls back to the Amount column when split Payment/Credit cells are blank', () => {
+      const csv = [
+        'Date,Description,Amount,Payment,Credit',
+        '2026-02-01,A,-5,,',
+        '2026-02-02,B,10,,',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-5, 10]);
+    });
+
+    test('falls back to Amount per row when Amount+Debit+Credit split cells are empty', () => {
+      const csv = [
+        'Date,Description,Amount,Debit,Credit',
+        '2026-02-01,A,-5,,',
+        '2026-02-02,B,10,,',
+        '2026-02-03,C,-7,7.00,',
+        '2026-02-04,D,9,,9.00',
+      ].join('\n');
+
+      expect(parseGenericCSV(csv).map((t) => t.amount)).toEqual([-5, 10, -7, 9]);
+    });
   });
 
   describe('date format normalization', () => {

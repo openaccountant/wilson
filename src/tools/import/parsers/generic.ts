@@ -99,9 +99,18 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     if (hasSeparateDebitCredit) {
       const debit = debitCol ? parseAmount(row[debitCol] || '0') : 0;
       const credit = creditCol ? parseAmount(row[creditCol] || '0') : 0;
-      // Debit = negative (expense), credit = positive (income)
-      amount = isNaN(debit) ? 0 : -Math.abs(debit);
-      amount += isNaN(credit) ? 0 : Math.abs(credit);
+      const hasSplitValue =
+        (debitCol && (row[debitCol] ?? '').trim() !== '' && !isNaN(debit)) ||
+        (creditCol && (row[creditCol] ?? '').trim() !== '' && !isNaN(credit));
+      if (!hasSplitValue && amountCol) {
+        // Split cells blank/non-numeric on this row: use the Amount column as-is.
+        amount = parseAmount(row[amountCol] ?? '0');
+        if (isNaN(amount)) continue;
+      } else {
+        // Debit = negative (expense), credit = positive (income)
+        amount = isNaN(debit) ? 0 : -Math.abs(debit);
+        amount += isNaN(credit) ? 0 : Math.abs(credit);
+      }
     } else {
       amount = parseAmount(row[amountCol!] ?? '0');
       if (isNaN(amount)) continue;

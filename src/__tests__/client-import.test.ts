@@ -25,7 +25,7 @@ const FIXTURES = [
   { path: ['csv', 'bofa-checking', 'standard.csv'], format: 'csv', bank: 'bofa', rows: 7, range: { start: '2026-01-03', end: '2026-01-28' } },
   { path: ['csv', 'bofa-cc', 'standard.csv'], format: 'csv', bank: 'bofa-cc', rows: 7, range: { start: '2026-01-04', end: '2026-02-04' } },
   { path: ['csv', 'generic', 'standard.csv'], format: 'csv', bank: 'generic', rows: 8, range: { start: '2026-01-03', end: '2026-02-05' } },
-  { path: ['csv', 'generic', 'debit-credit-cols.csv'], format: 'csv', bank: 'generic', rows: 7, range: { start: '2026-01-03', end: '2026-02-01' } },
+  { path: ['csv', 'generic', 'debit-credit-cols.csv'], format: 'csv', bank: 'generic', rows: 10, range: { start: '2026-01-03', end: '2026-02-05' } },
   { path: ['ofx', 'v1-standard.ofx'], format: 'ofx', bank: 'ofx', rows: 8, range: { start: '2026-01-03', end: '2026-02-01' } },
   { path: ['ofx', 'v2-standard.ofx'], format: 'ofx', bank: 'ofx', rows: 5, range: { start: '2026-01-05', end: '2026-01-30' } },
   { path: ['qif', 'standard.qif'], format: 'qif', bank: 'qif', rows: 10, range: { start: '2026-01-03', end: '2026-02-01' } },
@@ -51,6 +51,16 @@ describe('parseStatementContent — per-bank fixtures', () => {
       expect(Number.isFinite(first.amount)).toBe(true);
     });
   }
+
+  test('generic Debit/Credit fixture keeps credit rows positive and debits negative', () => {
+    const parsed = parseStatementContent(read('csv', 'generic', 'debit-credit-cols.csv'));
+    const amt = (needle: string) => parsed.transactions.find((t) => t.description.includes(needle))!.amount;
+    expect(amt('Payroll')).toBe(3200);
+    expect(amt('Venmo')).toBe(150);
+    expect(amt('Interest')).toBe(0.45);
+    expect(amt('Corner Market')).toBe(-42.67);
+    expect(amt('Rent')).toBe(-2400);
+  });
 
   test('Chase fixture rows carry their detected bank', () => {
     const parsed = parseStatementContent(read('csv', 'chase', 'standard.csv'));
