@@ -44,7 +44,7 @@ function stripReportPreamble(content: string): string {
  *
  * Looks for headers matching date, description, and amount patterns.
  * If separate debit/credit columns are found, merges them (debit = negative, credit = positive).
- * Tries to detect sign convention: if most amounts are positive, assumes positive = expense and negates.
+ * Tries to detect sign convention: if no amount is negative and most are positive, assumes positive = expense and negates.
  */
 export function parseGenericCSV(content: string): ParsedTransaction[] {
   const cleaned = stripReportPreamble(content);
@@ -112,10 +112,12 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     rawTransactions.push({ date, description: description.trim(), amount, accountName });
   }
 
-  // Detect sign convention: if most amounts are positive, the bank likely uses
-  // positive = expense, so we negate.
+  // Detect sign convention: an unsigned export (positive = expense) has no
+  // negative amounts at all, so we negate. Any negative row means the file is
+  // already signed — a mostly-deposit savings statement must keep its signs (NN-07).
   const positiveCount = rawTransactions.filter((t) => t.amount > 0).length;
-  const shouldNegate = !hasSeparateDebitCredit && positiveCount > rawTransactions.length * 0.6;
+  const hasNegative = rawTransactions.some((t) => t.amount < 0);
+  const shouldNegate = !hasSeparateDebitCredit && !hasNegative && positiveCount > rawTransactions.length * 0.6;
 
   const transactions: ParsedTransaction[] = rawTransactions.map((t) => ({
     date: t.date,

@@ -135,6 +135,37 @@ describe('parseGenericCSV', () => {
       const store = txns.find((t) => t.description === 'STORE A');
       expect(store?.amount).toBe(-50.00);
     });
+
+    // @invariant NN-07
+    test('keeps signs of a signed file that is mostly deposits (savings account)', () => {
+      const csv = [
+        'Date,Description,Amount',
+        '2026-02-01,FAKE TRANSFER FEE (dummy),-5.00',
+        '2026-02-02,FAKE DEPOSIT ONE (dummy),400.00',
+        '2026-02-03,FAKE DEPOSIT TWO (dummy),250.00',
+        '2026-02-04,FAKE INTEREST (dummy),1.25',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      // A negative row proves the file is already signed, so it must not be flipped
+      expect(txns.find((t) => t.description === 'FAKE TRANSFER FEE (dummy)')?.amount).toBe(-5.00);
+      expect(txns.find((t) => t.description === 'FAKE DEPOSIT ONE (dummy)')?.amount).toBe(400.00);
+      expect(txns.find((t) => t.description === 'FAKE INTEREST (dummy)')?.amount).toBe(1.25);
+    });
+
+    // @invariant NN-07
+    test('treats accounting-parentheses amounts as signed', () => {
+      const csv = [
+        'Date,Description,Amount',
+        '2026-02-01,FAKE FEE (dummy),(5.00)',
+        '2026-02-02,FAKE DEPOSIT (dummy),400.00',
+        '2026-02-03,FAKE DEPOSIT TWO (dummy),250.00',
+      ].join('\n');
+
+      const txns = parseGenericCSV(csv);
+      expect(txns.find((t) => t.description === 'FAKE FEE (dummy)')?.amount).toBe(-5.00);
+      expect(txns.find((t) => t.description === 'FAKE DEPOSIT (dummy)')?.amount).toBe(400.00);
+    });
   });
 
   describe('separate debit/credit columns', () => {
