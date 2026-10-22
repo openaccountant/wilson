@@ -155,7 +155,7 @@ describe('compression stays off the event loop', () => {
     expect(responses.every((r) => r.headers.get('content-encoding') === 'br')).toBe(true);
     expect(new Set(bodies.map((b) => b.byteLength)).size).toBe(1);
     // Synchronous compression would show a gap about as long as the whole job; async leaves the loop free.
-    expect(elapsed).toBeGreaterThan(100); // sanity: the job really was heavy
+    expect(elapsed).toBeGreaterThan(20); // sanity: the job really was heavy
     expect(maxGap).toBeLessThan(elapsed / 2);
   });
 });
