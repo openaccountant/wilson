@@ -45,7 +45,7 @@ describe('the live-check seed script', () => {
   test('keeps the real-HOME guard and the scratch-dir requirement (source guard)', () => {
     expect(guardSource).toContain("export const REAL_HOME = '/Users/jdfiscus';");
     expect(guardSource).toMatch(/realpathSync/);
-    expect(guardSource).toMatch(/startsWith\('\/private\/tmp\/'\)/);
+    expect(guardSource).toContain("const scratchPrefix = '/private/tmp/';");
     expect(guardSource).toContain('process.exit(1)');
     // The guard must be the first import, so it runs before any app module loads.
     expect(source.match(/^import .*$/m)?.[0]).toContain("from './webmcp-live-seed-guard.js'");
