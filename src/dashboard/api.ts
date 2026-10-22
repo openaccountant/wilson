@@ -1374,6 +1374,26 @@ export interface ImportResult {
   error?: string;
 }
 
+/**
+ * Per-field caps for /api/import rows. No shared constants existed, so these are
+ * chosen to sit well above real statement data (bank descriptions/memos are
+ * typically <256 chars) while rejecting abuse such as a multi-MB description.
+ */
+export const IMPORT_MAX_DESCRIPTION = 1000;
+export const IMPORT_MAX_TEXT_FIELD = 200; // bank, merchant_name, category*, payment_channel, external_id, account_last4
+const IMPORT_MIN_YEAR = 1900;
+const IMPORT_MAX_YEAR = 2100;
+
+/** True only for a real calendar date written YYYY-MM-DD (rejects 2026-13-45, 2026-02-30, 0000-00-00). */
+function isCalendarDate(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  if (y < IMPORT_MIN_YEAR || y > IMPORT_MAX_YEAR) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 function failedImport(error: string): ImportResult {
   return { status: 'failed', transactionsImported: 0, transactionsSkipped: 0, error, message: error };
 }
@@ -1411,11 +1431,35 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
       || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
       return failedImport(`transactions[${i + 1}] must include date, description, and amount`);
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
-      return failedImport(`transactions[${i + 1}].date must be YYYY-MM-DD`);
+    const n = i + 1;
+    if (!isCalendarDate(row.date)) {
+      return failedImport(`transactions[${n}].date must be a real YYYY-MM-DD date`);
+    }
+    if (row.authorized_date !== undefined && (typeof row.authorized_date !== 'string' || !isCalendarDate(row.authorized_date))) {
+      return failedImport(`transactions[${n}].authorized_date must be a real YYYY-MM-DD date`);
+    }
+    if (row.description.length > IMPORT_MAX_DESCRIPTION) {
+      return failedImport(`transactions[${n}].description must be at most ${IMPORT_MAX_DESCRIPTION} characters`);
     }
     if (row.external_id !== undefined && (typeof row.external_id !== 'string' || row.external_id === '')) {
-      return failedImport(`transactions[${i + 1}].external_id must be a string`);
+      return failedImport(`transactions[${n}].external_id must be a string`);
+    }
+    for (const f of ['external_id', 'bank', 'merchant_name', 'category', 'category_detailed', 'payment_channel', 'account_last4'] as const) {
+      const v = row[f];
+      if (v === undefined) continue;
+      if (typeof v !== 'string') return failedImport(`transactions[${n}].${f} must be a string`);
+      if (v.length > IMPORT_MAX_TEXT_FIELD) {
+        return failedImport(`transactions[${n}].${f} must be at most ${IMPORT_MAX_TEXT_FIELD} characters`);
+      }
+    }
+    // Categories render in dashboard filters; markup characters have no place in a category name.
+    for (const f of ['category', 'category_detailed'] as const) {
+      if (row[f] !== undefined && /[<>]/.test(row[f]!)) {
+        return failedImport(`transactions[${n}].${f} must not contain HTML`);
+      }
+    }
+    if (row.pending !== undefined && typeof row.pending !== 'boolean') {
+      return failedImport(`transactions[${n}].pending must be a boolean`);
     }
   }
 
