@@ -26,6 +26,7 @@ import {
 } from './api.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
 import { isBadRequest } from './spending-params.js';
+import { HttpError, jsonBody } from './http-errors.js';
 import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
@@ -555,7 +556,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (getUserCount(activeDb) > 0) {
             return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
           }
-          const body = await req.json() as { username?: string; password?: string };
+          const body = await jsonBody<{ username?: string; password?: string }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -570,7 +571,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/auth/login' && req.method === 'POST') {
-          const body = await req.json() as { username?: string; password?: string };
+          const body = await jsonBody<{ username?: string; password?: string }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -605,7 +606,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && (!currentUser || !canManageUsers(currentUser.role))) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { username?: string; password?: string; role?: 'admin' | 'viewer' };
+          const body = await jsonBody<{ username?: string; password?: string; role?: 'admin' | 'viewer' }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -645,7 +646,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && (!currentUser || !canManageUsers(currentUser.role))) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { auth_enabled?: boolean };
+          const body = await jsonBody<{ auth_enabled?: boolean }>(req);
           // Auth on with no active admin is a bootstrap hijack (#157): /api/auth/setup stays public
           // while no users exist, so whoever called it first would become admin. The first enable
           // goes through /api/auth/setup, which creates the admin and flips the flag in one
@@ -677,7 +678,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { name?: string };
+          const body = await jsonBody<{ name?: string }>(req);
           if (!body.name) {
             return Response.json({ error: 'name required' }, { status: 400, headers });
           }
@@ -822,7 +823,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
-            const body = await req.json() as Record<string, unknown>;
+            const body = await jsonBody<Record<string, unknown>>(req);
             return Response.json(await apiUpdateTransaction(activeDb, id, body), { headers });
           }
           if (req.method === 'DELETE') {
@@ -849,7 +850,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const id = parseInt(reviewMatch[1], 10);
           const result = reviewMatch[2] === 'confirm'
             ? apiConfirmReview(activeDb, id)
-            : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+            : apiCorrectReview(activeDb, id, await jsonBody<{ category?: string }>(req));
           auditRestWrite(`/api/reviews/:id/${reviewMatch[2]}`, result.success);
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
@@ -889,7 +890,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           return Response.json(apiCreateEntity(activeDb, body as { name?: string; description?: string; color?: string }), { headers });
         }
         const entityMatch = path.match(/^\/api\/entities\/(\d+)$/);
@@ -899,7 +900,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
-            const body = await req.json() as Record<string, unknown>;
+            const body = await jsonBody<Record<string, unknown>>(req);
             return Response.json(apiUpdateEntity(activeDb, id, body as { name?: string; description?: string; color?: string }), { headers });
           }
           if (req.method === 'DELETE') {
@@ -916,7 +917,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as ImportRequestBody;
+          const body = await jsonBody<ImportRequestBody>(req);
           const result = await apiImport(activeDb, body);
           return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
         }
@@ -926,7 +927,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // and mirrors /api/import's canWrite RBAC exactly.
 
         if (path === '/api/demo/trace/step' && req.method === 'POST') {
-          const body = await req.json() as { step?: unknown };
+          const body = await jsonBody<{ step?: unknown }>(req);
           if (body?.step === 'import' && authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
@@ -941,7 +942,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // substrate's commit, after the human approves the confirmation card.
 
         if (path === '/api/demo/autobook/candidates' && req.method === 'POST') {
-          const body = await req.json() as unknown;
+          const body = await jsonBody<unknown>(req);
           const result = apiDemoAutoBookCandidates(activeDb, body);
           if (!result.ok) return Response.json({ error: result.error }, { status: 400, headers });
           return Response.json({ candidates: result.candidates }, { headers });
@@ -956,7 +957,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           return Response.json(apiAddMemory(activeDb, body as { memoryType?: string; content?: string; category?: string }), { headers });
         }
         const memoryDeleteMatch = path.match(/^\/api\/memories\/(\d+)$/);
@@ -977,7 +978,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { prompt?: string };
+          const body = await jsonBody<{ prompt?: string }>(req);
           return Response.json(apiSetCustomPrompt(activeDb, body), { headers });
         }
 
@@ -1113,7 +1114,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
+          const body = await jsonBody<{ query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown }>(req);
           // The body was read and auth re-checked centrally (readBodyThenRecheck).
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
@@ -1176,7 +1177,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as SetTaskModelBody;
+          const body = await jsonBody<SetTaskModelBody>(req);
           const result = apiSetTaskModel(body);
           if ('error' in result) {
             return Response.json(result, { status: 400, headers });
@@ -1189,7 +1190,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat/local' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; answer?: string; sessionId?: string };
+          const body = await jsonBody<{ query?: string; answer?: string; sessionId?: string }>(req);
           const result = apiRecordLocalChatMessage(activeDb, body);
           if ('error' in result) {
             return Response.json(result, { status: 400, headers });
@@ -1204,7 +1205,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/cloud' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = await apiDemoShowdownCloud(body);
             return Response.json(result, { headers });
@@ -1220,7 +1221,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/local' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = await apiDemoShowdownLocal(body);
             return Response.json(result, { headers });
@@ -1233,7 +1234,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/browser-trace' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = apiDemoShowdownBrowserTrace(body);
             return Response.json(result, { headers });
@@ -1387,10 +1388,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         return new Response('Not Found', { status: 404, headers });
       } catch (err) {
-        return Response.json(
-          { error: err instanceof Error ? err.message : String(err) },
-          { status: 500, headers }
-        );
+        if (err instanceof HttpError) {
+          return Response.json({ error: err.message }, { status: err.status, headers });
+        }
+        console.error(`[dashboard] ${req.method} ${path} failed:`, err);
+        return Response.json({ error: 'Internal server error' }, { status: 500, headers });
       }
   };
 

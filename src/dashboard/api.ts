@@ -130,6 +130,7 @@ import {
 } from '../demo/showdown.js';
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
+import { HttpError } from './http-errors.js';
 import { discoverSkills } from '../skills/registry.js';
 import { csvText, csvCell } from '../utils/spreadsheet-safe.js';
 import { xlsxToBuffer } from '../utils/xlsx-writer.js';
@@ -1248,9 +1249,14 @@ export function apiMemories(db: Database) {
   }
 }
 
+const MEMORY_TYPES: MemoryInsert['memoryType'][] = ['context', 'insight', 'advice'];
+
 export function apiAddMemory(db: Database, body: { memoryType?: string; content?: string; category?: string }) {
   if (!body.memoryType || !body.content) {
-    throw new Error('memoryType and content required');
+    throw new HttpError(400, 'memoryType and content required');
+  }
+  if (typeof body.content !== 'string' || !MEMORY_TYPES.includes(body.memoryType as MemoryInsert['memoryType'])) {
+    throw new HttpError(400, `memoryType must be one of ${MEMORY_TYPES.join(', ')} and content must be a string`);
   }
   const insert: MemoryInsert = {
     memoryType: body.memoryType as MemoryInsert['memoryType'],
@@ -1299,7 +1305,7 @@ export function apiEntities(db: Database) {
 }
 
 export function apiCreateEntity(db: Database, body: { name?: string; description?: string; color?: string }) {
-  if (!body.name) throw new Error('name is required');
+  if (!body.name) throw new HttpError(400, 'name is required');
   const id = createEntity(db, body as EntityInsert);
   return { success: true, id };
 }
@@ -1472,6 +1478,9 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
   // 2. File-level dedup. When the client omits fileHash, hash the canonical JSON of
   //    the transactions array — best-effort (key order from the sender can differ
   //    between runs); row-level dedup via external_id is the real guarantee.
+  if (body.fileHash !== undefined && typeof body.fileHash !== 'string') {
+    return failedImport('fileHash must be a string');
+  }
   const fileHash = body.fileHash?.trim()
     ?? createHash('sha256').update(JSON.stringify(body.transactions)).digest('hex');
   const existing = checkImported(db, fileHash);
