@@ -9,11 +9,20 @@ export class HttpError extends Error {
   }
 }
 
-/** Parse a request's JSON body; unparseable JSON is a 400, not an internal error. */
-export async function jsonBody<T = unknown>(req: Request): Promise<T> {
+/** Parse a request's JSON body without checking its shape; unparseable JSON is a 400. */
+export async function jsonValue(req: Request): Promise<unknown> {
   try {
-    return await req.json() as T;
+    return await req.json();
   } catch {
     throw new HttpError(400, 'invalid JSON body');
   }
+}
+
+/** Parse a request's JSON body that must be a plain object; null, arrays and scalars are a 400 too. */
+export async function jsonBody<T = Record<string, unknown>>(req: Request): Promise<T> {
+  const value = await jsonValue(req);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, 'invalid JSON body');
+  }
+  return value as T;
 }

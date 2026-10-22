@@ -26,7 +26,7 @@ import {
 } from './api.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
 import { isBadRequest } from './spending-params.js';
-import { HttpError, jsonBody } from './http-errors.js';
+import { HttpError, jsonBody, jsonValue } from './http-errors.js';
 import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
@@ -947,7 +947,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // substrate's commit, after the human approves the confirmation card.
 
         if (path === '/api/demo/autobook/candidates' && req.method === 'POST') {
-          const body = await jsonBody<unknown>(req);
+          const body = await jsonValue(req);
           const result = apiDemoAutoBookCandidates(activeDb, body);
           if (!result.ok) return Response.json({ error: result.error }, { status: 400, headers });
           return Response.json({ candidates: result.candidates }, { headers });

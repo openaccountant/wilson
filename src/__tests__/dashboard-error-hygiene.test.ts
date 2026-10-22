@@ -1,9 +1,9 @@
 import { describe, expect, test, afterEach } from 'bun:test';
 import { createTestDb } from './helpers.js';
 import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
+import { insertTransactions } from '../db/queries.js';
 import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 
-// @invariant NN-07
 // Bad request bodies answer 4xx with a plain message, never a 500 that echoes
 // parser, TypeError or SQLite text. Anything unexpected is a generic 500.
 describe('dashboard error hygiene', () => {
@@ -35,6 +35,18 @@ describe('dashboard error hygiene', () => {
     ['POST', '/api/chat'],
     ['POST', '/api/demo/showdown/cloud'],
   ];
+
+  test('JSON that is not an object is a 400, not a TypeError 500', async () => {
+    const { base } = await start();
+    for (const raw of ['null', '[]', '5', '"x"']) {
+      for (const [method, path] of JSON_ROUTES) {
+        const res = await send(base, method, path, raw);
+        const text = await res.text();
+        expect(`${raw} ${method} ${path} ${res.status}`).toBe(`${raw} ${method} ${path} 400`);
+        expect(JSON.parse(text)).toEqual({ error: 'invalid JSON body' });
+      }
+    }
+  });
 
   test('unparseable JSON is a 400 { error: "invalid JSON body" } on body routes', async () => {
     const { base } = await start();
@@ -68,11 +80,11 @@ describe('dashboard error hygiene', () => {
   });
 
   test('unexpected failures answer a generic 500 without SQLite text', async () => {
-    const { base } = await start();
-    const res = await send(base, 'PATCH', '/api/transactions/1', JSON.stringify({ entity_id: 999999 }));
-    // Whether the row exists or not, no constraint text may leak.
-    const text = await res.text();
-    expect(text).not.toMatch(/FOREIGN KEY|constraint|Binding expected/i);
-    if (res.status === 500) expect(JSON.parse(text)).toEqual({ error: 'Internal server error' });
+    const { db, base } = await start();
+    insertTransactions(db, [{ date: '2026-01-15', description: 'X', amount: -1 }]);
+    const row = db.prepare('SELECT id FROM transactions LIMIT 1').get() as { id: number };
+    const res = await send(base, 'PATCH', `/api/transactions/${row.id}`, JSON.stringify({ entity_id: 999999 }));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Internal server error' });
   });
 });
