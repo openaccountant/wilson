@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef, Fragment, type Chang
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { formatAmount, formatDate } from '@/format';
-import type { CategoryRow, ReviewQueueItem } from '@/types';
+import type { CategoryRow, ModelsPanel, ReviewQueueItem, ReviewQueueStatus } from '@/types';
 import { CATEGORIES } from '../../../../tools/categorize/categories.js';
 import { orderByLane, type LaneRoute } from '@/prelabel/core';
 import type { PrelabelResult } from '@/prelabel/protocol';
@@ -17,6 +17,8 @@ import { pageError, pollUntil } from '@webmcp-page-tools';
 import { armPageGuard, scrollForAgent, useAgentGuard } from '@/agent/agentGuard';
 import { AgentFilledBanner, AgentOutcomeNote } from '@/components/agent/AgentFilledBanner';
 import { buildCategoryOptions, buildReviewOptions, fieldLock } from '@declarative-submit';
+import { useUrlState } from '@/hooks/useUrlState';
+import { categorizationModelReady, reviewEmptyState, uncategorizedTransactionsHash } from '@/lib/reviewEmptyState';
 
 /** Confidence at or below which a suggestion landed in the review queue (src/tools/categorize). */
 const CONFIDENCE_REVIEW_THRESHOLD = 0.7;
@@ -356,6 +358,17 @@ export function ReviewTab() {
   }
 
   const pending = useMemo(() => reviews ?? [], [reviews]);
+
+  // Empty queue: say whether that means "done" or "nothing has suggestions yet" (#185). Counts refresh with the queue;
+  // the model check runs only when the copy depends on it.
+  const queueEmpty = !loading && !error && pending.length === 0;
+  const { data: queueStatus, loading: statusLoading, error: statusError } =
+    useApi<ReviewQueueStatus>(queueEmpty ? '/api/reviews/status' : null, [reviews]);
+  const needsModelInfo = queueEmpty && !statusLoading && (queueStatus?.uncategorized ?? 0) > 0;
+  const { data: models, loading: modelsLoading } = useApi<ModelsPanel>(needsModelInfo ? '/api/models' : null);
+  const emptyReady = queueEmpty && !statusLoading && !(needsModelInfo && modelsLoading);
+  const emptyState = reviewEmptyState(statusError ? null : queueStatus, categorizationModelReady(models), canAct);
+  const { state: urlState } = useUrlState();
   // Identity order (the server's) until open-jev has scored something.
   const lanes = useMemo(
     () => orderByLane(pending, prelabel.results, prelabel.marginCut),
@@ -453,7 +466,7 @@ export function ReviewTab() {
       <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
         {!error && <div className="mb-3"><PrelabelPanel reviews={pending} canAct={canAct} onResults={handlePrelabelResults} /></div>}
 
-        {loading && (
+        {(loading || (queueEmpty && !emptyReady)) && (
           <div className="bg-surface-raised border border-border rounded-lg p-4">
             <div className="h-[200px] animate-pulse bg-border-muted rounded" />
           </div>
@@ -465,9 +478,17 @@ export function ReviewTab() {
           </div>
         )}
 
-        {!loading && !error && pending.length === 0 && (
-          <div className="bg-surface-raised border border-border rounded-lg p-8 text-center">
-            <p className="text-sm text-text-muted">Nothing to review — all suggestions resolved.</p>
+        {emptyReady && (
+          <div className="bg-surface-raised border border-border rounded-lg p-8 text-center space-y-3" data-review-empty>
+            <p className="text-sm text-text-muted">{emptyState.message}</p>
+            {emptyState.showTransactionsLink && queueStatus && (
+              <a
+                href={uncategorizedTransactionsHash(urlState, queueStatus)}
+                className="inline-block text-sm text-green hover:underline"
+              >
+                Show uncategorized in Transactions &rarr;
+              </a>
+            )}
           </div>
         )}
 

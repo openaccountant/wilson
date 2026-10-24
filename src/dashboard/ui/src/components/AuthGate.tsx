@@ -16,6 +16,7 @@ import {
   type AuthStatusResponse,
 } from '@/lib/authSession';
 import { apiErrorMessage, firstAdminBody, validateFirstAdmin } from '@/lib/firstAdmin';
+import { AGENT_ACCESS_HINT, signInBlockedReason, whatThisIs } from '@/lib/signInCopy';
 import { lockMirror, suspendMirror, unlockMirror } from '@/store/mirror-client';
 import { noteAuthEnabled, offlineLoginRequired, readMirrorOwner, writeMirrorOwner } from '@/store/mirror-session';
 
@@ -157,7 +158,8 @@ function GateCard({ title, children }: { title: string; children: ReactNode }) {
           <div className="text-lg font-semibold text-text">
             <span className="text-green">$</span> Wilson
           </div>
-          <h1 className="text-xs text-text-secondary uppercase tracking-wide mt-1">{title}</h1>
+          <p className="text-sm text-text-muted mt-1">{whatThisIs(window.location.hostname)}</p>
+          <h1 className="text-xs text-text-secondary uppercase tracking-wide mt-3">{title}</h1>
         </div>
         {children}
       </div>
@@ -184,9 +186,10 @@ function LoginView({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const blocked = signInBlockedReason(username, password);
 
   async function submit() {
-    if (!username.trim() || !password) return;
+    if (blocked) return;
     setBusy(true);
     setError('');
     try {
@@ -242,11 +245,18 @@ function LoginView({
           aria-label="Password"
           className={inputClass}
         />
-        <button type="submit" disabled={busy || !username.trim() || !password} className={submitClass}>
+        <button
+          type="submit"
+          disabled={busy || blocked !== null}
+          aria-describedby={blocked ? 'sign-in-blocked' : undefined}
+          className={submitClass}
+        >
           {busy ? 'Signing in...' : 'Sign in'}
         </button>
+        {blocked && !busy && <p id="sign-in-blocked" className="text-xs text-text-muted">{blocked}</p>}
         {error && <div role="alert" className="text-xs text-red">{error}</div>}
       </form>
+      <p className="text-xs text-text-muted border-t border-border pt-3">{AGENT_ACCESS_HINT}</p>
     </GateCard>
   );
 }

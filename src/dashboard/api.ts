@@ -44,6 +44,8 @@ import {
 } from '../db/queries.js';
 import {
   getPendingReviewQueue,
+  getReviewQueueStatus,
+  type ReviewQueueStatus,
   resolveCategorizationReview,
   type PendingReviewRow,
 } from '../db/categorization-review-queries.js';
@@ -331,6 +333,11 @@ export async function apiUpdateTransaction(db: Database, id: number, updates: Tr
 export function apiReviewQueue(db: Database, params: URLSearchParams): PendingReviewRow[] {
   const limit = parseInt(params.get('limit') ?? '200', 10);
   return getPendingReviewQueue(db, Number.isFinite(limit) && limit >= 1 ? limit : 200);
+}
+
+/** GET /api/reviews/status — queue + uncategorized counts for the Review tab's empty state (read-only; any authenticated user). */
+export function apiReviewQueueStatus(db: Database): ReviewQueueStatus {
+  return getReviewQueueStatus(db);
 }
 
 export type ReviewActionResult =

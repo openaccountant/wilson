@@ -267,6 +267,31 @@ describe('open_review_item and open_interaction', () => {
     expect(await call(db, scope, grants, 'open_review_item', { reviewId })).toMatchObject({ ok: false, status: 404 });
   });
 
+  test('a review that needs no decision (#191) is absent from list_review_items and a 404 for open_review_item, same as the Review tab', async () => {
+    const db = createTestDb();
+    seedTestData(db);
+    const real = txnId(db, 'Unknown Purchase');
+    const same = txnId(db, 'Restaurant'); // already 'Dining'
+    addPendingCategorizationReview(db, real, 'Shopping', 0.5);
+    addPendingCategorizationReview(db, same, 'Dining', 0.5);
+    const idOf = (t: number) => (db.prepare('SELECT id FROM categorization_reviews WHERE transaction_id = @t').get({ t }) as { id: number }).id;
+    const scope = testScope();
+    const grants = grantTools(db, scope, ['list_review_items', 'open_review_item']);
+
+    const listed = async () => {
+      const out = await call(db, scope, grants, 'list_review_items', {}, 'imperative');
+      if (!out.ok || out.kind !== 'read') throw new Error('expected read');
+      return (out.data as { items: Array<{ reviewId: number }> }).items.map((i) => i.reviewId);
+    };
+    expect(await listed()).toEqual([idOf(real)]);
+    expect(await call(db, scope, grants, 'open_review_item', { reviewId: idOf(same) })).toMatchObject({ ok: false, status: 404 });
+
+    // A human picks a category on Transactions: that suggestion leaves the agent's list too.
+    db.prepare('UPDATE transactions SET category = @c, user_verified = 1 WHERE id = @id').run({ c: 'Health', id: real });
+    expect(await listed()).toEqual([]);
+    expect(await call(db, scope, grants, 'open_review_item', { reviewId: idOf(real) })).toMatchObject({ ok: false, status: 404 });
+  });
+
   test('open_interaction output has no human rating, notes, prompts or response', async () => {
     const db = createTestDb();
     const id = addInteraction(db, { model: 'claude-sonnet-4', callType: 'agent' });

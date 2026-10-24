@@ -151,6 +151,15 @@ export interface ReviewQueueItem {
   current_category: string | null;
 }
 
+// Matches GET /api/reviews/status (ReviewQueueStatus in src/db/categorization-review-queries.ts)
+export interface ReviewQueueStatus {
+  pending: number;
+  uncategorized: number;
+  transactions: number;
+  uncategorizedFrom: string | null;
+  uncategorizedTo: string | null;
+}
+
 // Matches GET /api/pnl response (existing endpoint)
 export interface PnlResponse {
   totalIncome: number;

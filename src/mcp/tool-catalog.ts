@@ -27,7 +27,7 @@ import {
   type TransactionRow,
 } from '../db/queries.js';
 import { getGoalById, updateGoalStatus, upsertGoal } from '../db/goal-queries.js';
-import { getPendingReviewQueue, resolveCategorizationReview, type PendingReviewRow } from '../db/categorization-review-queries.js';
+import { getPendingReviewQueue, resolveCategorizationReview, REVIEW_NEEDS_DECISION_SQL, type PendingReviewRow } from '../db/categorization-review-queries.js';
 import { AGENT_TAB_IDS, type TabId } from '../dashboard/webmcp-session.js';
 import { JUDGE_CRITERION_IDS, JUDGE_RUBRIC_VERSION, JUDGE_TAGS } from '../training/judge-rubric.js';
 import type { ProposalItem } from '../training/annotations.js';
@@ -1482,10 +1482,18 @@ interface ReviewRow {
   status: string;
 }
 
-/** A pending review, read by name: only the columns a review action needs, never the whole row. */
+/**
+ * A review in the queue, read by name: only the columns a review action needs, never the whole row. A review the
+ * queue leaves out (a human already categorized the transaction, or it already has the suggestion, #191) reads as
+ * undefined, so open/resolve treat it like an unknown id, the same as list_review_items does.
+ */
 function getPendingReview(db: Database, id: number): ReviewRow | undefined {
   return db
-    .prepare('SELECT id, transaction_id, suggested_category, status FROM categorization_reviews WHERE id = @id')
+    .prepare(
+      `SELECT r.id, r.transaction_id, r.suggested_category, r.status FROM categorization_reviews r
+       JOIN transactions t ON t.id = r.transaction_id
+       WHERE r.id = @id AND ${REVIEW_NEEDS_DECISION_SQL}`,
+    )
     .get({ id }) as ReviewRow | undefined;
 }
 

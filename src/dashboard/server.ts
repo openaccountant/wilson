@@ -21,7 +21,7 @@ import {
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
-  apiReviewQueue, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
+  apiReviewQueue, apiReviewQueueStatus, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
   apiSkills, apiMerchants,
 } from './api.js';
@@ -907,6 +907,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         if (path === '/api/reviews') {
           return Response.json(apiReviewQueue(activeDb, url.searchParams), { headers });
+        }
+
+        if (path === '/api/reviews/status') {
+          return Response.json(apiReviewQueueStatus(activeDb), { headers });
         }
 
         const reviewMatch = path.match(/^\/api\/reviews\/(\d+)\/(confirm|correct)$/);
