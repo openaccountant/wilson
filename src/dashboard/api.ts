@@ -1209,6 +1209,10 @@ export function apiJudgements(db: Database, params: URLSearchParams) {
   }
   const limit = Math.max(1, Math.min(50, parseInt(params.get('limit') ?? '50', 10) || 50));
   const cursor = parseInt(params.get('cursor') ?? '0', 10);
+  // A cursor past 2^53 is no offset this server ever handed out, and SQLite refuses it as OFFSET (a 500 otherwise).
+  if (Number.isFinite(cursor) && !Number.isSafeInteger(cursor)) {
+    return { error: 'cursor is out of range' } as const;
+  }
   const offset = Number.isInteger(cursor) && cursor > 0 ? cursor : 0;
   const { rows, total } = listJudgements(db, { status, offset, limit });
   const next = offset + rows.length;

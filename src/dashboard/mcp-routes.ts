@@ -615,7 +615,14 @@ export async function handleMcpRoute(req: Request, url: URL, path: string, ctx: 
     if (noProof) return noProof;
     const body = await readBody(req, PolicyBody, headers);
     if (!body.ok) return body.response;
-    const result = setPolicy(activeDb, actor, decodeURIComponent(policyMatch[1]), body.data.policy);
+    let tool: string;
+    try {
+      tool = decodeURIComponent(policyMatch[1]);
+    } catch {
+      // A malformed %-escape (`%ZZ`) is the client's URL, not a server fault: URIError would otherwise be a 500.
+      return errorResponse(400, 'invalid_args', 'The tool name in the path is not valid URL encoding.', headers);
+    }
+    const result = setPolicy(activeDb, actor, tool, body.data.policy);
     if (!result.ok) return errorResponse(result.status, result.code, result.error, headers);
     return json({ tool: result.tool, policy: result.policy, effective: result.effective }, 200, headers);
   }
