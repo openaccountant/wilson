@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { SpendingDonut } from '@/charts/lazyCharts';
 import { api } from '@/api';
 import { useApi } from '@/hooks/useApi';
 import { ChartCard } from '@/charts/ChartCard';
-import { ChartTooltip } from '@/charts/ChartTooltip';
 import { useCategoryColor } from '@/charts/usePalette';
 import { chartTokens } from '@/charts/tokens';
 import {
@@ -264,32 +263,10 @@ export function SpendingLevel1({ ctx }: { ctx: DrillCtx }) {
           </div>
         ) : (
           <div aria-hidden="true" className="chart-mark-svg shrink-0" style={{ width: DONUT_SIZE, height: DONUT_SIZE }}>
-            <PieChart width={DONUT_SIZE} height={DONUT_SIZE}>
-              <Pie
-                data={slices}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={36}
-                outerRadius={60}
-                paddingAngle={1.5}
-                stroke={chartTokens().surfaceRaised}
-                strokeWidth={2}
-                isAnimationActive={false}
-                onMouseEnter={(_, index) => setHighlight(slices[index]?.key ?? null)}
-                onMouseLeave={() => setHighlight(null)}
-              >
-                {slices.map((s) => (
-                  <Cell
-                    key={s.key}
-                    fill={s.color}
-                    fillOpacity={highlight == null || highlight === s.key ? 1 : 0.3}
-                  />
-                ))}
-              </Pie>
-              <Tooltip content={<ChartTooltip total={total} labelFormat={() => null} colorFor={(name) => slices.find((s) => s.name === name)?.color} />} />
-            </PieChart>
+            {/* recharts loads on demand (charts/lazyCharts.ts); this fixed-size box holds the space meanwhile. */}
+            <Suspense fallback={null}>
+              <SpendingDonut size={DONUT_SIZE} slices={slices} total={total} highlight={highlight} onHighlight={setHighlight} />
+            </Suspense>
           </div>
         )}
       </div>

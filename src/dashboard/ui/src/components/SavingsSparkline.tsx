@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Suspense, useMemo } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import { ChartCard } from '@/charts/ChartCard';
-import { ChartTooltip } from '@/charts/ChartTooltip';
+import { SavingsSparklineChart } from '@/charts/lazyCharts';
 import { chartTokens } from '@/charts/tokens';
 import { buildSavingsSeries } from '@/lib/savingsSeries';
 import { savingsPath } from '@/lib/overviewQueries';
@@ -60,46 +59,10 @@ export function SavingsSparkline() {
         </span>
         {plotted > 1 && (
           <div className="flex-1 h-10 min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={points}>
-                <defs>
-                  <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="month" hide />
-                <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip
-                  content={
-                    <ChartTooltip
-                      valueFormat={fmtValue}
-                      nameFor={() => (mode === 'net' ? 'Net savings' : 'Savings rate')}
-                    />
-                  }
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke={color}
-                  strokeWidth={2}
-                  fill="url(#sparkFill)"
-                  // A month between two gaps has no segment to draw; give it a dot.
-                  dot={(props: { cx?: number; cy?: number; index?: number }) => {
-                    const i = props.index ?? -1;
-                    const isolated =
-                      points[i]?.value != null && points[i - 1]?.value == null && points[i + 1]?.value == null;
-                    return isolated && props.cx != null && props.cy != null ? (
-                      <circle key={i} cx={props.cx} cy={props.cy} r={2.5} fill={color} />
-                    ) : (
-                      <g key={i} />
-                    );
-                  }}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {/* recharts loads on demand (charts/lazyCharts.ts); the h-10 box holds the space meanwhile. */}
+            <Suspense fallback={null}>
+              <SavingsSparklineChart points={points} color={color} mode={mode} fmtValue={fmtValue} />
+            </Suspense>
           </div>
         )}
       </div>

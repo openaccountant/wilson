@@ -401,10 +401,11 @@ describe('worker boundary (source pin)', () => {
   });
 });
 
-describe('single-file build invariant', () => {
-  test('vite.config.ts keeps viteSingleFile() and the ES-module worker format', () => {
+describe('build invariant', () => {
+  test('vite.config.ts splits the build (no viteSingleFile) and keeps the ES-module worker format', () => {
     const source = read(repoRoot, 'src', 'dashboard', 'ui', 'vite.config.ts');
-    expect(source).toContain('viteSingleFile()');
+    // The app ships as hashed /_app/ chunks (dashboard-split-build.test.ts); the forecast worker stays inline in its tab chunk.
+    expect(source).not.toContain('viteSingleFile(');
     expect(source).toMatch(/format:\s*'es'/);
   });
 });
@@ -424,10 +425,11 @@ describe('tab registration lockstep', () => {
 
   test('TAB_LABELS and TAB_COMPONENTS have exactly the TAB_IDS keys, in order, and include forecast', () => {
     const tabBarSource = read(uiSrc, 'components', 'TabBar.tsx');
-    const appSource = read(uiSrc, 'App.tsx');
+    // App.tsx renders TAB_COMPONENTS[activeTab]; the map itself lives with the lazy loaders (tabs/lazyTabs.ts).
+    const appSource = read(uiSrc, 'tabs', 'lazyTabs.ts');
 
     const labelKeys = extractRecordKeys(tabBarSource, /const TAB_LABELS: Record<TabId, string> = \{([\s\S]*?)\};/, 'the TAB_LABELS map');
-    const componentKeys = extractRecordKeys(appSource, /const TAB_COMPONENTS: Record<TabId, React\.FC> = \{([\s\S]*?)\};/, 'the TAB_COMPONENTS map');
+    const componentKeys = extractRecordKeys(appSource, /export const TAB_COMPONENTS: Record<TabId, ComponentType> = \{([\s\S]*?)\};/, 'the TAB_COMPONENTS map');
 
     expect(labelKeys).toEqual([...TAB_IDS]);
     expect(componentKeys).toEqual([...TAB_IDS]);

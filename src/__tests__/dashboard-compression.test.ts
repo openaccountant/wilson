@@ -9,8 +9,9 @@ import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
 import type { Database } from '../db/compat-sqlite.js';
 
 /**
- * The dashboard inlines its whole React build into one ~3 MB index.html. Served raw that was ~15.7 s
- * LCP on a throttled phone; the page and /assets/* must be compressed when the client allows it.
+ * The dashboard used to inline its whole React build into one ~3 MB index.html (~15.7 s LCP raw on a throttled
+ * phone). The page is small now (its code lives in hashed /_app/ files, dashboard-app-assets.test.ts), but the
+ * page, /assets/* and /_app/* are still compressed when the client allows it.
  */
 
 // @invariant NN-10
@@ -47,7 +48,7 @@ describe('dashboard compression', () => {
     expect(res.headers.get('vary')).toContain('Accept-Encoding');
     expect(res.headers.get('vary')).toContain('Origin');
     const bytes = new Uint8Array(await res.arrayBuffer());
-    expect(bytes.length).toBeLessThan(plain.length / 2);
+    expect(bytes.length).toBeLessThan(plain.length);
     const html = gunzipSync(bytes).toString('utf8');
     expect(html).toBe(plain);
     expect(html).toContain('/webmcp-bridge.js');

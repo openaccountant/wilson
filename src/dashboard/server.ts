@@ -1,5 +1,6 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { getDashboardHtml } from './html.js';
 import { compressBytes, negotiateEncoding, varyWithEncoding, type Encoding } from './compression.js';
 import {
@@ -109,57 +110,100 @@ function injectWebMcpBridge(html: string, port: number): string {
   return html + tag;
 }
 
-// ── Static hybrid-chat assets ───────────────────────────────────────────────
+// ── Static assets ───────────────────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
 export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
 
+/**
+ * URL prefix and directory of the React dashboard's content-hashed build output (`assetsDir` in
+ * src/dashboard/ui/vite.config.ts): the entry chunk, CSS, one chunk per tab, the mirror worker and
+ * the wa-sqlite wasm. index.html only references these; nothing is inlined into it.
+ */
+export const DASHBOARD_APP_PREFIX = '/_app/';
+export const DASHBOARD_APP_DIR = new URL('./ui/dist/_app/', import.meta.url).pathname;
+
+/** A hashed file never changes under the same name, so a browser may keep it for a year without asking again. */
+export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+/** Vite's `[name]-[hash].[ext]` (an 8-character base64url hash). Only such a name is sent as immutable. */
+const HASHED_ASSET_NAME = /-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+
 const ASSET_MIME_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
   '.wasm': 'application/wasm',
   '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
 };
 
 /** Types worth compressing; fonts and images are already compressed, so they go out as-is. */
-const COMPRESSIBLE_ASSET_EXTS = new Set(['.js', '.mjs', '.wasm', '.json']);
+const COMPRESSIBLE_ASSET_EXTS = new Set(['.js', '.mjs', '.css', '.wasm', '.json', '.svg']);
 
 /** Compressed asset bodies, keyed by path + encoding and stamped with the file's mtime/size so a rebuild is picked up. */
 const assetCompressionCache = new Map<string, { stamp: string; body: Promise<Uint8Array<ArrayBuffer>> }>();
 
+export interface ServeAssetOptions {
+  /** URL prefix the file name follows (default `/assets/`). */
+  prefix?: string;
+  /** Send content-hashed names with `Cache-Control: immutable` (the /_app/ build); anything else gets `no-cache`. */
+  immutableHashed?: boolean;
+}
+
 /**
- * Serve a file from the hybrid build output under /assets/.
+ * Serve a build-output file under a public static prefix: /assets/ (the hybrid build) or /_app/
+ * (the React dashboard's hashed chunks).
  *
- * These must be public (no auth): the hybrid chunk is loaded as a module
- * script and the onnxruntime-web binaries are fetched by ORT itself — neither
- * can attach an Authorization header. A 404 is the normal "hybrid not built"
- * state; the client treats a failed chunk load as capability-unavailable and
- * silently uses the server path.
+ * These must be public (no auth): the page's own module scripts, the hybrid chunk and the mirror
+ * worker load before (or without) a login and cannot attach an Authorization header, and the
+ * onnxruntime-web binaries are fetched by ORT itself. They are build artifacts only, identical for
+ * every user, so serving them pre-login leaks nothing the public npm package does not already hold.
+ * A 404 under /assets/ is the normal "hybrid not built" state; the client treats a failed chunk load
+ * as capability-unavailable and silently uses the server path.
  *
- * Rejects path traversal: the resolved path must stay inside `dir`.
+ * Rejects path traversal: the resolved path must stay inside `dir` and be a regular file.
  */
 export async function serveDashboardAsset(
   pathname: string,
   dir: string,
   headers: Record<string, string>,
   acceptEncoding?: string | null,
+  options: ServeAssetOptions = {},
 ): Promise<Response> {
+  const prefix = options.prefix ?? '/assets/';
   const notFound = () => new Response('Not Found', { status: 404, headers });
 
-  const rel = pathname.slice('/assets/'.length);
-  if (!rel || rel.includes('\0')) return notFound();
+  if (!pathname.startsWith(prefix)) return notFound();
+  const rel = pathname.slice(prefix.length);
+  if (!rel || rel.includes('\0') || rel.includes('\\')) return notFound();
 
   const root = resolvePath(dir);
   const resolved = resolvePath(root, rel);
-  if (resolved !== root && !resolved.startsWith(root + pathSep)) return notFound();
+  if (resolved === root || !resolved.startsWith(root + pathSep)) return notFound();
 
+  try {
+    if (!(await stat(resolved)).isFile()) return notFound();
+  } catch {
+    return notFound();
+  }
   const file = Bun.file(resolved);
-  if (!(await file.exists())) return notFound();
 
   const ext = resolved.slice(resolved.lastIndexOf('.'));
   const contentType = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
+  const cacheHeaders: Record<string, string> = options.immutableHashed
+    ? { 'Cache-Control': HASHED_ASSET_NAME.test(resolved) ? IMMUTABLE_CACHE_CONTROL : 'no-cache' }
+    : {};
+  const baseHeaders = { ...headers, ...cacheHeaders, 'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff' };
   const encoding = COMPRESSIBLE_ASSET_EXTS.has(ext) ? negotiateEncoding(acceptEncoding) : null;
-  if (!encoding) return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+  if (!encoding) {
+    // Compressible types vary by Accept-Encoding even when sent identity, so a shared cache never mixes them up.
+    const plainHeaders: Record<string, string> = { ...baseHeaders };
+    if (COMPRESSIBLE_ASSET_EXTS.has(ext)) plainHeaders.Vary = varyWithEncoding(headers.Vary);
+    return new Response(file, { headers: plainHeaders });
+  }
 
   const cacheKey = `${resolved}\0${encoding}`;
   const stamp = `${file.lastModified}:${file.size}`;
@@ -173,8 +217,7 @@ export async function serveDashboardAsset(
   }
   return new Response(await cached.body, {
     headers: {
-      ...headers,
-      'Content-Type': contentType,
+      ...baseHeaders,
       'Content-Encoding': encoding,
       Vary: varyWithEncoding(headers.Vary),
     },
@@ -278,7 +321,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
     );
   }
 
-  // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
+  // Load the React dashboard build (index.html; its scripts and styles are hashed files under /_app/),
+  // with fallback to legacy html.ts
   let reactDashboardHtml: string | null = null;
   try {
     reactDashboardHtml = await Bun.file(
@@ -291,6 +335,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
   // The served page (HTML + bridge tag) and its compressed bodies, filled on first request.
   let pageHtml: string | null = null;
   const pageBodies = new Map<Encoding, Promise<Uint8Array<ArrayBuffer>>>();
+  const bridgeBodies = new Map<Encoding, Promise<Uint8Array<ArrayBuffer>>>();
 
   // Bundle the WebMCP bridge once at startup — deliberately independent of
   // the React dashboard build so the bridge works whether or not `ui/dist`
@@ -376,12 +421,18 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           );
         }
 
-        // ── Static hybrid-chat assets (public) ────────────────────────
-        // Module scripts and ORT's own wasm fetches cannot send auth headers,
-        // so /assets/* is served without the auth middleware (same treatment
-        // as the HTML page). Contents are build artifacts only.
-        if (path.startsWith('/assets/')) {
-          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers, req.headers.get('Accept-Encoding'));
+        // ── Static build assets (public) ──────────────────────────────
+        // Module scripts, workers and ORT's own wasm fetches cannot send auth
+        // headers, so /assets/* (hybrid build) and /_app/* (the dashboard's
+        // hashed chunks) are served without the auth middleware (same treatment
+        // as the HTML page). Contents are build artifacts only. Only GET/HEAD.
+        if (path.startsWith('/assets/') || path.startsWith(DASHBOARD_APP_PREFIX)) {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            return new Response('Method Not Allowed', { status: 405, headers: { ...headers, Allow: 'GET, HEAD' } });
+          }
+          return path.startsWith(DASHBOARD_APP_PREFIX)
+            ? serveDashboardAsset(path, DASHBOARD_APP_DIR, headers, req.headers.get('Accept-Encoding'), { prefix: DASHBOARD_APP_PREFIX, immutableHashed: true })
+            : serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers, req.headers.get('Accept-Encoding'));
         }
 
         // ── Auth middleware ──────────────────────────────────────────
@@ -524,7 +575,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           // The bridge tag is per-port, so compress after injecting; each variant is built once and reused.
           pageHtml ??= injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
           const encoding = negotiateEncoding(req.headers.get('Accept-Encoding'));
-          const pageHeaders = { ...headers, 'Content-Type': 'text/html; charset=utf-8', Vary: varyWithEncoding(headers.Vary) };
+          // no-cache: the HTML names this build's hashed /_app/ files, so it must be revalidated to pick up a new release.
+          const pageHeaders = { ...headers, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', Vary: varyWithEncoding(headers.Vary) };
           if (!encoding) return new Response(pageHtml, { headers: pageHeaders });
           let body = pageBodies.get(encoding);
           if (!body) {
@@ -537,9 +589,19 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/webmcp-bridge.js') {
-          return new Response(webMcpBridgeScript, {
-            headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' },
-          });
+          // Built once per process, so its compressed bodies are too. Not hashed (the page names it by a fixed
+          // path), so no long-lived caching: the browser revalidates it like the HTML.
+          const bridgeHeaders = { ...headers, 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache', Vary: varyWithEncoding(headers.Vary) };
+          const encoding = negotiateEncoding(req.headers.get('Accept-Encoding'));
+          if (!encoding || !webMcpBridgeScript) return new Response(webMcpBridgeScript, { headers: bridgeHeaders });
+          let body = bridgeBodies.get(encoding);
+          if (!body) {
+            const job = compressBytes(new TextEncoder().encode(webMcpBridgeScript), encoding);
+            body = job;
+            bridgeBodies.set(encoding, job);
+            job.catch(() => { if (bridgeBodies.get(encoding) === job) bridgeBodies.delete(encoding); });
+          }
+          return new Response(await body, { headers: { ...bridgeHeaders, 'Content-Encoding': encoding } });
         }
 
         // ── Auth API routes ─────────────────────────────────────────

@@ -1,6 +1,6 @@
 /**
  * The per-tab open-jev host singleton, wired to the real Worker, Web Locks, localStorage and
- * timers. Imported by the app (the singlefile React bundle); the model itself lives only in
+ * timers. Imported by the app (the React app bundle); the model itself lives only in
  * dist-hybrid/prelabel-worker.js, which this module reaches by URL, never by import.
  */
 import { getBaseUrl } from '@/api';

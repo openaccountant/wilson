@@ -24,7 +24,7 @@ import { getOpenJevHost } from '@/openjev/instance';
  *
  * The chunk (and transformers.js inside it) is loaded at runtime via a
  * dynamic import of a variable URL — the inline @vite-ignore comment keeps it
- * OUT of the singlefile React bundle. A missing chunk (hybrid build not
+ * OUT of the React app bundle. A missing chunk (hybrid build not
  * present) resolves to null → "unavailable", never a throw: the caller falls
  * back to the server path silently.
  */

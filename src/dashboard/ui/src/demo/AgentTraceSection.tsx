@@ -1,3 +1,5 @@
+// csv-parse (via the statement parsers) needs the Buffer global; this chunk is the only one that loads it.
+import '@/buffer-shim';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api';
 import { money } from '@/format';

@@ -4,7 +4,7 @@
 // generation, so inference never blocks the main thread. Imported with
 // `?worker&inline` from standalone.ts, which only vite.hybrid.config.ts
 // builds: the worker lands inside dist-hybrid/hybrid-chat.js as a blob module
-// worker, and the singlefile app build never sees transformers or ORT.
+// worker, and the React app build never sees transformers or ORT.
 //
 // The worker holds no auth token and makes no authed requests. Its only
 // network access is the HF Hub (weights, global fetch) and same-origin

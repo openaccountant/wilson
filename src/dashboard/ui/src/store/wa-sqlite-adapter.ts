@@ -26,15 +26,6 @@ const EXTRA_POOL_CAPACITY = 12;
 const MIRROR_DB_PATH = '/mirror.sqlite3';
 
 
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 /** Prefix plain param keys with '@' — wa-sqlite's bind_collection looks up
  * object bindings by the parameter name INCLUDING the prefix character. */
 function atKeys(params?: SqlParams): { [index: string]: SQLiteCompatibleType | null } {
@@ -52,10 +43,10 @@ export interface WaSqliteHandle {
   close(): Promise<void>;
 }
 
-export async function createWaSqliteHandle(profile: string, wasmBase64: string): Promise<WaSqliteHandle> {
-  // Nothing is fetched at runtime: the wasm bytes come from the build-time
-  // virtual module (wasmBinary is an emscripten Module option).
-  const emModule = await SQLiteESMFactory({ wasmBinary: base64ToBytes(wasmBase64) });
+export async function createWaSqliteHandle(profile: string, wasmBinary: Uint8Array): Promise<WaSqliteHandle> {
+  // The worker fetches the content-hashed wasm asset once and hands the bytes in
+  // (wasmBinary is an emscripten Module option), so the glue never fetches on its own.
+  const emModule = await SQLiteESMFactory({ wasmBinary });
   const sqlite3 = SQLite.Factory(emModule);
 
   // The VFS holds a FileSystemSyncAccessHandle on every pool file (capacity

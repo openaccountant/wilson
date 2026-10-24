@@ -1,6 +1,6 @@
 // ── Browser-only: mirror client singleton (main thread) ──────────────────────
 //
-// Owns the inline mirror worker and exposes three primitives to the app:
+// Owns the mirror worker and exposes three primitives to the app:
 //   initMirror()  — idempotent worker spawn + open of the last-known profile
 //   syncMirror()  — one full pull from the server, applied to the mirror
 //   tryMirror()   — serve a GET from the mirror when the server is unreachable
@@ -12,7 +12,7 @@
 // (components/AuthGate.tsx) lets the app in (unlockMirror). When the session
 // ends, lockMirror() wipes it before the login view shows (mirror-session.ts).
 
-import MirrorWorkerCtor from './mirror-worker.ts?worker&inline';
+import MirrorWorkerCtor from './mirror-worker.ts?worker';
 import { SYNC_PULL_LIMIT, collectSyncPayload, subagentEnabledFrom, type SyncApplier } from './sync-engine.js';
 import { isMirrorExcluded } from './mirror-reads.js';
 import { bearerHeader, readAuthToken, reportUnauthorized } from '../lib/authSession.js';
