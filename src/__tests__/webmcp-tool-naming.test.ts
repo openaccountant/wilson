@@ -316,9 +316,10 @@ describe('I1 baseline equivalence', () => {
     }
   });
 
-  test('digest unchanged for every http-mcp tool; the only changed digest is open_review_item (tab-only)', () => {
+  test('digest unchanged for every http-mcp tool; the only changed digests are tab-only (open_review_item, fill_transaction_filters)', () => {
     const changed = Object.entries(BASE).filter(([old, b]) => schemaDigest(currentOf(old)) !== b.schemaDigest).map(([old]) => currentOf(old));
-    expect(changed).toEqual(['open_review_item']);
+    // fill_transaction_filters: category_id 0 is the Uncategorized filter choice (#200).
+    expect(changed.sort()).toEqual(['fill_transaction_filters', 'open_review_item']);
     for (const name of changed) expect(byName.get(name)!.transports).not.toContain('http-mcp');
     for (const d of MCP_TOOL_CATALOG.filter((t) => t.transports.includes('http-mcp'))) {
       const old = Object.keys(BASE).find((o) => currentOf(o) === d.name)!;
