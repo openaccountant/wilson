@@ -3,7 +3,7 @@
  * the chat's failed-turn bubble both read from here.
  */
 
-import type { ModelAvailability } from '../types';
+import type { CatalogModel, ModelAvailability } from '../types';
 
 /** Where the fix lives — the same words the server's error text uses (src/utils/errors.ts). */
 export const MODELS_SETTINGS_LABEL = 'Settings → Models';
@@ -51,4 +51,19 @@ export function availabilityHint(
 export function pointsToModelSettings(content: string): boolean {
   const failed = content.startsWith('Error:') || content.startsWith('**Categorization failed:**');
   return failed && content.includes(MODELS_SETTINGS_LABEL);
+}
+
+/**
+ * Dropdown text for a catalog entry. Wilson never pulls Ollama models, so an uninstalled one
+ * says what to run; only models Wilson itself downloads (in-tab/transformers) flag a first-use download.
+ */
+export function catalogOptionLabel(model: CatalogModel): string {
+  if (!model.isLocal || model.cached) return model.displayName;
+  if (model.provider === 'ollama' || model.id.startsWith('ollama:')) {
+    return `${model.displayName} (not installed — run ollama pull ${model.id.replace(/^ollama:/, '')})`;
+  }
+  const size = model.downloadSize?.startsWith('~') ? model.downloadSize : model.downloadSize ? `~${model.downloadSize}` : null;
+  return size
+    ? `${model.displayName} (${size} — downloads on first use)`
+    : `${model.displayName} (downloads on first use)`;
 }

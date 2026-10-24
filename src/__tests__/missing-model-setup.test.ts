@@ -15,7 +15,7 @@ import { AgentRunnerController } from '../controllers/index.js';
 import { createTestDb, ensureTestProfile } from './helpers.js';
 import { handleChatMessage, initChatSession } from '../dashboard/chat.js';
 import { saveConfig, setSetting } from '../utils/config.js';
-import { availabilityHint, pointsToModelSettings, MODELS_SETTINGS_LABEL } from '../dashboard/ui/src/lib/modelSetup.js';
+import { availabilityHint, catalogOptionLabel, pointsToModelSettings, MODELS_SETTINGS_LABEL } from '../dashboard/ui/src/lib/modelSetup.js';
 
 /**
  * Fresh install, configured local model not pulled in Ollama (#182, #189):
@@ -254,5 +254,26 @@ describe('dashboard chat: raw missing-model errors are formatted', () => {
     const res = await handleChatMessage('hello');
     expect(res.failed).toBe(true);
     expect(res.answer).toContain('Settings → Models');
+  });
+});
+
+describe('catalogOptionLabel (#196)', () => {
+  const base = { providerName: 'x', isLocal: true, cached: false, downloadSize: null };
+  test('uninstalled Ollama model says to pull it, never "downloads"', () => {
+    const label = catalogOptionLabel({ ...base, id: 'ollama:granite4.1:3b', displayName: 'Granite 4.1 3B', provider: 'ollama' });
+    expect(label).toBe('Granite 4.1 3B (not installed — run ollama pull granite4.1:3b)');
+    expect(label).not.toContain('downloads');
+  });
+  test('uncached in-tab model keeps the first-use download note', () => {
+    expect(catalogOptionLabel({ ...base, id: 'transformers:a/b', displayName: 'Tab', provider: 'transformers', downloadSize: '300 MB' }))
+      .toBe('Tab (~300 MB — downloads on first use)');
+    expect(catalogOptionLabel({ ...base, id: 'transformers:a/b', displayName: 'Tab', provider: 'transformers', downloadSize: '~1 GB' }))
+      .toBe('Tab (~1 GB — downloads on first use)');
+    expect(catalogOptionLabel({ ...base, id: 'transformers:a/b', displayName: 'Tab', provider: 'transformers' }))
+      .toBe('Tab (downloads on first use)');
+  });
+  test('installed local and cloud models show the plain name', () => {
+    expect(catalogOptionLabel({ ...base, cached: true, id: 'ollama:m', displayName: 'M', provider: 'ollama' })).toBe('M');
+    expect(catalogOptionLabel({ ...base, isLocal: false, id: 'claude-x', displayName: 'C', provider: 'anthropic' })).toBe('C');
   });
 });

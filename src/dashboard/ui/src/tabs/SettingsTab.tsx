@@ -9,7 +9,7 @@ import { apiErrorMessage, firstAdminBody, shouldOfferFirstAdmin, validateFirstAd
 import { clearAuthToken, notifySessionChange, writeAuthToken } from '@/lib/authSession';
 import { lockMirror } from '@/store/mirror-client';
 import { dispatchAuthSession } from '@webmcp-session';
-import { availabilityHint } from '@/lib/modelSetup';
+import { availabilityHint, catalogOptionLabel } from '@/lib/modelSetup';
 
 const MEMORY_TYPES = ['context', 'insight', 'advice'] as const;
 
@@ -712,15 +712,6 @@ function executionBadge(execution: NonNullable<ModelTaskRow['execution']>): { te
   return execution === 'local'
     ? { text: 'Runs on this device', className: 'bg-green/15 text-green' }
     : { text: 'Runs on a cloud server', className: 'bg-amber-500/15 text-amber-500' };
-}
-
-/** Dropdown text for a catalog entry: uncached local models flag their first-use download. */
-function catalogOptionLabel(model: CatalogModel): string {
-  if (!model.isLocal || model.cached) return model.displayName;
-  const size = model.downloadSize?.startsWith('~') ? model.downloadSize : model.downloadSize ? `~${model.downloadSize}` : null;
-  return size
-    ? `${model.displayName} (${size} — downloads on first use)`
-    : `${model.displayName} (downloads on first use)`;
 }
 
 interface ModelRowProps {
