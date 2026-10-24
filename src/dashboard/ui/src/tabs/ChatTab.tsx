@@ -34,6 +34,7 @@ import { categorizeProgressLabel, isCategorizeQuery } from '@/lib/categorizeProg
 import { navigateToTab, navigateUrl, readUrlState, reloadForProfileSwitch, useUrlState } from '@/hooks/useUrlState';
 import { withSession } from '@/lib/urlState';
 import { MODELS_SETTINGS_LABEL, pointsToModelSettings } from '@/lib/modelSetup';
+import { adoptSession, reconcileUrlSession } from '@/lib/chatSessionSync';
 import {
   applySelection,
   contextBlockLabels,
@@ -184,8 +185,13 @@ export function ChatTab() {
   // the local state; ids the server assigns are written back (replace).
   const { state: urlState } = useUrlState();
   const urlSession = urlState.session;
+  // Written synchronously by setActive (never from render) so adopting a server-assigned id can't be
+  // mistaken for a navigation by the URL effect and reload the chat (#183).
   const activeSessionRef = useRef<string | null>(null);
-  activeSessionRef.current = activeSessionId;
+  function setActive(id: string | null) {
+    adoptSession(activeSessionRef, id);
+    setActiveSessionId(id);
+  }
   /** Guards loadSession against a slower, superseded history fetch. */
   const loadSeq = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
@@ -460,7 +466,7 @@ export function ChatTab() {
     if (sid === activeSessionId) return;
     priorLocalTurnsRef.current = [];
     const seq = ++loadSeq.current;
-    setActiveSessionId(sid);
+    setActive(sid);
     setSessionId(sid);
     try {
       const rows = await api<ChatHistoryRow[]>(`/api/chat/sessions/${sid}`);
@@ -487,7 +493,7 @@ export function ChatTab() {
       if (seq !== loadSeq.current) return;
       setMessages([]);
       setSessionId(null);
-      setActiveSessionId(null);
+      setActive(null);
       syncUrlSession(null, 'replace');
     }
     inputRef.current?.focus();
@@ -498,7 +504,7 @@ export function ChatTab() {
     loadSeq.current++;
     setMessages([]);
     setSessionId(null);
-    setActiveSessionId(null);
+    setActive(null);
     inputRef.current?.focus();
   }
 
@@ -511,9 +517,9 @@ export function ChatTab() {
   // Keyed on the URL only; a server-assigned id updates state and URL together
   // so they already agree by the time this runs.
   useEffect(() => {
-    if (urlSession === activeSessionRef.current) return;
-    if (urlSession) void loadSession(urlSession);
-    else resetChat();
+    const action = reconcileUrlSession(urlSession, activeSessionRef);
+    if (action === 'load' && urlSession) void loadSession(urlSession);
+    else if (action === 'reset') resetChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlSession]);
 
@@ -724,7 +730,7 @@ export function ChatTab() {
       if (local) {
         if (local.sessionId) {
           setSessionId(local.sessionId);
-          setActiveSessionId(local.sessionId);
+          setActive(local.sessionId);
           syncUrlSession(local.sessionId, 'replace');
         }
         priorLocalTurnsRef.current = [...priorLocalTurnsRef.current, { q: query, a: local.answer }].slice(
@@ -751,7 +757,7 @@ export function ChatTab() {
 
         setSessionId(res.sessionId);
         if (res.sessionId) {
-          setActiveSessionId(res.sessionId);
+          setActive(res.sessionId);
           syncUrlSession(res.sessionId, 'replace');
         }
         // A failed turn (the server's model unreachable, a deadline) comes back as a 200 "Error: ..." answer

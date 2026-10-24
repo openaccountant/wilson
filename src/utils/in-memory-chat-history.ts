@@ -73,7 +73,7 @@ Return only message IDs that contain information directly useful for answering t
  * mention context block or on-device handoff block.
  */
 function fallbackSummary(query: string): string {
-  return `Answer to: ${stripInjectedContext(query, replayDetector()).slice(0, 100)}`;
+  return stripInjectedContext(query, replayDetector()).trim().slice(0, 100).trim();
 }
 
 export class InMemoryChatHistory {
@@ -219,7 +219,8 @@ Generate a brief 1-2 sentence summary of this answer.`;
         updateChatAnswer(this.db, this.lastDbId, answer, lastMessage.summary);
         // Auto-title the session from the first Q&A
         if (!this.sessionTitled && this.sessionId) {
-          const title = lastMessage.summary || stripInjectedContext(lastMessage.query, replayDetector()).trim().slice(0, 100);
+          // Title is the person's own question, never the model's summary of the answer.
+          const title = stripInjectedContext(lastMessage.query, replayDetector()).trim().slice(0, 100).trim();
           updateSessionTitle(this.db, this.sessionId, title);
           this.sessionTitled = true;
         }

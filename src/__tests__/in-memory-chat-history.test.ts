@@ -185,7 +185,7 @@ describe('InMemoryChatHistory session lifecycle', () => {
     expect(history.getSessionId()).toBe('custom-session-id');
   });
 
-  test('saveAnswer auto-titles session from summary or query', async () => {
+  test('saveAnswer auto-titles session with the question, not the model summary', async () => {
     const db = createTestDb();
     history.setDatabase(db);
     history.saveUserQuery('What is my budget?');
@@ -194,7 +194,8 @@ describe('InMemoryChatHistory session lifecycle', () => {
     expect(sessionId).toBeTruthy();
     const sessions = getChatSessions(db);
     const session = sessions.find(s => s.id === sessionId);
-    expect(session?.title).toBe('Mock summary');
+    expect(session?.title).toBe('What is my budget?');
+    expect(session?.title).not.toBe('Mock summary');
   });
 
   test('messages persist to DB with correct session_id', async () => {

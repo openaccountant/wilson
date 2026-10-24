@@ -205,7 +205,7 @@ describe('a failed turn is counted once (#182)', () => {
     history.saveUserQuery('how much did I spend?');
     await history.saveAnswer('Error: nope', { failed: true });
     expect(spy).not.toHaveBeenCalled();
-    expect(history.getMessages()[0].summary).toBe('Answer to: how much did I spend?');
+    expect(history.getMessages()[0].summary).toBe('how much did I spend?');
   });
 
   test('the runner passes the failed mark through to the history', async () => {
