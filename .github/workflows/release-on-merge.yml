@@ -58,10 +58,16 @@ jobs:
 
       # Same as ci.yml: root typecheck imports src/dashboard/ui/src/lib/chatMarkdown.tsx,
       # which needs the UI package's own deps (separate lockfile). --ignore-scripts:
-      # this job holds the release-bot token, and typecheck/tests need no install scripts.
+      # this job holds the release-bot token, and the build/tests need no install scripts.
       - name: Install dashboard UI deps
         working-directory: src/dashboard/ui
         run: npm ci --ignore-scripts
+
+      # ui/dist and ui/dist-hybrid are gitignored, so the published package only has the
+      # React dashboard if it is built here; without it the server falls back to html.ts.
+      - name: Build dashboard UI
+        working-directory: src/dashboard/ui
+        run: npm run build && npm run build:hybrid
 
       - name: Test
         run: |
@@ -218,6 +224,7 @@ jobs:
         if: steps.bump.outputs.bump != 'none'
         run: |
           npm install -g npm@latest
+          bun run scripts/check-npm-pack.ts
           npm publish --provenance --access public
 
       - name: File docs issue

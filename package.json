@@ -16,6 +16,8 @@
     "src/",
     "!src/__tests__/",
     "!src/dashboard/ui/spike/",
+    "!src/dashboard/ui/node_modules/",
+    "!src/dashboard/ui/tsconfig.tsbuildinfo",
     "data/",
     "SOUL.md",
     "CHANGELOG.md",
