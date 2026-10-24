@@ -33,6 +33,7 @@ import { useCategorizeProgress } from '@/hooks/useCategorizeProgress';
 import { categorizeProgressLabel, isCategorizeQuery } from '@/lib/categorizeProgress';
 import { navigateToTab, navigateUrl, readUrlState, reloadForProfileSwitch, useUrlState } from '@/hooks/useUrlState';
 import { withSession } from '@/lib/urlState';
+import { MODELS_SETTINGS_LABEL, pointsToModelSettings } from '@/lib/modelSetup';
 import {
   applySelection,
   contextBlockLabels,
@@ -948,6 +949,16 @@ export function ChatTab() {
                         </span>
                       ))}
                     </div>
+                  )}
+                  {pointsToModelSettings(msg.content) && (
+                    // The missing-model error's fix is a setting: take the user there (#182).
+                    <button
+                      type="button"
+                      onClick={() => navigateToTab('settings')}
+                      className="mt-2 text-xs px-2 py-1 rounded border border-green-700/50 text-green hover:bg-green-900/30"
+                    >
+                      Open {MODELS_SETTINGS_LABEL}
+                    </button>
                   )}
                   {msg.notice && (
                     <div className="mt-0.5 text-xs text-text-muted break-words" title={msg.notice}>

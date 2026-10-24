@@ -29,6 +29,7 @@ interface TaskRow {
   webgpu: unknown;
   assignment: string;
   note: string | null;
+  availability: unknown;
 }
 
 interface CatalogEntry {
@@ -94,6 +95,16 @@ describe('GET /api/models', () => {
     // Machine capability: assert the type, not the value (machine-dependent).
     for (const row of tasks) {
       expect(typeof row.webgpu).toBe('boolean');
+    }
+
+    // #189: Ollama rows say whether the model is installed (value depends on the
+    // machine's Ollama); every other row is unchecked.
+    for (const row of tasks) {
+      if (row.inUse && row.provider === 'ollama') {
+        expect(['installed', 'not-installed', 'unreachable']).toContain(row.availability as string);
+      } else {
+        expect(row.availability).toBeNull();
+      }
     }
 
     // In-use rows follow the configured chat model (no settings writes here).

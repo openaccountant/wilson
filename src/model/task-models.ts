@@ -2,7 +2,7 @@ import { resolveProvider, PROVIDERS as PROVIDER_DEFS } from '../providers.js';
 import { isModelLocal, providerCallLocality } from './locality.js';
 import { getModelDisplayName, isTransformersModelCached, PROVIDERS as PROVIDER_REGISTRY } from '../utils/model.js';
 import { getConfiguredModel, getSetting, setSetting } from '../utils/config.js';
-import { getOllamaModels } from '../utils/ollama.js';
+import { isOllamaModelInstalled, listOllamaModels } from '../utils/ollama.js';
 
 /**
  * Which model handles which AI task the product runs, and whether it runs on
@@ -14,6 +14,13 @@ import { getOllamaModels } from '../utils/ollama.js';
 export type TaskKey = 'chat' | 'categorization' | 'entity-classification' | 'embeddings';
 
 export type TaskExecution = 'local' | 'server';
+
+/**
+ * Whether the row's model is there to run (#189). Only Ollama rows are checked:
+ * 'not-installed' = Ollama answered and doesn't have it; 'unreachable' = Ollama
+ * didn't answer. null = not checked (other providers, or no probe passed).
+ */
+export type ModelAvailability = 'installed' | 'not-installed' | 'unreachable';
 
 // Shared with the tool call sites so history tags and panel task keys stay
 // aligned: these are the `callType` values passed to callLlm, which land in
@@ -94,6 +101,8 @@ export interface ModelTaskRow {
   assignment: 'default' | 'override';
   /** Plain-language note (e.g. why the row is not in use); null otherwise. */
   note: string | null;
+  /** Ollama rows: is the model installed (see ModelAvailability)? null when not checked or !inUse. */
+  availability: ModelAvailability | null;
 }
 
 /**
@@ -143,8 +152,16 @@ export function buildModelTaskRows(
   configuredModel: string,
   webgpu: boolean,
   overrides?: TaskOverrides,
+  /** Installed Ollama model names (null = Ollama unreachable; undefined = not probed). */
+  installedOllama?: readonly string[] | null,
 ): ModelTaskRow[] {
   const chat = describeModel(configuredModel);
+
+  const availabilityOf = (d: ModelDescriptor): ModelAvailability | null => {
+    if (d.provider !== 'ollama' || installedOllama === undefined) return null;
+    if (installedOllama === null) return 'unreachable';
+    return isOllamaModelInstalled(d.model.replace(/^ollama:/, ''), installedOllama) ? 'installed' : 'not-installed';
+  };
 
   const inUseRow = (
     task: Exclude<TaskKey, 'embeddings'>,
@@ -165,6 +182,7 @@ export function buildModelTaskRows(
       webgpu,
       assignment: resolved === chat ? 'default' : 'override',
       note: null,
+      availability: availabilityOf(resolved),
     };
   };
 
@@ -180,6 +198,7 @@ export function buildModelTaskRows(
     webgpu,
     assignment: 'default',
     note,
+    availability: null,
   });
 
   return [
@@ -215,9 +234,13 @@ export interface CatalogModel {
  *   entries carry no downloadSize so nothing misleading is shown); cloud
  *   entries are always cached.
  */
-export async function buildModelCatalog(webgpu: boolean): Promise<CatalogModel[]> {
+export async function buildModelCatalog(
+  webgpu: boolean,
+  /** Installed Ollama models, when the caller already asked (null = unreachable). */
+  ollamaModels?: readonly string[] | null,
+): Promise<CatalogModel[]> {
   const providerDefById = new Map(PROVIDER_DEFS.map((p) => [p.id, p]));
-  const installedOllama = new Set(await getOllamaModels());
+  const installedOllama = (ollamaModels === undefined ? await listOllamaModels() : ollamaModels) ?? [];
 
   const catalog: CatalogModel[] = [];
   for (const provider of PROVIDER_REGISTRY) {
@@ -231,7 +254,7 @@ export async function buildModelCatalog(webgpu: boolean): Promise<CatalogModel[]
       if (provider.providerId === 'transformers') {
         cached = isTransformersModelCached(model.id.replace(/^transformers:/, ''));
       } else if (provider.providerId === 'ollama') {
-        cached = installedOllama.has(model.id.replace(/^ollama:/, ''));
+        cached = isOllamaModelInstalled(model.id.replace(/^ollama:/, ''), installedOllama);
       } else {
         cached = true;
       }
@@ -267,12 +290,18 @@ export interface ModelsPanel {
 export async function getModelPanel(webgpuOverride?: boolean): Promise<ModelsPanel> {
   const webgpu =
     webgpuOverride ?? (await (await import('./providers/transformers.js')).checkWebGpuAvailable());
-  const [tasks, catalog] = await Promise.all([
-    buildModelTaskRows(getConfiguredModel().model, webgpu, {
+  // One read-only /api/tags request answers both the rows' "Not installed" and the catalog's
+  // "cached" (the same configured Ollama the chat itself calls — no new destination, NN-01).
+  const ollamaModels = await listOllamaModels();
+  const tasks = buildModelTaskRows(
+    getConfiguredModel().model,
+    webgpu,
+    {
       categorization: getTaskOverride('categorization'),
       'entity-classification': getTaskOverride('entity-classification'),
-    }),
-    buildModelCatalog(webgpu),
-  ]);
+    },
+    ollamaModels,
+  );
+  const catalog = await buildModelCatalog(webgpu, ollamaModels);
   return { tasks, catalog };
 }

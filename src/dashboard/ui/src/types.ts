@@ -495,6 +495,8 @@ export interface Memory {
 
 // Matches GET /api/models response (see src/model/task-models.ts)
 export type TaskExecution = 'local' | 'server';
+/** Ollama rows only: is the model installed? (#189) */
+export type ModelAvailability = 'installed' | 'not-installed' | 'unreachable';
 
 export interface ModelTaskRow {
   task: 'chat' | 'categorization' | 'entity-classification' | 'embeddings';
@@ -508,6 +510,8 @@ export interface ModelTaskRow {
   webgpu: boolean;
   assignment: 'default' | 'override';
   note: string | null;
+  /** Null when not checked (non-Ollama rows, not in use). */
+  availability: ModelAvailability | null;
 }
 
 // One catalog entry an admin can pin to a task (POST /api/models)
