@@ -1,6 +1,5 @@
 // @invariant NN-10
 import { describe, expect, test } from 'bun:test';
-import { plugin } from 'bun';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -115,33 +114,24 @@ describe('readReactBuild (scripts/check-hybrid-build.ts)', () => {
   });
 });
 
-// The tab modules import Vite-only specifiers (`?worker`, `?url`); stand them in so bun can load the real modules.
-plugin({
-  name: 'vite-suffix-stubs',
-  setup(build) {
-    build.onResolve({ filter: /\?(worker|worker&inline|url)$/ }, (args) => ({ path: args.path, namespace: 'vite-suffix-stub' }));
-    build.onLoad({ filter: /.*/, namespace: 'vite-suffix-stub' }, (args) => ({
-      contents: args.path.endsWith('?url') ? 'export default "/_app/stub.wasm";' : 'export default class StubWorker {}',
-      loader: 'js',
-    }));
-  },
-});
+// Loaded in a child process (helpers/load-lazy-ui.ts): the Vite-suffix stub it needs is a global bun plugin, and here
+// it would also replace the mirror worker that mirror-client-wipe-race.test.ts mocks.
+let lazyUi: Promise<{ registry: string[]; tabs: Record<string, string>; sharedImport: boolean; charts: Record<string, string> }> | undefined;
+function loadLazyUi() {
+  lazyUi ??= (async () => {
+    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'src/__tests__/helpers/load-lazy-ui.ts')], { cwd: ROOT, stdout: 'pipe', stderr: 'pipe' });
+    const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+    if (code !== 0) throw new Error(`load-lazy-ui exited ${code}: ${err}`);
+    return JSON.parse(out.trim().split('\n').at(-1) ?? '{}');
+  })();
+  return lazyUi;
+}
 
 describe('lazy tabs and charts', () => {
   test('every tab id has a loader that resolves to its component', async () => {
-    // Computed specifier: the root tsconfig excludes the UI, so tsc must not follow this import.
-    const lazyTabs = (await import(new URL('../dashboard/ui/src/tabs/lazyTabs.ts', import.meta.url).pathname)) as {
-      TAB_COMPONENTS: Record<string, unknown>;
-      loadTab(tab: string): Promise<{ default: { name: string } }>;
-    };
-    expect(Object.keys(lazyTabs.TAB_COMPONENTS).sort()).toEqual([...TAB_IDS].sort());
-    const names: Record<string, string> = {};
-    for (const tab of TAB_IDS) {
-      const mod = await lazyTabs.loadTab(tab);
-      expect(typeof mod.default).toBe('function');
-      names[tab] = mod.default.name;
-    }
-    expect(names).toEqual({
+    const { registry, tabs, sharedImport } = await loadLazyUi();
+    expect(registry).toEqual([...TAB_IDS].sort());
+    expect(tabs).toEqual({
       overview: 'OverviewTab',
       transactions: 'TransactionsTab',
       review: 'ReviewTab',
@@ -154,7 +144,7 @@ describe('lazy tabs and charts', () => {
       settings: 'SettingsTab',
     });
     // One import per tab: prefetch and React.lazy share it.
-    expect(lazyTabs.loadTab('chat')).toBe(lazyTabs.loadTab('chat'));
+    expect(sharedImport).toBe(true);
   });
 
   test('App renders the active tab through the lazy registry inside <Suspense>', () => {
@@ -168,14 +158,11 @@ describe('lazy tabs and charts', () => {
   });
 
   test('the Overview charts load on demand and resolve to components', async () => {
-    for (const [file, name] of [
-      ['SavingsSparklineChart', 'SavingsSparklineChart'],
-      ['CashflowFanChart', 'CashflowFanChart'],
-      ['SpendingDonut', 'SpendingDonut'],
-    ] as const) {
-      const mod = (await import(new URL(`../dashboard/ui/src/charts/${file}.tsx`, import.meta.url).pathname)) as Record<string, unknown>;
-      expect(typeof mod[name]).toBe('function');
-    }
+    expect((await loadLazyUi()).charts).toEqual({
+      SavingsSparklineChart: 'function',
+      CashflowFanChart: 'function',
+      SpendingDonut: 'function',
+    });
     for (const f of ['components/SavingsSparkline.tsx', 'components/CashflowForecast.tsx', 'components/spending/SpendingLevel1.tsx']) {
       const src = readFileSync(join(UI, 'src', f), 'utf8');
       expect({ f, recharts: src.includes("from 'recharts'") }).toEqual({ f, recharts: false });
