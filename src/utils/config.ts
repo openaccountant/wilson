@@ -110,6 +110,27 @@ export function getCategorizationConfidenceThreshold(): number {
   );
 }
 
+/**
+ * How many categorization batches may be in flight at once. A cloud provider
+ * defaults to 4. A model on this machine (Ollama on loopback) defaults to 1:
+ * Ollama itself answers one request at a time unless OLLAMA_NUM_PARALLEL is
+ * raised, and a slow local model answering several batches at once pushes
+ * every request past the client timeout, so the run categorizes nothing.
+ * The "categorizationConcurrency" setting overrides both, clamped to 1–8.
+ * In-process Transformers.js models ignore it and always run one batch.
+ */
+export const DEFAULT_CATEGORIZATION_CONCURRENCY = 4;
+export const DEFAULT_LOCAL_CATEGORIZATION_CONCURRENCY = 1;
+export const MAX_CATEGORIZATION_CONCURRENCY = 8;
+export const CATEGORIZATION_CONCURRENCY_KEY = 'categorizationConcurrency';
+
+export function getCategorizationConcurrency(modelIsLocal: boolean): number {
+  const fallback = modelIsLocal ? DEFAULT_LOCAL_CATEGORIZATION_CONCURRENCY : DEFAULT_CATEGORIZATION_CONCURRENCY;
+  const raw = Number(getSetting<unknown>(CATEGORIZATION_CONCURRENCY_KEY, fallback));
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(MAX_CATEGORIZATION_CONCURRENCY, Math.max(1, Math.floor(raw)));
+}
+
 export function setSetting(key: string, value: unknown): boolean {
   const config = loadConfig();
   config[key] = value;
