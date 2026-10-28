@@ -74,8 +74,16 @@ export function InfoTooltip({
     const onDown = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) dispatch('outside');
     };
+    // Escape must dismiss a hover-opened tooltip too, where focus is elsewhere.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dispatch('escape');
+    };
     document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   // Mouse hover is handled by enter/leave; touch and pen taps by click. A
