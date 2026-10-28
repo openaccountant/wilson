@@ -6,7 +6,7 @@ import { buildRepairPrompt, LlmValidationError, validateStructuredOutput } from 
 import { logger } from '../utils/logger.js';
 import { classifyError, isNonRetryableError } from '../utils/errors.js';
 import { resolveProvider, getProviderById } from '../providers.js';
-import { getLocalLlmTimeoutMs } from './local-timeout.js';
+import { getLocalLlmTimeoutMs, LOCAL_NO_RETRY_AFTER_MS } from './local-timeout.js';
 import { traceStore } from '../utils/trace-store.js';
 import { interactionStore } from '../utils/interaction-store.js';
 
@@ -22,13 +22,14 @@ export function getFastModel(modelProvider: string, fallbackModel: string): stri
 }
 
 // Generic retry helper with exponential backoff
-async function withRetry<T>(
+export async function withRetry<T>(
   fn: () => Promise<T>,
   provider: string,
   maxAttempts = 3,
-  opts: { signal?: AbortSignal; retryTimeouts?: boolean } = {},
+  opts: { signal?: AbortSignal; retryTimeouts?: boolean; noRetryAfterMs?: number } = {},
 ): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const attemptStart = Date.now();
     try {
       return await fn();
     } catch (e) {
@@ -46,6 +47,13 @@ async function withRetry<T>(
       // The same oversized request against the same busy local server times out
       // the same way, so a local timeout is not retried (#209).
       if (errorType === 'timeout' && opts.retryTimeouts === false) {
+        throw new Error(`[${provider} API] ${message}`);
+      }
+
+      // Same reasoning when the error text says nothing useful (a bare 500,
+      // "context canceled"): an attempt that ran for minutes before failing
+      // will run for minutes again, so it is not retried either (#209).
+      if (opts.noRetryAfterMs !== undefined && Date.now() - attemptStart >= opts.noRetryAfterMs) {
         throw new Error(`[${provider} API] ${message}`);
       }
 
@@ -113,7 +121,11 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   const maxAttempts = provider.id === 'transformers' ? 1 : 3;
   const isOllama = provider.id === 'ollama';
   const timeoutMs = isOllama ? getLocalLlmTimeoutMs() : undefined;
-  const retryOpts = { signal, retryTimeouts: !isOllama };
+  const retryOpts = {
+    signal,
+    retryTimeouts: !isOllama,
+    noRetryAfterMs: isOllama ? LOCAL_NO_RETRY_AFTER_MS : undefined,
+  };
   const startTime = Date.now();
   const promptChars = prompt.length + finalSystemPrompt.length;
   const toolCount = tools?.length ?? 0;

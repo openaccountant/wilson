@@ -10,6 +10,13 @@
  */
 export const DEFAULT_LOCAL_LLM_TIMEOUT_MS = 15 * 60_000;
 
+/**
+ * A local attempt that fails after running this long is not retried, whatever
+ * the error says: quick failures (model still loading, server just started)
+ * are worth a retry, a request that tied up the server for minutes is not.
+ */
+export const LOCAL_NO_RETRY_AFTER_MS = 60_000;
+
 export function getLocalLlmTimeoutMs(): number | undefined {
   const raw = process.env.OA_LOCAL_LLM_TIMEOUT_MS?.trim();
   if (raw) {

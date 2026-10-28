@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll, afterEach } from 'bun:test
 import { createOpenAI } from '@ai-sdk/openai';
 import { ensureTestProfile } from './helpers.js';
 import { VercelAiAdapter } from '../model/providers/vercel-ai.js';
-import { callLlm } from '../model/llm.js';
+import { callLlm, withRetry } from '../model/llm.js';
 import { getLocalLlmTimeoutMs } from '../model/local-timeout.js';
 
 // Stub OpenAI-compatible server that holds every response for `delayMs`
@@ -116,5 +116,38 @@ describe('callLlm local timeout', () => {
     await callLlm('hi', { model: 'ollama:stub-model', signal: ac.signal }).catch(() => {});
     expect(Date.now() - t0).toBeLessThan(2_000);
     expect(requests).toBe(1);
+  });
+});
+
+describe('withRetry slow local failures', () => {
+  // What ended the #202 calls at 5–6 min is not known; Ollama may answer with
+  // a plain 500 that no pattern classifies. Elapsed time is the signal.
+  const failAfter = (ms: number, message: string) => {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      await Bun.sleep(ms);
+      throw new Error(message);
+    };
+    return { fn, calls: () => calls };
+  };
+
+  test('a slow failure with an unclassified message is not retried', async () => {
+    const f = failAfter(120, 'Internal Server Error');
+    const err = await withRetry(f.fn, 'Ollama', 3, { noRetryAfterMs: 100 }).catch((e) => e);
+    expect(String(err.message)).toContain('Internal Server Error');
+    expect(f.calls()).toBe(1);
+  });
+
+  test('a fast failure is still retried', async () => {
+    const f = failAfter(0, 'Internal Server Error');
+    await withRetry(f.fn, 'Ollama', 3, { noRetryAfterMs: 100 }).catch(() => {});
+    expect(f.calls()).toBe(3);
+  });
+
+  test('without noRetryAfterMs a slow failure is retried as before', async () => {
+    const f = failAfter(120, 'context canceled');
+    await withRetry(f.fn, 'OpenAI', 2).catch(() => {});
+    expect(f.calls()).toBe(2);
   });
 });
