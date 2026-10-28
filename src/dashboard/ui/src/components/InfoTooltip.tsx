@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type ReactNode } from 'react';
-import { TOOLTIP_CLOSED, tooltipOpen, tooltipReduce } from '@/lib/tooltipState';
+import { TOOLTIP_CLOSED, TOOLTIP_CLOSE_DELAY_MS, TOOLTIP_WIDTH, placeTooltip, tooltipOpen, tooltipReduce } from '@/lib/tooltipState';
 
 /**
  * Wraps an inline trigger with a real tooltip: opens instantly on hover and on
@@ -25,13 +25,49 @@ export function InfoTooltip({
   const [state, dispatch] = useReducer(tooltipReduce, TOOLTIP_CLOSED);
   const open = tooltipOpen(state);
   const ref = useRef<HTMLSpanElement>(null);
+  const bubbleRef = useRef<HTMLSpanElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touching = useRef(false);
 
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+  const hoverIn = useCallback(() => {
+    cancelClose();
+    dispatch('hover-in');
+  }, [cancelClose]);
+  // Delayed so the pointer can cross the gap onto the bubble; entering the
+  // bubble (a DOM child of the trigger) re-fires pointerenter and cancels it.
+  const hoverOut = useCallback(() => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => dispatch('hover-out'), TOOLTIP_CLOSE_DELAY_MS);
+  }, [cancelClose]);
+  useEffect(() => cancelClose, [cancelClose]);
+
+  // Place from the trigger's live rect; redo on scroll (capture, so scrolling
+  // the Review list's overflow container counts) and resize while open.
   useLayoutEffect(() => {
-    if (!open || !ref.current) return;
-    const r = ref.current.getBoundingClientRect();
-    setPos({ left: r.left + r.width / 2, top: r.bottom + 6 });
-  }, [open]);
+    if (!open) return;
+    const place = () => {
+      if (!ref.current) return;
+      const b = bubbleRef.current;
+      const p = placeTooltip(
+        ref.current.getBoundingClientRect(),
+        { width: TOOLTIP_WIDTH, height: b?.offsetHeight ?? 0 },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      setPos((prev) => (prev && prev.left === p.left && prev.top === p.top ? prev : { left: p.left, top: p.top }));
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, text]);
 
   useEffect(() => {
     if (!open) return;
@@ -47,8 +83,8 @@ export function InfoTooltip({
   const lastType = useRef('mouse');
   const onPointerEnter = useCallback((e: React.PointerEvent) => {
     lastType.current = e.pointerType;
-    if (e.pointerType === 'mouse') dispatch('hover-in');
-  }, []);
+    if (e.pointerType === 'mouse') hoverIn();
+  }, [hoverIn]);
 
   return (
     <span
@@ -57,12 +93,18 @@ export function InfoTooltip({
       aria-describedby={id}
       className={`relative outline-none focus-visible:ring-1 focus-visible:ring-green ${className}`}
       onPointerEnter={onPointerEnter}
-      onPointerLeave={(e) => e.pointerType === 'mouse' && dispatch('hover-out')}
+      onPointerLeave={(e) => e.pointerType === 'mouse' && hoverOut()}
       onPointerDown={(e) => {
         lastType.current = e.pointerType;
+        touching.current = e.pointerType !== 'mouse';
       }}
-      onClick={() => lastType.current !== 'mouse' && dispatch('tap')}
-      onFocus={() => dispatch('focus')}
+      onClick={() => {
+        touching.current = false;
+        if (lastType.current !== 'mouse') dispatch('tap');
+      }}
+      // A touch tap focuses the span too; that focus must not hold it open
+      // after a second tap, so it is ignored (the tap itself pins it).
+      onFocus={() => !touching.current && dispatch('focus')}
       onBlur={() => dispatch('blur')}
       onKeyDown={(e) => {
         if (e.key === 'Escape' && open) {
@@ -75,11 +117,12 @@ export function InfoTooltip({
       {children}
       <span
         id={id}
+        ref={bubbleRef}
         role="tooltip"
         hidden={!open}
         data-testid="info-tooltip"
-        style={pos ? { left: pos.left, top: pos.top } : undefined}
-        className="fixed z-50 -translate-x-1/2 w-64 whitespace-normal normal-case tracking-normal font-sans bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs text-text-secondary shadow-lg"
+        style={{ ...(pos ? { left: pos.left, top: pos.top } : null), width: TOOLTIP_WIDTH }}
+        className="fixed z-50 w-64 whitespace-normal normal-case tracking-normal font-sans bg-surface border border-border rounded-md px-2.5 py-1.5 text-xs text-text-secondary shadow-lg"
       >
         {text}
       </span>

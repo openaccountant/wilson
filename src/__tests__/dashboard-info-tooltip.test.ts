@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { TOOLTIP_CLOSED, tooltipOpen, tooltipReduce, type TooltipEvent } from '../dashboard/ui/src/lib/tooltipState.js';
+import { TOOLTIP_CLOSED, placeTooltip, tooltipOpen, tooltipReduce, type TooltipEvent } from '../dashboard/ui/src/lib/tooltipState.js';
 
 // The chip uses the UI's '@/' alias and the UI's own React copy, neither of
 // which the root tsconfig resolves; load them untyped through a computed path.
@@ -27,6 +27,40 @@ describe('tooltipState', () => {
     expect(tooltipOpen(run('tap', 'tap'))).toBe(false);
     expect(tooltipOpen(run('tap', 'blur'))).toBe(false);
     expect(tooltipOpen(run('tap', 'outside'))).toBe(false);
+  });
+
+  test('a second tap closes it even if the tap also focused the trigger', () => {
+    expect(tooltipOpen(run('tap', 'focus', 'tap'))).toBe(false);
+    expect(tooltipOpen(run('focus', 'tap'))).toBe(false);
+    expect(tooltipOpen(run('tap', 'tap', 'tap'))).toBe(true);
+  });
+});
+
+describe('placeTooltip', () => {
+  const vp = { width: 1000, height: 700 };
+  const bubble = { width: 256, height: 60 };
+  const trig = (left: number, top: number) => ({ left, right: left + 100, top, bottom: top + 20 });
+
+  test('sits 6px below, centred, when there is room', () => {
+    const p = placeTooltip(trig(400, 100), bubble, vp);
+    expect(p).toEqual({ left: 450 - 128, top: 126, side: 'below' });
+  });
+
+  test('flips above when it does not fit below', () => {
+    const p = placeTooltip(trig(400, 660), bubble, vp);
+    expect(p.side).toBe('above');
+    expect(p.top).toBe(660 - 6 - 60);
+  });
+
+  test('clamps horizontally inside the viewport', () => {
+    expect(placeTooltip(trig(0, 100), bubble, vp).left).toBe(8);
+    expect(placeTooltip(trig(950, 100), bubble, vp).left).toBe(1000 - 256 - 8);
+  });
+
+  test('stays inside the viewport when neither side fits', () => {
+    const p = placeTooltip(trig(400, 20), { width: 256, height: 690 }, vp);
+    expect(p.top).toBeGreaterThanOrEqual(8);
+    expect(p.top + 690).toBeLessThanOrEqual(700);
   });
 });
 
