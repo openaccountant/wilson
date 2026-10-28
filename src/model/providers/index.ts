@@ -58,6 +58,9 @@ export function getAdapter(providerId: string): ProviderAdapter {
       adapter = new VercelAiAdapter((m) =>
         createOpenAI({
           apiKey: 'ollama',
+          // Bun's fetch cuts off requests after ~5 min; the explicit local timeout
+          // (callLlm → timeoutMs) is the only limit we want (#209).
+          fetch: ((url: any, init: any) => fetch(url, { ...init, timeout: false })) as typeof fetch,
           baseURL: `${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/v1`,
         })(m),
       );
