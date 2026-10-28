@@ -10,9 +10,11 @@
  * Rules the engine enforces:
  *  - Nothing touches the network before a `load` or `info` message (consent
  *    lives in the UI, §4.4). `OpenJev.info()` is called for an `info` message,
- *    and by `load` itself when no `info` answer is known yet (#206): the load
- *    is already consented, and it is the only reliable "is this a cache read"
- *    signal (transformers.js fires progress events for cache reads too).
+ *    and by an online `load` when no `info` answer is known yet (#206): the
+ *    load is already consented, and it is the only reliable "is this a cache
+ *    read" signal (transformers.js fires progress events for cache reads too).
+ *    Offline (config.json came from the cache) a load is a cache read by
+ *    definition, and info() is skipped because it always throws then.
  *  - `env.remotePathTemplate` is pinned to the 40-hex revision before ANY
  *    library call that can fetch (`info`, `load`); `config.json` at that
  *    revision is hashed and must equal the pin, else `model_mismatch` and the
@@ -298,6 +300,8 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
 
     let mod: Awaited<ReturnType<typeof configuredModule>>;
     let configSha: string;
+    /** config.json came from the cache because huggingface.co was unreachable. */
+    let offline = false;
     try {
       mod = await configuredModule(p, assetBase);
       const host = mod.env.remoteHost ?? 'https://huggingface.co/';
@@ -318,6 +322,7 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
           return;
         }
         configSha = cachedSha.toLowerCase();
+        offline = true;
       }
     } catch (e) {
       fail('load', 'load', errMsg(e));
@@ -328,15 +333,17 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
       return;
     }
 
-    // #206: a cached load is not a download. Ask info() unless an `info` message already did.
-    if (infoCached === null) {
+    // #206: a cached load is not a download. Offline, every byte must come from the cache
+    // (open-jev 0.1.2 info() probes files over the network and always throws then), so
+    // skip it. Online, ask info() unless an `info` message already did.
+    if (!offline && infoCached === null) {
       try {
         infoCached = (await mod.OpenJev.info({ model: p.repo, device: 'webgpu', dtype: 'q4f16' })).isCached;
       } catch {
         // info() can need the network; stay null and let the progress heuristic decide.
       }
     }
-    const cached = infoCached === true;
+    const cached = offline || infoCached === true;
     // Move the panel off its initial "Downloading…" label right away.
     if (cached) post({ v: 1, type: 'progress', phase: 'session', loaded: 0, total: 1 });
 
@@ -361,7 +368,8 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
         },
       });
     } catch (e) {
-      fail('load', 'load', errMsg(e));
+      // Offline, a failed load means some weights were never cached; say so, not a raw fetch error.
+      fail('load', 'load', offline ? `offline and not fully cached: open-jev could not load (${errMsg(e)}). Connect once to finish downloading.` : errMsg(e));
       return;
     }
     if (session.runtime.device !== 'webgpu' || session.runtime.dtype !== 'q4f16') {
@@ -396,7 +404,7 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
       v: 1,
       type: 'loaded',
       loadMs: now() - t0,
-      fromCache: infoCached ?? progressEvents === 0,
+      fromCache: offline || (infoCached ?? progressEvents === 0),
       firstDecisionMs,
       runtime: {
         transformers: mod.env.version ?? 'unknown',

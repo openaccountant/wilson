@@ -53,6 +53,8 @@ function make(opts: {
   infoThrows?: boolean;
   /** A progress event per cache read, as transformers.js fires them. */
   progressOnCacheRead?: boolean;
+  /** Offline with only part of the weights cached: load() fails like transformers.js does. */
+  partialCache?: boolean;
 } = {}): Harness {
   const calls: Call[] = [];
   const out: FromWorker[] = [];
@@ -88,11 +90,14 @@ function make(opts: {
     dispose: async () => { calls.push('dispose'); },
   };
   const OpenJev = {
-    info: async (o: any) => { calls.push('info'); if (opts.infoThrows) throw new Error('offline'); return { isCached: opts.infoCached ?? false, downloadSize: 357050727, files: [], ...o }; },
+    // Like open-jev 0.1.2: info() probes files over the network, so it throws whenever the network is down.
+    info: async (o: any) => { calls.push('info'); if (opts.infoThrows || opts.fetchThrows) throw new TypeError('Failed to fetch'); return { isCached: opts.infoCached ?? false, downloadSize: 357050727, files: [], ...o }; },
     load: async (o: any) => {
       calls.push('load');
       if (opts.loadThrows) throw new Error('boom');
+      // transformers.js fires progress for cache reads too, so one comes before the miss.
       o.onProgress?.({ progress: 0.5, loaded: 50, total: 100 });
+      if (opts.partialCache) throw new TypeError('Failed to fetch');
       o.onProgress?.({ progress: 1, loaded: 100, total: 100 });
       return jev;
     },
@@ -315,11 +320,32 @@ describe('consent, pinning and load', () => {
   const cfgUrl = `https://huggingface.co/${pins.repo}/resolve/${pins.revision}/config.json`;
 
   test('offline with a cached config.json that hashes right -> loads (#207)', async () => {
-    const h = make({ fetchThrows: true, cachedSha: pins.configSha.toUpperCase(), infoCached: true });
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha.toUpperCase() });
     await ready(h);
     expect(h.calls).toContain(`cachedConfigSha:${cfgUrl}`);
     expect(h.calls).toContain('load');
     expect((h.out.find((m) => m.type === 'loaded') as any).configSha).toBe(pins.configSha);
+  });
+
+  test('offline with everything cached: no download label and fromCache=true, though info() throws (#206, #207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha });
+    await ready(h);
+    const loaded: any = h.out.find((m) => m.type === 'loaded');
+    expect(loaded.fromCache).toBe(true);
+    const phases = h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase);
+    expect(phases).not.toContain('download');
+    expect(phases[0]).toBe('session');
+  });
+
+  test('offline with only part of the weights cached: no download label, a clear offline error (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha, partialCache: true });
+    await ready(h);
+    expect(h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase)).not.toContain('download');
+    expect(h.out.find((m) => m.type === 'loaded')).toBeUndefined();
+    const e = errs(h.out).at(-1)!;
+    expect(e).toMatchObject({ fatal: true, code: 'load' });
+    expect(e.detail).toMatch(/offline/i);
+    expect(e.detail).toMatch(/not (fully )?cached/i);
   });
 
   test('offline with a cached config.json that hashes wrong -> model_mismatch, fail closed (#207)', async () => {
