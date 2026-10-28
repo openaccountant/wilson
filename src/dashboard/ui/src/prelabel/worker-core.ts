@@ -9,8 +9,10 @@
  *
  * Rules the engine enforces:
  *  - Nothing touches the network before a `load` or `info` message (consent
- *    lives in the UI, §4.4). `OpenJev.info()` is called only for an `info`
- *    message, never as a side effect of `load`.
+ *    lives in the UI, §4.4). `OpenJev.info()` is called for an `info` message,
+ *    and by `load` itself when no `info` answer is known yet (#206): the load
+ *    is already consented, and it is the only reliable "is this a cache read"
+ *    signal (transformers.js fires progress events for cache reads too).
  *  - `env.remotePathTemplate` is pinned to the 40-hex revision before ANY
  *    library call that can fetch (`info`, `load`); `config.json` at that
  *    revision is hashed and must equal the pin, else `model_mismatch` and the
@@ -303,6 +305,18 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
       return;
     }
 
+    // #206: a cached load is not a download. Ask info() unless an `info` message already did.
+    if (infoCached === null) {
+      try {
+        infoCached = (await mod.OpenJev.info({ model: p.repo, device: 'webgpu', dtype: 'q4f16' })).isCached;
+      } catch {
+        // info() can need the network; stay null and let the progress heuristic decide.
+      }
+    }
+    const cached = infoCached === true;
+    // Move the panel off its initial "Downloading…" label right away.
+    if (cached) post({ v: 1, type: 'progress', phase: 'session', loaded: 0, total: 1 });
+
     let progressEvents = 0;
     let lastProgressAt = Number.NEGATIVE_INFINITY;
     let session: OpenJevLike;
@@ -315,6 +329,7 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
         truncation: 'cut',
         onProgress: (pr) => {
           progressEvents++;
+          if (cached) return;
           const t = now();
           if (pr.loaded >= pr.total || t - lastProgressAt >= PROGRESS_THROTTLE_MS) {
             lastProgressAt = t;

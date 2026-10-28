@@ -45,6 +45,10 @@ function make(opts: {
   tokens?: (t: string) => number;
   loadThrows?: boolean;
   runtime?: any;
+  infoCached?: boolean;
+  infoThrows?: boolean;
+  /** A progress event per cache read, as transformers.js fires them. */
+  progressOnCacheRead?: boolean;
 } = {}): Harness {
   const calls: Call[] = [];
   const out: FromWorker[] = [];
@@ -80,7 +84,7 @@ function make(opts: {
     dispose: async () => { calls.push('dispose'); },
   };
   const OpenJev = {
-    info: async (o: any) => { calls.push('info'); return { isCached: false, downloadSize: 357050727, files: [], ...o }; },
+    info: async (o: any) => { calls.push('info'); if (opts.infoThrows) throw new Error('offline'); return { isCached: opts.infoCached ?? false, downloadSize: 357050727, files: [], ...o }; },
     load: async (o: any) => {
       calls.push('load');
       if (opts.loadThrows) throw new Error('boom');
@@ -209,9 +213,10 @@ describe('capability ladder', () => {
 });
 
 describe('consent, pinning and load', () => {
-  test('info() is never called unless an info message arrives', async () => {
+  test('info() is not called before an info or load message', async () => {
     const h = make();
-    await ready(h);
+    await h.send(init);
+    await h.send({ v: 1, type: 'probe' });
     expect(h.calls).not.toContain('info');
     await h.send({ v: 1, type: 'info' });
     expect(h.calls.filter((c) => c === 'info').length).toBe(1);
@@ -295,6 +300,40 @@ describe('consent, pinning and load', () => {
     await ready(h);
     expect(caps(h.out).at(-1)).toMatchObject({ verdict: 'failed', reason: 'load' });
     expect(errs(h.out).at(-1)).toMatchObject({ fatal: true, code: 'load', detail: 'boom' });
+  });
+
+  // #206: a cached load must not look like a download.
+  test('a cached load reports fromCache=true and never posts download progress (#206)', async () => {
+    const h = make({ infoCached: true });
+    await ready(h);
+    const loaded: any = h.out.find((m) => m.type === 'loaded');
+    expect(loaded.fromCache).toBe(true);
+    const phases = h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase);
+    expect(phases).not.toContain('download');
+    expect(phases[0]).toBe('session');
+  });
+
+  test('an uncached load reports fromCache=false and download progress (#206)', async () => {
+    const h = make({ infoCached: false });
+    await ready(h);
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(false);
+    expect(h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase)).toContain('download');
+  });
+
+  test('load asks info() once and reuses a prior info answer (#206)', async () => {
+    const h = make({ infoCached: true });
+    await h.send(init);
+    await h.send({ v: 1, type: 'info' });
+    await h.send({ v: 1, type: 'load' });
+    expect(h.calls.filter((c) => c === 'info').length).toBe(1);
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(true);
+  });
+
+  test('if info() throws, load still proceeds and falls back to the progress heuristic (#206)', async () => {
+    const h = make({ infoThrows: true });
+    await ready(h);
+    expect(h.calls).toContain('load');
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(false);
   });
 
   test('a second load message re-reports loaded without loading twice', async () => {
