@@ -46,6 +46,10 @@ function make(opts: {
   loadThrows?: boolean;
   runtime?: any;
   infoCached?: boolean;
+  /** fetchConfigSha rejects (offline). */
+  fetchThrows?: boolean;
+  /** Hash of the cached config.json; null = not cached; undefined = dep not wired. */
+  cachedSha?: string | null;
   infoThrows?: boolean;
   /** A progress event per cache read, as transformers.js fires them. */
   progressOnCacheRead?: boolean;
@@ -97,7 +101,12 @@ function make(opts: {
     loadOpenJev: async () => ({ OpenJev: OpenJev as any, env, ortVersion: '1.31.0' }),
     now: () => clock.t,
     gpu: opts.gpu === undefined ? { requestAdapter: async () => adapter() } : opts.gpu === null ? undefined : opts.gpu,
-    fetchConfigSha: async (url: string) => { calls.push(`fetchConfigSha:${url}`); return opts.configSha ?? pins.configSha; },
+    fetchConfigSha: async (url: string) => {
+      calls.push(`fetchConfigSha:${url}`);
+      if (opts.fetchThrows) throw new TypeError('Failed to fetch');
+      return opts.configSha ?? pins.configSha;
+    },
+    ...(opts.cachedSha === undefined ? {} : { cachedConfigSha: async (url: string) => { calls.push(`cachedConfigSha:${url}`); return opts.cachedSha ?? null; } }),
     yieldTick: async () => {},
     post: (m) => out.push(m),
   };
@@ -300,6 +309,54 @@ describe('consent, pinning and load', () => {
     await ready(h);
     expect(caps(h.out).at(-1)).toMatchObject({ verdict: 'failed', reason: 'load' });
     expect(errs(h.out).at(-1)).toMatchObject({ fatal: true, code: 'load', detail: 'boom' });
+  });
+
+  // #207: the pin check must work offline against the cached config.json.
+  const cfgUrl = `https://huggingface.co/${pins.repo}/resolve/${pins.revision}/config.json`;
+
+  test('offline with a cached config.json that hashes right -> loads (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha.toUpperCase(), infoCached: true });
+    await ready(h);
+    expect(h.calls).toContain(`cachedConfigSha:${cfgUrl}`);
+    expect(h.calls).toContain('load');
+    expect((h.out.find((m) => m.type === 'loaded') as any).configSha).toBe(pins.configSha);
+  });
+
+  test('offline with a cached config.json that hashes wrong -> model_mismatch, fail closed (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: 'f'.repeat(64) });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    expect(caps(h.out).at(-1)).toMatchObject({ verdict: 'failed', reason: 'model_mismatch' });
+    expect(errs(h.out).at(-1)).toMatchObject({ fatal: true, code: 'model_mismatch' });
+  });
+
+  test('offline and not cached -> a clear offline error, weights never loaded (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: null });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    const e = errs(h.out).at(-1)!;
+    expect(e).toMatchObject({ fatal: true, code: 'load' });
+    expect(e.detail).toMatch(/offline/i);
+    expect(e.detail).toMatch(/not cached/i);
+  });
+
+  test('offline with no cache reader wired -> the same offline error (#207)', async () => {
+    const h = make({ fetchThrows: true });
+    await ready(h);
+    expect(errs(h.out).at(-1)!.detail).toMatch(/offline.*not cached/i);
+  });
+
+  test('a fetched config.json that hashes wrong is a mismatch even if the cached copy is good (#207)', async () => {
+    const h = make({ configSha: 'f'.repeat(64), cachedSha: pins.configSha });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    expect(errs(h.out).at(-1)).toMatchObject({ code: 'model_mismatch' });
+  });
+
+  test('online: the cache is not consulted when the fetch succeeds (#207)', async () => {
+    const h = make({ cachedSha: pins.configSha });
+    await ready(h);
+    expect(h.calls.some((c) => c.startsWith('cachedConfigSha:'))).toBe(false);
   });
 
   // #206: a cached load must not look like a download.

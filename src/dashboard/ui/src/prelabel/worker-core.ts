@@ -16,7 +16,9 @@
  *  - `env.remotePathTemplate` is pinned to the 40-hex revision before ANY
  *    library call that can fetch (`info`, `load`); `config.json` at that
  *    revision is hashed and must equal the pin, else `model_mismatch` and the
- *    350 MB of weights are never downloaded.
+ *    350 MB of weights are never downloaded. Offline, the cached `config.json`
+ *    at that revision is hashed instead (#207); a wrong hash, fetched or
+ *    cached, still fails closed.
  *  - Capability ladder (§4.3) ends at `unavailable`. There is no wasm fallback
  *    (DECISIONS OQ6): a wasm or fp32 pin is refused outright.
  *  - Decisions are sequential, batch-1, pass `temperature` explicitly and bare
@@ -98,6 +100,11 @@ export interface PrelabelEngineDeps {
   gpu: GpuLike | undefined;
   /** GET the URL and return the lowercase hex sha256 of the body. */
   fetchConfigSha(url: string): Promise<string>;
+  /**
+   * Lowercase hex sha256 of the CACHED copy of that URL (Cache Storage), or null when
+   * there is none. Used only when `fetchConfigSha` fails, so the pin check works offline (#207).
+   */
+  cachedConfigSha?(url: string): Promise<string | null>;
   post(msg: FromWorker): void;
   /** Let queued messages (cancel) run between rows. Defaults to a 0 ms timeout. */
   yieldTick?(): Promise<void>;
@@ -295,7 +302,23 @@ export function createPrelabelEngine(deps: PrelabelEngineDeps): PrelabelEngine {
       mod = await configuredModule(p, assetBase);
       const host = mod.env.remoteHost ?? 'https://huggingface.co/';
       const base = host.endsWith('/') ? host : `${host}/`;
-      configSha = (await deps.fetchConfigSha(`${base}${p.repo}/resolve/${p.revision}/config.json`)).toLowerCase();
+      const url = `${base}${p.repo}/resolve/${p.revision}/config.json`;
+      try {
+        configSha = (await deps.fetchConfigSha(url)).toLowerCase();
+      } catch (fetchErr) {
+        // Unreachable (offline): hash the cached copy at the same pinned URL, if any.
+        let cachedSha: string | null = null;
+        try {
+          cachedSha = (await deps.cachedConfigSha?.(url)) ?? null;
+        } catch {
+          cachedSha = null;
+        }
+        if (cachedSha === null) {
+          fail('load', 'load', `offline and not cached: could not fetch config.json (${errMsg(fetchErr)}) and no cached copy exists. Connect once to download open-jev.`);
+          return;
+        }
+        configSha = cachedSha.toLowerCase();
+      }
     } catch (e) {
       fail('load', 'load', errMsg(e));
       return;
