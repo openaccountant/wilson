@@ -48,11 +48,31 @@ const SEARCH_MONTH_YEAR_RE = new RegExp(
   'gi',
 );
 
+/** The period words transaction_search's parser reads ("this month", a month name, ...). */
+const RELATIVE_PERIOD_RE = /\b(this|last) (month|year)\b/i;
+const SEARCH_MONTH_RE = new RegExp(`\\b(${MONTHS.join('|')}|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\\b`, 'i');
+
+/**
+ * The period the user asked about, as transaction_search's parser spells it, or
+ * null. A named month counts only in the current year: a year in the search text
+ * becomes a merchant word (see SEARCH_MONTH_YEAR_RE).
+ */
+function searchPeriod(query: string, now: Date): string | null {
+  const relative = RELATIVE_PERIOD_RE.exec(query);
+  if (relative) return relative[0].toLowerCase();
+  const month = namedMonth(query, now);
+  if (!month || Number(month.slice(0, 4)) !== now.getFullYear()) return null;
+  return MONTHS[Number(month.slice(5)) - 1];
+}
+
 /**
  * The call's arguments with the query's named month filled in, or the same
  * object when there is nothing to change:
  * - spending_summary for the current month (or with no period) while the
  *   user asked about another month gets that month;
+ * - transaction_search gets the user's period when the model left it out:
+ *   granite asked "How much did I spend on dining this month?" searched
+ *   "dining", summed six months of rows and called it this month;
  * - transaction_search drops a current-year year after a month name: its
  *   parser keeps the year in the merchant words ("August 2026 expenses" ->
  *   merchant "2026", no rows) and defaults to the current year anyway.
@@ -65,8 +85,10 @@ export function resolveLocalDateArgs(
 ): Record<string, unknown> {
   if (tool === 'transaction_search' && typeof args.query === 'string') {
     const year = String(now.getFullYear());
-    const stripped = args.query.replace(SEARCH_MONTH_YEAR_RE, (all, month: string, y: string) => (y === year ? month : all));
-    return stripped === args.query ? args : { ...args, query: stripped };
+    let next = args.query.replace(SEARCH_MONTH_YEAR_RE, (all, month: string, y: string) => (y === year ? month : all));
+    const period = searchPeriod(query, now);
+    if (period && !RELATIVE_PERIOD_RE.test(next) && !SEARCH_MONTH_RE.test(next)) next = `${next} ${period}`;
+    return next === args.query ? args : { ...args, query: next };
   }
   if (tool !== 'spending_summary') return args;
   if (args.month !== undefined || (args.period !== undefined && args.period !== 'month')) return args;

@@ -299,10 +299,13 @@ export class Agent {
         return;
       }
 
-      // Local models: fill a month the user named into spending_summary,
-      // which the model calls for the current month (and tidy
-      // transaction_search's month + year, see local-date-args.ts).
-      if (local) {
+      // Local models (in-browser and Ollama): fill a month the user named into
+      // spending_summary, which they call for the current month, put the
+      // user's period into a transaction_search that left it out, and tidy its
+      // month + year (see local-date-args.ts). Ollama needs it as much as the
+      // browser: granite4.1:3b searched "dining" for "dining this month".
+      // Cloud models' arguments stay as written.
+      if (local || resolveProvider(this.model).id === 'ollama') {
         const userQuery = stripInjectedContext(query, replayDetector());
         for (const call of response.toolCalls) call.args = resolveLocalDateArgs(userQuery, call.name, call.args);
       }
