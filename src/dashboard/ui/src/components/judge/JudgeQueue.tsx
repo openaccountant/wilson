@@ -3,7 +3,7 @@ import { useApi } from '@/hooks/useApi';
 import { api } from '@/api';
 import { Dialog } from '@/components/Dialog';
 import { HoldToApprove } from '@/components/agent/HoldToApprove';
-import { agentErrorMessage } from '@/lib/agent-api';
+import { agentErrorMessage, onAgentStateChanged } from '@/lib/agent-api';
 import {
   BULK_ACCEPT_MAX,
   JUDGE_ENABLE_AFTER_MS,
@@ -204,6 +204,10 @@ export function JudgeQueue({ refreshKey, canAct, onOpenInteraction, onChanged }:
     refetch();
     onChanged();
   }, [refetch, onChanged]);
+
+  // An agent's proposals land only once a person approves its card (in this tab or another). The bridge announces
+  // every decided card, so refetch then instead of showing a stale "0 proposals" until the next reload.
+  useEffect(() => onAgentStateChanged(done, 'judge-queue'), [done]);
 
   async function act(row: JudgementRow, action: 'accept' | 'reject') {
     setBusyId(row.id);
