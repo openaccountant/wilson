@@ -6,6 +6,7 @@ import { buildRepairPrompt, LlmValidationError, validateStructuredOutput } from 
 import { logger } from '../utils/logger.js';
 import { classifyError, isNonRetryableError } from '../utils/errors.js';
 import { resolveProvider, getProviderById } from '../providers.js';
+import { getLocalLlmTimeoutMs, LOCAL_NO_RETRY_AFTER_MS } from './local-timeout.js';
 import { traceStore } from '../utils/trace-store.js';
 import { interactionStore } from '../utils/interaction-store.js';
 
@@ -21,8 +22,14 @@ export function getFastModel(modelProvider: string, fallbackModel: string): stri
 }
 
 // Generic retry helper with exponential backoff
-async function withRetry<T>(fn: () => Promise<T>, provider: string, maxAttempts = 3): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  provider: string,
+  maxAttempts = 3,
+  opts: { signal?: AbortSignal; retryTimeouts?: boolean; noRetryAfterMs?: number } = {},
+): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const attemptStart = Date.now();
     try {
       return await fn();
     } catch (e) {
@@ -30,7 +37,23 @@ async function withRetry<T>(fn: () => Promise<T>, provider: string, maxAttempts 
       const errorType = classifyError(message);
       logger.error(`[${provider} API] ${errorType} error (attempt ${attempt + 1}/${maxAttempts}): ${message}`);
 
+      // A caller abort is final: never retry, never wrap away the cause.
+      if (opts.signal?.aborted) throw e;
+
       if (isNonRetryableError(message)) {
+        throw new Error(`[${provider} API] ${message}`);
+      }
+
+      // The same oversized request against the same busy local server times out
+      // the same way, so a local timeout is not retried (#209).
+      if (errorType === 'timeout' && opts.retryTimeouts === false) {
+        throw new Error(`[${provider} API] ${message}`);
+      }
+
+      // Same reasoning when the error text says nothing useful (a bare 500,
+      // "context canceled"): an attempt that ran for minutes before failing
+      // will run for minutes again, so it is not retried either (#209).
+      if (opts.noRetryAfterMs !== undefined && Date.now() - attemptStart >= opts.noRetryAfterMs) {
         throw new Error(`[${provider} API] ${message}`);
       }
 
@@ -96,6 +119,13 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
   // call fails identically on retry — and a failed WebGPU prefill on a large
   // prompt can take a minute and a half — so it gets exactly one attempt.
   const maxAttempts = provider.id === 'transformers' ? 1 : 3;
+  const isOllama = provider.id === 'ollama';
+  const timeoutMs = isOllama ? getLocalLlmTimeoutMs() : undefined;
+  const retryOpts = {
+    signal,
+    retryTimeouts: !isOllama,
+    noRetryAfterMs: isOllama ? LOCAL_NO_RETRY_AFTER_MS : undefined,
+  };
   const startTime = Date.now();
   const promptChars = prompt.length + finalSystemPrompt.length;
   const toolCount = tools?.length ?? 0;
@@ -113,10 +143,12 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
           ...(toolIndex ? { toolIndex } : {}),
           outputSchema,
           signal,
+          timeoutMs,
           maxTokens,
         }),
       provider.displayName,
       maxAttempts,
+      retryOpts,
     );
 
     // Structured-output gate: when a schema was supplied, validate what came back
@@ -144,10 +176,12 @@ export async function callLlm(prompt: string, options: CallLlmOptions = {}): Pro
               }),
               outputSchema,
               signal,
+              timeoutMs,
               maxTokens,
             }),
           provider.displayName,
           maxAttempts,
+          retryOpts,
         );
         const second = validateStructuredOutput(finalResponse, outputSchema);
         if (!second.ok) {
