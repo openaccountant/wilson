@@ -9,7 +9,7 @@ import type { Database } from '../db/compat-sqlite.js';
 
 /**
  * `wilson --dashboard` attached only the trace store, so Chat answered but never wrote `llm_interactions`: the LLM
- * tab's Traces, Training and the judge stayed empty. A profile switch also left both stores on the first profile's DB.
+ * tab's Traces, Training and the judge stayed empty.
  */
 
 const count = (db: Database, table: string) => (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
@@ -35,7 +35,7 @@ describe('dashboard LLM stores', () => {
     expect(count(db, 'llm_interactions')).toBe(1);
   });
 
-  test('re-attaching moves both stores to the new DB (profile switch)', () => {
+  test('re-attaching moves both stores to the new DB', () => {
     const first = createTestDb();
     const second = createTestDb();
     attachLlmStores(first);
@@ -47,13 +47,23 @@ describe('dashboard LLM stores', () => {
     expect(count(second, 'llm_traces')).toBe(1);
   });
 
-  // The standalone server and the profile switch must both go through the helper; this is the wiring that was missing.
-  test('the standalone dashboard and the profile switch attach both stores', () => {
+  // The standalone server must go through the helper (the wiring that was missing). A profile switch must NOT re-point
+  // the process-wide stores: an in-flight run or an embedded TUI would then record into the other profile.
+  test('the standalone dashboard attaches both stores; a profile switch does not re-point them', () => {
     const dir = join(import.meta.dir, '..', 'dashboard');
     const standalone = readFileSync(join(dir, 'standalone.ts'), 'utf8');
     const dbManager = readFileSync(join(dir, 'db-manager.ts'), 'utf8');
     expect(standalone).toContain('attachLlmStores(db)');
     expect(standalone).not.toContain('traceStore.setDatabase');
-    expect(dbManager.slice(dbManager.indexOf('export function switchProfile'))).toMatch(/attachLlmStores\(db\)[\s\S]*?return db;/);
+    expect(dbManager).not.toContain('attachLlmStores');
+    expect(dbManager).not.toMatch(/(traceStore|interactionStore)\.setDatabase/);
+  });
+
+  test('training data routes are listed for the admin-only gate', async () => {
+    const { isTrainingDataPath } = await import('../dashboard/server.js');
+    for (const p of ['/api/interactions', '/api/interactions/7', '/api/interactions/7/annotate', '/api/judgements', '/api/judgements/3/accept', '/api/annotations/stats', '/api/export/training/sft', '/api/export/training/dpo', '/api/export/training/stats']) {
+      expect(isTrainingDataPath(p)).toBe(true);
+    }
+    for (const p of ['/api/transactions', '/api/chat', '/api/interactionsx']) expect(isTrainingDataPath(p)).toBe(false);
   });
 });

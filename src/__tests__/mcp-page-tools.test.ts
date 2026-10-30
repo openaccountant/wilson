@@ -64,7 +64,8 @@ describe('the P3 catalog entries', () => {
       expect(def, name).toBeDefined();
       expect(def.exposure, name).toBe('imperative');
       expect(def.surface as unknown, name).toEqual(surfaces[name]);
-      expect(def.minRole, name).toBe('viewer');
+      // open_interaction shows a recorded interaction (someone's private Chat): admin-only, like the other interaction reads.
+      expect(def.minRole, name).toBe(name === 'open_interaction' ? 'admin' : 'viewer');
       expect(def.defaultPolicy, name).toBe('allow');
       // Only the review queue read is also offered to /mcp clients; the page tools need the page.
       expect([...def.transports], name).toEqual(name === 'list_review_items' ? ['webmcp', 'http-mcp'] : ['webmcp']);

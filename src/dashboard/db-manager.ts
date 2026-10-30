@@ -7,7 +7,6 @@ import {
   setActiveProfile,
 } from '../profile/index.js';
 import { initChatSession } from './chat.js';
-import { attachLlmStores } from './llm-stores.js';
 
 const connections = new Map<string, Database>();
 let currentProfile: string = 'default';
@@ -61,9 +60,9 @@ export function switchProfile(name: string): Database {
   // Ensure profile dir exists
   setActiveProfile(name);
   const db = openDb(name);
-  // Re-init chat for the new DB, and record its LLM calls there too (not in the first profile's DB)
+  // Re-init chat for the new DB. The LLM record stores are process-wide and stay on the startup profile's DB: re-pointing
+  // them here would also move an in-flight run's (or an embedded TUI's) records into this profile.
   initChatSession(db);
-  attachLlmStores(db);
   return db;
 }
 

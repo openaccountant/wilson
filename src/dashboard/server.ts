@@ -239,6 +239,18 @@ function isPublicAuthPath(path: string): boolean {
   return PUBLIC_AUTH_PATHS.includes(path);
 }
 
+/** Routes that expose recorded LLM interactions (prompts, replies, tool results) or data derived from them. */
+export function isTrainingDataPath(path: string): boolean {
+  return (
+    path === '/api/interactions' ||
+    path.startsWith('/api/interactions/') ||
+    path === '/api/judgements' ||
+    path.startsWith('/api/judgements/') ||
+    path === '/api/annotations/stats' ||
+    path.startsWith('/api/export/training/')
+  );
+}
+
 function canManageUsers(role: Role): boolean {
   return role === 'admin';
 }
@@ -1350,6 +1362,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         // ── Interactions (Training Data) ─────────────────────────────
+
+        // Recorded Chat prompts and replies belong to whoever chatted (chat sessions are per user), and the training
+        // exports and judge queue are built from them: with auth on, only an admin reads any of it.
+        if (authEnabled && (!currentUser || currentUser.role !== 'admin') && isTrainingDataPath(path)) {
+          return Response.json({ error: 'Forbidden: training data is admin-only' }, { status: 403, headers });
+        }
 
         if (path === '/api/interactions') {
           return Response.json(apiInteractions(activeDb, url.searchParams), { headers });
