@@ -33,7 +33,10 @@ import {
   revokeGrantsForSession,
   recentGrantSessions,
   validateGrant,
+  attachOperationCaller,
   createOperation,
+  detachOperationCaller,
+  findJoinablePendingOperation,
   getOperation,
   listPendingOperations,
   markOperationStatus,
@@ -443,6 +446,27 @@ export async function callTool(
     return error;
   }
 
+  /**
+   * A call identical to one still waiting on a person (same profile, owner, tool and normalised arguments) does not
+   * raise a second card: it joins that operation, waits on the same decision and gets the same outcome and id.
+   * Audited as its own `operation_joined` row naming the operation. Nothing matches once the operation is decided.
+   */
+  function joinPending(kind: 'mutation' | 'read' | 'proposal', storedArgs: unknown): CallResult | null {
+    const existing = findJoinablePendingOperation(db, {
+      source: transport === 'http-mcp' ? 'http-mcp' : 'webmcp',
+      profile: scope.profile,
+      userId: scope.userId,
+      toolName,
+      kind,
+      args: storedArgs,
+    });
+    if (!existing) return null;
+    attachOperationCaller(existing, scope.sessionGeneration);
+    note.decision = 'operation_joined';
+    note.operationId = existing.id;
+    return { ok: true, kind: 'operation', operation: existing };
+  }
+
   async function run(): Promise<CallResult> {
     // Process-global and read from agent-access.json, never from a profile setting: it holds with no active profile.
     if (!isAgentAccessEnabled()) return deny('denied_kill_switch', fail(403, 'kill_switch', KILL_SWITCH_MESSAGE));
@@ -525,6 +549,13 @@ export async function callTool(
         return deny('error', fail(500, 'internal', 'Internal error'));
       }
 
+      // What commit inserts, normalized: the same items, the declared model, the rubric the call cited.
+      const proposalArgs = { judgeModel: prepared.judgeModel, rubricVersion: prepared.rubricVersion, items: prepared.items };
+      if (policy === 'ask') {
+        const joined = joinPending('proposal', proposalArgs);
+        if (joined) return joined;
+      }
+
       const dailyLimit = getJudgeDailyLimit();
       const used = judgeRowsToday(db);
       if (used + prepared.items.length > dailyLimit) {
@@ -540,8 +571,7 @@ export async function callTool(
           source: transport === 'http-mcp' ? 'http-mcp' : 'webmcp',
           grantId,
           toolName,
-          // What commit inserts, normalized: the same items, the declared model, the rubric the call cited.
-          args: { judgeModel: prepared.judgeModel, rubricVersion: prepared.rubricVersion, items: prepared.items },
+          args: proposalArgs,
           before: null,
           after: prepared.after,
           summary: prepared.summary,
@@ -578,6 +608,8 @@ export async function callTool(
       // Ask every time: park the read (or page call) as an operation. It runs only when a human approves.
       const askLimit = limited(limiter.take(`pt:${principal.id}:${def.name}`, LIMIT_PRINCIPAL_TOOL), `Too many ${def.name} calls in the last minute — wait before retrying.`);
       if (askLimit) return deny('rate_limited', askLimit);
+      const joined = joinPending('read', callArgs);
+      if (joined) return joined;
       if (pendingCountForPrincipal(db, scope.sessionGeneration) >= MAX_PENDING_PER_PRINCIPAL ||
           pendingCountForUser(db, scope.userId) >= MAX_PENDING_PER_USER) {
         return deny('rate_limited', fail(429, 'rate_limited', 'Too many pending approvals — resolve or wait', { retryAfterSec: 30 }));
@@ -676,10 +708,6 @@ export async function callTool(
       limited(limiter.take(`pp:${principal.id}`, LIMIT_PRINCIPAL_PREPARES), 'Too many change proposals from this session — wait before retrying.') ??
       limited(limiter.take(`up:${userKey}`, LIMIT_USER_PREPARES), 'Too many change proposals for this user — wait before retrying.');
     if (prepareLimit) return deny('rate_limited', prepareLimit);
-    if (pendingCountForPrincipal(db, scope.sessionGeneration) >= MAX_PENDING_PER_PRINCIPAL ||
-        pendingCountForUser(db, scope.userId) >= MAX_PENDING_PER_USER) {
-      return deny('rate_limited', fail(429, 'rate_limited', 'Too many pending approvals — resolve or wait', { retryAfterSec: 30 }));
-    }
 
     let delta;
     try {
@@ -693,6 +721,14 @@ export async function callTool(
       if (err instanceof PrepareError) return deny('invalid_args', fail(400, 'invalid_args', `${def.name}: ${err.message}`));
       note.detail = err instanceof Error ? err.message.slice(0, 120) : 'unknown error';
       return deny('error', fail(500, 'internal', 'Internal error'));
+    }
+
+    // An identical retry (a client that timed out on the card and called again) waits on the card already open.
+    const joined = joinPending('mutation', delta.args);
+    if (joined) return joined;
+    if (pendingCountForPrincipal(db, scope.sessionGeneration) >= MAX_PENDING_PER_PRINCIPAL ||
+        pendingCountForUser(db, scope.userId) >= MAX_PENDING_PER_USER) {
+      return deny('rate_limited', fail(429, 'rate_limited', 'Too many pending approvals — resolve or wait', { retryAfterSec: 30 }));
     }
 
     const operation = createOperation(db, {
@@ -718,6 +754,15 @@ export async function callTool(
   }
 }
 
+/** This client token joined the operation (an identical call while it was pending): it may read the outcome too. */
+function joinedBy(db: Database, operationId: string, scope: RequestScope): boolean {
+  if (!scope.tokenId) return false;
+  const row = db
+    .prepare("SELECT 1 AS x FROM mcp_audit_log WHERE operation_id = @id AND decision = 'operation_joined' AND principal_kind = 'client_token' AND principal_id = @pid LIMIT 1")
+    .get({ id: operationId, pid: scope.tokenId });
+  return row != null;
+}
+
 /**
  * `get_operation_result`: the outcome of an operation THIS client token created.
  * Anyone else's operation, or an id that does not exist, is the same 404, so ids cannot be probed.
@@ -725,7 +770,7 @@ export async function callTool(
  */
 function readOperationResult(db: Database, scope: RequestScope, args: Record<string, unknown>): unknown {
   const op = getOperationById(db, String(args.operationId));
-  if (!op || op.source !== 'http-mcp' || op.session_generation !== scope.sessionGeneration) {
+  if (!op || op.source !== 'http-mcp' || (op.session_generation !== scope.sessionGeneration && !joinedBy(db, op.id, scope))) {
     throw new NotFoundError('No operation with that id was created by this client.');
   }
   if (op.kind === 'read' && op.status === 'committed' && op.outcome_json !== null && readDeliveryRefusal(db, op) !== null) {
@@ -1009,8 +1054,19 @@ export function rejectOperation(db: Database, operationId: string, actor?: Opera
 export function cancelOperation(db: Database, scope: RequestScope, operationId: string): TypedOutcome | null {
   const operation = getOperation(db, operationId);
   if (!operation || operation.source === 'chat') return null;
-  if (operation.session_generation !== scope.sessionGeneration || operation.user_id !== scope.userId) return null;
-  if (operation.status !== 'pending') return resolvedOutcome(operation);
+  if (operation.user_id !== scope.userId) return null;
+  if (operation.status !== 'pending') {
+    return operation.session_generation === scope.sessionGeneration ? resolvedOutcome(operation) : null;
+  }
+  // Several identical calls may be waiting on this one card (an agent retried after timing out). Withdrawing one
+  // caller leaves the card for the others: only the last caller to let go withdraws the operation itself.
+  const remaining = detachOperationCaller(operation, scope.sessionGeneration);
+  if (remaining === null) return null;
+  if (remaining > 0) {
+    lifecycleAudit(db, operation, 'cancelled', { userId: scope.userId, role: scope.role, authEnabled: scope.userId !== null },
+      `call withdrawn; operation kept for ${remaining} other waiting call${remaining === 1 ? '' : 's'}`);
+    return { outcome: 'cancelled' };
+  }
   markOperationStatus(db, operationId, 'rejected', { reason: 'cancelled_by_agent' });
   lifecycleAudit(db, operation, 'cancelled', { userId: scope.userId, role: scope.role, authEnabled: scope.userId !== null });
   return { outcome: 'cancelled' };

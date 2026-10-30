@@ -521,17 +521,22 @@ async function waitForOperation(
   options: AnswerOptions
 ): Promise<ServerAnswer> {
   const id = operation.id;
+  // Another call in this tab already holds this operation: the server joined an identical retry to the card that call
+  // is waiting on. This call waits on the same decision but never takes over (or releases, or withdraws through) the
+  // other call's ledger entry; its own abort still detaches it on the server, which keeps the card for the other.
+  const ledger = deps.ledger;
+  const shared = ledger !== undefined && (ledger.has(id) || ledger.withdrawal(id) !== undefined);
   // Registered, under THIS call, for as long as the card is open: Chrome can end this call without any signal (see
   // `endChromeCall`). A person's own submit has no agent call and registers nothing.
-  if (agentCall && deps.ledger && !deps.ledger.attach(agentCall, id)) {
+  if (!shared && agentCall && ledger && !ledger.attach(agentCall, id)) {
     // Chrome already ended this call (a toolcancel arrived before its operation existed): withdraw the card now.
     return withdrawnAnswer(id, await cancelOperation(deps, id));
   }
   try {
-    return await pollOperation(deps, headers, id, signal, options);
+    return await pollOperation(deps, headers, id, signal, options, !shared);
   } finally {
     // The outcome was delivered (or the call was withdrawn): nothing is left to cancel.
-    deps.ledger?.release(id);
+    if (!shared) ledger?.release(id);
   }
 }
 
@@ -540,7 +545,8 @@ async function pollOperation(
   headers: () => Record<string, string>,
   id: string,
   signal: AbortSignal | undefined,
-  options: AnswerOptions
+  options: AnswerOptions,
+  ownsLedgerEntry = true
 ): Promise<ServerAnswer> {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? defaultSleep;
@@ -550,14 +556,14 @@ async function pollOperation(
 
   // The agent gave up (its execute was aborted): withdraw the card's operation, best effort.
   const cancelAndThrow = async (): Promise<never> => {
-    deps.ledger?.release(id); // this cancel is the one; the ledger must not offer it again
+    if (ownsLedgerEntry) deps.ledger?.release(id); // this cancel is the one; the ledger must not offer it again
     await cancelOperation(deps, id);
     throw abortError();
   };
 
   // Chrome ended this call and `endChromeCall` is cancelling (or has cancelled) its operation server-side: stop polling for a
   // card nobody is waiting on, and report what the cancel route said (it may have lost the race to the person's answer).
-  const withdrawal = () => deps.ledger?.withdrawal(id);
+  const withdrawal = () => (ownsLedgerEntry ? deps.ledger?.withdrawal(id) : undefined);
   const withdrawnResult = async (pending: Promise<CancelAnswer | undefined>) => withdrawnAnswer(id, await pending);
 
   let refusal: ToolCallError | undefined;
