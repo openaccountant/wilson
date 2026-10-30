@@ -1,6 +1,6 @@
 import { initDatabase } from '../db/database.js';
 import { logger } from '../utils/logger.js';
-import { traceStore } from '../utils/trace-store.js';
+import { attachLlmStores } from './llm-stores.js';
 import { startDashboardServer, stopDashboardServer } from './server.js';
 import { setInitialProfile, closeAll } from './db-manager.js';
 import { getActiveProfileName } from '../profile/index.js';
@@ -15,7 +15,7 @@ export async function runStandalone(port?: number): Promise<void> {
 
   const db = initDatabase();
   logger.setDatabase(db);
-  traceStore.setDatabase(db);
+  attachLlmStores(db);
 
   const { server, url } = await startDashboardServer(db, port);
 
