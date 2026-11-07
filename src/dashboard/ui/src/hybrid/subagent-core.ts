@@ -815,6 +815,256 @@ export function precheckMirror(status: MirrorPortStatus, expectedProfile: string
   return { kind: 'ok' };
 }
 
+// ── Loop hardening ───────────────────────────────────────────────────────────
+//
+// Four small rules for any multi-step tool loop over a small local model
+// (docs/research/2026-10-28-lfm3-webgpu-workspace-teardown.md §3, patterns 1-4).
+// Written fresh for Wilson. Today's precision-first run makes at most one tool
+// call and one compose call, so these are mostly latent there; the workspace
+// tools (read / write / edit / bash) are the loop they are built for.
+//
+//  1. Stable prefix: instructions and tool schemas render byte-identically on
+//     every turn, so an engine that reuses its KV cache can keep the prefix.
+//  2. Failed-call memory: an identical {tool, args} call that just failed is not
+//     run again; the model is told it already failed. Any success clears it.
+//  3. Failure is an exception: a tool signals failure by throwing, and the
+//     wrapper turns that into a result with `is_error: true`.
+//  4. Honest history: a stopped partial reply is shown to the user but never
+//     sent back to the model, and a prompt that does not fit the context raises
+//     ContextOverflowError. History is never cut silently.
+
+/**
+ * Hard ceiling for one prompt (system + user), in characters. Slice 1 measured
+ * a hard WebGPU failure near 6,000 chars of prefill, so a prompt at or over it
+ * is refused before it reaches the engine.
+ */
+export const SUBAGENT_CONTEXT_LIMIT_CHARS = 6_000;
+
+/** A prompt (or history) too large for the model's context. Raised, never trimmed around. */
+export class ContextOverflowError extends Error {
+  override readonly name = 'ContextOverflowError';
+  constructor(
+    readonly usedChars: number,
+    readonly limitChars: number,
+  ) {
+    super(`prompt is ${usedChars} chars; the context limit is ${limitChars}`);
+  }
+}
+
+export function isContextOverflowError(err: unknown): err is ContextOverflowError {
+  return err instanceof ContextOverflowError || (isRecord(err) && err.name === 'ContextOverflowError');
+}
+
+/** Throw ContextOverflowError when the parts together reach the limit. Returns the size otherwise. */
+export function assertFitsContext(parts: readonly string[], limitChars: number = SUBAGENT_CONTEXT_LIMIT_CHARS): number {
+  const used = parts.reduce((n, p) => n + p.length, 0);
+  if (used >= limitChars) throw new ContextOverflowError(used, limitChars);
+  return used;
+}
+
+/**
+ * JSON with object keys sorted at every depth, so two equal values always
+ * serialise to the same bytes whatever order their keys were built in.
+ * Array order is kept (it is meaningful). Cycles become "[cycle]".
+ */
+export function canonicalJson(value: unknown): string {
+  const seen = new WeakSet<object>();
+  const norm = (v: unknown): unknown => {
+    if (v === null || typeof v !== 'object') return v;
+    if (seen.has(v)) return '[cycle]';
+    seen.add(v);
+    let out: unknown;
+    if (Array.isArray(v)) out = v.map((x) => (x === undefined ? null : norm(x)));
+    else {
+      const o: Record<string, unknown> = {};
+      for (const k of Object.keys(v).sort()) {
+        const x = (v as Record<string, unknown>)[k];
+        if (x !== undefined && typeof x !== 'function') o[k] = norm(x);
+      }
+      out = o;
+    }
+    seen.delete(v);
+    return out;
+  };
+  return JSON.stringify(norm(value)) ?? 'null';
+}
+
+export interface ToolSpec {
+  name: string;
+  /** JSON schema of the tool's arguments. */
+  schema: unknown;
+  description?: string;
+}
+
+/**
+ * Pattern 1. The part of a prompt that must not change between turns: the
+ * instructions, then every tool sorted by name with its schema in canonical
+ * JSON. Anything that varies per turn (date, history, the question, tool
+ * results) goes AFTER this string, never inside it.
+ */
+export function buildStablePrefix(instructions: string, tools: readonly ToolSpec[]): string {
+  const sorted = [...tools].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const blocks = sorted.map((t) => {
+    const desc = t.description ? `${t.description.trim()}\n` : '';
+    return `## ${t.name}\n${desc}${canonicalJson(t.schema)}`;
+  });
+  return [instructions.trim(), '', '# Tools', ...blocks].join('\n');
+}
+
+export interface ToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+/** Identity of a call for failed-call memory: the tool name plus its canonical arguments. */
+export function toolCallKey(call: ToolCall): string {
+  return `${call.tool} ${canonicalJson(call.args ?? {})}`;
+}
+
+function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name;
+  if (typeof err === 'string') return err;
+  return 'unknown error';
+}
+
+/** What the model sees instead of a re-run of a call that already failed. Must contain "already failed". */
+export function alreadyFailedMessage(call: ToolCall, previousError: string): string {
+  return (
+    `Not run: this exact call already failed (${call.tool} ${canonicalJson(call.args ?? {})}): ${previousError}. ` +
+    'Try different arguments or a different tool, or tell the user what went wrong.'
+  );
+}
+
+/**
+ * Pattern 2. Remembers calls that failed since the last success. The first
+ * failure of a call runs and fails normally; an identical repeat is blocked.
+ * Any successful call clears the memory (the model has moved on).
+ */
+export class FailedCallMemory {
+  private readonly failed = new Map<string, string>();
+
+  /** The "already failed" message when this call should not run, else null. */
+  blocked(call: ToolCall): string | null {
+    const prev = this.failed.get(toolCallKey(call));
+    return prev === undefined ? null : alreadyFailedMessage(call, prev);
+  }
+
+  recordFailure(call: ToolCall, err: unknown): void {
+    this.failed.set(toolCallKey(call), capText(stripControl(errorText(err)), 300));
+  }
+
+  recordSuccess(): void {
+    this.failed.clear();
+  }
+
+  get size(): number {
+    return this.failed.size;
+  }
+}
+
+/** Pattern 3. A finished tool call as the loop sees it. */
+export type ToolCallResult<T = unknown> =
+  | { tool: string; args: Record<string, unknown>; is_error: false; value: T; content: string }
+  | {
+      tool: string;
+      args: Record<string, unknown>;
+      is_error: true;
+      content: string;
+      /** True when the call was not run because the identical call already failed. */
+      repeated: boolean;
+      error?: unknown;
+    };
+
+/**
+ * Run one tool call under failed-call memory. `invoke` signals failure by
+ * throwing (or rejecting); the result then has `is_error: true` and the error
+ * text as content. A repeat of a call that already failed is not executed.
+ * Never throws.
+ */
+export async function runToolCall<T>(
+  memory: FailedCallMemory,
+  call: ToolCall,
+  invoke: () => Promise<T> | T,
+  render: (value: T) => string = (v) => (typeof v === 'string' ? v : canonicalJson(v)),
+): Promise<ToolCallResult<T>> {
+  const blocked = memory.blocked(call);
+  if (blocked !== null) return { tool: call.tool, args: call.args, is_error: true, content: blocked, repeated: true };
+  let value: T;
+  try {
+    value = await invoke();
+  } catch (error) {
+    memory.recordFailure(call, error);
+    return { tool: call.tool, args: call.args, is_error: true, content: stripControl(errorText(error)), repeated: false, error };
+  }
+  memory.recordSuccess();
+  let content: string;
+  try {
+    content = render(value);
+  } catch {
+    content = '';
+  }
+  return { tool: call.tool, args: call.args, is_error: false, value, content };
+}
+
+/** Thrown where a dependency must reject: carries the is_error result that caused it. */
+export class ToolCallError extends Error {
+  override readonly name = 'ToolCallError';
+  constructor(readonly result: Extract<ToolCallResult, { is_error: true }>) {
+    super(result.content);
+  }
+}
+
+export type HistoryRole = 'user' | 'assistant' | 'tool';
+
+export interface HistoryEntry {
+  role: HistoryRole;
+  content: string;
+  /** Assistant only: the reply was stopped before it finished. Shown, never sent to the model. */
+  stopped?: boolean;
+  /** Tool only. */
+  tool?: string;
+  is_error?: boolean;
+}
+
+/**
+ * Pattern 4. One conversation with two views: what the user saw (everything,
+ * including stopped partial replies) and what the model is sent (stopped
+ * replies left out). Append-only: nothing is ever dropped to make room.
+ */
+export class ConversationLog {
+  private readonly entries: HistoryEntry[] = [];
+
+  append(entry: HistoryEntry): void {
+    this.entries.push({ ...entry });
+  }
+
+  /** Every entry, for display. */
+  display(): readonly HistoryEntry[] {
+    return this.entries.map((e) => ({ ...e }));
+  }
+
+  /** The entries the model is sent: stopped partial replies are left out. */
+  forModel(): readonly HistoryEntry[] {
+    return this.entries.filter((e) => !(e.role === 'assistant' && e.stopped === true)).map((e) => ({ ...e }));
+  }
+}
+
+function renderEntry(e: HistoryEntry): string {
+  if (e.role === 'tool') return `[tool ${neutralise(e.tool ?? '?')}${e.is_error ? ' error' : ''}]\n${neutralise(e.content)}`;
+  return `[${e.role}]\n${neutralise(e.content)}`;
+}
+
+/**
+ * The model's prompt for the next turn: the stable prefix as the system part,
+ * then the model view of the history. Throws ContextOverflowError when it does
+ * not fit; it never drops old turns to make it fit.
+ */
+export function buildLoopPrompt(prefix: string, log: ConversationLog, limitChars: number = SUBAGENT_CONTEXT_LIMIT_CHARS): PromptPair {
+  const user = log.forModel().map(renderEntry).join('\n\n');
+  assertFitsContext([prefix, user], limitChars);
+  return { system: prefix, user };
+}
+
 // ── The loop ─────────────────────────────────────────────────────────────────
 
 export interface GenerateRequest {
@@ -1138,6 +1388,14 @@ async function runInner(deps: SubagentDeps, input: SubagentInput): Promise<Subag
   const today = ctx.nowDate.toISOString().slice(0, 10);
   if (limits.compose !== 'model') return composeFromTemplate(ctx, tool, today);
   const prompt = buildComposePrompt(query, ctx.steps, today);
+  // Pattern 4: a prompt the engine cannot hold is refused before generation (a typed error, not a
+  // trimmed prompt). The server answers instead; the engine is never handed an over-limit prefill.
+  try {
+    assertFitsContext([prompt.system, prompt.user]);
+  } catch (err) {
+    if (isContextOverflowError(err)) return handoffOutcome(ctx, 'error');
+    throw err;
+  }
   const gen = await guarded(ctx, () =>
     deps.generate({ kind: 'compose', system: prompt.system, user: prompt.user, maxNewTokens: limits.composeMaxNewTokens, signal: deps.signal })
   );
