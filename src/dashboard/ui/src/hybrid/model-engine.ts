@@ -151,6 +151,29 @@ export const BENCH_MESSAGES = [
 ] as const;
 
 export const BENCH_MAX_NEW_TOKENS = 128;
+export const BENCH_MIN_NEW_TOKENS = 64;
+
+/**
+ * Prompt length in tokens. Tokenizing the chat template directly can come back
+ * in shapes that vary by tokenizer, so fall back to rendering it as text and encoding that.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function countPromptTokens(tokenizer: any): number {
+  const messages = BENCH_MESSAGES.map((m) => ({ role: m.role, content: m.content }));
+  try {
+    const n = countTokens(tokenizer?.apply_chat_template?.(messages, { add_generation_prompt: true, tokenize: true, return_tensor: false }));
+    if (n > 0) return n;
+  } catch {
+    // fall through
+  }
+  try {
+    const text = tokenizer?.apply_chat_template?.(messages, { add_generation_prompt: true, tokenize: false });
+    if (typeof text === 'string') return countTokens(tokenizer.encode(text));
+  } catch {
+    // fall through
+  }
+  return 0;
+}
 
 function countTokens(ids: unknown): number {
   if (Array.isArray(ids)) return Array.isArray(ids[0]) ? (ids[0] as unknown[]).length : ids.length;
@@ -209,6 +232,7 @@ async function isPipelineCached(
   repo: string,
   dtype: string,
   revision?: string,
+  config?: unknown,
 ): Promise<boolean | undefined> {
   const registry = tf.ModelRegistry;
   if (typeof registry?.is_pipeline_cached !== 'function') return undefined;
@@ -216,7 +240,14 @@ async function isPipelineCached(
   try {
     return await Promise.race([
       registry
-        .is_pipeline_cached('text-generation', repo, { dtype, device: 'webgpu', ...(revision ? { revision } : {}) })
+        // `config` is passed because transformers.js 4.3.2's get_model_files() calls
+        // get_config() without the revision, which would fetch (and cache) main's config.json.
+        .is_pipeline_cached('text-generation', repo, {
+          dtype,
+          device: 'webgpu',
+          ...(revision ? { revision } : {}),
+          ...(config ? { config } : {}),
+        })
         .then((v) => v === true),
       new Promise<undefined>((resolve) => {
         timer = setTimeout(() => resolve(undefined), CACHE_CHECK_TIMEOUT_MS);
@@ -266,6 +297,8 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
   let modelCache: ModelCache | null = null;
   let modelCacheCos: boolean | null = null;
   let persistResult: PersistResult | null = null;
+  /** Duration of the most recent load that actually built the pipeline (what the benchmark reports). */
+  let lastFreshLoadMs: number | null = null;
   /** Counts for the load in progress (reset right before pipeline()). */
   let report: LoadCacheReport | null = null;
 
@@ -275,6 +308,19 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
     else if (e.kind === 'miss') report.misses++;
     else if (e.kind === 'store' && e.source === 'cos-write') report.storedBytes.cos += e.bytes ?? 0;
     else if (e.kind === 'store' && e.source === 'cache-write') report.storedBytes.cache += e.bytes ?? 0;
+  }
+
+  /** config.json at the pinned revision (plain Hub fetch); undefined when unpinned or unreachable. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function pinnedConfig(env: any, repo: string, revision: string | undefined): Promise<unknown> {
+    if (!revision) return undefined;
+    try {
+      const host = (typeof env.remoteHost === 'string' ? env.remoteHost : 'https://huggingface.co/').replace(/\/+$/, '');
+      const res = await hubFetch(`${host}/${repo}/resolve/${revision}/config.json`);
+      return res.ok ? await res.json() : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Install (or rebuild, when the COS flag changed) the custom cache on transformers.js's env. */
@@ -289,6 +335,8 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
       fetchManifest: hubManifestFetcher(engineOpts.manifestFetch ?? ((u, i) => globalThis.fetch(u, i)), env.remoteHost),
       hubHost: typeof env.remoteHost === 'string' ? env.remoteHost : undefined,
       onEvent: onCacheEvent,
+      // Read `model` at call time: the pinned repo can change after the cache is built.
+      skipStore: (ref) => ref.revision === 'main' && !!model?.revision && ref.repo === model.repo,
     });
     modelCacheCos = wantCos;
     env.useCustomCache = true;
@@ -369,7 +417,7 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
         // "Downloading" (with the catalog size) unless every file is already
         // cached: transformers.js reports a cache read and a download alike.
         const progress = createLoadProgressReporter({
-          cached: (cachedBefore = await isPipelineCached(loaded, cfg.repo, dtype, revision)),
+          cached: (cachedBefore = await isPipelineCached(loaded, cfg.repo, dtype, revision, await pinnedConfig(env, cfg.repo, revision))),
           downloadSize: cfg.downloadSize,
           emit: (label) => onProgress?.(label),
         });
@@ -425,7 +473,9 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
     const inflight = fresh ? startLoad(cfg, onProgress) : pipelinePromise!;
     try {
       const { dtype, cache } = await inflight;
-      return { loadMs: performance.now() - t0, loadFresh: fresh, dtype, ...(fresh && cache ? { cache } : {}) };
+      const loadMs = performance.now() - t0;
+      if (fresh) lastFreshLoadMs = loadMs;
+      return { loadMs, loadFresh: fresh, dtype, ...(fresh && cache ? { cache } : {}) };
     } catch (err) {
       if (pipelinePromise === inflight) {
         pipelinePromise = null;
@@ -544,22 +594,15 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
    * M6: one fixed-prompt, greedy generation. First-token latency comes from the
    * streamer's first token callback; decode rate excludes that first token.
    */
-  async function bench(): Promise<BenchResult> {
+  async function bench(onProgress?: ProgressCb): Promise<BenchResult> {
     if (!model) throw new EngineError({ phase: 'protocol', message: 'model engine used before init' });
     const cfg = model;
-    const loaded = await load();
+    const loaded = await load(onProgress);
     const { cached } = await pipelinePromise!;
     try {
       const p = await pipe();
       const tf = tfModule ?? (await engineOpts.loadTransformers());
-      let promptTokens = 0;
-      try {
-        promptTokens = countTokens(
-          p.tokenizer?.apply_chat_template?.(BENCH_MESSAGES, { add_generation_prompt: true, tokenize: true, return_tensor: false }),
-        );
-      } catch {
-        promptTokens = 0;
-      }
+      const promptTokens = countPromptTokens(p.tokenizer);
       let first: number | null = null;
       let last = 0;
       let newTokens = 0;
@@ -569,7 +612,12 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
         last = t;
         newTokens += Array.isArray(tokens) ? tokens.length || 1 : 1;
       };
-      const callOpts: Record<string, unknown> = { max_new_tokens: BENCH_MAX_NEW_TOKENS, do_sample: false };
+      // min_new_tokens keeps an early EOS from turning the decode rate into noise.
+      const callOpts: Record<string, unknown> = {
+        max_new_tokens: BENCH_MAX_NEW_TOKENS,
+        min_new_tokens: BENCH_MIN_NEW_TOKENS,
+        do_sample: false,
+      };
       if (tf.TextStreamer && p.tokenizer) {
         callOpts.streamer = new tf.TextStreamer(p.tokenizer, {
           skip_prompt: true,
@@ -592,7 +640,7 @@ export function createModelEngine(engineOpts: ModelEngineOpts) {
         repo: cfg.repo,
         revision: cfg.revision ?? null,
         dtype: loaded.dtype,
-        loadMs: loaded.loadMs,
+        loadMs: lastFreshLoadMs ?? loaded.loadMs,
         cached,
         firstTokenMs: first - t0,
         decodeTokPerSec: newTokens > 1 && decodeMs > 0 ? (newTokens - 1) / (decodeMs / 1000) : 0,

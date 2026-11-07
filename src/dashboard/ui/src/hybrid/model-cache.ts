@@ -88,6 +88,12 @@ export interface ModelCacheDeps {
   /** Hub host (`env.remoteHost`); only URLs under it are treated as Hub files. */
   hubHost?: string;
   onEvent?: (event: CacheEvent) => void;
+  /**
+   * Hub files not to store (they are still served from the network). The engine skips
+   * `/resolve/main/` copies of a repo it loads pinned: transformers.js 4.3.2's pipeline()
+   * fetches progress metadata and config.json at `main` even when a revision is set.
+   */
+  skipStore?: (ref: HubFileRef) => boolean;
 }
 
 export interface HubFileRef {
@@ -240,6 +246,11 @@ export function createModelCache(deps: ModelCacheDeps) {
   }
 
   async function put(key: string, response: Response): Promise<void> {
+    const ref = parseHubFileUrl(key, hubHost);
+    if (ref && deps.skipStore?.(ref)) {
+      emit({ kind: 'store-failed', source: 'cache-write', url: key, detail: 'skipped: unpinned copy of a pinned repo' });
+      return;
+    }
     const found = await entryFor(key);
     const sha256 = found?.entry?.sha256;
 

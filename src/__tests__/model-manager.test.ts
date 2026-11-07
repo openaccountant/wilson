@@ -9,7 +9,7 @@ import {
   getBrowserChatModelSetting,
   getLocalChatModelConfig,
 } from '../model/local-chat.js';
-import { createModelEngine, BENCH_MAX_NEW_TOKENS, type TransformersModule } from '../dashboard/ui/src/hybrid/model-engine.js';
+import { createModelEngine, countPromptTokens, BENCH_MAX_NEW_TOKENS, BENCH_MIN_NEW_TOKENS, type TransformersModule } from '../dashboard/ui/src/hybrid/model-engine.js';
 import type { CacheLike } from '../dashboard/ui/src/hybrid/model-cache.js';
 import { benchStorageKey, isMainToWorker } from '../dashboard/ui/src/hybrid/worker-protocol.js';
 
@@ -234,6 +234,35 @@ describe('engine: revision, custom cache, persist, bench', () => {
     // 9 tokens after the first, over 90 ms.
     expect(r.decodeTokPerSec).toBeCloseTo(100, 5);
     expect(BENCH_MAX_NEW_TOKENS).toBe(128);
+  });
+
+  test('bench reports the original load time when the model was already loaded, and forces min_new_tokens', async () => {
+    const f = fakeTransformers();
+    const seen: Record<string, unknown>[] = [];
+    const orig = f.mod.pipeline;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (f.mod as any).pipeline = async (...a: unknown[]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pipe: any = await (orig as any)(...a);
+      const wrapped = async (m: unknown, o: Record<string, unknown>) => (seen.push(o), pipe(m, o));
+      return Object.assign(wrapped, { tokenizer: pipe.tokenizer });
+    };
+    const engine = createModelEngine({ loadTransformers: async () => f.mod, openCache: null });
+    engine.setModel(MODEL, 'http://127.0.0.1:3000');
+    const first = await engine.load();
+    const r = await engine.bench();
+    expect(r.loadMs).toBe(first.loadMs);
+    expect(seen.at(-1)).toMatchObject({ max_new_tokens: BENCH_MAX_NEW_TOKENS, min_new_tokens: BENCH_MIN_NEW_TOKENS, do_sample: false });
+  });
+
+  test('countPromptTokens falls back to encoding the rendered template', () => {
+    const tok = {
+      apply_chat_template: (_m: unknown, o: { tokenize: boolean }) => (o.tokenize ? { weird: true } : 'rendered prompt text'),
+      encode: (t: string) => t.split(' ').map((_, i) => i),
+    };
+    expect(countPromptTokens(tok)).toBe(3);
+    expect(countPromptTokens({ apply_chat_template: () => [[1, 2, 3, 4]] })).toBe(4);
+    expect(countPromptTokens(null)).toBe(0);
   });
 
   test('cacheStats and cacheClear work before any load', async () => {

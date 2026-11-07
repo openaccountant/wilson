@@ -51,6 +51,7 @@ import {
 import { parseCategorizationDecision, type ParsedDecision } from '../demo/core.js';
 import { isOnnxDtype, type DtypeFetch } from '../../../../model/transformers-dtype.js';
 import { createModelEngine, type ProgressCb, type TransformersModule } from './model-engine.js';
+import { requestPersistentStorage, type PersistResult } from './model-cache.js';
 import {
   asWorkerError,
   createInThreadBackend,
@@ -469,7 +470,8 @@ export function createHybridChat(opts: HybridOpts) {
     if (!cfg || !backend) return null;
 
     try {
-      const loaded = await backend.load(onProgress);
+      const [loaded, storage] = await Promise.all([backend.load(onProgress), persistOnce()]);
+      if (loaded.cache && !storage.unsupported) loaded.cache.persisted = storage.persisted;
       provenRepo = cfg.repo;
       lastLoadError = null;
       failureDetail = null;
@@ -907,10 +909,18 @@ export function createHybridChat(opts: HybridOpts) {
     return loadConfig();
   }
 
+  // navigator.storage.persist() exists only on Window (not in workers), so the main thread asks.
+  let persistPromise: Promise<PersistResult> | null = null;
+  function persistOnce(): Promise<PersistResult> {
+    persistPromise ??= requestPersistentStorage((globalThis.navigator as { storage?: Parameters<typeof requestPersistentStorage>[0] } | undefined)?.storage);
+    return persistPromise;
+  }
+
   async function cacheStats(): Promise<ModelCacheStats | null> {
     const backend = getBackend();
     if (!backend?.cacheStats || !(await loadConfig())) return null;
-    return backend.cacheStats();
+    const [stats, storage] = await Promise.all([backend.cacheStats(), persistOnce()]);
+    return { ...stats, persisted: storage.unsupported ? stats.persisted : storage.persisted };
   }
 
   async function cacheClear(repo: string, revision?: string): Promise<{ removed: number } | null> {
@@ -929,7 +939,7 @@ export function createHybridChat(opts: HybridOpts) {
     const cfg = await loadConfig();
     const backend = getBackend();
     if (!cfg || !backend?.bench) return null;
-    const result = await backend.bench(onProgress);
+    const [result] = await Promise.all([backend.bench(onProgress), persistOnce()]);
     provenRepo = cfg.repo;
     readyOn = backend;
     setModelStatus({ state: 'ready' });

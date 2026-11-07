@@ -203,6 +203,16 @@ describe('with COS', () => {
   });
 });
 
+describe('skipStore', () => {
+  test('a skipped URL is not stored but other files are', async () => {
+    const c = new FakeCache();
+    const mc = createModelCache({ openCache: async () => c, fetchManifest: async () => MANIFEST, skipStore: (r) => r.revision === 'main' });
+    await mc.put(url('main', 'config.json'), new Response('{}'));
+    await mc.put(url(SHA, 'config.json'), new Response('{}'));
+    expect([...c.store.keys()]).toEqual([url(SHA, 'config.json')]);
+  });
+});
+
 describe('helpers', () => {
   test('manifestFromTree keeps LFS sha256 and xet hash', () => {
     const m = manifestFromTree([

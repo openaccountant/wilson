@@ -170,9 +170,8 @@ async function handle(msg: MainToWorker): Promise<void> {
     case 'bench': {
       if (refusal) return fail(msg.id, { phase: 'protocol', message: `model worker refused to run: ${refusal}` });
       try {
-        // The model load inside bench() reports progress like a plain load.
-        await engine.load((label) => send({ t: 'progress', id: msg.id, label }));
-        send({ t: 'result', id: msg.id, ok: true, result: await engine.bench() });
+        // bench() loads the model first (reporting progress like a plain load) and times that load.
+        send({ t: 'result', id: msg.id, ok: true, result: await engine.bench((label) => send({ t: 'progress', id: msg.id, label })) });
       } catch (err) {
         fail(msg.id, toWorkerError(err, 'generate'));
       }

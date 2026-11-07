@@ -114,7 +114,7 @@ export function createInThreadBackend(engine: ModelEngine, origin: string): Mode
     categorize: (opts) => guard(() => engine.categorize(opts)),
     cacheStats: () => guard(() => engine.cacheStats()),
     cacheClear: (r, rev) => guard(() => engine.cacheClear(r, rev)),
-    bench: () => guard(() => engine.bench()),
+    bench: (onProgress) => guard(() => engine.bench(onProgress)),
     subagentRun: (args, onStep, signal) =>
       guard(() =>
         runSubagentOnPort({
