@@ -10,10 +10,25 @@
  * Port traffic is exactly `status` and `toolRead` (mirror-port-protocol.ts);
  * that is the worker's only data access. The port is closed when the run ends
  * whatever the outcome.
+ *
+ * Loop hardening (teardown §3, patterns 2-4): every tool read goes through
+ * `runToolCall`, so a failed read becomes an `is_error` result and an identical
+ * repeat of a failed read is not sent to the port again. A context overflow
+ * from generation is a typed error and does not count as a device fault.
  */
 
 import type { MirrorPortStatus, PortLike, ToolReadResult } from '../store/mirror-port-protocol.js';
-import { runSubagent, type GenerateRequest, type SubagentDeps, type SubagentInput } from './subagent-core.js';
+import {
+  FailedCallMemory,
+  ToolCallError,
+  isContextOverflowError,
+  runSubagent,
+  runToolCall,
+  type GenerateRequest,
+  type SubagentDeps,
+  type SubagentInput,
+  type ToolCallResult,
+} from './subagent-core.js';
 import type { StepEvent, SubagentRunResult } from './worker-protocol.js';
 
 export const PORT_REQUEST_TIMEOUT_MS = 5_000;
@@ -86,6 +101,11 @@ export function createPortClient(port: PortLike, opts: { requestTimeoutMs?: numb
   };
 }
 
+/** What a read contributes as tool-result text: its summary only (row data never leaves the worker). */
+function readContent(r: ToolReadResult): string {
+  return isRecord(r) && r.servable === true && typeof r.summary === 'string' ? r.summary : '';
+}
+
 export interface RunOnPortOpts {
   port: PortLike;
   /** One model generation (the engine's, in the worker). */
@@ -96,26 +116,46 @@ export interface RunOnPortOpts {
   now?(): number;
   /** Per-request port timeout (tests shorten it). */
   portTimeoutMs?: number;
+  /**
+   * Failed-call memory. Defaults to a fresh one per run; pass one to share it
+   * across runs (a success in any run clears it).
+   */
+  failedCalls?: FailedCallMemory;
+  /** Every tool read's result, success or `is_error`, in order. Exceptions are swallowed. */
+  onToolResult?(result: ToolCallResult<ToolReadResult>): void;
 }
 
 /**
  * Run one turn. ALWAYS resolves. `deviceFault` is set when `generate` threw:
  * a failed OrtRun can poison the WebGPU session, so the main thread respawns
- * the worker after this result.
+ * the worker after this result. A ContextOverflowError is the exception: the
+ * prompt never reached the GPU, so the session is fine.
  */
 export async function runSubagentOnPort(opts: RunOnPortOpts): Promise<SubagentRunResult> {
   const client = createPortClient(opts.port, { requestTimeoutMs: opts.portTimeoutMs });
+  const failedCalls = opts.failedCalls ?? new FailedCallMemory();
   let deviceFault = false;
   const deps: SubagentDeps = {
     generate: async (req) => {
       try {
         return await opts.generate(req);
       } catch (err) {
-        deviceFault = true;
+        if (!isContextOverflowError(err)) deviceFault = true;
         throw err;
       }
     },
-    toolRead: (req) => client.toolRead(req),
+    // The core's contract is unchanged: a read resolves or rejects. An is_error result rejects with a
+    // ToolCallError, which the core turns into its usual 'error' handoff.
+    toolRead: async (req) => {
+      const result = await runToolCall(failedCalls, { tool: req.tool, args: req.args }, () => client.toolRead(req), readContent);
+      try {
+        opts.onToolResult?.(result);
+      } catch {
+        // observers must never break a run
+      }
+      if (result.is_error) throw new ToolCallError(result);
+      return result.value;
+    },
     status: () => client.status(),
     now: opts.now ?? (() => Date.now()),
     signal: opts.signal,
