@@ -1,10 +1,10 @@
 # Chat workspace: a chat / files split for the dashboard
 
 Date: 2026-10-28
-Branch: `feat/chat-workspace` (worktree `.claude/worktrees/chat-workspace`, off `release/0.10.0` 72f0cdb)
+Branch: `feat/chat-workspace` (worktree `.claude/worktrees/chat-workspace`). First cut off `release/0.10.0`; rebased onto `main` on 2026-11-07 after 0.10.0 shipped (D18)
 Decisions: `specs/chat-workspace-DECISIONS.md` (binding; read first)
 Background: `docs/research/2026-10-28-lfm3-webgpu-workspace-teardown.md`
-Status: **plan only. Nothing is built.** Each phase has a gate, and the build waits for Jd's go.
+Status: Phase 1 in build (D18). Later phases are plan only. Each phase has a gate, and the build waits for Jd's go.
 
 ## 1. Goal
 
@@ -35,7 +35,7 @@ Browser (dashboard)                                   Wilson server (same machin
                                                       +-------------------------------+
 ```
 
-- **`/data/`**: built when each run starts, from the wa-sqlite mirror (`src/dashboard/ui/src/store/`), with the current dashboard filter or the last 12 months and a row cap. Read-only, kept **in memory only**, never saved anywhere. The server agent doesn't need it because it queries the real database.
+- **`/data/`**: built when each run starts, from the wa-sqlite mirror (`src/dashboard/ui/src/store/`), with the current dashboard filter window (D19) and a row cap. Read-only, kept **in memory only**, never saved anywhere. The server agent doesn't need it because it queries the real database.
 - **`/workspace/`**: reports, notes, what-if sheets. Saved **on the Wilson server** in SQLite and cached in the browser. The browser and server agents read the same files.
 - **Tools:** `read`, `write`, `edit`, `bash`, with the Space's contracts: `edit` must match exactly once, a non-zero exit throws, and output is cut at 6,000 characters with a hint. Writing under `/data` returns "use the categorize/rules tools to change data".
 - **Shell:** just-bash in `hardened` mode with the Space's limits (10 s, 3,000 commands, 16 MB, 256 KB output).
@@ -55,6 +55,7 @@ Reimplement teardown §3 patterns 1–4 in `src/dashboard/ui/src/hybrid/subagent
 - Stopped partial replies are left out of the model history. Context overflow is a typed error, never a silent trim.
 - Stable prefix: instructions and tool schemas are ordered so they stay the same across turns, and a test asserts it. (Real KV reuse depends on the engine. transformers.js support is measured, not assumed.)
 - **Gate:** `bun test` and typecheck green. No change to the router bars from browser-subagent Round 4.
+- **Ships alone (D18):** Phase 1 has no UI and no flag, so it goes to `main` on the 0.10.1 train ahead of the pane, not to `release/0.10.0`.
 
 ### Phase 2: Server workspace API *(server first)*
 - Migration **v40** `create_workspace_files` (D9): `(user_id, path, content, sha256, size, updated_at, deleted_at)`, unique on `(user_id, path)`.
@@ -101,7 +102,8 @@ Reimplement teardown §3 patterns 1–4 in `src/dashboard/ui/src/hybrid/subagent
 
 ### Phase 6: Review and merge
 - Opus security review (auth, paths, injection, wipe) and fix rounds as needed.
-- Squash into **local** `release/0.10.0` on a candidate branch. **Jd pushes.**
+- Squash into a **local** candidate branch off `main` for the next release train (0.10.0 has shipped; D18). **Jd pushes.**
+- The pane ships behind `workspace.enabled`, default off (D21). No `wilson workspace` TUI commands in v1 (D20).
 
 ### Later, flag-gated
 - `/proposals/*.json` checked against the mutating-tool argument schemas, applied as one batched approval card.

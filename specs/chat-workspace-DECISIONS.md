@@ -1,7 +1,7 @@
 # Decisions for docs/plans/2026-10-28-004-chat-workspace-plan.md (2026-10-28)
 
 Binding for implementation.
-- "Jd" = Jd accepted it in the 2026-10-28 planning conversation ("fold all this in").
+- "Jd" = Jd accepted it in the 2026-10-28 planning conversation ("fold all this in"), or decided it on 2026-11-07 (D18–D21).
 - "default" = orchestrator default that Jd may override before Phase 1 starts.
 
 | # | Question | Decision | By |
@@ -23,10 +23,7 @@ Binding for implementation.
 | D15 | Export | Workspace files only. Chat history is opt-in. | default |
 | D16 | Server-side shell | just-bash inside the server process with the same limits. Never a host shell. | default |
 | D17 | Server to server handoff | The browser sends workspace paths only. The server reads the files itself. | default |
-
-## Open, to ask before the build
-
-1. Phase 1 (agent-loop hardening) can ship to `release/0.10.0` alone, before the pane. OK to split it out?
-2. Default `/data` window: the current dashboard filter, or always the last 12 months?
-3. Should workspace files appear in `wilson` TUI commands in v1 (`wilson workspace ls|cat|export`), or only in the server agent's tools?
-4. Feature flag name and default: `workspace.enabled`, off until Phase 6?
+| D18 | Ship Phase 1 alone? | **Yes.** Phase 1 (agent-loop hardening) is split out and ships on its own, before the pane. It is based on `main`, not `release/0.10.0` (0.10.0 has shipped), and rides the 0.10.1 train. Decided 2026-11-07. | Jd |
+| D19 | Default `/data` window | **The current dashboard filter window.** Decided 2026-11-07. | Jd |
+| D20 | TUI workspace commands | **None in v1.** Workspace files are reachable through the agent tools only; no `wilson workspace ls\|cat\|export`. Decided 2026-11-07. | Jd |
+| D21 | Feature flag | **`workspace.enabled`, default off** until Phase 6. Decided 2026-11-07. | Jd |
