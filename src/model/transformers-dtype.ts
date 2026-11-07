@@ -46,7 +46,7 @@ export type TransformersDevice = 'webgpu' | 'cpu';
 /** A resolved dtype, or `'auto'` when nothing better could be determined offline. */
 export type ResolvedDtype = OnnxDtype | 'auto';
 
-/** File suffix → dtype, mirroring DEFAULT_DTYPE_SUFFIX_MAPPING in transformers.js 4.3.0. */
+/** File suffix → dtype, mirroring DEFAULT_DTYPE_SUFFIX_MAPPING in transformers.js 4.3.x. */
 const SUFFIX_TO_DTYPE: Record<string, OnnxDtype> = {
   '': 'fp32',
   _fp16: 'fp16',

@@ -75,7 +75,7 @@ export function toWorkerError(err: unknown, fallbackPhase: WorkerError['phase'] 
 
 /**
  * Whether the adapter exposes `shader-f16`, which fp16 and q4f16 weights need.
- * transformers.js 4.3.0 only pre-checks this for 'fp16', so a q4f16 load on
+ * transformers.js 4.3.x (still true in 4.3.2) only pre-checks this for 'fp16', so a q4f16 load on
  * such a GPU would otherwise fail late, at session creation. Undefined when it
  * cannot be determined (treated as supported).
  */
