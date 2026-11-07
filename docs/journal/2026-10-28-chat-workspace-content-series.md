@@ -85,7 +85,7 @@ Thread through the series: **small local models are good at looking and bad at d
 | Phase | Capture | Status |
 |---|---|---|
 | 0 | Space recording + DevTools pass (Ep 1, 2) | todo (Jd's machine) |
-| 1 | Before/after loop traces on dev sets (Ep 5) | todo |
+| 1 | Before/after loop traces on dev sets (Ep 5) | code landed 2026-11-07 (`3fac09b`, `d7c81f3`, tests `2d26a59`); traces todo. Today's precision-first route makes one read and never retries, so a flat before/after on the Round 4 dev sets is the expected result; the memory pays off in the Phase 3 file loop |
 | 2 | Route test output, version-check code walk (Ep 4) | todo |
 | 3 | Playwright gate run, phone width, conflict banner (Ep 3) | todo |
 | 5 | Pre-registered bars commit, then results (Ep 6) | todo |
