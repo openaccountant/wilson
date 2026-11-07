@@ -156,6 +156,28 @@ async function handle(msg: MainToWorker): Promise<void> {
       }
       return;
     }
+    case 'cacheStats':
+    case 'cacheClear': {
+      if (refusal) return fail(msg.id, { phase: 'protocol', message: `model worker refused to run: ${refusal}` });
+      try {
+        const result = msg.t === 'cacheStats' ? await engine.cacheStats() : await engine.cacheClear(msg.repo, msg.revision);
+        send({ t: 'result', id: msg.id, ok: true, result });
+      } catch (err) {
+        fail(msg.id, toWorkerError(err, 'protocol'));
+      }
+      return;
+    }
+    case 'bench': {
+      if (refusal) return fail(msg.id, { phase: 'protocol', message: `model worker refused to run: ${refusal}` });
+      try {
+        // The model load inside bench() reports progress like a plain load.
+        await engine.load((label) => send({ t: 'progress', id: msg.id, label }));
+        send({ t: 'result', id: msg.id, ok: true, result: await engine.bench() });
+      } catch (err) {
+        fail(msg.id, toWorkerError(err, 'generate'));
+      }
+      return;
+    }
     case 'cancel': {
       // Bump past the cancelled id so its result is dropped and a same-id replay can never restart it.
       activeRunId = Math.max(activeRunId, msg.runId + 1);

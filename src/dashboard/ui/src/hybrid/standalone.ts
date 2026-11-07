@@ -25,6 +25,8 @@ import {
 } from './client.js';
 import type { HybridResult } from './core.js';
 import type { CategorizeSampleResult, CategorizeSampleOpts } from './client.js';
+import type { ModelCacheStats } from './model-backend.js';
+import type { BenchResult } from './worker-protocol.js';
 
 export type { CategorizeSampleResult, CategorizeSampleOpts, TryLocalOpts, SubagentTurnOpts, InTabModelStatus } from './client.js';
 
@@ -48,6 +50,12 @@ export interface WilsonHybridChatGlobal {
    */
   getModelStatus?(): InTabModelStatus;
   onModelStatus?(listener: (status: InTabModelStatus) => void): () => void;
+  /** Model manager (specs/model-manager.md). Optional: an older chunk has none of them. */
+  refreshConfig?(): Promise<unknown>;
+  cacheStats?(): Promise<ModelCacheStats | null>;
+  cacheClear?(repo: string, revision?: string): Promise<{ removed: number } | null>;
+  bench?(onProgress?: (label: string) => void): Promise<BenchResult | null>;
+  lastBench?(repo: string, revision: string | null, dtype: string | null): BenchResult | null;
 }
 
 /** The inlined model worker. The constructor can throw (CSP, policy); the backend treats that as unavailable. */
@@ -121,6 +129,12 @@ export function categorizeSample(opts: CategorizeSampleOpts): Promise<Categorize
   return get().categorizeSample(opts);
 }
 
+export const refreshConfig = () => get().refreshConfig();
+export const cacheStats = () => get().cacheStats();
+export const cacheClear = (repo: string, revision?: string) => get().cacheClear(repo, revision);
+export const bench = (onProgress?: (label: string) => void) => get().bench(onProgress);
+export const lastBench = (repo: string, revision: string | null, dtype: string | null) => get().lastBench(repo, revision, dtype);
+
 declare global {
   interface Window {
     WilsonHybridChat?: WilsonHybridChatGlobal;
@@ -128,5 +142,18 @@ declare global {
 }
 
 if (typeof window !== 'undefined') {
-  window.WilsonHybridChat = { init, probe, loadModel, tryLocal, categorizeSample, getModelStatus, onModelStatus };
+  window.WilsonHybridChat = {
+    init,
+    probe,
+    loadModel,
+    tryLocal,
+    categorizeSample,
+    getModelStatus,
+    onModelStatus,
+    refreshConfig,
+    cacheStats,
+    cacheClear,
+    bench,
+    lastBench,
+  };
 }

@@ -56,10 +56,13 @@ import {
   createInThreadBackend,
   createWorkerBackend,
   type ModelBackend,
+  type ModelCacheStats,
   type WorkerLike,
 } from './model-backend.js';
 import {
+  benchStorageKey,
   clampSubagentLimits,
+  type BenchResult,
   workerErrorToCause,
   type RouteHint,
   type LoadResult,
@@ -147,6 +150,10 @@ export interface LocalChatConfigResponse {
   downloadSize: string;
   /** Catalog-pinned ONNX dtype (e.g. 'q4f16'); null → resolve from the Hub file list. */
   dtype?: string | null;
+  /** 40-hex Hub commit the files load from (absent/null from older servers = `main`). */
+  revision?: string | null;
+  /** Browser weight cache options (absent from older servers = Cache API only). */
+  cache?: { crossOriginStorage?: boolean };
   bundle: BundleParams;
   /**
    * Whether the server's chat model (and the task models its tools call) run on this machine (serverChatModelInfo).
@@ -214,6 +221,8 @@ function modelConfigOf(cfg: LocalChatConfigResponse): WorkerModelConfig {
     displayName: cfg.displayName,
     catalogDtype: isOnnxDtype(cfg.dtype) ? cfg.dtype : null,
     downloadSize: typeof cfg.downloadSize === 'string' ? cfg.downloadSize : null,
+    revision: typeof cfg.revision === 'string' && /^[0-9a-f]{40}$/.test(cfg.revision) ? cfg.revision : null,
+    crossOriginStorage: cfg.cache?.crossOriginStorage === true,
   };
 }
 
@@ -890,11 +899,68 @@ export function createHybridChat(opts: HybridOpts) {
     markModelLost();
   }
 
+  // ── Model manager (specs/model-manager.md M4–M6) ─────────────────────────
+
+  /** Forget the cached config so a changed Browser model setting is picked up on the next use. */
+  async function refreshConfig(): Promise<LocalChatConfigResponse | null> {
+    configPromise = null;
+    return loadConfig();
+  }
+
+  async function cacheStats(): Promise<ModelCacheStats | null> {
+    const backend = getBackend();
+    if (!backend?.cacheStats || !(await loadConfig())) return null;
+    return backend.cacheStats();
+  }
+
+  async function cacheClear(repo: string, revision?: string): Promise<{ removed: number } | null> {
+    const backend = getBackend();
+    if (!backend?.cacheClear || !(await loadConfig())) return null;
+    const result = await backend.cacheClear(repo, revision);
+    if (repo === provenRepo) {
+      readyOn = null;
+      setModelStatus({ state: 'idle' });
+    }
+    return result;
+  }
+
+  /** Run the benchmark on the configured model and keep the result in localStorage (M-D8). */
+  async function bench(onProgress?: ProgressCb): Promise<BenchResult | null> {
+    const cfg = await loadConfig();
+    const backend = getBackend();
+    if (!cfg || !backend?.bench) return null;
+    const result = await backend.bench(onProgress);
+    provenRepo = cfg.repo;
+    readyOn = backend;
+    setModelStatus({ state: 'ready' });
+    try {
+      localStorage.setItem(benchStorageKey(result.repo, result.revision, result.dtype), JSON.stringify(result));
+    } catch {
+      // private mode / quota: the result is still returned
+    }
+    return result;
+  }
+
+  /** The last stored benchmark for a model, or null. */
+  function lastBench(repo: string, revision: string | null, dtype: string | null): BenchResult | null {
+    try {
+      const raw = localStorage.getItem(benchStorageKey(repo, revision, dtype));
+      return raw ? (JSON.parse(raw) as BenchResult) : null;
+    } catch {
+      return null;
+    }
+  }
+
   return {
     probe,
     loadModel,
     tryLocal,
     categorizeSample,
+    refreshConfig,
+    cacheStats,
+    cacheClear,
+    bench,
+    lastBench,
     /** Current in-tab model status (HybridOpts.onModelStatus reports each change). */
     getModelStatus: (): InTabModelStatus => modelStatus,
     dispose,

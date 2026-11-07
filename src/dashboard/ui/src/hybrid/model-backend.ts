@@ -17,10 +17,12 @@
 import { toWorkerError, type ModelEngine, type ProgressCb } from './model-engine.js';
 import { runSubagentOnPort } from './subagent-runner.js';
 import type { PortLike } from '../store/mirror-port-protocol.js';
+import type { CacheStats } from './model-cache.js';
 import {
   HYBRID_PROTOCOL_VERSION,
   createPendingTable,
   isWorkerToMain,
+  type BenchResult,
   type BundleAnswerResult,
   type CategorizeResult,
   type LoadResult,
@@ -54,9 +56,17 @@ export interface ModelBackend {
    * the worker itself failed (crash, timeout). Aborting `signal` cancels the run.
    */
   subagentRun(args: SubagentRunArgs, onStep?: (event: StepEvent) => void, signal?: AbortSignal): Promise<SubagentRunResult>;
+  /** Hub files in the model weight cache (specs/model-manager.md M4). */
+  cacheStats?(): Promise<ModelCacheStats>;
+  /** Delete a repo's cached files (all revisions, or one). */
+  cacheClear?(repo: string, revision?: string): Promise<{ removed: number }>;
+  /** M6 fixed-prompt benchmark; loads the model first when needed. */
+  bench?(onProgress?: ProgressCb): Promise<BenchResult>;
   /** Stop everything: terminate the worker and fail whatever is in flight. */
   dispose(): void;
 }
+
+export type ModelCacheStats = CacheStats & { persisted: boolean | null };
 
 /** The slice of a Web Worker the proxy uses. */
 export interface WorkerLike {
@@ -102,6 +112,9 @@ export function createInThreadBackend(engine: ModelEngine, origin: string): Mode
     isLoaded: () => loadedRepo !== null && loadedRepo === repo,
     bundleAnswer: (query, bundleText, today) => guard(() => engine.bundleAnswer(query, bundleText, today)),
     categorize: (opts) => guard(() => engine.categorize(opts)),
+    cacheStats: () => guard(() => engine.cacheStats()),
+    cacheClear: (r, rev) => guard(() => engine.cacheClear(r, rev)),
+    bench: () => guard(() => engine.bench()),
     subagentRun: (args, onStep, signal) =>
       guard(() =>
         runSubagentOnPort({
@@ -125,7 +138,7 @@ export function createInThreadBackend(engine: ModelEngine, origin: string): Mode
 
 // ── Worker backend (production) ──────────────────────────────────────────
 
-export type RpcKind = 'probe' | 'load' | 'bundleAnswer' | 'categorize' | 'subagentRun';
+export type RpcKind = 'probe' | 'load' | 'bundleAnswer' | 'categorize' | 'subagentRun' | 'cacheStats' | 'cacheClear' | 'bench';
 
 /**
  * Per-call time budgets. For `load` the clock restarts on every progress
@@ -139,6 +152,10 @@ export const DEFAULT_RPC_TIMEOUT_MS: Record<RpcKind, number> = {
   // The run's own deadline is 30 s (measured from model-ready); this is the
   // backstop for a worker that stops answering, with headroom over it.
   subagentRun: 45_000,
+  cacheStats: 30_000,
+  cacheClear: 30_000,
+  // Includes a cold load; progress messages re-arm it like `load`, so only a stall times out.
+  bench: 180_000,
 };
 
 export interface WorkerBackendOpts {
@@ -264,10 +281,15 @@ export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
 
   return {
     setModel(cfg) {
-      const changed = !model || model.repo !== cfg.repo || model.catalogDtype !== cfg.catalogDtype;
+      const changed =
+        !model ||
+        model.repo !== cfg.repo ||
+        model.catalogDtype !== cfg.catalogDtype ||
+        (model.revision ?? null) !== (cfg.revision ?? null);
+      const cacheChanged = !!model && (model.crossOriginStorage === true) !== (cfg.crossOriginStorage === true);
       model = cfg;
       if (changed) loadedIn = null;
-      if (changed && worker) sendInit(worker);
+      if ((changed || cacheChanged) && worker) sendInit(worker);
     },
 
     async probe() {
@@ -296,6 +318,25 @@ export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
     },
 
     categorize: (cats) => call<CategorizeResult>('categorize', (id) => ({ t: 'categorize', id, opts: cats })),
+
+    cacheStats: () => call<ModelCacheStats>('cacheStats', (id) => ({ t: 'cacheStats', id })),
+
+    cacheClear: async (repo, revision) => {
+      const result = await call<{ removed: number }>('cacheClear', (id) => ({
+        t: 'cacheClear',
+        id,
+        repo,
+        ...(revision ? { revision } : {}),
+      }));
+      if (model?.repo === repo) loadedIn = null;
+      return result;
+    },
+
+    async bench(onProgress) {
+      const result = await call<BenchResult>('bench', (id) => ({ t: 'bench', id }), onProgress);
+      loadedIn = worker;
+      return result;
+    },
 
     async subagentRun(args, onStep, signal) {
       const runId = ++runCounter;

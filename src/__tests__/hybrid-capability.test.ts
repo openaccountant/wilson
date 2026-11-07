@@ -42,11 +42,15 @@ const KEY = capabilityKey(CFG);
 // ── pure helpers ─────────────────────────────────────────────────────────
 
 describe('verdict keying', () => {
-  test('the key covers resolver version, repo and catalog dtype', () => {
-    expect(KEY).toBe(`v${HYBRID_RESOLVER_VERSION}|${REPO}|q4f16`);
+  test('the key covers resolver version, repo, revision and catalog dtype', () => {
+    expect(KEY).toBe(`v${HYBRID_RESOLVER_VERSION}|${REPO}@main|q4f16`);
     expect(capabilityKey({ repo: REPO, dtype: 'q4' })).not.toBe(KEY);
     expect(capabilityKey({ repo: 'other/repo', dtype: 'q4f16' })).not.toBe(KEY);
-    expect(capabilityKey({ repo: REPO, dtype: null })).toBe(`v${HYBRID_RESOLVER_VERSION}|${REPO}|resolve`);
+    expect(capabilityKey({ repo: REPO, dtype: null })).toBe(`v${HYBRID_RESOLVER_VERSION}|${REPO}@main|resolve`);
+    // A model update (new pinned revision) re-probes instead of inheriting the old verdict.
+    const pinned = capabilityKey({ repo: REPO, dtype: 'q4f16', revision: 'a'.repeat(40) });
+    expect(pinned).toBe(`v${HYBRID_RESOLVER_VERSION}|${REPO}@${'a'.repeat(40)}|q4f16`);
+    expect(capabilityKey({ repo: REPO, dtype: 'q4f16', revision: 'b'.repeat(40) })).not.toBe(pinned);
   });
 
   test("a 'failed' verdict only sticks for the exact config it was recorded for", () => {

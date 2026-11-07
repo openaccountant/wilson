@@ -15,7 +15,8 @@
 import { getProviderById } from '../providers.js';
 import { PRELABEL_MODEL, type PrelabelModelPins } from '../prelabel/config.js';
 import { getModelsForProvider } from '../utils/model.js';
-import type { OnnxDtype } from './transformers-dtype.js';
+import { getSetting } from '../utils/config.js';
+import { isOnnxDtype, type OnnxDtype } from './transformers-dtype.js';
 
 export const LOCAL_CHAT_PROVIDER_ID = 'transformers';
 
@@ -103,8 +104,74 @@ export interface LocalChatModelConfig {
    * file list with the shared resolver (src/model/transformers-dtype.ts).
    */
   dtype: OnnxDtype | null;
+  /**
+   * 40-hex Hub commit every file loads from (specs/model-manager.md M2). Null only
+   * for an uncatalogued fastModel with no pin: the browser then loads `main`.
+   */
+  revision: string | null;
+  /** Where the choice came from: the admin's Browser model setting, or the provider fastModel. */
+  source: 'setting' | 'fastModel' | 'none';
+  /** Browser weight cache options (M4). */
+  cache: LocalChatCacheConfig;
   bundle: { limit: number; maxChars: number };
   subagent: LocalChatSubagentConfig;
+}
+
+export interface LocalChatCacheConfig {
+  /** Use Cross-Origin Storage for model weights when the browser has it. Default off. */
+  crossOriginStorage: boolean;
+}
+
+/** settings.json key for the COS flag (specs/model-manager-DECISIONS.md M-D3). */
+export const MODEL_CACHE_COS_KEY = 'modelCache.crossOriginStorage';
+
+/** settings.json key for the admin's browser chat model (M5). */
+export const BROWSER_CHAT_MODEL_KEY = 'browserChatModel';
+
+/** What POST /api/models/browser saves (always validated against the Hub first). */
+export interface BrowserChatModelSetting {
+  repo: string;
+  revision: string;
+  dtype: OnnxDtype;
+  displayName?: string;
+  downloadSize?: string;
+}
+
+const SHA_RE = /^[0-9a-f]{40}$/;
+
+/**
+ * A settings read that can't fail: with no active profile (tests, early boot)
+ * there are no settings, so the defaults apply. This config is defensive by design.
+ */
+function readSetting<T>(key: string, fallback: T): T {
+  try {
+    return getSetting<T>(key, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+/** The saved Browser model setting, or null when absent or malformed (malformed is ignored, never trusted). */
+export function getBrowserChatModelSetting(): BrowserChatModelSetting | null {
+  const raw = readSetting<unknown>(BROWSER_CHAT_MODEL_KEY, null);
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(r.repo)) return null;
+  if (typeof r.revision !== 'string' || !SHA_RE.test(r.revision)) return null;
+  if (!isOnnxDtype(r.dtype)) return null;
+  return {
+    repo: r.repo,
+    revision: r.revision,
+    dtype: r.dtype,
+    ...(typeof r.displayName === 'string' ? { displayName: r.displayName } : {}),
+    ...(typeof r.downloadSize === 'string' ? { downloadSize: r.downloadSize } : {}),
+  };
+}
+
+export function localChatCacheConfig(): LocalChatCacheConfig {
+  return {
+    crossOriginStorage: process.env.WILSON_MODEL_COS === '1' || readSetting<unknown>(MODEL_CACHE_COS_KEY, false) === true,
+  };
 }
 
 /**
@@ -115,6 +182,27 @@ export interface LocalChatModelConfig {
  */
 export function getLocalChatModelConfig(): LocalChatModelConfig {
   const provider = getProviderById(LOCAL_CHAT_PROVIDER_ID);
+  const prefix = provider?.modelPrefix ?? 'transformers:';
+
+  // The admin's Browser model (validated when saved) wins over the provider default.
+  const chosen = getBrowserChatModelSetting();
+  if (chosen) {
+    const catalogEntry = getModelsForProvider(LOCAL_CHAT_PROVIDER_ID).find((m) => m.id === `${prefix}${chosen.repo}`);
+    return {
+      enabled: true,
+      id: `${prefix}${chosen.repo}`,
+      repo: chosen.repo,
+      displayName: chosen.displayName ?? catalogEntry?.displayName ?? chosen.repo,
+      downloadSize: chosen.downloadSize ?? catalogEntry?.downloadSize ?? 'unknown',
+      dtype: chosen.dtype,
+      revision: chosen.revision,
+      source: 'setting',
+      cache: localChatCacheConfig(),
+      bundle: { ...LOCAL_CHAT_BUNDLE_DEFAULTS },
+      subagent: localSubagentConfig(),
+    };
+  }
+
   const fastModel = provider?.fastModel;
 
   if (!fastModel) {
@@ -125,12 +213,14 @@ export function getLocalChatModelConfig(): LocalChatModelConfig {
       displayName: '',
       downloadSize: '',
       dtype: null,
+      revision: null,
+      source: 'none',
+      cache: localChatCacheConfig(),
       bundle: { ...LOCAL_CHAT_BUNDLE_DEFAULTS },
       subagent: localSubagentConfig(),
     };
   }
 
-  const prefix = provider.modelPrefix; // 'transformers:'
   const repo = fastModel.startsWith(prefix) ? fastModel.slice(prefix.length) : fastModel;
   const catalogEntry = getModelsForProvider(LOCAL_CHAT_PROVIDER_ID).find((m) => m.id === fastModel);
 
@@ -142,6 +232,9 @@ export function getLocalChatModelConfig(): LocalChatModelConfig {
     downloadSize: catalogEntry?.downloadSize ?? 'unknown',
     // The browser always runs WebGPU, so a pin only applies to a webgpu entry.
     dtype: catalogEntry?.device === 'webgpu' ? (catalogEntry.dtype ?? null) : null,
+    revision: catalogEntry?.revision ?? null,
+    source: 'fastModel',
+    cache: localChatCacheConfig(),
     bundle: { ...LOCAL_CHAT_BUNDLE_DEFAULTS },
     subagent: localSubagentConfig(),
   };
