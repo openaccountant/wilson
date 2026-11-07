@@ -5,6 +5,7 @@ import type { Memory, Entity, ModelTaskRow, CatalogModel, ModelsPanel } from '@/
 import { parseDbTimestamp } from '@/format';
 import { reloadForProfileSwitch } from '@/hooks/useUrlState';
 import { AgentAccessCenter } from '@/components/agent/AgentAccessCenter';
+import { BrowserModelCard } from '@/components/BrowserModelCard';
 import { apiErrorMessage, firstAdminBody, shouldOfferFirstAdmin, validateFirstAdmin } from '@/lib/firstAdmin';
 import { clearAuthToken, notifySessionChange, writeAuthToken } from '@/lib/authSession';
 import { lockMirror } from '@/store/mirror-client';
@@ -911,6 +912,7 @@ function ModelsSection() {
             />
           ))}
         </div>
+        <BrowserModelCard canWrite={canOverride} />
         {canOverride && (
           <p className="text-xs text-text-muted">
             Model pins apply on each task's next run — no restart needed.
