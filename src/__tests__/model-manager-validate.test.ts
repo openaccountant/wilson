@@ -5,6 +5,7 @@ import {
   checkBrowserModelUpdates,
   filesForDtype,
   formatBytes,
+  normalizeRepoInput,
   resetBrowserModel,
   saveBrowserModel,
   textGenerationDtypes,
@@ -186,6 +187,13 @@ describe('helpers', () => {
       'onnx/embed_tokens_q4.onnx',
       'onnx/decoder_model_merged_q4.onnx',
     ]);
+  });
+
+  test('normalizeRepoInput accepts ids and Hub URLs', () => {
+    for (const raw of ['a/b', ' a/b/ ', 'https://huggingface.co/a/b', 'https://hf.co/a/b/tree/main', 'https://huggingface.co/a/b/blob/main/config.json?x=1']) {
+      expect(normalizeRepoInput(raw)).toBe('a/b');
+    }
+    expect(normalizeRepoInput('noslash')).toBe('noslash');
   });
 
   test('formatBytes', () => {

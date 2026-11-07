@@ -67,6 +67,20 @@ interface TreeEntry {
   lfs?: { size?: number };
 }
 
+/**
+ * Accept `owner/name` or any huggingface.co / hf.co model URL (including /tree/<rev>,
+ * /blob/..., query strings and trailing slashes) and return `owner/name`.
+ */
+export function normalizeRepoInput(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+  const url = /^https?:\/\/(www\.)?(huggingface\.co|hf\.co)\//i;
+  // A bare id must be exactly owner/name (validated later); only URLs are trimmed to their first two segments.
+  if (!url.test(trimmed)) return trimmed.replace(/\/+$/, '');
+  const parts = trimmed.split(/[?#]/)[0].replace(url, '').replace(/^models\//, '').split('/').filter(Boolean);
+  return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts.join('/');
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1e9) return `~${(bytes / 1e9).toFixed(1)}GB`;
   return `~${Math.max(1, Math.round(bytes / 1e6))}MB`;
@@ -102,7 +116,7 @@ export async function validateBrowserModel(
 ): Promise<BrowserModelValidation> {
   const fetchImpl = deps.fetch ?? (globalThis.fetch as unknown as HubFetch);
   const hub = (deps.hubUrl ?? HUB).replace(/\/+$/, '');
-  const repo = typeof input.repo === 'string' ? input.repo.trim().replace(/^https:\/\/huggingface\.co\//, '').replace(/\/+$/, '') : '';
+  const repo = normalizeRepoInput(input.repo);
   const result: BrowserModelValidation = {
     ok: false,
     repo,

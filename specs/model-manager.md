@@ -79,7 +79,7 @@ Replaces the default store via Transformers.js `env.useCustomCache` + `env.custo
 
 | Route | Behaviour |
 |---|---|
-| `GET /api/models/browser` | Current browser chat model (repo, revision, dtype, source: `catalog` / `custom` / `fastModel`), the catalog with sizes, the custom list, and the cache flag. |
+| `GET /api/models/browser` | Current browser chat model (repo, revision, dtype, source: `catalog` / `custom` / `fastModel`), the catalog with sizes, the saved choice (v1 keeps one; a list of earlier custom picks is a follow-up), and the cache flag. |
 | `POST /api/models/browser/validate` `{ repo, revision? }` | Hub checks, listed below. Never saves. |
 | `POST /api/models/browser` `{ repo, revision, dtype }` | Re-validates and saves setting `browserChatModel`. A catalog id is accepted by id. |
 | `DELETE /api/models/browser` | Reset to the provider `fastModel`. |
@@ -111,9 +111,7 @@ Replaces the default store via Transformers.js `env.useCustomCache` + `env.custo
 
 **Storage:** in the browser (`localStorage`, key `wilson-bench:v1:<repo>@<revision>:<dtype>`). There is no server table: v34 to v39 are reserved for open-jev and v40 for the workspace.
 
-**Triggers:**
-- It runs on demand from the card.
-- It also runs once automatically after the first successful load of a newly chosen model, if the user opted into "Benchmark after download".
+**Triggers:** it runs on demand from the card. An automatic "benchmark after download" opt-in is deferred to a follow-up. Updates need no cleanup: bench entries and capability verdicts are keyed by revision, so a new revision starts fresh.
 
 ## Out of scope (fast follow, `specs/webgpu-kernels-followup.md`)
 
