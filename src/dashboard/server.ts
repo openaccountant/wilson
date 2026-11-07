@@ -28,6 +28,14 @@ import {
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
   apiSkills, apiMerchants,
 } from './api.js';
+import {
+  browserModelsOverview,
+  checkBrowserModelUpdates,
+  resetBrowserModel,
+  saveBrowserModel,
+  setModelCacheCos,
+  validateBrowserModel,
+} from '../model/browser-models.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
 import { isBadRequest } from './spending-params.js';
 import { HttpError, jsonBody, jsonValue } from './http-errors.js';
@@ -1267,6 +1275,48 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           // serverModelLocal: while the in-tab model downloads, the browser lets the server answer only when the
           // model its next turn would use runs on this machine; otherwise the turn waits for the in-tab model.
           return Response.json({ ...apiLocalChatConfig(), serverModelLocal: nextChatModelInfo().serverModelLocal }, { headers });
+        }
+
+        // ── Browser model manager (specs/model-manager.md M5) ───────
+        // Reads are open to any signed-in user; validation (it makes Hub
+        // requests on the server's behalf) and every write follow the
+        // settings posture: admin-only when auth is on.
+
+        if (path.startsWith('/api/models/browser')) {
+          const isWrite = req.method !== 'GET';
+          if (isWrite && authEnabled && currentUser && !canWrite(currentUser.role)) {
+            return Response.json({ error: 'Forbidden' }, { status: 403, headers });
+          }
+          if (path === '/api/models/browser' && req.method === 'GET') {
+            return Response.json(browserModelsOverview(), { headers });
+          }
+          if (path === '/api/models/browser/updates' && req.method === 'GET') {
+            return Response.json({ updates: await checkBrowserModelUpdates() }, { headers });
+          }
+          if (path === '/api/models/browser/validate' && req.method === 'POST') {
+            const body = (await req.json().catch(() => ({}))) as { repo?: unknown; revision?: unknown };
+            return Response.json(await validateBrowserModel(body), { headers });
+          }
+          if (path === '/api/models/browser' && req.method === 'POST') {
+            const body = (await req.json().catch(() => ({}))) as { repo?: unknown; revision?: unknown };
+            const result = await saveBrowserModel(body);
+            return Response.json(result, { status: result.ok ? 200 : 400, headers });
+          }
+          if (path === '/api/models/browser' && req.method === 'DELETE') {
+            return resetBrowserModel()
+              ? Response.json({ ok: true, current: browserModelsOverview().current }, { headers })
+              : Response.json({ error: 'Failed to save settings' }, { status: 500, headers });
+          }
+          if (path === '/api/models/browser/cache' && req.method === 'PUT') {
+            const body = (await req.json().catch(() => ({}))) as { crossOriginStorage?: unknown };
+            if (typeof body.crossOriginStorage !== 'boolean') {
+              return Response.json({ error: 'crossOriginStorage must be true or false' }, { status: 400, headers });
+            }
+            return setModelCacheCos(body.crossOriginStorage)
+              ? Response.json({ ok: true, cache: browserModelsOverview().cache }, { headers })
+              : Response.json({ error: 'Failed to save settings' }, { status: 500, headers });
+          }
+          return Response.json({ error: 'Not found' }, { status: 404, headers });
         }
 
         // ── Models panel (Settings) ─────────────────────────────────
