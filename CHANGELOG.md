@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.11.1] — 2026-11-08
+
+### Fixes
+
+- fix(release): accept npm 12's object-shaped npm pack --json output (9f9c725)
+
+### Other
+
+- Merge pull request #222 from openaccountant/fix/check-npm-pack-npm12 (bd49e15)
+
+
 ## [v0.11.0] — 2026-11-08
 
 ### Features
