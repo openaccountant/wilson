@@ -266,7 +266,8 @@ jobs:
       - name: Build Claude Desktop extension (when present)
         run: |
           if [ -f scripts/build-mcpb.ts ]; then
-            bun run build:mcpb
+            # Reads the binaries in dist/bin (linux ones too with --linux); needs network for bunx mcpb.
+            bun run build:mcpb --linux
             cp dist/wilson.mcpb dist/bin/wilson.mcpb
           else
             echo "scripts/build-mcpb.ts not on this branch; skipping wilson.mcpb"
