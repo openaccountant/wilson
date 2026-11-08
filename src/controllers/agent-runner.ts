@@ -380,7 +380,7 @@ export class AgentRunnerController {
       case 'done': {
         const done = event as DoneEvent;
         if (done.answer) {
-          await this.inMemoryChatHistory.saveAnswer(done.answer).catch(() => {});
+          await this.inMemoryChatHistory.saveAnswer(done.answer, { failed: done.failed === true }).catch(() => {});
         }
         this.updateLastItem((last) => ({
           ...last,

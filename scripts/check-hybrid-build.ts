@@ -1,14 +1,14 @@
 /**
  * Build gate for the browser-local chat bundles (CI does not build the UI). It is the
  * last step of `npm run build:hybrid`, so a failing check fails the build. It reads
- * dist/index.html, so run `npm run build` first:
+ * the React build (dist/index.html plus every chunk under dist/_app/), so run `npm run build` first:
  *
  *   cd src/dashboard/ui && npm run build && npm run build:hybrid
  *
  * It can also be run on its own from the repo root: bun run scripts/check-hybrid-build.ts
  *
  * Asserts (specs/browser-subagent.md D1 and section 11):
- *  - dist/index.html (the singlefile app) contains no onnxruntime / transformers.js;
+ *  - the React app (dist/index.html and its dist/_app/ chunks) contains no onnxruntime / transformers.js;
  *  - dist-hybrid/hybrid-chat.js carries exactly ONE ONNX Runtime banner, so
  *    transformers.js ships once, inside the inlined model worker, and the
  *    main-thread half of the chunk imports none;
@@ -18,7 +18,7 @@
  *    excepted), so a second transformers copy cannot slip in unnoticed;
  *  - Round 4: the second allowlisted bundle, prelabel-worker.js (the open-jev worker shared by
  *    the Review tab and the chat router), carries exactly ONE ORT banner of its own, and the
- *    open-jev library appears in no other bundle (not hybrid-chat.js, not the singlefile app).
+ *    open-jev library appears in no other bundle (not hybrid-chat.js, not the React app).
  *    Presence and the transformers.js version of prelabel-worker.js are owned by
  *    scripts/check-prelabel-bundle.ts, which runs just before this one.
  */
@@ -28,6 +28,24 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ORT_BANNER = 'ONNX Runtime Web v';
+
+/**
+ * The whole React dashboard build as one string: dist/index.html followed by every script under
+ * dist/_app/ (entry, tab and library chunks, the mirror worker). The app is code-split, so a guard
+ * that read index.html alone would see none of the code. Null when index.html is missing.
+ */
+export function readReactBuild(distDir: string): string | null {
+  const indexPath = join(distDir, 'index.html');
+  if (!existsSync(indexPath)) return null;
+  const parts = [readFileSync(indexPath, 'utf8')];
+  const appDir = join(distDir, '_app');
+  if (existsSync(appDir)) {
+    for (const name of readdirSync(appDir).sort()) {
+      if (/\.(m?js)$/.test(name)) parts.push(readFileSync(join(appDir, name), 'utf8'));
+    }
+  }
+  return parts.join('\n');
+}
 const PRELABEL_WORKER = 'prelabel-worker.js';
 
 /** Top-level .js files allowed in dist-hybrid/. Workflow B's open-jev labeler adds prelabel-worker.js. */
@@ -70,7 +88,7 @@ export function checkHybridBuild(input: HybridBuildInputs): string[] {
 
   for (const marker of RUNTIME_MARKERS) {
     if (input.indexHtml.includes(marker)) {
-      problems.push(`dist/index.html contains "${marker}" (the singlefile app must not bundle the model runtime)`);
+      problems.push(`dist/index.html contains "${marker}" (the React app, index.html or a dist/_app chunk, must not bundle the model runtime)`);
     }
   }
 
@@ -132,7 +150,7 @@ if (import.meta.main) {
   }
   const prelabelPath = join(hybridDir, PRELABEL_WORKER);
   const problems = checkHybridBuild({
-    indexHtml: readFileSync(indexPath, 'utf8'),
+    indexHtml: readReactBuild(join(uiDir, 'dist')) ?? '',
     hybridJs: readFileSync(hybridPath, 'utf8'),
     hybridEntries: readdirSync(hybridDir),
     prelabelJs: existsSync(prelabelPath) ? readFileSync(prelabelPath, 'utf8') : null,
@@ -141,5 +159,5 @@ if (import.meta.main) {
     console.error(`check-hybrid-build: FAILED\n${problems.map((p) => `  - ${p}`).join('\n')}`);
     process.exit(1);
   }
-  console.log('check-hybrid-build: ok (one ORT banner per bundle, worker inlined, singlefile app clean)');
+  console.log('check-hybrid-build: ok (one ORT banner per bundle, worker inlined, React app clean)');
 }

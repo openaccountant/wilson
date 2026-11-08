@@ -45,6 +45,16 @@ function make(opts: {
   tokens?: (t: string) => number;
   loadThrows?: boolean;
   runtime?: any;
+  infoCached?: boolean;
+  /** fetchConfigSha rejects (offline). */
+  fetchThrows?: boolean;
+  /** Hash of the cached config.json; null = not cached; undefined = dep not wired. */
+  cachedSha?: string | null;
+  infoThrows?: boolean;
+  /** A progress event per cache read, as transformers.js fires them. */
+  progressOnCacheRead?: boolean;
+  /** Offline with only part of the weights cached: load() fails like transformers.js does. */
+  partialCache?: boolean;
 } = {}): Harness {
   const calls: Call[] = [];
   const out: FromWorker[] = [];
@@ -80,11 +90,14 @@ function make(opts: {
     dispose: async () => { calls.push('dispose'); },
   };
   const OpenJev = {
-    info: async (o: any) => { calls.push('info'); return { isCached: false, downloadSize: 357050727, files: [], ...o }; },
+    // Like open-jev 0.1.2: info() probes files over the network, so it throws whenever the network is down.
+    info: async (o: any) => { calls.push('info'); if (opts.infoThrows || opts.fetchThrows) throw new TypeError('Failed to fetch'); return { isCached: opts.infoCached ?? false, downloadSize: 357050727, files: [], ...o }; },
     load: async (o: any) => {
       calls.push('load');
       if (opts.loadThrows) throw new Error('boom');
+      // transformers.js fires progress for cache reads too, so one comes before the miss.
       o.onProgress?.({ progress: 0.5, loaded: 50, total: 100 });
+      if (opts.partialCache) throw new TypeError('Failed to fetch');
       o.onProgress?.({ progress: 1, loaded: 100, total: 100 });
       return jev;
     },
@@ -93,7 +106,12 @@ function make(opts: {
     loadOpenJev: async () => ({ OpenJev: OpenJev as any, env, ortVersion: '1.31.0' }),
     now: () => clock.t,
     gpu: opts.gpu === undefined ? { requestAdapter: async () => adapter() } : opts.gpu === null ? undefined : opts.gpu,
-    fetchConfigSha: async (url: string) => { calls.push(`fetchConfigSha:${url}`); return opts.configSha ?? pins.configSha; },
+    fetchConfigSha: async (url: string) => {
+      calls.push(`fetchConfigSha:${url}`);
+      if (opts.fetchThrows) throw new TypeError('Failed to fetch');
+      return opts.configSha ?? pins.configSha;
+    },
+    ...(opts.cachedSha === undefined ? {} : { cachedConfigSha: async (url: string) => { calls.push(`cachedConfigSha:${url}`); return opts.cachedSha ?? null; } }),
     yieldTick: async () => {},
     post: (m) => out.push(m),
   };
@@ -209,9 +227,10 @@ describe('capability ladder', () => {
 });
 
 describe('consent, pinning and load', () => {
-  test('info() is never called unless an info message arrives', async () => {
+  test('info() is not called before an info or load message', async () => {
     const h = make();
-    await ready(h);
+    await h.send(init);
+    await h.send({ v: 1, type: 'probe' });
     expect(h.calls).not.toContain('info');
     await h.send({ v: 1, type: 'info' });
     expect(h.calls.filter((c) => c === 'info').length).toBe(1);
@@ -295,6 +314,109 @@ describe('consent, pinning and load', () => {
     await ready(h);
     expect(caps(h.out).at(-1)).toMatchObject({ verdict: 'failed', reason: 'load' });
     expect(errs(h.out).at(-1)).toMatchObject({ fatal: true, code: 'load', detail: 'boom' });
+  });
+
+  // #207: the pin check must work offline against the cached config.json.
+  const cfgUrl = `https://huggingface.co/${pins.repo}/resolve/${pins.revision}/config.json`;
+
+  test('offline with a cached config.json that hashes right -> loads (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha.toUpperCase() });
+    await ready(h);
+    expect(h.calls).toContain(`cachedConfigSha:${cfgUrl}`);
+    expect(h.calls).toContain('load');
+    expect((h.out.find((m) => m.type === 'loaded') as any).configSha).toBe(pins.configSha);
+  });
+
+  test('offline with everything cached: no download label and fromCache=true, though info() throws (#206, #207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha });
+    await ready(h);
+    const loaded: any = h.out.find((m) => m.type === 'loaded');
+    expect(loaded.fromCache).toBe(true);
+    const phases = h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase);
+    expect(phases).not.toContain('download');
+    expect(phases[0]).toBe('session');
+  });
+
+  test('offline with only part of the weights cached: no download label, a clear offline error (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: pins.configSha, partialCache: true });
+    await ready(h);
+    expect(h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase)).not.toContain('download');
+    expect(h.out.find((m) => m.type === 'loaded')).toBeUndefined();
+    const e = errs(h.out).at(-1)!;
+    expect(e).toMatchObject({ fatal: true, code: 'load' });
+    expect(e.detail).toMatch(/offline/i);
+    expect(e.detail).toMatch(/not (fully )?cached/i);
+  });
+
+  test('offline with a cached config.json that hashes wrong -> model_mismatch, fail closed (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: 'f'.repeat(64) });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    expect(caps(h.out).at(-1)).toMatchObject({ verdict: 'failed', reason: 'model_mismatch' });
+    expect(errs(h.out).at(-1)).toMatchObject({ fatal: true, code: 'model_mismatch' });
+  });
+
+  test('offline and not cached -> a clear offline error, weights never loaded (#207)', async () => {
+    const h = make({ fetchThrows: true, cachedSha: null });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    const e = errs(h.out).at(-1)!;
+    expect(e).toMatchObject({ fatal: true, code: 'load' });
+    expect(e.detail).toMatch(/offline/i);
+    expect(e.detail).toMatch(/not cached/i);
+  });
+
+  test('offline with no cache reader wired -> the same offline error (#207)', async () => {
+    const h = make({ fetchThrows: true });
+    await ready(h);
+    expect(errs(h.out).at(-1)!.detail).toMatch(/offline.*not cached/i);
+  });
+
+  test('a fetched config.json that hashes wrong is a mismatch even if the cached copy is good (#207)', async () => {
+    const h = make({ configSha: 'f'.repeat(64), cachedSha: pins.configSha });
+    await ready(h);
+    expect(h.calls).not.toContain('load');
+    expect(errs(h.out).at(-1)).toMatchObject({ code: 'model_mismatch' });
+  });
+
+  test('online: the cache is not consulted when the fetch succeeds (#207)', async () => {
+    const h = make({ cachedSha: pins.configSha });
+    await ready(h);
+    expect(h.calls.some((c) => c.startsWith('cachedConfigSha:'))).toBe(false);
+  });
+
+  // #206: a cached load must not look like a download.
+  test('a cached load reports fromCache=true and never posts download progress (#206)', async () => {
+    const h = make({ infoCached: true });
+    await ready(h);
+    const loaded: any = h.out.find((m) => m.type === 'loaded');
+    expect(loaded.fromCache).toBe(true);
+    const phases = h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase);
+    expect(phases).not.toContain('download');
+    expect(phases[0]).toBe('session');
+  });
+
+  test('an uncached load reports fromCache=false and download progress (#206)', async () => {
+    const h = make({ infoCached: false });
+    await ready(h);
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(false);
+    expect(h.out.filter((m) => m.type === 'progress').map((m: any) => m.phase)).toContain('download');
+  });
+
+  test('load asks info() once and reuses a prior info answer (#206)', async () => {
+    const h = make({ infoCached: true });
+    await h.send(init);
+    await h.send({ v: 1, type: 'info' });
+    await h.send({ v: 1, type: 'load' });
+    expect(h.calls.filter((c) => c === 'info').length).toBe(1);
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(true);
+  });
+
+  test('if info() throws, load still proceeds and falls back to the progress heuristic (#206)', async () => {
+    const h = make({ infoThrows: true });
+    await ready(h);
+    expect(h.calls).toContain('load');
+    expect((h.out.find((m) => m.type === 'loaded') as any).fromCache).toBe(false);
   });
 
   test('a second load message re-reports loaded without loading twice', async () => {

@@ -5,7 +5,7 @@
  * the end of `npm run build:hybrid` (a failing guard fails the build).
  *
  * Invariants:
- *  - the singlefile React bundle (dist/index.html) must never contain the
+ *  - the React bundle (dist/index.html and its dist/_app/ chunks) must never contain the
  *    open-jev LIBRARY (an import/require of it, or its `OpenJev` class) or
  *    onnxruntime. User-facing copy may NAME open-jev ("Second opinion
  *    (open-jev)"), so a bare substring is not a violation;
@@ -15,7 +15,7 @@
  */
 
 export interface BundleGuardInput {
-  /** Contents of ui/dist/index.html, or null when `npm run build` was not run. */
+  /** The React build: ui/dist/index.html plus every dist/_app/ chunk, concatenated (scripts/check-hybrid-build.ts readReactBuild), or null when `npm run build` was not run. */
   indexHtml: string | null;
   /** Contents of ui/dist-hybrid/prelabel-worker.js, or null when missing. */
   workerJs: string | null;
@@ -38,10 +38,10 @@ export function checkPrelabelBundles(input: BundleGuardInput): string[] {
   if (input.indexHtml !== null) {
     const lower = input.indexHtml.toLowerCase();
     if (OPEN_JEV_IMPORT.test(input.indexHtml) || OPEN_JEV_CLASS.test(input.indexHtml)) {
-      problems.push('dist/index.html (singlefile React bundle) contains "open-jev" library code; it may only live in dist-hybrid');
+      problems.push('dist/index.html or a dist/_app chunk (React bundle) contains "open-jev" library code; it may only live in dist-hybrid');
     }
     if (lower.includes('onnxruntime')) {
-      problems.push('dist/index.html (singlefile React bundle) contains "onnxruntime"; it may only live in dist-hybrid');
+      problems.push('dist/index.html or a dist/_app chunk (React bundle) contains "onnxruntime"; it may only live in dist-hybrid');
     }
   }
 

@@ -1,48 +1,14 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
-import { viteSingleFile } from 'vite-plugin-singlefile';
-import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
 import path from 'path';
 
-const WASM_MODULE_ID = 'virtual:wa-sqlite-wasm';
-
 /**
- * Inline the wa-sqlite wasm binary into the bundle as a base64 string so the
- * mirror store needs no runtime fetch, no static-asset route in server.ts, and
- * no COOP/COEP headers (see docs/plans/2026-09-20-003-dashboard-offline-store-
- * comparison.md §5.2/§5.4 — the committed delivery for the offline store).
+ * Where the content-hashed build output lives, under dist/ and in URLs (/_app/<name>-<hash>.<ext>).
+ * src/dashboard/server.ts serves this directory with immutable caching (DASHBOARD_APP_PREFIX); keep the
+ * two in step. Not /assets/: that prefix belongs to the unhashed hybrid build (dist-hybrid).
  */
-function waSqliteWasmInline(): Plugin {
-  const require = createRequire(import.meta.url);
-  const wasmPath = path.join(
-    path.dirname(require.resolve('wa-sqlite/package.json')),
-    'dist',
-    'wa-sqlite.wasm'
-  );
-  const resolvedId = `\0${WASM_MODULE_ID}`;
-
-  return {
-    name: 'wa-sqlite-wasm-inline',
-    resolveId(id) {
-      if (id === WASM_MODULE_ID) return resolvedId;
-    },
-    load(id) {
-      if (id !== resolvedId) return;
-      const base64 = readFileSync(wasmPath).toString('base64');
-      return `export default ${JSON.stringify(base64)};`;
-    },
-    generateBundle(_, bundle) {
-      // The emscripten glue still references the wasm path it never fetches
-      // (wasmBinary is provided instead); drop the emitted asset so the build
-      // truly produces a single index.html.
-      for (const name of Object.keys(bundle)) {
-        if (name.endsWith('.wasm')) delete bundle[name];
-      }
-    },
-  };
-}
+const APP_ASSETS_DIR = '_app';
 
 /**
  * In production the dashboard server injects the WebMCP bridge <script> into
@@ -63,13 +29,11 @@ function webMcpBridgeDevTag(): Plugin {
 const DASHBOARD_ORIGIN = 'http://localhost:3141';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile(), waSqliteWasmInline(), webMcpBridgeDevTag()],
+  plugins: [react(), tailwindcss(), webMcpBridgeDevTag()],
   // The mirror worker imports wa-sqlite's ESM build (which uses import.meta.url),
-  // so the inline worker must be bundled as an ES module; the wasm-inline plugin
-  // must apply to the worker bundle too (workers are bundled separately at build).
+  // so it is bundled as an ES module worker (its own hashed file under /_app/).
   worker: {
     format: 'es',
-    plugins: () => [waSqliteWasmInline()],
   },
   resolve: {
     alias: {
@@ -128,5 +92,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     target: 'esnext',
+    // The page is index.html plus hashed files under /_app/: the server sends the HTML no-cache and
+    // everything under /_app/ immutable, so a phone downloads and compiles the app once per release
+    // and the first paint waits only for the entry chunk (tabs and heavy libraries load on demand).
+    assetsDir: APP_ASSETS_DIR,
+    // Never base64 a file into the JS: an inlined asset can't be cached on its own.
+    assetsInlineLimit: 0,
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: an app-code change doesn't invalidate the cached React runtime.
+        manualChunks(id) {
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'react';
+          return undefined;
+        },
+      },
+    },
   },
 });

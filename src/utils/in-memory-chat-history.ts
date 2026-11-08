@@ -68,6 +68,14 @@ Return only message IDs that contain information directly useful for answering t
  * Manages in-memory conversation history for multi-turn conversations.
  * Stores user queries, final answers, and LLM-generated summaries.
  */
+/**
+ * Summary used when no model summarizes the answer: the user's words, not the dashboard's "@"
+ * mention context block or on-device handoff block.
+ */
+function fallbackSummary(query: string): string {
+  return stripInjectedContext(query, replayDetector()).trim().slice(0, 100).trim();
+}
+
 export class InMemoryChatHistory {
   private messages: Message[] = [];
   private model: string;
@@ -158,9 +166,7 @@ Generate a brief 1-2 sentence summary of this answer.`;
       });
       return response.content.trim();
     } catch {
-      // Fallback to a simple summary if LLM fails (the user's words, not the
-      // dashboard's "@" mention context block or on-device handoff block).
-      return `Answer to: ${stripInjectedContext(query, replayDetector()).slice(0, 100)}`;
+      return fallbackSummary(query);
     }
   }
 
@@ -192,16 +198,20 @@ Generate a brief 1-2 sentence summary of this answer.`;
 
   /**
    * Saves the answer to the most recent message and generates a summary.
-   * Should be called when the agent completes answering.
+   * Should be called when the agent completes answering. A failed turn (`failed`: the model call
+   * itself failed) gets the fallback summary without a model call: that call would fail the same
+   * way and show up as a second failed LLM call for one question (#182).
    */
-  async saveAnswer(answer: string): Promise<void> {
+  async saveAnswer(answer: string, opts: { failed?: boolean } = {}): Promise<void> {
     const lastMessage = this.messages[this.messages.length - 1];
     if (!lastMessage || lastMessage.answer !== null) {
       return; // No pending query or already has answer
     }
 
     lastMessage.answer = answer;
-    lastMessage.summary = await this.generateSummary(lastMessage.query, answer);
+    lastMessage.summary = opts.failed
+      ? fallbackSummary(lastMessage.query)
+      : await this.generateSummary(lastMessage.query, answer);
 
     // Persist to DB
     if (this.db && this.lastDbId !== null) {
@@ -209,7 +219,8 @@ Generate a brief 1-2 sentence summary of this answer.`;
         updateChatAnswer(this.db, this.lastDbId, answer, lastMessage.summary);
         // Auto-title the session from the first Q&A
         if (!this.sessionTitled && this.sessionId) {
-          const title = lastMessage.summary || stripInjectedContext(lastMessage.query, replayDetector()).trim().slice(0, 100);
+          // Title is the person's own question, never the model's summary of the answer.
+          const title = stripInjectedContext(lastMessage.query, replayDetector()).trim().slice(0, 100).trim();
           updateSessionTitle(this.db, this.sessionId, title);
           this.sessionTitled = true;
         }

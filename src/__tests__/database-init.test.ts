@@ -26,6 +26,13 @@ mock.module('../utils/keychain.js', () => ({
   setSecret: mockSetSecret,
   getSecret: mockGetSecret,
   deleteSecret: mockDeleteSecret,
+  readSecret: (account: string) =>
+    store.has(account) ? { status: 'found', value: store.get(account)! } : { status: 'not-found' },
+  createSecret: (account: string, secret: string) => {
+    if (store.has(account)) return { status: 'exists' };
+    store.set(account, secret);
+    return { status: 'created' };
+  },
 }));
 
 const { initDatabase } = await import('../db/database.js');

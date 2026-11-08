@@ -2,7 +2,7 @@
  * Entry of the open-jev pre-labeler worker bundle (dist-hybrid/prelabel-worker.js).
  * A thin `self.onmessage` shim: all logic is in worker-core.ts (bun-tested).
  *
- * ONLY the prelabel vite build may import this file. The singlefile React
+ * ONLY the prelabel vite build may import this file. The React app
  * bundle must never reference it, `open-jev` or `onnxruntime`.
  *
  * The UI tsconfig has no WebWorker or WebGPU lib types, so `self` and
@@ -37,6 +37,11 @@ const engine = createPrelabelEngine({
     const res = await fetch(url);
     if (!res.ok) throw new Error(`config.json fetch failed: HTTP ${res.status}`);
     return sha256Hex(await res.arrayBuffer());
+  },
+  // transformers.js caches every remote file under the request URL in this Cache Storage bucket.
+  cachedConfigSha: async (url) => {
+    const hit = await caches.match(url, { cacheName: 'transformers-cache' });
+    return hit ? sha256Hex(await hit.arrayBuffer()) : null;
   },
   post: (msg: FromWorker) => scope.postMessage(msg),
 });

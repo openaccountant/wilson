@@ -24,6 +24,17 @@ export function csvText(value: string): string {
   return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
+/**
+ * A CSV cell that may hold a number or text. SQLite's REAL affinity stores
+ * non-numeric text as text, so a PATCHed date/amount can carry a formula:
+ * real numbers (negatives included) pass through as `String(n)`, anything
+ * else is treated as text.
+ */
+export function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return typeof value === 'number' ? String(value) : csvText(String(value));
+}
+
 /** Neutralise every string field of a row bound for XLSX/`json_to_sheet`; non-strings pass through. */
 export function sanitizeRow<T extends Record<string, unknown>>(row: T): T {
   const out: Record<string, unknown> = {};

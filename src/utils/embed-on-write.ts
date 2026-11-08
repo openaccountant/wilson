@@ -12,6 +12,11 @@
  *   - deletes: `deleteTransaction` drops the stored vectors synchronously
  *     (storage maintenance, not embedding — lives in db/queries.ts)
  *
+ * Never downloads: with the real engine, rows are embedded only once the
+ * model is already on disk (fetched by the explicit `wilson --index`);
+ * otherwise they are skipped and left for that backfill. The dashboard fires
+ * these hooks without awaiting them, so a write never waits on the model.
+ *
  * Degrade, never error: an embedding failure (missing model, failed download,
  * inference error) is logged and the affected rows are simply left for the
  * next backfill run — an import or edit must never fail because of the
@@ -30,6 +35,7 @@ import { upsertEmbeddings } from '../db/embedding-queries.js';
 import {
   DEFAULT_EMBEDDING_MODEL,
   embedTexts,
+  isEmbeddingModelCached,
   transactionEmbedText,
 } from './embeddings.js';
 import { logger } from './logger.js';
@@ -84,8 +90,17 @@ export async function embedTransactionIds(
 
   const model = opts.model ?? DEFAULT_EMBEDDING_MODEL;
   const batchSize = opts.batchSize ?? DEFAULT_BATCH_SIZE;
-  const embed =
-    opts.embed ?? overrideEmbed ?? ((texts: string[]) => embedTexts(texts, model));
+  const injected = opts.embed ?? overrideEmbed;
+
+  // The engine itself refuses to download without allowDownload (NN-01);
+  // this up-front check just skips the row re-select and logs a clear reason.
+  // Until `wilson --index` has fetched the model, rows are left for that
+  // backfill.
+  if (!injected && !isEmbeddingModelCached(model)) {
+    logger.info('embed:on-write:skipped', { model, rows: unique.length, reason: 'model not downloaded' });
+    return { embedded: 0, failed: unique.length };
+  }
+  const embed = injected ?? ((texts: string[]) => embedTexts(texts, model));
 
   try {
     // Re-select the rows' current embed text — the DB is the source of truth,

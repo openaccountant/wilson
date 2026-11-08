@@ -13,6 +13,8 @@ import {
   getConfiguredModel,
   CATEGORIZATION_CONFIDENCE_THRESHOLD_KEY,
   DEFAULT_CATEGORIZATION_CONFIDENCE_THRESHOLD,
+  CATEGORIZATION_CONCURRENCY_KEY,
+  getCategorizationConcurrency,
 } from '../utils/config.js';
 import { createTestDb } from './helpers.js';
 import * as llmModule from '../model/llm.js';
@@ -568,5 +570,188 @@ describe('categorize tool', () => {
     expect(result.data.categorized).toBe(0);
     expect(result.data.errors[0]).toContain(`ignored id ${strayId}`);
     expect(getTransactions(db)[0].category).toBeNull();
+  });
+});
+
+
+describe('categorize tool: concurrent batches (#202)', () => {
+  let db: Database;
+  let llmSpy: ReturnType<typeof spyOn>;
+
+  /** Ids the prompt offered, in order. */
+  const promptIds = (prompt: string) => [...prompt.matchAll(/"id": (\d+)/g)].map((m) => Number(m[1]));
+  const answerAll = (prompt: string, confidence = 0.9) => ({
+    response: { content: '', structured: { transactions: promptIds(prompt).map((id) => ({ id, category: 'Shopping', confidence })) } },
+    metadata: {},
+  });
+  /** A gate the mock awaits, so the test decides when each batch's answer lands. */
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const seed = (n: number) => {
+    insertTransactions(db, Array.from({ length: n }, (_, i) => ({ date: '2026-02-15', description: `Vendor ${i}`, amount: -10 })));
+    initCategorizeTool(db);
+  };
+
+  beforeEach(() => {
+    ensureTestProfile();
+    saveConfig({});
+    setSetting('modelId', 'gpt-5.2');
+    setSetting('provider', 'openai');
+    db = createTestDb();
+    llmSpy = spyOn(llmModule, 'callLlm');
+  });
+
+  afterEach(() => {
+    llmSpy.mockRestore();
+    saveConfig({});
+  });
+
+  test('a cloud provider runs up to 4 batches at once by default and categorizes every row', async () => {
+    seed(300); // 6 batches of 50
+    let inFlight = 0;
+    let peak = 0;
+    llmSpy.mockImplementation(async (prompt: string) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return answerAll(prompt);
+    });
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    expect(llmSpy.mock.calls.length).toBe(6);
+    expect(peak).toBe(4);
+    expect(result.data.categorized).toBe(300);
+    expect(getTransactions(db).every((t) => t.category === 'Shopping')).toBe(true);
+  });
+
+  test('the categorizationConcurrency setting is honoured and clamped to 1–8', async () => {
+    expect(getCategorizationConcurrency(false)).toBe(4);
+    expect(getCategorizationConcurrency(true)).toBe(1);
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 2);
+    expect(getCategorizationConcurrency(false)).toBe(2);
+    expect(getCategorizationConcurrency(true)).toBe(2);
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 0);
+    expect(getCategorizationConcurrency(false)).toBe(1);
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 64);
+    expect(getCategorizationConcurrency(false)).toBe(8);
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 'lots');
+    expect(getCategorizationConcurrency(false)).toBe(4);
+    expect(getCategorizationConcurrency(true)).toBe(1);
+
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 1);
+    seed(150);
+    let inFlight = 0;
+    let peak = 0;
+    llmSpy.mockImplementation(async (prompt: string) => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 2));
+      inFlight--;
+      return answerAll(prompt);
+    });
+    await categorizeTool.func({});
+    expect(peak).toBe(1);
+  });
+
+  test('local Ollama runs one batch at a time unless the user opts in', async () => {
+    setSetting('modelId', 'ollama:gemma4:12b');
+    setSetting('provider', 'ollama');
+    const peakFor = async () => {
+      db = createTestDb();
+      seed(200);
+      let inFlight = 0;
+      let peak = 0;
+      llmSpy.mockImplementation(async (prompt: string) => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 2));
+        inFlight--;
+        return answerAll(prompt);
+      });
+      await categorizeTool.func({});
+      return peak;
+    };
+    expect(await peakFor()).toBe(1);
+    // Opted in (with OLLAMA_NUM_PARALLEL raised on the server): fans out.
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 4);
+    expect(await peakFor()).toBe(4);
+  });
+
+  test('a local transformers model stays at one batch at a time whatever the setting', async () => {
+    setSetting('modelId', 'transformers:onnx-community/granite-4.0-micro-ONNX-web');
+    setSetting('provider', 'transformers');
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 8);
+    seed(40);
+    let inFlight = 0;
+    let peak = 0;
+    llmSpy.mockImplementation(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 2));
+      inFlight--;
+      return { response: { content: '', structured: { transactions: [] } }, metadata: {} };
+    });
+    await categorizeTool.func({});
+    expect(llmSpy.mock.calls.length).toBe(4);
+    expect(peak).toBe(1);
+  });
+
+  test('batches answering out of order: errors stay in batch order, progress stays monotonic', async () => {
+    seed(200); // 4 batches, all in flight together
+    const gates = [deferred(), deferred(), deferred(), deferred()];
+    let call = 0;
+    llmSpy.mockImplementation(async (prompt: string) => {
+      const n = call++;
+      await gates[n].promise;
+      if (n === 1 || n === 3) throw new Error(`boom ${n + 1}`);
+      return answerAll(prompt);
+    });
+    const progress: { done: number; batch: number }[] = [];
+    const run = categorizeTool.func({}, { onProgress: (p: { done: number; batch: number }) => progress.push(p) } as never);
+    // Land the answers last-to-first.
+    for (const g of [...gates].reverse()) {
+      g.resolve();
+      await new Promise((r) => setTimeout(r, 1));
+    }
+    const result = JSON.parse((await run) as string);
+    expect(result.data.categorized).toBe(100);
+    expect(result.data.errors).toEqual(['Batch 2: boom 2', 'Batch 4: boom 4']);
+    // Two failures arrived, but a success landed between them: no stop.
+    expect(result.data.notAttempted).toBeUndefined();
+    const dones = progress.map((p) => p.done);
+    expect(dones).toEqual([...dones].sort((a, b) => a - b));
+    expect(progress.at(-1)).toMatchObject({ done: 200, batch: 4 });
+  });
+
+  test('two failures in a row stop new batches; rows never started are reported', async () => {
+    setSetting(CATEGORIZATION_CONCURRENCY_KEY, 2);
+    seed(500); // 10 batches
+    llmSpy.mockRejectedValue(new Error('model unavailable'));
+    const result = JSON.parse((await categorizeTool.func({})) as string);
+    // Both workers start one batch each; both fail; neither starts another.
+    expect(llmSpy.mock.calls.length).toBe(2);
+    expect(result.data.notAttempted).toBe(400);
+    expect(result.data.message).toContain('400 transactions were not attempted');
+  });
+
+  test('a cancel stops new batches and nothing in flight writes, even after the run settles', async () => {
+    seed(400); // 8 batches
+    const controller = new AbortController();
+    const gate = deferred();
+    llmSpy.mockImplementation(async (prompt: string) => {
+      await gate.promise;
+      return answerAll(prompt);
+    });
+    const run = categorizeTool.func({}, { signal: controller.signal } as never);
+    await new Promise((r) => setTimeout(r, 1));
+    expect(llmSpy.mock.calls.length).toBe(4);
+    controller.abort();
+    gate.resolve(); // the 4 in-flight batches answer after the cancel
+    await expect(run).rejects.toThrow('Categorization cancelled');
+    expect(llmSpy.mock.calls.length).toBe(4);
+    expect(getTransactions(db).every((t) => t.category === null)).toBe(true);
   });
 });

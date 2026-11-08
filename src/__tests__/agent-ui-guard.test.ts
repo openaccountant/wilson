@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 /**
  * Source guards for the P1 UI (threat model T31). Audit args and operation
@@ -20,7 +20,7 @@ describe('agent UI source guards', () => {
   const files = filesUnder(AGENT_DIR).filter((f) => /\.tsx?$/.test(f));
 
   test('the control center components exist', () => {
-    const names = files.map((f) => f.split('/').pop());
+    const names = files.map((f) => basename(f));
     for (const n of ['AgentAccessCenter.tsx', 'KillSwitch.tsx', 'ToolPolicyTable.tsx', 'GrantTtlSelect.tsx', 'PendingApprovalsList.tsx', 'AuditLogViewer.tsx', 'ClientTokensPanel.tsx', 'TokenRevealModal.tsx']) {
       expect(names).toContain(n);
     }

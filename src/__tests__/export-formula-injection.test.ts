@@ -3,7 +3,7 @@ import { readFileSync, unlinkSync } from 'fs';
 import { readXlsx, rowsOf, columnIsNumeric } from './helpers/xlsx-read.js';
 import type { Database } from '../db/compat-sqlite.js';
 import * as licenseModule from '../licensing/license.js';
-import { flagTaxDeduction, insertTransactions } from '../db/queries.js';
+import { flagTaxDeduction, insertTransactions, updateTransaction } from '../db/queries.js';
 import { insertAccount } from '../db/net-worth-queries.js';
 import { runExport } from '../reports.js';
 import { initExportTool, exportTransactionsTool } from '../tools/export/export-transactions.js';
@@ -143,6 +143,19 @@ describe('export formula injection', () => {
       expect(csv).toContain(`2026-02-15,${EVIL_CSV},-85.5,'+cmd|calc`);
       expect(csv).toContain("'@SUM(A1)");
       expect(csv).toContain('Grocery Store,1200,Income');
+    });
+
+    test('apiExportCsv neutralises date and amount cells written via PATCH', () => {
+      const [id] = seed(db);
+      // SQLite's REAL affinity keeps non-numeric text as text, so a PATCHed
+      // date/amount can carry a formula.
+      updateTransaction(db, id, { date: '=1+1', amount: '=HYPERLINK("http://evil/")' as unknown as number });
+      const csv = apiExportCsv(db, new URLSearchParams());
+      expect(csv).toContain("'=1+1,");
+      expect(csv).toContain(`"'=HYPERLINK(""http://evil/"")"`);
+      expect(csv.split('\n').some((l) => /^[=+\-@]/.test(l))).toBe(false);
+      // Genuine negative numbers stay numeric.
+      expect(csv).toContain(',-10,');
     });
 
     test('apiExportXlsx', async () => {

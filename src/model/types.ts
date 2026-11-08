@@ -101,6 +101,8 @@ export interface ProviderCallOptions {
   toolIndex?: string[];
   outputSchema?: z.ZodType;
   signal?: AbortSignal;
+  /** Client-side limit for the whole call, in ms. Honored by the Vercel AI adapter; undefined = none. */
+  timeoutMs?: number;
   /** Generation cap. Honored by the Transformers adapter; other adapters ignore it in this slice. */
   maxTokens?: number;
 }

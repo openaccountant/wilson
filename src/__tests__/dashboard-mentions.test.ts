@@ -229,6 +229,6 @@ describe('session titles strip the mention context block', () => {
     await h.saveAnswer('About $120.');
     const title = getChatSessions(db).find((s) => s.id === h.getSessionId())?.title ?? '';
     expect(title).not.toContain('[Referenced');
-    expect(title).toBe('Answer to: how much on @Dining this month?');
+    expect(title).toBe('how much on @Dining this month?');
   });
 });

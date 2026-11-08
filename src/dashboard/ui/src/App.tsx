@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { TabBar } from '@/components/TabBar';
 import { TAB_IDS, type TabId } from '@webmcp-session';
@@ -12,35 +12,13 @@ import { useMirrorSync } from '@/hooks/useMirrorSync';
 import { primeCategoryPalette } from '@/charts/palette';
 import { WebMcpProvider } from '@/agent/WebMcpProvider';
 import type { Account, SpendingSummaryItem, Entity } from '@/types';
-import { OverviewTab } from '@/tabs/OverviewTab';
-import { TransactionsTab } from '@/tabs/TransactionsTab';
-import { ReviewTab } from '@/tabs/ReviewTab';
-import { AccountsTab } from '@/tabs/AccountsTab';
-import { ChatTab } from '@/tabs/ChatTab';
-import { LlmTab } from '@/tabs/LlmTab';
-import { LogsTab } from '@/tabs/LogsTab';
-import { GoalsTab } from '@/tabs/GoalsTab';
-import { ForecastTab } from '@/tabs/ForecastTab';
-import { SettingsTab } from '@/tabs/SettingsTab';
+import { TAB_COMPONENTS } from '@/tabs/lazyTabs';
 
 // lib/urlState.ts parses the tab out of the URL hash from the same TAB_IDS;
 // fail the build if its tab type ever drifts from the TabBar's.
 type SameTabs = [(typeof TAB_IDS)[number]] extends [UrlTab] ? ([UrlTab] extends [TabId] ? true : false) : false;
 const TABS_IN_SYNC: SameTabs = true;
 void TABS_IN_SYNC;
-
-const TAB_COMPONENTS: Record<TabId, React.FC> = {
-  overview: OverviewTab,
-  transactions: TransactionsTab,
-  review: ReviewTab,
-  accounts: AccountsTab,
-  goals: GoalsTab,
-  forecast: ForecastTab,
-  chat: ChatTab,
-  llm: LlmTab,
-  logs: LogsTab,
-  settings: SettingsTab,
-};
 
 export function App() {
   useMirrorSync();
@@ -125,10 +103,18 @@ export function App() {
       <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
       <WebMcpProvider activeTab={activeTab} onNavigate={handleTabChange}>
         <main className="flex-1 overflow-hidden min-h-0 flex flex-col">
-          <ActiveTabComponent />
+          {/* Tabs are separate chunks (tabs/lazyTabs.ts); main.tsx starts the URL's tab before React renders. */}
+          <Suspense fallback={<TabLoading />}>
+            <ActiveTabComponent />
+          </Suspense>
         </main>
       </WebMcpProvider>
       </div>
     </AppContext.Provider>
   );
+}
+
+/** Shown only while a tab's chunk downloads; fills <main> so nothing below it shifts when the tab arrives. */
+function TabLoading() {
+  return <div className="flex-1" aria-busy="true" aria-label="Loading tab" />;
 }

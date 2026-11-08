@@ -16,6 +16,8 @@
     "src/",
     "!src/__tests__/",
     "!src/dashboard/ui/spike/",
+    "!src/dashboard/ui/node_modules/",
+    "!src/dashboard/ui/tsconfig.tsbuildinfo",
     "data/",
     "SOUL.md",
     "CHANGELOG.md",
@@ -27,7 +29,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test --isolate",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "build:binaries": "bun run scripts/build-binaries.ts",
+    "build:mcpb": "bun run scripts/build-mcpb.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.58",

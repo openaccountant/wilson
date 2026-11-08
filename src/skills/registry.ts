@@ -6,6 +6,7 @@ import type { SkillMetadata, Skill, SkillSource } from './types.js';
 import { extractSkillMetadata, loadSkillFromPath } from './loader.js';
 import { hasLicense } from '../licensing/license.js';
 import { fetchPaidSkillContent } from '../content/fetcher.js';
+import { extractEmbeddedDir } from '../utils/embedded-assets.js';
 
 // Get the directory of this file to locate builtin skills
 const __filename = fileURLToPath(import.meta.url);
@@ -15,7 +16,8 @@ const __dirname = dirname(__filename);
  * Skill directories in order of precedence (later overrides earlier).
  */
 const SKILL_DIRECTORIES: { path: string; source: SkillSource }[] = [
-  { path: __dirname, source: 'builtin' },
+  // A compiled binary extracts its embedded SKILL.md files; from source they sit next to this file.
+  { path: extractEmbeddedDir('src/skills') ?? __dirname, source: 'builtin' },
   { path: join(homedir(), '.openaccountant', 'skills'), source: 'user' },
   { path: join(process.cwd(), '.openaccountant', 'skills'), source: 'project' },
 ];

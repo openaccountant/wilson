@@ -217,7 +217,7 @@ const RED = new Set(['denied_policy', 'denied_kill_switch', 'denied_grant', 'den
 export function auditChip(decision: string): ChipTone {
   if (decision === 'allowed' || decision === 'committed') return 'green';
   if (RED.has(decision)) return 'red';
-  if (decision === 'operation_created' || decision === 'approved') return 'amber';
+  if (decision === 'operation_created' || decision === 'operation_joined' || decision === 'approved') return 'amber';
   return 'muted';
 }
 
@@ -227,7 +227,7 @@ export const CLIENT_REPORTED_TITLE = 'Reported by the calling page; not verified
 
 /** The decisions the Activity filter offers, in the order a person thinks about them. Sentinels are notices, not filterable calls. */
 export const AUDIT_DECISION_OPTIONS = [
-  'allowed', 'operation_created', 'approved', 'committed', 'rejected', 'stale', 'expired', 'cancelled',
+  'allowed', 'operation_created', 'operation_joined', 'approved', 'committed', 'rejected', 'stale', 'expired', 'cancelled',
   'denied_policy', 'denied_kill_switch', 'denied_grant', 'denied_role', 'invalid_args', 'rate_limited', 'error', 'rest_export', 'rest_write',
 ] as const;
 

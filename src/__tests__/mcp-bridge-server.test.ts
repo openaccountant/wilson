@@ -470,9 +470,10 @@ describe('POST /api/mcp/call', () => {
     const grants = await grantVia(base, session, ['update_transaction']);
     const txnId = firstTransactionId(db);
     for (const transport of ['imperative', 'declarative', 'page']) {
-      const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: 'sneaky' }, transport }, { [SESSION_HEADER]: session });
+      const res = await post(base, '/api/mcp/call', { grantId: grants.update_transaction, tool: 'update_transaction', args: { id: txnId, notes: `sneaky ${transport}` }, transport }, { [SESSION_HEADER]: session });
       expect(res.body.kind, transport).toBe('operation');
     }
+    // Distinct notes per transport: identical calls would join one pending operation (see mcp-operation-dedupe.test.ts).
     expect((db.prepare('SELECT notes FROM transactions WHERE id=@id').get({ id: txnId }) as any).notes).toBeNull();
     expect((db.prepare("SELECT COUNT(*) AS n FROM mcp_operations WHERE status = 'pending'").get() as any).n).toBe(3);
   });

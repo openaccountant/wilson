@@ -9,6 +9,7 @@ import { apiErrorMessage, firstAdminBody, shouldOfferFirstAdmin, validateFirstAd
 import { clearAuthToken, notifySessionChange, writeAuthToken } from '@/lib/authSession';
 import { lockMirror } from '@/store/mirror-client';
 import { dispatchAuthSession } from '@webmcp-session';
+import { availabilityHint, catalogOptionLabel } from '@/lib/modelSetup';
 
 const MEMORY_TYPES = ['context', 'insight', 'advice'] as const;
 
@@ -713,15 +714,6 @@ function executionBadge(execution: NonNullable<ModelTaskRow['execution']>): { te
     : { text: 'Runs on a cloud server', className: 'bg-amber-500/15 text-amber-500' };
 }
 
-/** Dropdown text for a catalog entry: uncached local models flag their first-use download. */
-function catalogOptionLabel(model: CatalogModel): string {
-  if (!model.isLocal || model.cached) return model.displayName;
-  const size = model.downloadSize?.startsWith('~') ? model.downloadSize : model.downloadSize ? `~${model.downloadSize}` : null;
-  return size
-    ? `${model.displayName} (${size} — downloads on first use)`
-    : `${model.displayName} (downloads on first use)`;
-}
-
 interface ModelRowProps {
   row: ModelTaskRow;
   /** Friendly name of the chat model — what "Follows chat model" points at. */
@@ -734,6 +726,8 @@ interface ModelRowProps {
 function ModelRow({ row, chatModelName, catalog, canOverride, onSave }: ModelRowProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // "Runs on this device" says where data goes; this says whether the model is there to run (#189).
+  const missing = row.inUse ? availabilityHint(row.availability, row.model, canOverride) : null;
 
   // The dropdown lists the server-filtered catalog; if the row's current model
   // isn't in it (installed-but-uncatalogued id), append it so the select shows
@@ -807,8 +801,19 @@ function ModelRow({ row, chatModelName, catalog, canOverride, onSave }: ModelRow
               {executionBadge(row.execution).text}
             </span>
           )}
+          {missing && (
+            <span className="text-[10px] uppercase tracking-wide font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500">
+              {missing.badge}
+            </span>
+          )}
         </div>
       </div>
+      {missing && (
+        <p className="text-xs text-amber-500 mt-1">
+          {/* `command` spans render as code, like the chat's copy of the same step. */}
+          {missing.fix.split('`').map((part, i) => (i % 2 ? <code key={i} className="font-mono">{part}</code> : part))}
+        </p>
+      )}
       {canOverride && row.inUse && (
         <div className="mt-2">
           <select

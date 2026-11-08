@@ -13,6 +13,7 @@ export type ErrorType =
   | 'auth'
   | 'timeout'
   | 'overloaded'
+  | 'model_not_found'
   | 'unknown';
 
 type ErrorPattern = RegExp | string;
@@ -61,6 +62,14 @@ const ERROR_PATTERNS = {
     /\b401\b/,
     /\b403\b/,
     'no api key found',
+  ],
+  // Ollama: "model 'qwen3:8b' not found" (older builds: `model "x" not found, try pulling it first`).
+  // OpenAI-compatible: "The model `x` does not exist", code model_not_found.
+  modelNotFound: [
+    /\bmodel\s+['"`][^'"`]+['"`]\s+not\s+found\b/i,
+    /\bmodel\s+['"`][^'"`]+['"`]\s+does\s+not\s+exist\b/i,
+    'model_not_found',
+    'try pulling it first',
   ],
   contextOverflow: [
     'context length exceeded',
@@ -204,9 +213,23 @@ export function isOverloadedError(raw?: string): boolean {
   return raw ? matchesPatterns(raw, ERROR_PATTERNS.overloaded) : false;
 }
 
+export function isModelNotFoundError(raw?: string): boolean {
+  return raw ? matchesPatterns(raw, ERROR_PATTERNS.modelNotFound) : false;
+}
+
+/** The model name a model-not-found error quotes ('qwen3:8b'), or null. Only model-id characters survive. */
+export function modelNameFromError(raw: string): string | null {
+  const m = raw.match(/\bmodel\s+['"`]([^'"`]+)['"`]/i);
+  if (!m) return null;
+  const name = m[1].trim();
+  return /^[\w.:/@+-]{1,200}$/.test(name) ? name : null;
+}
+
 export function classifyError(raw?: string): ErrorType {
   if (!raw) return 'unknown';
 
+  // Before the others: the quoted model name could contain any of their words.
+  if (isModelNotFoundError(raw)) return 'model_not_found';
   if (isContextOverflowError(raw)) return 'context_overflow';
   if (isRateLimitError(raw)) return 'rate_limit';
   if (isBillingError(raw)) return 'billing';
@@ -219,7 +242,8 @@ export function classifyError(raw?: string): ErrorType {
 
 export function isNonRetryableError(raw?: string): boolean {
   const type = classifyError(raw);
-  return type === 'context_overflow' || type === 'billing' || type === 'auth';
+  // A missing model stays missing until someone pulls it or picks another: retrying only repeats the call.
+  return type === 'context_overflow' || type === 'billing' || type === 'auth' || type === 'model_not_found';
 }
 
 export function formatUserFacingError(raw: string, provider?: string): string {
@@ -247,6 +271,8 @@ export function formatUserFacingError(raw: string, provider?: string): string {
       return 'LLM request timed out. Please try again.';
     case 'overloaded':
       return 'The AI service is temporarily overloaded. Please try again in a moment.';
+    case 'model_not_found':
+      return formatModelNotFound(raw, provider);
     case 'unknown':
     default:
       if (info?.message) {
@@ -262,4 +288,22 @@ export function formatUserFacingError(raw: string, provider?: string): string {
 
       return raw;
   }
+}
+
+/**
+ * Plain-language setup steps for a chat model that isn't there (#182). An Ollama model is
+ * named in the error (callLlm prefixes "[Ollama API]"); anything else gets the Settings step only.
+ */
+function formatModelNotFound(raw: string, provider?: string): string {
+  const name = modelNameFromError(raw);
+  const isOllama = /ollama/i.test(provider ?? '') || /\[ollama api\]|try pulling it first/i.test(raw);
+  const quoted = name ? `"${name}"` : 'the configured model';
+  if (isOllama) {
+    return `The chat model ${quoted} isn't installed in Ollama yet, so nothing answered. To fix it, either:\n\n` +
+      `1. Install it: run \`ollama pull ${name ?? '<model>'}\` in a terminal, then send your message again.\n` +
+      '2. Or pick a model you already have in Settings → Models.';
+  }
+  const from = provider ? ` from ${provider}` : '';
+  return `The chat model ${quoted} isn't available${from}, so nothing answered. ` +
+    'Pick a different model in Settings → Models.';
 }

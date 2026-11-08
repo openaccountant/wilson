@@ -12,7 +12,7 @@
  */
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import type { Database } from '../db/compat-sqlite.js';
 import { createTestDb } from './helpers.js';
 import { TAGGED, TEST_STATE } from './handoff-test-utils.js';
@@ -271,7 +271,7 @@ describe('source guard: no built-in normalisation of untrusted text in the hando
     expect(offenders).toEqual([]); // the only allowed caller is scripts/gen-unicode-fold-table.ts
   });
   test('no other ICU collation/locale-casing calls on the server-side scan surface', () => {
-    const files = surfaceFiles().filter((f) => !f.includes('/dashboard/ui/'));
+    const files = surfaceFiles().filter((f) => !f.split(sep).join('/').includes('/dashboard/ui/'));
     const offenders = files.filter((f) => /localeCompare|Intl\.Collator|toLocale(Lower|Upper)Case/.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });

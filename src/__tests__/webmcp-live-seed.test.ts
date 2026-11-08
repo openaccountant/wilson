@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 import {
   CHAIN_ITERATION_CLOSING,
@@ -36,13 +37,16 @@ async function runSeed(home: string, homeEnv = home) {
   return { code: await proc.exited, stdout, stderr };
 }
 
-describe('the live-check seed script', () => {
+// Skipped on Windows: the seed script only accepts a macOS /private/tmp scratch HOME.
+
+describe.skipIf(process.platform === 'win32')('the live-check seed script', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const guardSource = readFileSync(join(import.meta.dir, '../../scripts/webmcp-live-seed-guard.ts'), 'utf8');
 
   test('keeps the real-HOME guard and the scratch-dir requirement (source guard)', () => {
     expect(guardSource).toContain("export const REAL_HOME = '/Users/jdfiscus';");
-    expect(guardSource).toMatch(/home === REAL_HOME \|\| envHome === REAL_HOME \|\| !home\.includes\('\/private\/tmp\/'\)/);
+    expect(guardSource).toMatch(/realpathSync/);
+    expect(guardSource).toContain("const scratchPrefix = '/private/tmp/';");
     expect(guardSource).toContain('process.exit(1)');
     // The guard must be the first import, so it runs before any app module loads.
     expect(source.match(/^import .*$/m)?.[0]).toContain("from './webmcp-live-seed-guard.js'");
@@ -106,9 +110,9 @@ describe('the live-check seed script', () => {
     expect(second.stderr).toContain('already has transactions');
 
     // A HOME outside /private/tmp is refused before anything is opened.
-    // A fresh dir per run, so a leftover from an earlier run can't fail the check. The literal
-    // "/tmp/..." path (not "/private/tmp/...") is what the guard refuses.
-    const notScratchHome = mkdtempSync('/tmp/oa-not-scratch-home-');
+    // A fresh dir per run, so a leftover from an earlier run can't fail the check. Fixed under /private/var/tmp, never
+    // os.tmpdir(): TMPDIR is often under /tmp or /private/tmp in agent sandboxes, which the guard correctly accepts.
+    const notScratchHome = mkdtempSync('/private/var/tmp/oa-not-scratch-home-');
     try {
       const notScratch = await runSeed(home!, notScratchHome);
       expect(notScratch.code).toBe(1);
@@ -118,6 +122,23 @@ describe('the live-check seed script', () => {
       rmSync(notScratchHome, { recursive: true, force: true });
     }
   }, 60_000);
+
+  // FINDING seed-guard: a `..` path that merely contains /private/tmp/ but resolves outside it must be refused.
+  // Fixed outside dir (/private/var/tmp) so the escape is always exercised; macOS-only, so an explicit skip elsewhere.
+  test.skipIf(!home || !existsSync('/private/var/tmp'))('refuses a HOME that contains /private/tmp/ but resolves outside it', async () => {
+    const outside = mkdtempSync('/private/var/tmp/oa-escape-home-');
+    try {
+      const real = realpathSync(outside);
+      expect(real.startsWith('/private/tmp/')).toBe(false);
+      const escaping = `/private/tmp/../${relative('/private', real)}`;
+      const res = await runSeed(home!, escaping);
+      expect(res.code).toBe(1);
+      expect(res.stderr).toContain('Refusing to seed');
+      expect(existsSync(join(outside, '.openaccountant'))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
 
   test.skipIf(!home)('cleanup', () => {
     if (home) rmSync(home, { recursive: true, force: true });

@@ -91,6 +91,21 @@ describe('callLlm', () => {
     await expect(callLlm('test', { model: 'gpt-5.2' })).rejects.toThrow('invalid api key');
   });
 
+  test('a missing Ollama model is tried once and recorded as one failed call (#182)', async () => {
+    let callCount = 0;
+    mockAdapterFn = async () => {
+      callCount++;
+      throw new Error("model 'qwen3:8b' not found");
+    };
+    traceStore.clear();
+
+    await expect(callLlm('test', { model: 'ollama:qwen3:8b' })).rejects.toThrow("[Ollama API] model 'qwen3:8b' not found");
+    expect(callCount).toBe(1);
+    const added = traceStore.getTraces();
+    expect(added).toHaveLength(1);
+    expect(added[0].status).toBe('error');
+  });
+
   test('local transformers failures are not retried (greedy decoding fails the same way every time)', async () => {
     let callCount = 0;
     mockAdapterFn = async () => {

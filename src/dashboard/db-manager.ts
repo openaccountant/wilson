@@ -60,7 +60,8 @@ export function switchProfile(name: string): Database {
   // Ensure profile dir exists
   setActiveProfile(name);
   const db = openDb(name);
-  // Re-init chat for the new DB
+  // Re-init chat for the new DB. The LLM record stores are process-wide and stay on the startup profile's DB: re-pointing
+  // them here would also move an in-flight run's (or an embedded TUI's) records into this profile.
   initChatSession(db);
   return db;
 }

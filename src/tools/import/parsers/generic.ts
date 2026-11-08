@@ -7,7 +7,7 @@ const DATE_PATTERNS = /^(date|transaction\s*date|trans\s*date|posted?\s*date)$/i
 // Quicken's "Transaction Report" CSV labels its description column
 // "Payee/Security" (it covers investment-security transactions too).
 const DESCRIPTION_PATTERNS = /^(description|merchant|payee(\s*\/\s*security)?|memo|name|transaction\s*description)$/i;
-const AMOUNT_PATTERNS = /^(amount|debit|credit|transaction\s*amount)$/i;
+const AMOUNT_PATTERNS = /^(amount|transaction\s*amount)$/i;
 const DEBIT_PATTERNS = /^(debit|withdrawal|payment)$/i;
 const CREDIT_PATTERNS = /^(credit|deposit)$/i;
 // Some exports (e.g. Quicken's combined "Transaction Report" CSV) cover
@@ -44,7 +44,7 @@ function stripReportPreamble(content: string): string {
  *
  * Looks for headers matching date, description, and amount patterns.
  * If separate debit/credit columns are found, merges them (debit = negative, credit = positive).
- * Tries to detect sign convention: if most amounts are positive, assumes positive = expense and negates.
+ * Tries to detect sign convention: if no amount is negative and most are positive, assumes positive = expense and negates.
  */
 export function parseGenericCSV(content: string): ParsedTransaction[] {
   const cleaned = stripReportPreamble(content);
@@ -81,10 +81,18 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     );
   }
 
-  const hasSeparateDebitCredit = !!(debitCol || creditCol) && !amountCol;
+  // A full Debit+Credit pair wins over a stray amount-like column (NN-07: credits
+  // must not be dropped); a lone debit/credit-ish column only counts without an amount.
+  const hasSeparateDebitCredit = !!((debitCol && creditCol) || ((debitCol || creditCol) && !amountCol));
 
-  // First pass: parse raw amounts to detect sign convention
-  const rawTransactions: { date: string; description: string; amount: number; accountName?: string }[] = [];
+  // First pass: parse raw amounts. In split mode a row's value comes from the
+  // Debit/Credit cells; a row with no usable split value (blank, non-numeric or a
+  // "0.00" placeholder in both) falls back to the Amount column, whose sign
+  // convention is resolved after the pass.
+  const rawTransactions: { date: string; description: string; amount: number; accountName?: string; fromAmount?: boolean }[] = [];
+  // Rows carrying BOTH a split value and an Amount tell us how the Amount column is signed.
+  let amountAgrees = 0;
+  let amountUnsigned = 0;
 
   for (const row of records) {
     const rawDate = row[dateCol] ?? '';
@@ -93,13 +101,31 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
     if (!rawDate || !description) continue;
 
     let amount: number;
+    let fromAmount = false;
 
     if (hasSeparateDebitCredit) {
-      const debit = debitCol ? parseAmount(row[debitCol] || '0') : 0;
-      const credit = creditCol ? parseAmount(row[creditCol] || '0') : 0;
-      // Debit = negative (expense), credit = positive (income)
-      amount = isNaN(debit) ? 0 : -Math.abs(debit);
-      amount += isNaN(credit) ? 0 : Math.abs(credit);
+      const debit = debitCol ? parseAmount(row[debitCol] ?? '') : NaN;
+      const credit = creditCol ? parseAmount(row[creditCol] ?? '') : NaN;
+      // A zero is a placeholder for "not this side", never a value that outranks the other column.
+      const debitVal = Number.isFinite(debit) && debit !== 0 ? -Math.abs(debit) : 0;
+      const creditVal = Number.isFinite(credit) && credit !== 0 ? Math.abs(credit) : 0;
+      const split = debitVal + creditVal;
+      const rowAmount = amountCol ? parseAmount(row[amountCol] ?? '') : NaN;
+      if (debitVal === 0 && creditVal === 0) {
+        // No split value on this row: Amount column, else a blank row to skip.
+        if (!Number.isFinite(rowAmount) || rowAmount === 0) continue;
+        amount = rowAmount;
+        fromAmount = true;
+      } else {
+        amount = split;
+        if (Number.isFinite(rowAmount) && rowAmount !== 0) {
+          // Only a debit is informative: a positive credit agrees under either convention.
+          if (split < 0) {
+            if (rowAmount < 0) amountAgrees++;
+            else amountUnsigned++;
+          }
+        }
+      }
     } else {
       amount = parseAmount(row[amountCol!] ?? '0');
       if (isNaN(amount)) continue;
@@ -107,13 +133,32 @@ export function parseGenericCSV(content: string): ParsedTransaction[] {
 
     const date = normalizeDate(rawDate);
     const accountName = accountCol ? row[accountCol]?.trim() || undefined : undefined;
-    rawTransactions.push({ date, description: description.trim(), amount, accountName });
+    rawTransactions.push({ date, description: description.trim(), amount, accountName, fromAmount });
   }
 
-  // Detect sign convention: if most amounts are positive, the bank likely uses
-  // positive = expense, so we negate.
+  // Amount-only rows in a split file (NN-07: negative = expense). The rows that carry
+  // both an Amount and a split value reveal the Amount convention: where Amount is
+  // positive on a debit it is unsigned (positive = expense), so fallback rows flip.
+  // With no such evidence, an Amount-only set with no negatives is treated as unsigned
+  // like a plain Amount file; any negative means it is already signed.
+  const fallbackRows = rawTransactions.filter((t) => t.fromAmount);
+  let negateFallback = false;
+  if (fallbackRows.length > 0) {
+    if (amountUnsigned > 0 || amountAgrees > 0) {
+      negateFallback = amountUnsigned > amountAgrees;
+    } else {
+      const pos = fallbackRows.filter((t) => t.amount > 0).length;
+      negateFallback = !fallbackRows.some((t) => t.amount < 0) && pos > fallbackRows.length * 0.6;
+    }
+  }
+  for (const t of fallbackRows) if (negateFallback) t.amount = -t.amount;
+
+  // Detect sign convention: an unsigned export (positive = expense) has no
+  // negative amounts at all, so we negate. Any negative row means the file is
+  // already signed — a mostly-deposit savings statement must keep its signs (NN-07).
   const positiveCount = rawTransactions.filter((t) => t.amount > 0).length;
-  const shouldNegate = !hasSeparateDebitCredit && positiveCount > rawTransactions.length * 0.6;
+  const hasNegative = rawTransactions.some((t) => t.amount < 0);
+  const shouldNegate = !hasSeparateDebitCredit && !hasNegative && positiveCount > rawTransactions.length * 0.6;
 
   const transactions: ParsedTransaction[] = rawTransactions.map((t) => ({
     date: t.date,

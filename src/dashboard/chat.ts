@@ -6,6 +6,7 @@ import { InMemoryChatHistory } from '../utils/in-memory-chat-history.js';
 import { getConfiguredModel } from '../utils/config.js';
 import { initAgentTools } from '../agent/init-tools.js';
 import { logger } from '../utils/logger.js';
+import { formatUserFacingError } from '../utils/errors.js';
 import {
   createOperation,
   expirePendingOperationsBySource,
@@ -772,7 +773,7 @@ export async function handleChatMessage(
     const answer =
       result?.answer ??
       (runner.error
-        ? `Error: ${runner.error}`
+        ? `Error: ${formatUserFacingError(runner.error)}`
         : denied
           ? readOnlyUser
             ? viewerCannotWrite(user!, denied)
@@ -789,7 +790,9 @@ export async function handleChatMessage(
     const durationMs = Date.now() - startTime;
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard chat error`, { durationMs, error: errorMsg });
-    return { answer: `Error: ${errorMsg}`, sessionId: chatHistory.getSessionId() ?? null, failed: true };
+    // The raw message (e.g. "[Ollama API] model 'qwen3:8b' not found") stays in the log; the
+    // browser gets the plain-language version with the step that fixes it (#182).
+    return { answer: `Error: ${formatUserFacingError(errorMsg)}`, sessionId: chatHistory.getSessionId() ?? null, failed: true };
   } finally {
     clearTimeout(deadline);
   }
@@ -879,7 +882,7 @@ async function runCategorizeCommand(
     }
     const errorMsg = err instanceof Error ? err.message : String(err);
     logger.error(`Dashboard /categorize error`, { durationMs: Date.now() - startTime, error: errorMsg });
-    return { answer: `**Categorization failed:** ${errorMsg}`, failed: true };
+    return { answer: `**Categorization failed:** ${formatUserFacingError(errorMsg)}`, failed: true };
   } finally {
     categorizeProgress = null;
   }

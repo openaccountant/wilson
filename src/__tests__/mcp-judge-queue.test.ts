@@ -95,16 +95,18 @@ describe('GET /api/judgements', () => {
     expect(body.agreement).toEqual({ n: 1, within1Pct: 0 });
   });
 
-  test('pages with a cursor, rejects an unknown status, and is readable by a viewer', async () => {
-    const { db, get, viewer } = await start({ auth: true });
+  test('pages with a cursor, rejects an unknown status, and is admin-only with auth on', async () => {
+    const { db, get, admin, viewer } = await start({ auth: true });
     for (let i = 0; i < 3; i++) propose(db, addInteraction(db));
-    const first = (await (await get('/api/judgements?limit=2', viewer)).json()) as any;
+    // Judgements are built from recorded interactions (each user's private Chat): a viewer reads none of it.
+    expect((await get('/api/judgements?limit=2', viewer)).status).toBe(403);
+    const first = (await (await get('/api/judgements?limit=2', admin)).json()) as any;
     expect(first.judgements).toHaveLength(2);
     expect(first.nextCursor).toBe('2');
-    const second = (await (await get(`/api/judgements?limit=2&cursor=${first.nextCursor}`, viewer)).json()) as any;
+    const second = (await (await get(`/api/judgements?limit=2&cursor=${first.nextCursor}`, admin)).json()) as any;
     expect(second.judgements).toHaveLength(1);
     expect(second.nextCursor).toBeUndefined();
-    expect((await get('/api/judgements?status=bogus', viewer)).status).toBe(400);
+    expect((await get('/api/judgements?status=bogus', admin)).status).toBe(400);
   });
 });
 
@@ -196,7 +198,7 @@ describe('accept, reject, revoke', () => {
     const first = propose(db, interaction, { principal: 'agent-a' });
     expect((await post(`/api/judgements/${first}/accept`, undefined, admin)).status).toBe(200);
     const newer = propose(db, interaction, { principal: 'agent-b' }); // a later proposal on the same interaction
-    const accepted = (await (await get('/api/judgements?status=accepted', viewer)).json()) as any;
+    const accepted = (await (await get('/api/judgements?status=accepted', admin)).json()) as any;
     expect(accepted.judgements.map((j: any) => j.id)).toEqual([first]);
     expect((await get('/api/interactions?judged=accepted', admin).then((r) => r.json()) as any[]).map((r) => r.id)).toEqual([interaction]);
     expect((await post(`/api/judgements/${first}/revoke`, undefined, viewer)).status).toBe(403);

@@ -2,8 +2,10 @@
 //
 // Dedicated worker owning the single wa-sqlite connection and all OPFS/wasm
 // glue (OPFS SyncAccessHandles are worker-only — see the committed decision
-// doc §5.3). Bundled with `?worker&inline` so it lives inside the single-file
-// build. Message protocol (request → response):
+// doc §5.3). Bundled with `?worker` as its own content-hashed module under
+// /_app/ (served immutable by the dashboard), and it fetches the hashed
+// wa-sqlite wasm from there too, so neither weighs on the page's first paint.
+// Message protocol (request → response):
 //   { id, type: 'init',       profile }              → { available, profile, seeded, lastSyncedAt }
 //   { id, type: 'setProfile', profile }              → same shape (closes/reopens the pool)
 //   { id, type: 'applySync',  payload: SyncPayload } → ApplySyncResult + lastSyncedAt
@@ -16,7 +18,7 @@
 //                                                      status | toolRead only), bound to `profile`
 // Responses: { id, ok: true, result } | { id, ok: false, error }.
 
-import wasmBase64 from 'virtual:wa-sqlite-wasm';
+import wasmUrl from 'wa-sqlite/dist/wa-sqlite.wasm?url';
 import { createWaSqliteHandle, type WaSqliteHandle } from './wa-sqlite-adapter.js';
 import { applySync, getMeta, isMirrorSeeded } from './mirror-schema.js';
 import { serveApiPath } from './mirror-reads.js';
@@ -25,6 +27,18 @@ import { removeMirrorPools, type PoolRoot } from './mirror-session.js';
 import type { MirrorStatus, SyncPayload } from './types.js';
 
 let handle: WaSqliteHandle | null = null;
+
+/** The wasm bytes, fetched once per worker (a profile switch reopens the pool, not the download). */
+let wasmBytes: Promise<Uint8Array> | null = null;
+function loadWasm(): Promise<Uint8Array> {
+  wasmBytes ??= fetch(wasmUrl).then(async (res) => {
+    if (!res.ok) throw new Error(`wa-sqlite wasm: HTTP ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  });
+  // A failed download must not stick: the next init retry fetches again.
+  wasmBytes.catch(() => { wasmBytes = null; });
+  return wasmBytes;
+}
 let profile: string | null = null;
 let seeded = false;
 
@@ -38,7 +52,7 @@ async function readLastSyncedAt(): Promise<string | null> {
 
 async function openProfile(name: string): Promise<MirrorStatus> {
   if (handle) await handle.close();
-  handle = await createWaSqliteHandle(name, wasmBase64);
+  handle = await createWaSqliteHandle(name, await loadWasm());
   profile = name;
   // A restored mirror (pool reopened after a reload) is already seeded if its
   // meta marker matches the current schema version.

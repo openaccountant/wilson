@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import type { Database } from '../db/compat-sqlite.js';
 import { createTestDb } from './helpers.js';
 import { LEGACY, TAGGED, TEST_SECRET, baseHandoff, blockFromBody, realBlock } from './handoff-test-utils.js';
@@ -388,7 +388,13 @@ describe('the secret', () => {
       expect(detectorFromDb(b, '1999-01-01 00:00:00').acceptLegacy).toBe(true); // older than handoff_tag_since
       b.close();
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch (err) {
+        // Windows won't delete a still-open file, and bun:sqlite may hold the handle past close()
+        // until its prepared statements are finalized. Leaking a temp dir there is fine.
+        if (process.platform !== 'win32' || (err as NodeJS.ErrnoException).code !== 'EBUSY') throw err;
+      }
     }
   }, 30_000); // two real-file initDatabase calls (migrations + fsync) can pass the 5 s default on a loaded machine
 
@@ -425,7 +431,7 @@ describe('the secret', () => {
         if (name === 'node_modules' || name === '__tests__' || name === 'dist') continue;
         const p = join(dir, name);
         if (statSync(p).isDirectory()) walk(p);
-        else if (/\.(ts|tsx)$/.test(name) && readFileSync(p, 'utf8').includes('handoff_secret')) hits.push(p.replace(/.*\/src\//, 'src/'));
+        else if (/\.(ts|tsx)$/.test(name) && readFileSync(p, 'utf8').includes('handoff_secret')) hits.push(p.split(sep).join('/').replace(/.*\/src\//, 'src/'));
       }
     };
     walk(join(import.meta.dir, '..'));

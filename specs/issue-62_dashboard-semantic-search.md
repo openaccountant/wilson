@@ -146,7 +146,7 @@ Optional (cheap, keeps route wiring honest): extend `src/__tests__/dashboard-ser
 1. `bun run typecheck` — clean (root tsc excludes the UI dir; it covers `src/dashboard/api.ts` + `server.ts`).
 2. `bun test` — all green, including the untouched `embedding-search.test.ts`, `embedding-backfill.test.ts`, `dashboard-api.test.ts`, `dashboard-server.test.ts`.
 3. `cd src/dashboard/ui && npm run build` — `tsc -b && vite build` pass (run `npm ci` first if `node_modules` is missing in this worktree).
-4. Manual check (network only for the one-time model download if not already cached):
+4. Manual check (after `wilson --index` has downloaded the model; search itself never downloads it):
    - Seed or use a profile with transactions; `bun run src/index.tsx --index` to index them (instant no-op if already indexed).
    - `bun run src/index.tsx --dashboard`, open Transactions:
      - Type "coffee shops" → Starbucks / Blue Bottle / similar coffee vendors appear ranked with score chips and the `semantic` marker, even though no description contains "coffee".
@@ -168,7 +168,7 @@ Embed-on-write hooks (new/edited transactions are searchable only after the next
 
 ## Risks / notes for the builder
 
-- **First semantic query is slow-ish.** The dashboard process lazily loads the ONNX pipeline on the first `q` (a few seconds; plus one-time download if the model was never cached). The UI loading state covers it; no warmup endpoint in this slice. If it feels broken in manual testing, that's expected on the very first query only.
+- **First semantic query is slow-ish.** The dashboard process lazily loads the ONNX pipeline on the first `q` (a few seconds). It never downloads the model: if `wilson --index` has not fetched it, the endpoint returns `modelReady: false` and the Transactions view says to run `wilson --index` *(amended 2026-10-22, fix/gf-embed-lazy, NN-01)*. The UI loading state covers it; no warmup endpoint in this slice. If it feels broken in manual testing, that's expected on the very first query only.
 - **Scores are cosine similarities in [-1, 1]** (both vectors unit-norm). Display `Math.round(score * 100)` and don't clamp; a score near 0.3–0.6 is a normal "related" match for MiniLM, not a bug.
 - **`pending` is a raw 0/1** in DB rows; the UI type says `boolean` and only truthiness-checks it — raw rows already flow through `/api/transactions` today, so passing raw rows + `score` changes nothing.
 - **Named params only** in the enrichment query: the `compat-sqlite` wrapper rewrites `@x` → `$x` and takes a single params object; there is no positional-args overload. Build `@id0, @id1, …` dynamically.

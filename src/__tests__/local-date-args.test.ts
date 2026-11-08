@@ -58,7 +58,7 @@ describe('resolveLocalDateArgs', () => {
     const explicit = { period: 'month', month: '2026-07' };
     expect(resolveLocalDateArgs(query, 'spending_summary', explicit, NOW)).toBe(explicit);
     const search = { query: 'expenses' };
-    expect(resolveLocalDateArgs(query, 'transaction_search', search, NOW)).toBe(search);
+    expect(resolveLocalDateArgs('what are my biggest expenses?', 'transaction_search', search, NOW)).toBe(search);
     const other = { action: 'list' };
     expect(resolveLocalDateArgs(query, 'budget_check', other, NOW)).toBe(other);
     expect(resolveLocalDateArgs('biggest expenses?', 'spending_summary', args, NOW)).toBe(args);
@@ -72,5 +72,26 @@ describe('resolveLocalDateArgs', () => {
     expect(resolveLocalDateArgs('x', 'transaction_search', { query: 'dining in aug, 2026' }, NOW)).toEqual({ query: 'dining in aug' });
     const older = { query: 'August 2025 expenses' };
     expect(resolveLocalDateArgs(query, 'transaction_search', older, NOW)).toBe(older);
+  });
+
+  // granite, "How much did I spend on dining this month?" -> transaction_search
+  // {query: 'dining'}: six months of rows, answered as "this month" (demo seed,
+  // $1,259.18 against $168.44). The user's period goes into the search.
+  test('transaction_search: the period the user asked about is added when the model left it out', () => {
+    const dining = 'How much did I spend on dining this month?';
+    expect(resolveLocalDateArgs(dining, 'transaction_search', { query: 'dining' }, NOW)).toEqual({ query: 'dining this month' });
+    expect(resolveLocalDateArgs('groceries last month?', 'transaction_search', { query: 'groceries' }, NOW)).toEqual({ query: 'groceries last month' });
+    expect(resolveLocalDateArgs('fuel This Year', 'transaction_search', { query: 'gas' }, NOW)).toEqual({ query: 'gas this year' });
+    expect(resolveLocalDateArgs(query, 'transaction_search', { query: 'expenses' }, NOW)).toEqual({ query: 'expenses august' });
+  });
+
+  test('transaction_search: a period already in the search, another year, or none asked: unchanged', () => {
+    const has = { query: 'dining this month' };
+    expect(resolveLocalDateArgs('How much did I spend on dining this month?', 'transaction_search', has, NOW)).toBe(has);
+    const named = { query: 'dining in October' };
+    expect(resolveLocalDateArgs('How much did I spend on dining this month?', 'transaction_search', named, NOW)).toBe(named);
+    const older = { query: 'dining' };
+    expect(resolveLocalDateArgs('dining in December?', 'transaction_search', older, NOW)).toBe(older); // December 2025
+    expect(resolveLocalDateArgs('show my dining', 'transaction_search', older, NOW)).toBe(older);
   });
 });

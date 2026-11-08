@@ -6,6 +6,26 @@ config({ quiet: true });
 
 const args = process.argv.slice(2);
 
+if (args.includes("--version") || args.includes("-v")) {
+  const { default: packageJson } = await import("../package.json");
+  console.log(packageJson.version);
+  process.exit(0);
+}
+
+// `wilson --mcp-server` speaks JSON-RPC on stdout, so nothing else may print
+// there: send every console line to stderr before any profile/DB code can log.
+// (Not to be confused with `--mcp`, which lists Wilson's MCP *client* connections.)
+const mcpServerIdx = args.indexOf("--mcp-server");
+const mcpMode = mcpServerIdx !== -1;
+if (mcpMode) {
+  args.splice(mcpServerIdx, 1);
+  const toStderr = (...a: unknown[]) => console.error(...a);
+  console.log = toStderr;
+  console.info = toStderr;
+  console.debug = toStderr;
+  console.warn = toStderr;
+}
+
 // Enable debug logging if --debug flag is passed
 if (args.includes("--debug")) {
   process.env.OA_DEBUG = "1";
@@ -33,7 +53,12 @@ if (args.includes("--profiles")) {
 }
 
 // Extract --profile <name> and remove from args so downstream doesn't see it
-let profileName = DEFAULT_PROFILE;
+// WILSON_PROFILE picks the profile when --profile is absent (the Claude Desktop
+// extension passes its "profile" setting this way). An unexpanded host
+// placeholder or a blank value means the default.
+const envProfile = process.env.WILSON_PROFILE?.trim();
+let profileName =
+  envProfile && !envProfile.startsWith("${") ? envProfile : DEFAULT_PROFILE;
 const profileIdx = args.indexOf("--profile");
 if (profileIdx !== -1) {
   const name = args[profileIdx + 1];
@@ -47,12 +72,24 @@ if (profileIdx !== -1) {
   args.splice(profileIdx, 2);
 }
 
+// The extension's profile setting is free text typed into a settings form: keep
+// it a plain folder name (no "..", no separators).
+if (mcpMode && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(profileName)) {
+  console.error(
+    `Error: profile name "${profileName}" must be letters, digits, - or _ (up to 64).`,
+  );
+  process.exit(1);
+}
+
 setActiveProfile(profileName);
 // ──────────────────────────────────────────────────────────────────────────
 
 const runIndex = args.indexOf("--run");
 
-if (args.includes("--help")) {
+if (mcpMode) {
+  const { runStdioServer } = await import("./mcp/stdio-server.js");
+  await runStdioServer();
+} else if (args.includes("--help")) {
   console.log(`Open Accountant — AI-powered personal finance CLI
 
 Usage:
@@ -72,9 +109,11 @@ Usage:
   wilson --sync                    Sync all linked accounts (Plaid, Monarch, Firefly III)
   wilson --index                   Build the local semantic index for existing transactions (on-device)
   wilson --mcp                     Show MCP server connections and available tools
+  wilson --mcp-server              Run as an MCP server on stdio (Claude Desktop extension)
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
+  wilson --version                 Print the version
   wilson --help                    Show this help`);
 } else if (args.includes("--status")) {
   const { printStatus } = await import("./reports.js");

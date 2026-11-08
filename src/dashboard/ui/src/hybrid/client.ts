@@ -2,7 +2,7 @@
  * Hybrid chat client — browser-only orchestration for local-first WebGPU chat.
  *
  * Bundled ONLY into the prebuilt hybrid chunk (dist-hybrid/hybrid-chat.js via
- * vite.hybrid.config.ts); never into the singlefile React HTML, which loads
+ * vite.hybrid.config.ts); never into the React app bundle, which loads
  * this chunk at runtime from /assets/hybrid-chat.js.
  *
  * This is the main-thread PROXY. Everything that touches transformers.js (the

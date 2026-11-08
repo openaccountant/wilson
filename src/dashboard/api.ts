@@ -1,4 +1,5 @@
 import type { Database } from '../db/compat-sqlite.js';
+import { MAX_CATEGORY_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_TEXT_FIELD_LENGTH, MAX_FILENAME_LENGTH } from '../db/field-limits.js';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 import {
@@ -43,6 +44,8 @@ import {
 } from '../db/queries.js';
 import {
   getPendingReviewQueue,
+  getReviewQueueStatus,
+  type ReviewQueueStatus,
   resolveCategorizationReview,
   type PendingReviewRow,
 } from '../db/categorization-review-queries.js';
@@ -75,7 +78,7 @@ import {
   searchTransactionsSemantic,
   type SemanticTransactionFilters,
 } from '../db/embedding-queries.js';
-import { DEFAULT_EMBEDDING_MODEL, embedTexts } from '../utils/embeddings.js';
+import { DEFAULT_EMBEDDING_MODEL, embedTexts, isEmbeddingModelCached } from '../utils/embeddings.js';
 import { getLocalChatModelConfig } from '../model/local-chat.js';
 import { getModelPanel, setTaskOverride, validateTaskModel, type OverridableTask } from '../model/task-models.js';
 import { resolveProvider } from '../providers.js';
@@ -130,8 +133,9 @@ import {
 } from '../demo/showdown.js';
 import { getSampleBySlug } from '../demo/samples.js';
 import { getPrivacyExhibit, getPrivacyLedger, startPrivacyRun } from '../demo/privacy.js';
+import { HttpError } from './http-errors.js';
 import { discoverSkills } from '../skills/registry.js';
-import { csvText } from '../utils/spreadsheet-safe.js';
+import { csvText, csvCell } from '../utils/spreadsheet-safe.js';
 import { xlsxToBuffer } from '../utils/xlsx-writer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -315,9 +319,10 @@ export function apiTransactions(db: Database, params: URLSearchParams) {
 export async function apiUpdateTransaction(db: Database, id: number, updates: TransactionUpdate) {
   const success = updateTransaction(db, id, updates);
   // Description is part of the embed text — refresh the stored vector.
-  // Never fails the edit (degrade, never error).
+  // Fire-and-forget: never fails or delays the edit (embedTransactionIds
+  // never throws and logs its own failures).
   if (success && updates.description !== undefined) {
-    await embedTransactionIds(db, [id]);
+    void embedTransactionIds(db, [id]);
   }
   return { success, id };
 }
@@ -328,6 +333,11 @@ export async function apiUpdateTransaction(db: Database, id: number, updates: Tr
 export function apiReviewQueue(db: Database, params: URLSearchParams): PendingReviewRow[] {
   const limit = parseInt(params.get('limit') ?? '200', 10);
   return getPendingReviewQueue(db, Number.isFinite(limit) && limit >= 1 ? limit : 200);
+}
+
+/** GET /api/reviews/status — queue + uncategorized counts for the Review tab's empty state (read-only; any authenticated user). */
+export function apiReviewQueueStatus(db: Database): ReviewQueueStatus {
+  return getReviewQueueStatus(db);
 }
 
 export type ReviewActionResult =
@@ -436,6 +446,8 @@ export interface SemanticSearchResponse {
   /** Total transaction count. */
   total: number;
   model: string;
+  /** False when the embedding model is not downloaded yet — search did not run; `wilson --index` fetches it. */
+  modelReady: boolean;
 }
 
 /**
@@ -460,10 +472,13 @@ export async function apiSemanticSearch(
   const missing = countMissingTransactionTargets(db, DEFAULT_EMBEDDING_MODEL);
   const indexed = Math.max(0, total - missing);
   const model = DEFAULT_EMBEDDING_MODEL;
+  // The local engine is used only once the model is on disk — a search never
+  // triggers the model download (NN-01); the UI tells the user to run --index.
+  const modelReady = embed !== undefined || isEmbeddingModelCached(model);
 
   const q = (params.get('q') ?? '').trim();
-  if (!q) {
-    return { results: [], indexed, total, model };
+  if (!q || !modelReady) {
+    return { results: [], indexed, total, model, modelReady };
   }
 
   const parsedLimit = parseInt(params.get('limit') ?? '25', 10);
@@ -513,7 +528,7 @@ export async function apiSemanticSearch(
     }
   }
 
-  return { results, indexed, total, model };
+  return { results, indexed, total, model, modelReady };
 }
 
 export function apiDeleteTransaction(db: Database, id: number) {
@@ -541,7 +556,7 @@ export function apiExportCsv(db: Database, params: URLSearchParams): string {
 
   const header = 'Date,Description,Amount,Category';
   const rows = txns.map((t) =>
-    [t.date, csvText(t.description), String(t.amount), csvText(t.category ?? '')].join(',')
+    [csvCell(t.date), csvText(t.description), csvCell(t.amount), csvText(t.category ?? '')].join(',')
   );
   return [header, ...rows].join('\n');
 }
@@ -603,7 +618,7 @@ export function apiExportNetWorthCsv(db: Database): string {
       csvText(a.account_type),
       csvText(a.account_subtype),
       csvText(a.institution ?? ''),
-      String(a.current_balance),
+      csvCell(a.current_balance),
     ].join(','));
   }
   lines.push(['','','','Total Assets', String(nw.totalAssets)].join(','));
@@ -1194,6 +1209,10 @@ export function apiJudgements(db: Database, params: URLSearchParams) {
   }
   const limit = Math.max(1, Math.min(50, parseInt(params.get('limit') ?? '50', 10) || 50));
   const cursor = parseInt(params.get('cursor') ?? '0', 10);
+  // A cursor past 2^53 is no offset this server ever handed out, and SQLite refuses it as OFFSET (a 500 otherwise).
+  if (Number.isFinite(cursor) && !Number.isSafeInteger(cursor)) {
+    return { error: 'cursor is out of range' } as const;
+  }
   const offset = Number.isInteger(cursor) && cursor > 0 ? cursor : 0;
   const { rows, total } = listJudgements(db, { status, offset, limit });
   const next = offset + rows.length;
@@ -1242,9 +1261,14 @@ export function apiMemories(db: Database) {
   }
 }
 
+const MEMORY_TYPES: MemoryInsert['memoryType'][] = ['context', 'insight', 'advice'];
+
 export function apiAddMemory(db: Database, body: { memoryType?: string; content?: string; category?: string }) {
   if (!body.memoryType || !body.content) {
-    throw new Error('memoryType and content required');
+    throw new HttpError(400, 'memoryType and content required');
+  }
+  if (typeof body.content !== 'string' || !MEMORY_TYPES.includes(body.memoryType as MemoryInsert['memoryType'])) {
+    throw new HttpError(400, `memoryType must be one of ${MEMORY_TYPES.join(', ')} and content must be a string`);
   }
   const insert: MemoryInsert = {
     memoryType: body.memoryType as MemoryInsert['memoryType'],
@@ -1293,7 +1317,7 @@ export function apiEntities(db: Database) {
 }
 
 export function apiCreateEntity(db: Database, body: { name?: string; description?: string; color?: string }) {
-  if (!body.name) throw new Error('name is required');
+  if (!body.name) throw new HttpError(400, 'name is required');
   const id = createEntity(db, body as EntityInsert);
   return { success: true, id };
 }
@@ -1374,6 +1398,25 @@ export interface ImportResult {
   error?: string;
 }
 
+/**
+ * Per-field caps for /api/import rows, shared with the agent tool validators (src/db/field-limits.ts)
+ * so imported values stay editable through update_transaction / categorize_transaction.
+ * description 200, category and category_detailed 64, other text fields 200, filename 255.
+ */
+export const IMPORT_MAX_DESCRIPTION = MAX_DESCRIPTION_LENGTH;
+export const IMPORT_MAX_CATEGORY = MAX_CATEGORY_LENGTH;
+export const IMPORT_MAX_TEXT_FIELD = MAX_TEXT_FIELD_LENGTH; // bank, merchant_name, payment_channel, external_id, account_last4
+export const IMPORT_MAX_FILENAME = MAX_FILENAME_LENGTH;
+const IMPORT_MIN_YEAR = 1900;
+const IMPORT_MAX_YEAR = 2100;
+
+/** Real calendar date (see isRealCalendarDate) within a sane statement-year range. */
+function isImportDate(s: string): boolean {
+  if (!isRealCalendarDate(s)) return false;
+  const y = Number(s.slice(0, 4));
+  return y >= IMPORT_MIN_YEAR && y <= IMPORT_MAX_YEAR;
+}
+
 function failedImport(error: string): ImportResult {
   return { status: 'failed', transactionsImported: 0, transactionsSkipped: 0, error, message: error };
 }
@@ -1390,6 +1433,15 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
   // 1. Validate the payload
   if (!body.filename || typeof body.filename !== 'string' || body.filename.trim() === '') {
     return failedImport('filename is required');
+  }
+  if (body.filename.length > IMPORT_MAX_FILENAME) {
+    return failedImport(`filename must be at most ${IMPORT_MAX_FILENAME} characters`);
+  }
+  if (body.bank !== undefined && body.bank !== null) {
+    if (typeof body.bank !== 'string') return failedImport('bank must be a string');
+    if (body.bank.length > IMPORT_MAX_TEXT_FIELD) {
+      return failedImport(`bank must be at most ${IMPORT_MAX_TEXT_FIELD} characters`);
+    }
   }
   if (!body.transactions) {
     return failedImport('transactions is required');
@@ -1411,17 +1463,45 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
       || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) {
       return failedImport(`transactions[${i + 1}] must include date, description, and amount`);
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) {
-      return failedImport(`transactions[${i + 1}].date must be YYYY-MM-DD`);
+    const n = i + 1;
+    if (!isImportDate(row.date)) {
+      return failedImport(`transactions[${n}].date must be a real YYYY-MM-DD date`);
+    }
+    if (row.authorized_date !== undefined && (typeof row.authorized_date !== 'string' || !isImportDate(row.authorized_date))) {
+      return failedImport(`transactions[${n}].authorized_date must be a real YYYY-MM-DD date`);
+    }
+    if (row.description.length > IMPORT_MAX_DESCRIPTION) {
+      return failedImport(`transactions[${n}].description must be at most ${IMPORT_MAX_DESCRIPTION} characters`);
     }
     if (row.external_id !== undefined && (typeof row.external_id !== 'string' || row.external_id === '')) {
-      return failedImport(`transactions[${i + 1}].external_id must be a string`);
+      return failedImport(`transactions[${n}].external_id must be a string`);
+    }
+    for (const f of ['external_id', 'bank', 'merchant_name', 'category', 'category_detailed', 'payment_channel', 'account_last4'] as const) {
+      const v = row[f];
+      if (v === undefined) continue;
+      if (typeof v !== 'string') return failedImport(`transactions[${n}].${f} must be a string`);
+      const cap = f === 'category' || f === 'category_detailed' ? IMPORT_MAX_CATEGORY : IMPORT_MAX_TEXT_FIELD;
+      if (v.length > cap) {
+        return failedImport(`transactions[${n}].${f} must be at most ${cap} characters`);
+      }
+    }
+    // Categories render in dashboard filters; markup characters have no place in a category name.
+    for (const f of ['category', 'category_detailed'] as const) {
+      if (row[f] !== undefined && /[<>]/.test(row[f]!)) {
+        return failedImport(`transactions[${n}].${f} must not contain HTML`);
+      }
+    }
+    if (row.pending !== undefined && typeof row.pending !== 'boolean') {
+      return failedImport(`transactions[${n}].pending must be a boolean`);
     }
   }
 
   // 2. File-level dedup. When the client omits fileHash, hash the canonical JSON of
   //    the transactions array — best-effort (key order from the sender can differ
   //    between runs); row-level dedup via external_id is the real guarantee.
+  if (body.fileHash !== undefined && typeof body.fileHash !== 'string') {
+    return failedImport('fileHash must be a string');
+  }
   const fileHash = body.fileHash?.trim()
     ?? createHash('sha256').update(JSON.stringify(body.transactions)).digest('hex');
   const existing = checkImported(db, fileHash);
@@ -1477,8 +1557,9 @@ export async function apiImport(db: Database, body: ImportRequestBody): Promise<
   }));
   const { count, ids } = insertTransactions(db, txns);
 
-  // Embed-on-write: index the new rows immediately (never fails the import).
-  await embedTransactionIds(db, ids);
+  // Embed-on-write: index the new rows in the background — never fails or
+  // delays the import (embedTransactionIds never throws).
+  void embedTransactionIds(db, ids);
 
   // Date range (mirrors CLI step 9: lexicographic sort works for YYYY-MM-DD)
   const dates = newRows.map((t) => t.date).sort();

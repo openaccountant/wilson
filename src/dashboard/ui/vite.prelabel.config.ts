@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
  *
  * Like vite.hybrid.config.ts this is a plain library build that may contain
  * transformers.js / onnxruntime-web / open-jev, and must NEVER be imported by
- * the singlefile React bundle (scripts/check-prelabel-bundle.ts enforces it).
+ * the React app bundle (scripts/check-prelabel-bundle.ts enforces it).
  *
  * It MUST run after the hybrid build: that config uses emptyOutDir:true and
  * would delete this file. Hence `emptyOutDir: false` here and the ordering in

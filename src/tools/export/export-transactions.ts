@@ -5,6 +5,7 @@ import { defineTool } from '../define-tool.js';
 import { getTransactions, type TransactionFilters } from '../../db/queries.js';
 import { formatToolResult } from '../types.js';
 import { writeXlsxFile, sheetToCsv, type XlsxSheet } from '../../utils/xlsx-writer.js';
+import { expandHome } from '../../utils/path-arg.js';
 
 // Module-level database reference
 let db: Database | null = null;
@@ -46,9 +47,7 @@ export const exportTransactionsTool = defineTool({
     const database = getDb();
 
     // Resolve ~ to home directory
-    const resolvedPath = filePath.startsWith('~')
-      ? filePath.replace('~', process.env.HOME ?? '')
-      : filePath;
+    const resolvedPath = expandHome(filePath);
 
     // Build filters from args
     const filters: TransactionFilters = {};

@@ -576,7 +576,7 @@ CREATE TABLE IF NOT EXISTS mcp_audit_log (
   origin TEXT NOT NULL,
   tool_name TEXT NOT NULL,       -- or REST route for transport='rest'
   classification TEXT NOT NULL,
-  decision TEXT NOT NULL,        -- signal: allowed | operation_created | approved | rejected | committed | stale | expired
+  decision TEXT NOT NULL,        -- signal: allowed | operation_created | operation_joined | approved | rejected | committed | stale | expired
                                  --   | cancelled | error | rest_export
                                  -- noise: denied_policy | denied_kill_switch | denied_grant | denied_role | invalid_args | rate_limited
                                  -- sentinel: audit_compacted | audit_evicted | deep_paging

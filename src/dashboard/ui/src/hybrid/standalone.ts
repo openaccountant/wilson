@@ -4,8 +4,8 @@
  * Served same-origin by the dashboard server at /assets/hybrid-chat.js. The
  * legacy vanilla dashboard loads it via a module script tag; the React
  * ChatTab loads it via a runtime dynamic import (which the @vite-ignore
- * comment keeps out of the singlefile React bundle). transformers.js is
- * bundled ONLY here — never into the singlefile HTML.
+ * comment keeps out of the React app bundle). transformers.js is
+ * bundled ONLY here — never into the React app bundle.
  *
  * The model itself runs in a Web Worker: model.worker.ts is imported with
  * `?worker&inline`, so transformers.js + ORT are inlined into this chunk as a

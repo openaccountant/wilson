@@ -22,6 +22,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { appendAudit, principalFor } from './audit.js';
 import { getKillSwitchEpoch } from './global-state.js';
 import { getToolDef, schemaDigest } from './tool-catalog.js';
+import { canonicalArgs } from './output.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -431,6 +432,71 @@ export function getOperation(db: Database, id: string): McpOperation | null {
   return row ?? null;
 }
 
+/**
+ * The still-pending operation an identical agent call should JOIN instead of raising a second card: same source family
+ * (WebMCP tab or HTTP-MCP client), profile, owner, tool and kind, and the same stored arguments compared as canonical
+ * JSON (sorted keys). The agent session is deliberately not part of the key: grants are profile-wide, so a client that
+ * timed out and retried from a fresh session is still the same request. Chat cards never join. Oldest match wins.
+ * Once an operation is decided (or its window closed) nothing matches, so a person can re-run the same change.
+ */
+export function findJoinablePendingOperation(
+  db: Database,
+  key: { source: OperationSource; profile: string; userId: number | null; toolName: string; kind: OperationKind; args: unknown }
+): McpOperation | null {
+  if (key.source === 'chat') return null;
+  const rows = db.prepare(`
+    SELECT * FROM mcp_operations
+    WHERE status = 'pending' AND source = @source AND profile = @profile AND user_id IS @userId
+      AND tool_name = @toolName AND kind = @kind AND julianday(expires_at) > julianday(@now)
+    ORDER BY created_at ASC
+  `).all({ source: key.source, profile: key.profile, userId: key.userId, toolName: key.toolName, kind: key.kind, now: nowIso() }) as McpOperation[];
+  if (rows.length === 0) return null;
+  const wanted = canonicalArgs(key.args);
+  for (const row of rows) {
+    let stored: unknown;
+    try {
+      stored = JSON.parse(row.args_json);
+    } catch {
+      continue;
+    }
+    if (canonicalArgs(stored) === wanted) return row;
+  }
+  return null;
+}
+
+// ── Callers attached to a pending operation ─────────────────────────────────
+// An identical retry joins the pending operation rather than raising a second card (findJoinablePendingOperation), so
+// one operation can have several agent calls waiting on it. A tab whose call was aborted withdraws the operation
+// (cancelOperation); with another call still attached, only that caller lets go and the card stays. Process-local,
+// like the waiters below: after a restart nobody is waiting in this process anyway. Cleared once the operation resolves.
+const attachedSessions = new Map<string, string[]>();
+
+/** Record that a call from `sessionGeneration` joined `operationId` (its creator is implicitly attached). */
+export function attachOperationCaller(op: Pick<McpOperation, 'id' | 'session_generation'>, sessionGeneration: string): void {
+  const list = attachedSessions.get(op.id) ?? [op.session_generation];
+  list.push(sessionGeneration);
+  attachedSessions.set(op.id, list);
+}
+
+/**
+ * Detach one caller from `sessionGeneration`. `null`: that session is not attached (it may not withdraw it).
+ * Otherwise how many callers remain attached; 0 means the operation itself may be withdrawn.
+ */
+export function detachOperationCaller(op: Pick<McpOperation, 'id' | 'session_generation'>, sessionGeneration: string): number | null {
+  const list = attachedSessions.get(op.id) ?? [op.session_generation];
+  const i = list.indexOf(sessionGeneration);
+  if (i === -1) return null;
+  list.splice(i, 1);
+  if (list.length === 0) attachedSessions.delete(op.id);
+  else attachedSessions.set(op.id, list);
+  return list.length;
+}
+
+/** Whether `sessionGeneration` created or joined `op` (and has not withdrawn). */
+export function isOperationCaller(op: Pick<McpOperation, 'id' | 'session_generation'>, sessionGeneration: string): boolean {
+  return (attachedSessions.get(op.id) ?? [op.session_generation]).includes(sessionGeneration);
+}
+
 /** Pending operations across every source (WebMCP tabs, HTTP-MCP clients, chat) — the single confirmation queue. */
 export function listPendingOperations(db: Database): McpOperation[] {
   return db.prepare(`
@@ -522,6 +588,7 @@ export function markOperationStatus(
     UPDATE mcp_operations SET status = @status, outcome_json = @outcomeJson, resolved_at = datetime('now')
     WHERE id = @id
   `).run({ id, status, outcomeJson: outcome === undefined ? null : JSON.stringify(outcome) });
+  attachedSessions.delete(id);
   resolveWaiters(id);
 }
 

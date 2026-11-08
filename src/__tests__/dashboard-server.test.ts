@@ -314,6 +314,18 @@ describe('dashboard server', () => {
       expect(((await stillListed.json()) as unknown[]).length).toBe(1);
     });
 
+    test('GET /api/reviews/status needs a login and is a read any role may make (#185)', async () => {
+      const { db, base, viewerToken } = await setupRbac();
+      seedPendingReview(db);
+
+      expect((await fetch(base + '/api/reviews/status')).status).toBe(401);
+      const res = await fetch(base + '/api/reviews/status', { headers: { Authorization: `Bearer ${viewerToken}` } });
+      expect(res.status).toBe(200);
+      const status = (await res.json()) as { pending: number; uncategorized: number; transactions: number };
+      expect(status.pending).toBe(1);
+      expect(status.transactions).toBeGreaterThan(0);
+    });
+
     test('viewer cannot correct a review', async () => {
       const { db, base, viewerToken } = await setupRbac();
       const { txnId, reviewId } = seedPendingReview(db);

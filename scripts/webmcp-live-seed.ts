@@ -72,10 +72,12 @@ for (const [desc, amount, cat, every, offset] of patterns) {
   for (let d = offset; d <= 120; d += every) insertTxn.run({ date: daysAgo(d), desc, amount, cat, conf: 0.95 });
 }
 
-// Unverified rows that need review (the review queue).
+// Unverified rows that need review (the review queue). Shaped like the categorize guardrail leaves them (#84): a
+// below-threshold suggestion writes nothing to the transaction, so it stays uncategorized until a human decides. A row
+// whose category already equals its suggestion is not a decision and the queue leaves it out (#191).
 const insertPending = db.prepare(
   `INSERT INTO transactions (date, description, amount, category, category_confidence, user_verified, source_file, bank, account_last4)
-   VALUES (@date, @desc, @amount, @cat, @conf, 0, 'webmcp-live-seed', 'Fake Bank (dummy)', '0000')`,
+   VALUES (@date, @desc, @amount, NULL, NULL, 0, 'webmcp-live-seed', 'Fake Bank (dummy)', '0000')`,
 );
 const insertReview = db.prepare(
   `INSERT INTO categorization_reviews (transaction_id, suggested_category, confidence, status) VALUES (@tid, @cat, @conf, 'pending')`,
@@ -86,7 +88,7 @@ const reviews: Array<[string, number, string, number, number]> = [
   ['FAKE Mystery Vendor 42 (dummy)', -18.0, 'Other', 0.35, 9],
 ];
 for (const [desc, amount, cat, conf, ago] of reviews) {
-  const r = insertPending.run({ date: daysAgo(ago), desc, amount, cat, conf });
+  const r = insertPending.run({ date: daysAgo(ago), desc, amount });
   insertReview.run({ tid: Number(r.lastInsertRowid), cat, conf });
 }
 

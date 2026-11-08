@@ -537,7 +537,7 @@
   },
   "open_interaction": {
     "classification": "page",
-    "minRole": "viewer",
+    "minRole": "admin",
     "transports": [
       "webmcp"
     ],
@@ -559,7 +559,7 @@
   },
   "list_interactions": {
     "classification": "read",
-    "minRole": "viewer",
+    "minRole": "admin",
     "transports": [
       "webmcp",
       "http-mcp"
@@ -595,7 +595,7 @@
   },
   "get_interaction": {
     "classification": "read",
-    "minRole": "viewer",
+    "minRole": "admin",
     "transports": [
       "webmcp",
       "http-mcp"

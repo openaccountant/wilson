@@ -22,7 +22,7 @@ import { currentNameFor, retiredNamesFor } from './tool-names.js';
 import { canonicalArgs, maskPii, sanitizeUntrustedText } from './output.js';
 
 export type SignalDecision =
-  | 'allowed' | 'operation_created' | 'approved' | 'rejected' | 'committed' | 'stale' | 'expired'
+  | 'allowed' | 'operation_created' | 'operation_joined' | 'approved' | 'rejected' | 'committed' | 'stale' | 'expired'
   | 'cancelled' | 'error' | 'rest_export' | 'rest_write';
 export type NoiseDecision =
   | 'denied_policy' | 'denied_kill_switch' | 'denied_grant' | 'denied_role' | 'invalid_args' | 'rate_limited';

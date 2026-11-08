@@ -2,8 +2,8 @@
 //
 // Dedicated worker that drives simulateNetWorth() in chunks, off the main
 // thread, so a 20,000-path final run never freezes the UI. Bundled with
-// `?worker&inline` (see netWorthForecastClient.ts) so it lives inside the
-// single-file build, same as store/mirror-worker.ts.
+// `?worker&inline` (see netWorthForecastClient.ts), so it rides inside the
+// Forecast tab's lazily loaded chunk and costs the first paint nothing.
 //
 // Message protocol: see netWorthForecastProtocol.ts (ForecastRequest /
 // ForecastResponse). Unlike the mirror worker there is NO promise chain

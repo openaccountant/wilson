@@ -443,6 +443,23 @@ describe('Agent tool selection (design 2026-10-03)', () => {
     }
   });
 
+  // granite4.1:3b over Ollama (the demo model) searched "dining" for "dining this
+  // month" and summed six months of rows. Ollama never gets local tool selection,
+  // so the date fill must not depend on it.
+  test('Ollama model: the period the user asked about goes into transaction_search', async () => {
+    adapterResponses = [makeResponse('', [{ id: 'tc1', name: 'transaction_search', args: { query: 'dining' } }]), makeResponse('done')];
+    const agent = await Agent.create({ model: 'ollama:granite4.1:3b', maxIterations: 3 });
+    const events = await collectEvents(agent.run('How much did I spend on dining this month?'));
+    expect((events.find((e) => e.type === 'tool_start') as any).args).toEqual({ query: 'dining this month' });
+  });
+
+  test('Ollama model: a month named in the query is filled into spending_summary', async () => {
+    adapterResponses = [summaryCall(), makeResponse('done')];
+    const agent = await Agent.create({ model: 'ollama:granite4.1:3b', maxIterations: 3 });
+    const events = await collectEvents(agent.run('What were my biggest expenses in August 2025?'));
+    expect((events.find((e) => e.type === 'tool_start') as any).args).toEqual({ period: 'month', compareWithPrevious: true, month: '2025-08' });
+  });
+
   test('cloud model: spending_summary arguments are left as the model wrote them', async () => {
     adapterResponses = [summaryCall(), makeResponse('done')];
     const agent = await Agent.create({ model: 'claude-sonnet-4-5', maxIterations: 3 });

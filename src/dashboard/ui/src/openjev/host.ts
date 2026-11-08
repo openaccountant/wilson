@@ -23,7 +23,7 @@
  * Pure apart from injected dependencies (worker factory, locks, storage, timers), so bun
  * tests drive it with fakes. Imports no DOM, worker, network or model-runtime API. The
  * identifier for the model library is deliberately never spelled out here: this module
- * ships in the singlefile React bundle, which the build guard scans for it.
+ * ships in the React app bundle, which the build guard scans for it.
  */
 import { OPEN_JEV_CHAT_TIMEOUT_MS } from '../hybrid/openjev-route.js';
 import { parseFromWorker, type FromWorker, type PrelabelPins, type ToWorker } from '../prelabel/protocol.js';

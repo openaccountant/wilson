@@ -18,6 +18,7 @@ import { checkAlerts } from './alerts/engine.js';
 import { generateReport } from './report/generator.js';
 import { getNetWorthSummary, getEquitySummary } from './db/net-worth-queries.js';
 import { SUBTYPE_LABELS, type AccountSubtype } from './tools/net-worth/account-types.js';
+import { expandHome } from './utils/path-arg.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -327,9 +328,7 @@ export async function runReport(args: string[], injectedDb?: Database): Promise<
       process.exit(1);
     }
 
-    const resolvedPath = filePath.startsWith('~')
-      ? filePath.replace('~', process.env.HOME ?? '')
-      : filePath;
+    const resolvedPath = expandHome(filePath);
 
     const monthArg = getArgValue(args, '--month');
     const markdown = generateReport(db, monthArg);
@@ -354,9 +353,7 @@ export async function runExport(args: string[], injectedDb?: Database): Promise<
     }
 
     // Resolve ~ to home directory
-    const resolvedPath = filePath.startsWith('~')
-      ? filePath.replace('~', process.env.HOME ?? '')
-      : filePath;
+    const resolvedPath = expandHome(filePath);
 
     const formatArg = getArgValue(args, '--format');
     const format = formatArg === 'xlsx' ? 'xlsx' : 'csv';

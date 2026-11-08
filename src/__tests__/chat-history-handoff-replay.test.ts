@@ -115,9 +115,20 @@ describe('[C5] handoff block is never replayed from history', () => {
     h.saveUserQuery(raw);
     await h.saveAnswer('About $120.');
     const title = getChatSessions(db).find((s) => s.id === h.getSessionId())?.title ?? '';
-    expect(title).toBe(`Answer to: ${q}`);
+    expect(title).toBe(q);
     expect(title).not.toContain('[On-device');
     expect(title).not.toContain('[Referenced');
+  });
+
+  test('session title (LLM succeeds with an answer-style summary) is still the question', async () => {
+    spy = spyOn(llmModule, 'callLlm').mockResolvedValue({ response: { content: 'You spent about $120 on dining.', structured: null }, metadata: {} } as never);
+    const db = createTestDb();
+    const h = new InMemoryChatHistory('test-model', 10);
+    h.setDatabase(db);
+    h.saveUserQuery(handoff + q);
+    await h.saveAnswer('About $120.');
+    const title = getChatSessions(db).find((s) => s.id === h.getSessionId())?.title ?? '';
+    expect(title).toBe(q);
   });
 
   test('session title (empty summary) is the user words, never the block', async () => {

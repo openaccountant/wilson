@@ -102,7 +102,8 @@ describe('catalog entries for the judge', () => {
       const def = getToolDef(name)!;
       expect(def.classification).toBe('read');
       expect(def.defaultPolicy).toBe('allow');
-      expect(def.minRole).toBe('viewer');
+      // Interactions hold each user's private Chat: with auth on, only an admin reads them. The rubric is not private.
+      expect(def.minRole).toBe(name === 'get_judge_rubric' ? 'viewer' : 'admin');
       expect(def.surface as unknown).toEqual({ tab: 'llm' });
       expect([...def.transports]).toEqual(['webmcp', 'http-mcp']);
       expect(def.exposure).toBe('imperative');
@@ -715,8 +716,15 @@ describe('propose_judgments', () => {
     const refusedGrant = (await import('../mcp/engine.js')).grantLocalAccess(db, scope, ['propose_judgments']);
     expect(refusedGrant.ok).toBe(false);
     if (!refusedGrant.ok) expect(refusedGrant.status).toBe(403);
-    // A viewer may read the judge tools.
+    // Read tools can be granted to a viewer; the interaction reads are then refused at call time (minRole admin).
     expect((await import('../mcp/engine.js')).grantLocalAccess(db, scope, ['list_interactions', 'get_interaction', 'get_judge_rubric']).ok).toBe(true);
+    const grants = grantTools(db, scope, ['list_interactions', 'get_interaction', 'get_judge_rubric']);
+    for (const tool of ['list_interactions', 'get_interaction']) {
+      const out = await callTool(db, scope, grants[tool] ?? null, tool, tool === 'get_interaction' ? { id: 1 } : {}, 'imperative');
+      expect(out.ok, tool).toBe(false);
+      if (!out.ok) expect(out.error, tool).toContain('requires the admin role');
+    }
+    expect((await callTool(db, scope, grants.get_judge_rubric ?? null, 'get_judge_rubric', {}, 'imperative')).ok).toBe(true);
   });
 
   test('propose_judgment is refused over /mcp (it is a form in the tab) and propose_judgments needs auth for tokens', async () => {

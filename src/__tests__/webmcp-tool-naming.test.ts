@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { MCP_TOOL_CATALOG, jsonSchemaFor, readEstimate, schemaDigest, toolAnnotations, type McpToolDef } from '../mcp/tool-catalog.js';
 import { allowedPolicies } from '../mcp/policies.js';
 import { RETIRED_TOOL_NAMES, currentNameFor, isRetiredToolName, retiredNamesFor } from '../mcp/tool-names.js';
@@ -380,7 +380,7 @@ describe('I13 no retired literal in runtime code', () => {
     const hits: string[] = [];
     let scanned = 0;
     for (const file of walk(SRC)) {
-      const rel = relative(SRC, file);
+      const rel = relative(SRC, file).split(sep).join('/'); // posix form on Windows too
       if (ALLOWED.includes(rel) || ALLOWED_PREFIXES.some((p) => rel.startsWith(p))) continue;
       scanned++;
       const text = readFileSync(file, 'utf8');

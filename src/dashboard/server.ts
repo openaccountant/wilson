@@ -1,6 +1,11 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { getDashboardHtml } from './html.js';
+import { compressBytes, negotiateEncoding, varyWithEncoding, type Encoding } from './compression.js';
+import { extractEmbeddedDir, readEmbeddedText } from '../utils/embedded-assets.js';
+import { consumeInitialAdminPasswordFile } from './bootstrap.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
@@ -19,12 +24,13 @@ import {
   apiGetCustomPrompt, apiSetCustomPrompt,
   apiEntities, apiCreateEntity, apiUpdateEntity, apiDeleteEntity,
   apiImport, apiDemoTraceStep, type ImportRequestBody,
-  apiReviewQueue, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
+  apiReviewQueue, apiReviewQueueStatus, apiConfirmReview, apiCorrectReview, apiSetBudget, apiUpdateGoal,
   apiDemoPrivacyStart, apiDemoPrivacyLedger, apiDemoPrivacyExhibit,
   apiSkills, apiMerchants,
 } from './api.js';
 import { validateMentions, resolveMentionContext } from './mentions.js';
 import { isBadRequest } from './spending-params.js';
+import { HttpError, jsonBody, jsonValue } from './http-errors.js';
 import { buildHandoffContext, serverReadExecutor } from './local-handoff.js';
 import { apiDemoAutoBookCandidates } from '../demo/auto-book.js';
 import type { EmbedFn } from '../demo/statement-trace.js';
@@ -84,11 +90,17 @@ function resolveBindHost(): string {
   return process.env.WILSON_DASHBOARD_HOST?.trim() || getGlobalAgentState().dashboardHost || LOOPBACK_DEFAULT;
 }
 
-/** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
+/**
+ * Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup.
+ * A compiled binary has no source to bundle, so it carries the script prebuilt
+ * by scripts/build-binaries.ts instead.
+ */
 async function buildWebMcpBridgeScript(): Promise<string> {
+  const prebuilt = await readEmbeddedText('src/dashboard/webmcp-bridge.js');
+  if (prebuilt !== null) return prebuilt;
   try {
     const result = await Bun.build({
-      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL('./webmcp-bridge.ts', import.meta.url))],
       target: 'browser',
       minify: false,
     });
@@ -107,49 +119,122 @@ function injectWebMcpBridge(html: string, port: number): string {
   return html + tag;
 }
 
-// ── Static hybrid-chat assets ───────────────────────────────────────────────
+// ── Static assets ───────────────────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
-export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows .pathname is `/C:/...`, and anywhere it keeps %20 for spaces.
+// A compiled binary carries these builds embedded (scripts/build-binaries.ts) and extracts them on first use.
+export const DASHBOARD_ASSETS_DIR =
+  extractEmbeddedDir('src/dashboard/ui/dist-hybrid') ?? fileURLToPath(new URL('./ui/dist-hybrid/', import.meta.url));
+
+/**
+ * URL prefix and directory of the React dashboard's content-hashed build output (`assetsDir` in
+ * src/dashboard/ui/vite.config.ts): the entry chunk, CSS, one chunk per tab, the mirror worker and
+ * the wa-sqlite wasm. index.html only references these; nothing is inlined into it.
+ */
+export const DASHBOARD_APP_PREFIX = '/_app/';
+export const DASHBOARD_APP_DIR =
+  extractEmbeddedDir('src/dashboard/ui/dist/_app') ?? fileURLToPath(new URL('./ui/dist/_app/', import.meta.url));
+
+/** A hashed file never changes under the same name, so a browser may keep it for a year without asking again. */
+export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+/** Vite's `[name]-[hash].[ext]` (an 8-character base64url hash). Only such a name is sent as immutable. */
+const HASHED_ASSET_NAME = /-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
 
 const ASSET_MIME_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
   '.wasm': 'application/wasm',
   '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
 };
 
+/** Types worth compressing; fonts and images are already compressed, so they go out as-is. */
+const COMPRESSIBLE_ASSET_EXTS = new Set(['.js', '.mjs', '.css', '.wasm', '.json', '.svg']);
+
+/** Compressed asset bodies, keyed by path + encoding and stamped with the file's mtime/size so a rebuild is picked up. */
+const assetCompressionCache = new Map<string, { stamp: string; body: Promise<Uint8Array<ArrayBuffer>> }>();
+
+export interface ServeAssetOptions {
+  /** URL prefix the file name follows (default `/assets/`). */
+  prefix?: string;
+  /** Send content-hashed names with `Cache-Control: immutable` (the /_app/ build); anything else gets `no-cache`. */
+  immutableHashed?: boolean;
+}
+
 /**
- * Serve a file from the hybrid build output under /assets/.
+ * Serve a build-output file under a public static prefix: /assets/ (the hybrid build) or /_app/
+ * (the React dashboard's hashed chunks).
  *
- * These must be public (no auth): the hybrid chunk is loaded as a module
- * script and the onnxruntime-web binaries are fetched by ORT itself — neither
- * can attach an Authorization header. A 404 is the normal "hybrid not built"
- * state; the client treats a failed chunk load as capability-unavailable and
- * silently uses the server path.
+ * These must be public (no auth): the page's own module scripts, the hybrid chunk and the mirror
+ * worker load before (or without) a login and cannot attach an Authorization header, and the
+ * onnxruntime-web binaries are fetched by ORT itself. They are build artifacts only, identical for
+ * every user, so serving them pre-login leaks nothing the public npm package does not already hold.
+ * A 404 under /assets/ is the normal "hybrid not built" state; the client treats a failed chunk load
+ * as capability-unavailable and silently uses the server path.
  *
- * Rejects path traversal: the resolved path must stay inside `dir`.
+ * Rejects path traversal: the resolved path must stay inside `dir` and be a regular file.
  */
 export async function serveDashboardAsset(
   pathname: string,
   dir: string,
   headers: Record<string, string>,
+  acceptEncoding?: string | null,
+  options: ServeAssetOptions = {},
 ): Promise<Response> {
+  const prefix = options.prefix ?? '/assets/';
   const notFound = () => new Response('Not Found', { status: 404, headers });
 
-  const rel = pathname.slice('/assets/'.length);
-  if (!rel || rel.includes('\0')) return notFound();
+  if (!pathname.startsWith(prefix)) return notFound();
+  const rel = pathname.slice(prefix.length);
+  if (!rel || rel.includes('\0') || rel.includes('\\')) return notFound();
 
   const root = resolvePath(dir);
   const resolved = resolvePath(root, rel);
-  if (resolved !== root && !resolved.startsWith(root + pathSep)) return notFound();
+  if (resolved === root || !resolved.startsWith(root + pathSep)) return notFound();
 
+  try {
+    if (!(await stat(resolved)).isFile()) return notFound();
+  } catch {
+    return notFound();
+  }
   const file = Bun.file(resolved);
-  if (!(await file.exists())) return notFound();
 
   const ext = resolved.slice(resolved.lastIndexOf('.'));
   const contentType = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
-  return new Response(file, { headers: { ...headers, 'Content-Type': contentType } });
+  const cacheHeaders: Record<string, string> = options.immutableHashed
+    ? { 'Cache-Control': HASHED_ASSET_NAME.test(resolved) ? IMMUTABLE_CACHE_CONTROL : 'no-cache' }
+    : {};
+  const baseHeaders = { ...headers, ...cacheHeaders, 'Content-Type': contentType, 'X-Content-Type-Options': 'nosniff' };
+  const encoding = COMPRESSIBLE_ASSET_EXTS.has(ext) ? negotiateEncoding(acceptEncoding) : null;
+  if (!encoding) {
+    // Compressible types vary by Accept-Encoding even when sent identity, so a shared cache never mixes them up.
+    const plainHeaders: Record<string, string> = { ...baseHeaders };
+    if (COMPRESSIBLE_ASSET_EXTS.has(ext)) plainHeaders.Vary = varyWithEncoding(headers.Vary);
+    return new Response(file, { headers: plainHeaders });
+  }
+
+  const cacheKey = `${resolved}\0${encoding}`;
+  const stamp = `${file.lastModified}:${file.size}`;
+  let cached = assetCompressionCache.get(cacheKey);
+  if (!cached || cached.stamp !== stamp) {
+    // Cache the in-flight promise so concurrent first requests share one job; drop it on failure so a retry can succeed.
+    const job = file.arrayBuffer().then((buf) => compressBytes(new Uint8Array(buf), encoding));
+    cached = { stamp, body: job };
+    assetCompressionCache.set(cacheKey, cached);
+    job.catch(() => { if (assetCompressionCache.get(cacheKey)?.body === job) assetCompressionCache.delete(cacheKey); });
+  }
+  return new Response(await cached.body, {
+    headers: {
+      ...baseHeaders,
+      'Content-Encoding': encoding,
+      Vary: varyWithEncoding(headers.Vary),
+    },
+  });
 }
 
 // Profile names become path segments (see resolveProfile in profile/context.ts),
@@ -165,6 +250,18 @@ type Role = 'admin' | 'viewer';
 const PUBLIC_AUTH_PATHS = ['/api/auth/status', '/api/auth/setup', '/api/auth/login'];
 function isPublicAuthPath(path: string): boolean {
   return PUBLIC_AUTH_PATHS.includes(path);
+}
+
+/** Routes that expose recorded LLM interactions (prompts, replies, tool results) or data derived from them. */
+export function isTrainingDataPath(path: string): boolean {
+  return (
+    path === '/api/interactions' ||
+    path.startsWith('/api/interactions/') ||
+    path === '/api/judgements' ||
+    path.startsWith('/api/judgements/') ||
+    path === '/api/annotations/stats' ||
+    path.startsWith('/api/export/training/')
+  );
 }
 
 function canManageUsers(role: Role): boolean {
@@ -249,15 +346,23 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
     );
   }
 
-  // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
-  let reactDashboardHtml: string | null = null;
-  try {
-    reactDashboardHtml = await Bun.file(
-      new URL('./ui/dist/index.html', import.meta.url)
-    ).text();
-  } catch {
-    // React build not available — fall back to legacy getDashboardHtml()
+  // Load the React dashboard build (index.html; its scripts and styles are hashed files under /_app/):
+  // embedded in a compiled binary, else from the source tree, else fall back to legacy html.ts.
+  let reactDashboardHtml: string | null = await readEmbeddedText('src/dashboard/ui/dist/index.html');
+  if (reactDashboardHtml === null) {
+    try {
+      reactDashboardHtml = await Bun.file(
+        new URL('./ui/dist/index.html', import.meta.url)
+      ).text();
+    } catch {
+      // React build not available — fall back to legacy getDashboardHtml()
+    }
   }
+
+  // The served page (HTML + bridge tag) and its compressed bodies, filled on first request.
+  let pageHtml: string | null = null;
+  const pageBodies = new Map<Encoding, Promise<Uint8Array<ArrayBuffer>>>();
+  const bridgeBodies = new Map<Encoding, Promise<Uint8Array<ArrayBuffer>>>();
 
   // Bundle the WebMCP bridge once at startup — deliberately independent of
   // the React dashboard build so the bridge works whether or not `ui/dist`
@@ -343,12 +448,18 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           );
         }
 
-        // ── Static hybrid-chat assets (public) ────────────────────────
-        // Module scripts and ORT's own wasm fetches cannot send auth headers,
-        // so /assets/* is served without the auth middleware (same treatment
-        // as the HTML page). Contents are build artifacts only.
-        if (path.startsWith('/assets/')) {
-          return serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers);
+        // ── Static build assets (public) ──────────────────────────────
+        // Module scripts, workers and ORT's own wasm fetches cannot send auth
+        // headers, so /assets/* (hybrid build) and /_app/* (the dashboard's
+        // hashed chunks) are served without the auth middleware (same treatment
+        // as the HTML page). Contents are build artifacts only. Only GET/HEAD.
+        if (path.startsWith('/assets/') || path.startsWith(DASHBOARD_APP_PREFIX)) {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            return new Response('Method Not Allowed', { status: 405, headers: { ...headers, Allow: 'GET, HEAD' } });
+          }
+          return path.startsWith(DASHBOARD_APP_PREFIX)
+            ? serveDashboardAsset(path, DASHBOARD_APP_DIR, headers, req.headers.get('Accept-Encoding'), { prefix: DASHBOARD_APP_PREFIX, immutableHashed: true })
+            : serveDashboardAsset(path, DASHBOARD_ASSETS_DIR, headers, req.headers.get('Accept-Encoding'));
         }
 
         // ── Auth middleware ──────────────────────────────────────────
@@ -488,16 +599,36 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         // ── HTML page ───────────────────────────────────────────────
         if (path === '/' || path === '/index.html') {
-          const html = injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
-          return new Response(html, {
-            headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
-          });
+          // The bridge tag is per-port, so compress after injecting; each variant is built once and reused.
+          pageHtml ??= injectWebMcpBridge(reactDashboardHtml ?? getDashboardHtml(port), port);
+          const encoding = negotiateEncoding(req.headers.get('Accept-Encoding'));
+          // no-cache: the HTML names this build's hashed /_app/ files, so it must be revalidated to pick up a new release.
+          const pageHeaders = { ...headers, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', Vary: varyWithEncoding(headers.Vary) };
+          if (!encoding) return new Response(pageHtml, { headers: pageHeaders });
+          let body = pageBodies.get(encoding);
+          if (!body) {
+            const job = compressBytes(new TextEncoder().encode(pageHtml), encoding);
+            body = job;
+            pageBodies.set(encoding, job);
+            job.catch(() => { if (pageBodies.get(encoding) === job) pageBodies.delete(encoding); });
+          }
+          return new Response(await body, { headers: { ...pageHeaders, 'Content-Encoding': encoding } });
         }
 
         if (path === '/webmcp-bridge.js') {
-          return new Response(webMcpBridgeScript, {
-            headers: { ...headers, 'Content-Type': 'application/javascript; charset=utf-8' },
-          });
+          // Built once per process, so its compressed bodies are too. Not hashed (the page names it by a fixed
+          // path), so no long-lived caching: the browser revalidates it like the HTML.
+          const bridgeHeaders = { ...headers, 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache', Vary: varyWithEncoding(headers.Vary) };
+          const encoding = negotiateEncoding(req.headers.get('Accept-Encoding'));
+          if (!encoding || !webMcpBridgeScript) return new Response(webMcpBridgeScript, { headers: bridgeHeaders });
+          let body = bridgeBodies.get(encoding);
+          if (!body) {
+            const job = compressBytes(new TextEncoder().encode(webMcpBridgeScript), encoding);
+            body = job;
+            bridgeBodies.set(encoding, job);
+            job.catch(() => { if (bridgeBodies.get(encoding) === job) bridgeBodies.delete(encoding); });
+          }
+          return new Response(await body, { headers: { ...bridgeHeaders, 'Content-Encoding': encoding } });
         }
 
         // ── Auth API routes ─────────────────────────────────────────
@@ -519,7 +650,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (getUserCount(activeDb) > 0) {
             return Response.json({ error: 'Admin already exists' }, { status: 400, headers });
           }
-          const body = await req.json() as { username?: string; password?: string };
+          const body = await jsonBody<{ username?: string; password?: string }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -534,7 +665,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/auth/login' && req.method === 'POST') {
-          const body = await req.json() as { username?: string; password?: string };
+          const body = await jsonBody<{ username?: string; password?: string }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -542,6 +673,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!result) {
             return Response.json({ error: 'Invalid credentials' }, { status: 401, headers });
           }
+          // A first-boot generated password (bootstrap.ts) has done its job once someone has signed in.
+          consumeInitialAdminPasswordFile();
           return Response.json({ token: result.token, user: result.user }, { headers });
         }
 
@@ -569,7 +702,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && (!currentUser || !canManageUsers(currentUser.role))) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { username?: string; password?: string; role?: 'admin' | 'viewer' };
+          const body = await jsonBody<{ username?: string; password?: string; role?: 'admin' | 'viewer' }>(req);
           if (!body.username || !body.password) {
             return Response.json({ error: 'username and password required' }, { status: 400, headers });
           }
@@ -609,7 +742,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && (!currentUser || !canManageUsers(currentUser.role))) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { auth_enabled?: boolean };
+          const body = await jsonBody<{ auth_enabled?: boolean }>(req);
           // Auth on with no active admin is a bootstrap hijack (#157): /api/auth/setup stays public
           // while no users exist, so whoever called it first would become admin. The first enable
           // goes through /api/auth/setup, which creates the admin and flips the flag in one
@@ -641,7 +774,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { name?: string };
+          const body = await jsonBody<{ name?: string }>(req);
           if (!body.name) {
             return Response.json({ error: 'name required' }, { status: 400, headers });
           }
@@ -786,7 +919,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
-            const body = await req.json() as Record<string, unknown>;
+            const body = await jsonBody<Record<string, unknown>>(req);
             return Response.json(await apiUpdateTransaction(activeDb, id, body), { headers });
           }
           if (req.method === 'DELETE') {
@@ -805,6 +938,10 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           return Response.json(apiReviewQueue(activeDb, url.searchParams), { headers });
         }
 
+        if (path === '/api/reviews/status') {
+          return Response.json(apiReviewQueueStatus(activeDb), { headers });
+        }
+
         const reviewMatch = path.match(/^\/api\/reviews\/(\d+)\/(confirm|correct)$/);
         if (reviewMatch && req.method === 'POST') {
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
@@ -813,7 +950,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           const id = parseInt(reviewMatch[1], 10);
           const result = reviewMatch[2] === 'confirm'
             ? apiConfirmReview(activeDb, id)
-            : apiCorrectReview(activeDb, id, await req.json() as { category?: string });
+            : apiCorrectReview(activeDb, id, await jsonBody<{ category?: string }>(req));
           auditRestWrite(`/api/reviews/:id/${reviewMatch[2]}`, result.success);
           return Response.json(result, { status: result.success ? 200 : result.status, headers });
         }
@@ -853,7 +990,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           return Response.json(apiCreateEntity(activeDb, body as { name?: string; description?: string; color?: string }), { headers });
         }
         const entityMatch = path.match(/^\/api\/entities\/(\d+)$/);
@@ -863,7 +1000,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
             if (authEnabled && currentUser && !canWrite(currentUser.role)) {
               return Response.json({ error: 'Forbidden' }, { status: 403, headers });
             }
-            const body = await req.json() as Record<string, unknown>;
+            const body = await jsonBody<Record<string, unknown>>(req);
             return Response.json(apiUpdateEntity(activeDb, id, body as { name?: string; description?: string; color?: string }), { headers });
           }
           if (req.method === 'DELETE') {
@@ -880,7 +1017,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as ImportRequestBody;
+          const body = await jsonBody<ImportRequestBody>(req);
           const result = await apiImport(activeDb, body);
           return Response.json(result, { status: result.status === 'failed' ? 400 : 200, headers });
         }
@@ -890,7 +1027,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // and mirrors /api/import's canWrite RBAC exactly.
 
         if (path === '/api/demo/trace/step' && req.method === 'POST') {
-          const body = await req.json() as { step?: unknown };
+          const body = await jsonBody<{ step?: unknown }>(req);
           if (body?.step === 'import' && authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
@@ -905,7 +1042,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         // substrate's commit, after the human approves the confirmation card.
 
         if (path === '/api/demo/autobook/candidates' && req.method === 'POST') {
-          const body = await req.json() as unknown;
+          const body = await jsonValue(req);
           const result = apiDemoAutoBookCandidates(activeDb, body);
           if (!result.ok) return Response.json({ error: result.error }, { status: 400, headers });
           return Response.json({ candidates: result.candidates }, { headers });
@@ -920,7 +1057,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           return Response.json(apiAddMemory(activeDb, body as { memoryType?: string; content?: string; category?: string }), { headers });
         }
         const memoryDeleteMatch = path.match(/^\/api\/memories\/(\d+)$/);
@@ -941,7 +1078,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as { prompt?: string };
+          const body = await jsonBody<{ prompt?: string }>(req);
           return Response.json(apiSetCustomPrompt(activeDb, body), { headers });
         }
 
@@ -1077,7 +1214,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown };
+          const body = await jsonBody<{ query?: string; sessionId?: string; mentions?: unknown; localHandoff?: unknown }>(req);
           // The body was read and auth re-checked centrally (readBodyThenRecheck).
           if (!body.query) {
             return Response.json({ error: 'query is required' }, { status: 400, headers });
@@ -1140,7 +1277,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (authEnabled && currentUser && !canWrite(currentUser.role)) {
             return Response.json({ error: 'Forbidden' }, { status: 403, headers });
           }
-          const body = await req.json() as SetTaskModelBody;
+          const body = await jsonBody<SetTaskModelBody>(req);
           const result = apiSetTaskModel(body);
           if ('error' in result) {
             return Response.json(result, { status: 400, headers });
@@ -1153,7 +1290,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/chat/local' && req.method === 'POST') {
-          const body = await req.json() as { query?: string; answer?: string; sessionId?: string };
+          const body = await jsonBody<{ query?: string; answer?: string; sessionId?: string }>(req);
           const result = apiRecordLocalChatMessage(activeDb, body);
           if ('error' in result) {
             return Response.json(result, { status: 400, headers });
@@ -1168,7 +1305,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/cloud' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = await apiDemoShowdownCloud(body);
             return Response.json(result, { headers });
@@ -1184,7 +1321,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/local' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = await apiDemoShowdownLocal(body);
             return Response.json(result, { headers });
@@ -1197,7 +1334,7 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         if (path === '/api/demo/showdown/browser-trace' && req.method === 'POST') {
-          const body = await req.json() as Record<string, unknown>;
+          const body = await jsonBody<Record<string, unknown>>(req);
           try {
             const result = apiDemoShowdownBrowserTrace(body);
             return Response.json(result, { headers });
@@ -1242,6 +1379,12 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
         }
 
         // ── Interactions (Training Data) ─────────────────────────────
+
+        // Recorded Chat prompts and replies belong to whoever chatted (chat sessions are per user), and the training
+        // exports and judge queue are built from them: with auth on, only an admin reads any of it.
+        if (authEnabled && (!currentUser || currentUser.role !== 'admin') && isTrainingDataPath(path)) {
+          return Response.json({ error: 'Forbidden: training data is admin-only' }, { status: 403, headers });
+        }
 
         if (path === '/api/interactions') {
           return Response.json(apiInteractions(activeDb, url.searchParams), { headers });
@@ -1351,10 +1494,11 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
 
         return new Response('Not Found', { status: 404, headers });
       } catch (err) {
-        return Response.json(
-          { error: err instanceof Error ? err.message : String(err) },
-          { status: 500, headers }
-        );
+        if (err instanceof HttpError) {
+          return Response.json({ error: err.message }, { status: err.status, headers });
+        }
+        console.error(`[dashboard] ${req.method} ${path} failed:`, err);
+        return Response.json({ error: 'Internal server error' }, { status: 500, headers });
       }
   };
 

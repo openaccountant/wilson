@@ -72,6 +72,19 @@ afterEach(() => {
   /* every test builds its own in-memory db */
 });
 
+/**
+ * Windows refuses to delete a file that is still open, and bun:sqlite keeps the handle until every
+ * prepared statement is finalized (sqlite3_close_v2), which can be after close(). A leaked temp dir
+ * on Windows is fine; a failed test is not.
+ */
+function rmTempDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    if (process.platform !== 'win32' || (err as NodeJS.ErrnoException).code !== 'EBUSY') throw err;
+  }
+}
+
 describe('I2 policy equivalence: never default-allow', () => {
   test('policy merge matrix: every pair, old value, new state; NEW equals clamp(minRank), OLD mirrors NEW', () => {
     const db = createTestDb();
@@ -493,8 +506,10 @@ describe('I9 a failed fix-up is not fail-open', () => {
       expect(getConfiguredPolicy(b, null, 'get_net_worth')).toBe('off'); // the fallback still holds
       // The next start retries and succeeds.
       expect(applyToolRenames(b, { quiet: true }).policies).toBe(1);
+      b.close();
+      a.close();
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmTempDir(dir);
     }
   });
 });

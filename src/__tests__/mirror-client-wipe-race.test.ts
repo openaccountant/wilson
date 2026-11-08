@@ -33,7 +33,7 @@ class FakeMirrorWorker {
   }
 }
 
-mock.module('../dashboard/ui/src/store/mirror-worker.ts?worker&inline', () => ({ default: FakeMirrorWorker }));
+mock.module('../dashboard/ui/src/store/mirror-worker.ts?worker', () => ({ default: FakeMirrorWorker }));
 
 function memoryStorage() {
   const data = new Map<string, string>();
@@ -54,7 +54,7 @@ function stub(name: string, value: unknown): void {
   Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
 }
 
-// The slice of mirror-client.ts used here. Imported by a computed path: its `?worker&inline` import has types only
+// The slice of mirror-client.ts used here. Imported by a computed path: its `?worker` import has types only
 // in the UI's vite build, not in the root tsconfig this file is checked under.
 interface Client {
   initMirror(): Promise<{ available: boolean }>;

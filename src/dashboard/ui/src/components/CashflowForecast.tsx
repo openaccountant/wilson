@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ComposedChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { Suspense, useMemo, useState } from 'react';
+import { CashflowFanChart } from '@/charts/lazyCharts';
 import { useApi } from '@/hooks/useApi';
 import { OfflineUnavailable } from '@/components/OfflineUnavailable';
 import {
@@ -17,49 +17,9 @@ import type { MonthlyCashflowRow, Account } from '@/types';
 // vehicle/crypto/other_asset are excluded).
 const LIQUID_SUBTYPES = ['checking', 'savings', 'cash'];
 
-interface ChartDatum {
-  label: string;
-  p10: number;
-  p50: number;
-  p90: number;
-  band25: number;
-  band50: number;
-  band75: number;
-  band90: number;
-}
-
 const fmtUsd = moneyWhole;
 
-function FanTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: ReadonlyArray<{ payload: ChartDatum }>;
-  label?: string;
-}) {
-  if (!active || !payload || payload.length === 0) return null;
-  const d = payload[0].payload;
-  return (
-    <div
-      style={{
-        background: '#1a1d27',
-        border: '1px solid #2a2d37',
-        borderRadius: 6,
-        fontSize: 12,
-        color: '#e4e4e7',
-        padding: '6px 10px',
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
-      <div>Median {fmtUsd(d.p50)}</div>
-      <div style={{ color: '#a1a1aa' }}>
-        Range {fmtUsd(d.p10)}–{fmtUsd(d.p90)}
-      </div>
-    </div>
-  );
-}
+import type { CashflowChartDatum as ChartDatum } from '@/charts/CashflowFanChart';
 
 function currentMonth(): string {
   const d = new Date();
@@ -248,32 +208,10 @@ export function CashflowForecast() {
         </div>
       </div>
       <div className="h-[160px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 5, right: 0, bottom: 0, left: 0 }}>
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
-              tickLine={false}
-              axisLine={false}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              width={52}
-              tick={{ fontSize: 10, fill: '#a1a1aa' }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v: number) => moneyCompact(v)}
-            />
-            <Tooltip content={<FanTooltip />} />
-            <Area dataKey="p10" stackId="fan" stroke="none" fill="transparent" isAnimationActive={false} />
-            <Area dataKey="band25" stackId="fan" stroke="none" fill="#233046" fillOpacity={0.55} isAnimationActive={false} />
-            <Area dataKey="band50" stackId="fan" stroke="none" fill="#2e4a6b" fillOpacity={0.55} isAnimationActive={false} />
-            <Area dataKey="band75" stackId="fan" stroke="none" fill="#2e4a6b" fillOpacity={0.55} isAnimationActive={false} />
-            <Area dataKey="band90" stackId="fan" stroke="none" fill="#233046" fillOpacity={0.55} isAnimationActive={false} />
-            <Line dataKey="p50" stroke="#e4e4e7" strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line dataKey="p10" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 4" dot={false} isAnimationActive={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
+        {/* recharts loads on demand (charts/lazyCharts.ts); the fixed-height box holds the space meanwhile. */}
+        <Suspense fallback={null}>
+          <CashflowFanChart chartData={chartData} />
+        </Suspense>
       </div>
       <p className="text-sm text-text mt-2">{takeawayFull}</p>
       <p className="text-xs text-text-muted mt-2">

@@ -95,15 +95,11 @@ describe('db-manager', () => {
     });
 
     test('returns db for switched profile', () => {
-      const db = createTestDb();
-      setInitialProfile('target', db);
-      setInitialProfile('start');
-      // Pre-cache target profile's db
-      // Actually setInitialProfile only sets currentProfile and optionally caches.
-      // We need to re-register 'target' with its db after the second call.
       closeAll();
+      // Open the target's db after closeAll: switchProfile now attaches the LLM stores to it, so it must be open.
+      const db = createTestDb();
       setInitialProfile('start');
-      // Manually set up target in cache by calling setInitialProfile with db
+      // Register 'target' with its db in the cache (setInitialProfile only caches when given a db)
       setInitialProfile('target', db);
       setInitialProfile('start');
 

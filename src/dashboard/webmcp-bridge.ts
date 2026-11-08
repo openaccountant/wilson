@@ -664,7 +664,7 @@ interface ModelContextTool {
   description: string;
   inputSchema?: unknown;
   annotations?: ToolAnnotations;
-  execute: (inputObject: Record<string, unknown>, options: { signal: AbortSignal }) => Promise<unknown>;
+  execute: (inputObject: Record<string, unknown>, options?: { signal?: AbortSignal }) => Promise<unknown>;
 }
 
 interface ModelContextRegisterToolOptions {
@@ -764,7 +764,11 @@ function pageRegistry() {
  * the tab's own handler (a React component registered it in the page registry); every other tool is one server call.
  * The server's `classification` decides which: nothing here names a tool.
  */
-function makeExecute(tool: LiveToolDescriptor): (args: Record<string, unknown>, options: { signal: AbortSignal }) => Promise<unknown> {
+/** Chrome 156.0.8078.74 calls `execute(args)` with no second argument; later builds pass `{ signal }`. */
+const NEVER_ABORTS = new AbortController().signal;
+const callSignal = (options?: { signal?: AbortSignal }) => options?.signal ?? NEVER_ABORTS;
+
+function makeExecute(tool: LiveToolDescriptor): (args: Record<string, unknown>, options?: { signal?: AbortSignal }) => Promise<unknown> {
   // Every refusal and failure is RETURNED as `{ error: { code, message } }`: Chrome 154 replaces a thrown error with a
   // generic "Tool was executed but the invocation failed", so the agent would never read what to do next (L4).
   if (tool.classification !== 'page') {
@@ -775,7 +779,7 @@ function makeExecute(tool: LiveToolDescriptor): (args: Record<string, unknown>, 
       executePageTool({
         tool,
         args,
-        signal: options.signal,
+        signal: callSignal(options),
         runtime: pageRegistry(),
         serverCall: (signal) => {
           const grant = grantForCall(tool.name, grantIdByTool, lastGrantIdByTool);

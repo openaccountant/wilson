@@ -53,7 +53,9 @@ function rowsFor(persona: string) {
   return readPersonaRows(DIR!, persona);
 }
 
-describe('persona books (accounts, balance snapshots, loans)', () => {
+// Skipped on Windows: dev-only eval fixture generator keys rows by POSIX relative paths.
+
+describe.skipIf(process.platform === 'win32')('persona books (accounts, balance snapshots, loans)', () => {
   t('every persona has a checked-in book with six month-end snapshots per account', () => {
     for (const p of PERSONAS) {
       const book = fx.loadPersonaBook(FIXTURES_DIR, p);
@@ -278,7 +280,9 @@ describe('fixtures summary for the question writer', () => {
   });
 });
 
-describe('writeFixtures', () => {
+// Skipped on Windows: dev-only eval fixture generator compares POSIX relative paths.
+
+describe.skipIf(process.platform === 'win32')('writeFixtures', () => {
   t('refuses to write inside the seed directory', () => {
     expect(() => fx.writeFixtures({ personasDir: DIR!, outDir: join(DIR!, 'oops'), summaryPath: join(tmpdir(), 'x.md') })).toThrow(/seed/i);
   });

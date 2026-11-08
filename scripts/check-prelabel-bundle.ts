@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkPrelabelBundles } from '../src/prelabel/bundle-guard.ts';
+import { readReactBuild } from './check-hybrid-build.ts';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ui = join(repoRoot, 'src', 'dashboard', 'ui');
@@ -21,9 +22,10 @@ const transformersVersion = JSON.parse(
   readFileSync(join(repoRoot, 'node_modules', '@huggingface', 'transformers', 'package.json'), 'utf8'),
 ).version as string;
 
-const indexHtml = read(indexPath);
+// index.html plus every dist/_app chunk: the app is code-split, so index.html alone holds no code.
+const indexHtml = existsSync(indexPath) ? readReactBuild(join(ui, 'dist')) : null;
 if (indexHtml === null) {
-  console.warn('check-prelabel-bundle: dist/index.html not found (run `npm run build` too); skipping the singlefile check');
+  console.warn('check-prelabel-bundle: dist/index.html not found (run `npm run build` too); skipping the React app check');
 }
 
 const problems = checkPrelabelBundles({ indexHtml, workerJs: read(workerPath), transformersVersion });
