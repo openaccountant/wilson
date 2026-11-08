@@ -7,6 +7,9 @@ import { POWERSHELL, windowsSystemBinary } from './windows-bin.js';
 
 const SERVICE = 'openaccountant';
 
+/** Accounts that may only be created, never overwritten by set() (database encryption keys). */
+export const PROTECTED_ACCOUNT_PREFIX = 'db-encryption-';
+
 /**
  * OS secret storage, one backend per platform:
  *
@@ -508,6 +511,12 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
   return {
     primary,
     set(account, secret, setOpts = {}) {
+      // set() replaces (macOS: delete + add -U). The DB key must only ever be created, never
+      // replaced: a replaced key orphans the encrypted database. Use createSecret().
+      if (account.startsWith(PROTECTED_ACCOUNT_PREFIX)) {
+        logger.warn('keychain:set:refused', { account, reason: 'database keys are create-only; use createSecret' });
+        return false;
+      }
       if (primary.secure || !setOpts.requireSecure) {
         if (primary.set(account, secret)) {
           if (!primary.secure) warnOnce(primary);

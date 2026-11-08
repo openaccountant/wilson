@@ -418,3 +418,30 @@ describe('three-valued reads (data-loss guard)', () => {
     }
   });
 });
+
+describe('db-encryption-* accounts are create-only', () => {
+  test('set() refuses them without touching any backend; createSecret still works', () => {
+    const { exec, calls } = fakeExec(() => '');
+    const store = createSecretStore({ ...baseOpts(), platform: 'darwin', exec });
+    expect(store.set('db-encryption-default', 'k'.repeat(64))).toBe(false);
+    expect(calls).toHaveLength(0); // no delete-generic-password, no add -U
+
+    expect(store.create('db-encryption-default', 'k'.repeat(64))).toEqual({ status: 'created' });
+    expect(calls.map((c) => c.args[0])).toEqual(['add-generic-password']);
+    expect(calls[0]!.args).not.toContain('-U');
+  });
+
+  test('refused on every platform, including the file fallback', () => {
+    for (const platform of ['linux', 'win32'] as const) {
+      const store = createSecretStore({ ...baseOpts(), platform, exec: () => exitCode(1) });
+      expect(store.set('db-encryption-x', 'k')).toBe(false);
+    }
+    expect(existsSync(secretsDir())).toBe(false);
+  });
+
+  test('other accounts still use set()', () => {
+    const { exec } = fakeExec(() => '');
+    const store = createSecretStore({ ...baseOpts(), platform: 'darwin', exec });
+    expect(store.set('plaid-item', 'tok')).toBe(true);
+  });
+});
