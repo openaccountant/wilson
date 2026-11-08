@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTestDb } from './helpers.js';
 import { createUser, disableAuth, getUserCount, isAuthEnabled, lanAuthReady, verifyLogin } from '../dashboard/auth.js';
-import { bootstrapAdmin, bootstrapDefaultModel, INITIAL_ADMIN_PASSWORD_FILE } from '../dashboard/bootstrap.js';
+import { bootstrapAdmin, bootstrapDefaultModel, consumeInitialAdminPasswordFile, INITIAL_ADMIN_PASSWORD_FILE } from '../dashboard/bootstrap.js';
 import { ensureProfileDir, getActiveProfile, resetActiveProfile, resolveProfile, setActiveProfilePaths } from '../profile/index.js';
 import { getSetting, setSetting } from '../utils/config.js';
 
@@ -50,7 +50,42 @@ describe('dashboard bootstrap: admin', () => {
     expect(await verifyLogin(db, 'admin', 'from a secret file')).not.toBeNull();
   });
 
-  test('generate: random password, logged once and saved 0600 in the profile', async () => {
+  test('generate: the password never reaches stdout or stderr (default logger)', async () => {
+    const db = createTestDb();
+    const seen: string[] = [];
+    const capture = (...args: unknown[]) => { seen.push(args.map(String).join(' ')); };
+    const spies = [
+      spyOn(console, 'log').mockImplementation(capture),
+      spyOn(console, 'info').mockImplementation(capture),
+      spyOn(console, 'warn').mockImplementation(capture),
+      spyOn(console, 'error').mockImplementation(capture),
+      spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => { seen.push(String(chunk)); return true; }) as never),
+      spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => { seen.push(String(chunk)); return true; }) as never),
+    ];
+    let password = '';
+    try {
+      const res = await bootstrapAdmin(db, { WILSON_ADMIN_BOOTSTRAP: 'generate' });
+      password = readFileSync(res.generatedPasswordFile!, 'utf8').trim();
+    } finally {
+      for (const s of spies) s.mockRestore();
+    }
+    expect(password.length).toBeGreaterThanOrEqual(20);
+    const out = seen.join('\n');
+    expect(out).not.toContain(password);
+    expect(out).toContain(INITIAL_ADMIN_PASSWORD_FILE); // it says where to look instead
+    expect(out).toContain('docker compose exec wilson cat');
+  });
+
+  test('the first successful login deletes the generated-password file', async () => {
+    const db = createTestDb();
+    const res = await bootstrapAdmin(db, { WILSON_ADMIN_BOOTSTRAP: 'generate' }, quiet);
+    expect(existsSync(res.generatedPasswordFile!)).toBe(true);
+    expect(consumeInitialAdminPasswordFile(quiet)).toBe(true);
+    expect(existsSync(res.generatedPasswordFile!)).toBe(false);
+    expect(consumeInitialAdminPasswordFile(quiet)).toBe(false);
+  });
+
+  test('generate: random password saved 0600 in the profile', async () => {
     const db = createTestDb();
     const lines: string[] = [];
     const res = await bootstrapAdmin(db, { WILSON_ADMIN_BOOTSTRAP: 'generate' }, (m) => lines.push(m));
@@ -60,7 +95,7 @@ describe('dashboard bootstrap: admin', () => {
     const password = readFileSync(file, 'utf8').trim();
     expect(password.length).toBeGreaterThanOrEqual(20);
     if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(lines.some((l) => l.includes(password))).toBe(true);
+    expect(lines.some((l) => l.includes(password))).toBe(false);
     expect(await verifyLogin(db, 'admin', password)).not.toBeNull();
     expect(lanAuthReady(db)).toBe(true);
   });

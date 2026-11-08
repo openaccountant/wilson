@@ -11,8 +11,12 @@
  *   dashboard users at all, this creates the first admin and turns auth on:
  *     - WILSON_ADMIN_PASSWORD (or WILSON_ADMIN_PASSWORD_FILE) sets the password;
  *     - otherwise, with WILSON_ADMIN_BOOTSTRAP=generate, a random one is
- *       generated, printed once to the log, and written to
- *       <profile>/initial-admin-password (mode 0600) for the user to read and delete.
+ *       generated and written ONLY to <profile>/initial-admin-password
+ *       (mode 0600). The log names the file, never the password: home-lab log
+ *       stacks (Portainer, Loki, Synology Log Center) keep and display logs.
+ *       The first successful dashboard login deletes the file
+ *       (consumeInitialAdminPasswordFile). There is no forced password change:
+ *       the auth layer has no change-password route yet.
  *   WILSON_ADMIN_USERNAME defaults to "admin". Once any user exists they never
  *   create an account or reset a password; the one thing they still do is turn
  *   login back ON for a network bind (WILSON_DASHBOARD_HOST) that has an active
@@ -23,7 +27,7 @@
  *   a model picked later in Settings is never overwritten.
  */
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Database } from '../db/compat-sqlite.js';
 import { createFirstAdmin, enableAuth, getUserCount, hasActiveAdmin, hashPassword, isAuthEnabled } from './auth.js';
@@ -90,15 +94,33 @@ export async function bootstrapAdmin(db: Database, env: Env = process.env, log: 
     log('================================================================');
     log(' Dashboard admin account created (dashboard login is now ON).');
     log(`   username: ${username}`);
-    log(`   password: ${password}`);
-    log(` Also saved to ${file}.`);
-    log(' Sign in, change it if you like, then delete that file.');
+    log(`   password: saved to ${file} (readable only by this account)`);
+    log(' Read it with:');
+    log(`   docker compose exec wilson cat ${file}`);
+    log(' (outside Docker: cat that path). The file is deleted on the first sign-in.');
     log('================================================================');
     log('');
   } else {
     log(`Dashboard admin "${username}" created from WILSON_ADMIN_PASSWORD; dashboard login is now ON.`);
   }
   return result;
+}
+
+/**
+ * After a successful dashboard login: delete the generated-password file in the active profile, if any, so the
+ * plaintext copy does not outlive its one use. Never throws (a login must not fail over housekeeping).
+ * Returns whether a file was removed.
+ */
+export function consumeInitialAdminPasswordFile(log: (msg: string) => void = console.log): boolean {
+  try {
+    const file = join(getActiveProfile().root, INITIAL_ADMIN_PASSWORD_FILE);
+    if (!existsSync(file)) return false;
+    rmSync(file, { force: true });
+    log(`First sign-in done; deleted ${file}.`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function bootstrapDefaultModel(env: Env = process.env, log: (msg: string) => void = console.log): string | undefined {

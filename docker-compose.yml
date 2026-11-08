@@ -2,7 +2,7 @@
 #
 #   docker compose up -d                          # dashboard only (bring your own LLM key or Ollama)
 #   docker compose --profile local-ai up -d       # + a local Ollama running granite4.1:3b
-#   docker compose logs wilson                    # first boot prints the admin password
+#   docker compose logs wilson                    # first boot says where the admin password is
 #
 # Then open http://<this-machine>:3141. Full guide: docs/self-hosting/docker.md
 # Settings go in a .env file next to this one (copy env.example).
@@ -25,8 +25,8 @@ services:
       # Anything else is refused (DNS-rebinding protection). localhost always works.
       WILSON_LAN_HOSTS: ${WILSON_LAN_HOSTS:-}
       WILSON_HOST_PORT: ${WILSON_HOST_PORT:-3141}
-      # Admin account for the first boot only. Leave WILSON_ADMIN_PASSWORD empty to get a
-      # random one in `docker compose logs wilson` (and in /data/.../initial-admin-password).
+      # Admin account for the first boot only. Leave WILSON_ADMIN_PASSWORD empty to get a random one,
+      # written only to /data/.openaccountant/profiles/default/initial-admin-password (never logged).
       WILSON_ADMIN_USERNAME: ${WILSON_ADMIN_USERNAME:-admin}
       WILSON_ADMIN_PASSWORD: ${WILSON_ADMIN_PASSWORD:-}
       # Local AI (used with --profile local-ai). Its own variable, so OLLAMA_BASE_URL=127.0.0.1 from a

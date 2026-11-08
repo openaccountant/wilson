@@ -2,6 +2,7 @@ import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
 import { extractEmbeddedDir, readEmbeddedText } from '../utils/embedded-assets.js';
+import { consumeInitialAdminPasswordFile } from './bootstrap.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
@@ -553,6 +554,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!result) {
             return Response.json({ error: 'Invalid credentials' }, { status: 401, headers });
           }
+          // A first-boot generated password (bootstrap.ts) has done its job once someone has signed in.
+          consumeInitialAdminPasswordFile();
           return Response.json({ token: result.token, user: result.user }, { headers });
         }
 

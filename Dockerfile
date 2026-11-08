@@ -47,7 +47,8 @@ ENV NODE_ENV=production \
     HOME=/data \
     # LAN mode: the server refuses to bind here until dashboard login is on and an admin exists.
     WILSON_DASHBOARD_HOST=0.0.0.0 \
-    # So on first boot, with no users yet, create the admin (random password, printed to the log).
+    # So on first boot, with no users yet, create the admin with a random password saved to a 0600
+    # file in /data (never logged; the log prints the path). See src/dashboard/bootstrap.ts.
     WILSON_ADMIN_BOOTSTRAP=generate
 
 WORKDIR /app

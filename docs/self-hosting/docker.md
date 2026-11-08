@@ -28,23 +28,17 @@ docker compose up -d
 docker compose logs wilson
 ```
 
-On first start, the log prints a box with the admin **username and password**:
-
-```
-================================================================
- Dashboard admin account created (dashboard login is now ON).
-   username: admin
-   password: 3vQ...
-```
-
-Open `http://nas.local:3141` (use your own name or IP), then sign in. If the log has scrolled away, the password is also saved inside the volume. To read it, then delete it:
+On first start, Open Accountant creates an admin account with a random password. The password is **not** printed in the log, because log viewers such as Portainer, Loki, or Synology Log Center keep logs around and show them. Instead it is saved in a file only the container can read, and the log tells you how to read it:
 
 ```bash
 docker compose exec wilson cat /data/.openaccountant/profiles/default/initial-admin-password
-docker compose exec wilson rm /data/.openaccountant/profiles/default/initial-admin-password
 ```
 
-To choose the password yourself, put `WILSON_ADMIN_PASSWORD=...` (8 or more characters) in `.env` **before the first start**. Once any dashboard user exists, these settings are ignored. They never reset a password.
+Open `http://nas.local:3141` (use your own name or IP) and sign in as `admin` with that password. **The file is deleted the first time anyone signs in**, so save the password in your password manager first.
+
+To choose the password yourself, put `WILSON_ADMIN_PASSWORD=...` (8 or more characters) in `.env` **before the first start**. Remove it from `.env` once you have signed in. Once any dashboard user exists, these settings are ignored. They never reset a password.
+
+There is no "change password" screen yet. To replace the first password, add a new admin under Settings → Users, sign in as that admin, then remove the original `admin` user there.
 
 ### Why there is a login
 
