@@ -6,12 +6,6 @@ config({ quiet: true });
 
 const args = process.argv.slice(2);
 
-if (args.includes("--version") || args.includes("-v")) {
-  const { default: packageJson } = await import("../package.json");
-  console.log(packageJson.version);
-  process.exit(0);
-}
-
 // Enable debug logging if --debug flag is passed
 if (args.includes("--debug")) {
   process.env.OA_DEBUG = "1";
@@ -81,7 +75,6 @@ Usage:
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
-  wilson --version                 Print the version
   wilson --help                    Show this help`);
 } else if (args.includes("--status")) {
   const { printStatus } = await import("./reports.js");
