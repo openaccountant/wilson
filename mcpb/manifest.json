@@ -1,0 +1,88 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/schemas/mcpb-manifest-v0.3.schema.json",
+  "manifest_version": "0.3",
+  "name": "open-accountant-wilson",
+  "display_name": "Open Accountant (Wilson)",
+  "version": "0.0.0",
+  "description": "Private bookkeeping on your own computer: import bank files, see where your money went, categorize, budgets and goals.",
+  "long_description": "Wilson keeps your bank transactions in a private database on this computer. Nothing is uploaded to Open Accountant. Claude does the thinking, so no API key is needed.\n\nImport a bank export (CSV from Chase, Amex, Bank of America and most other banks, or OFX, QFX or QIF), then ask things like \"Where did my money go last month?\" or \"Categorize my uncategorized transactions\". Claude asks before anything is added or changed. Open the local dashboard any time for charts and tables.",
+  "author": {
+    "name": "Open Accountant",
+    "url": "https://openaccountant.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openaccountant/wilson"
+  },
+  "homepage": "https://openaccountant.ai",
+  "documentation": "https://github.com/openaccountant/wilson/blob/main/docs/claude-desktop.md",
+  "support": "https://github.com/openaccountant/wilson/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": ["finance", "bookkeeping", "budget", "bank", "csv", "ofx", "qif", "quicken", "privacy", "local"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/launch.sh",
+    "mcp_config": {
+      "command": "/bin/sh",
+      "args": ["${__dirname}/server/launch.sh", "mcp"],
+      "env": {
+        "WILSON_PROFILE": "${user_config.profile}",
+        "WILSON_HOME": "${user_config.data_dir}",
+        "WILSON_MCP_ALLOW_CHANGES": "${user_config.allow_changes}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/wilson-windows-x64.exe",
+          "args": ["mcp"]
+        }
+      }
+    }
+  },
+  "tools": [
+    { "name": "get_overview", "description": "Which profile is open, how many transactions, the dates they cover, and how many still need a category." },
+    { "name": "import_file", "description": "Import a bank export (CSV, OFX, QFX or QIF) or a folder of them. Asks before adding anything." },
+    { "name": "search_transactions", "description": "Find transactions with a short plain-English query." },
+    { "name": "get_spending_summary", "description": "Spending by category for this month, quarter or year, compared with the one before." },
+    { "name": "get_profit_loss", "description": "Income, expenses and net for a period." },
+    { "name": "get_net_worth", "description": "Net worth summary, trend or balance sheet." },
+    { "name": "get_cash_forecast", "description": "Projected cash, with what-if changes." },
+    { "name": "get_tax_summary", "description": "Tax-deductible transactions by IRS category." },
+    { "name": "list_uncategorized", "description": "Transactions that have no category yet." },
+    { "name": "list_categories", "description": "The category names you can use." },
+    { "name": "categorize_transactions", "description": "Set the category of up to 100 transactions at once. Asks before changing anything." },
+    { "name": "get_budgets", "description": "Budgets against actual spending for a month." },
+    { "name": "list_goals", "description": "Savings and spending goals and their progress." },
+    { "name": "set_budget", "description": "Set a category's monthly limit. Asks before changing anything." },
+    { "name": "update_goal", "description": "Change a goal's target, date or status. Asks before changing anything." },
+    { "name": "set_tax_flag", "description": "Mark or unmark a transaction as tax-deductible. Asks before changing anything." },
+    { "name": "open_dashboard", "description": "Open Wilson's local dashboard in your browser." }
+  ],
+  "tools_generated": false,
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  },
+  "user_config": {
+    "profile": {
+      "type": "string",
+      "title": "Profile",
+      "description": "Which set of books to open, e.g. \"default\", \"business\" or \"household\". Letters, digits, - and _ only.",
+      "default": "default",
+      "required": false
+    },
+    "data_dir": {
+      "type": "directory",
+      "title": "Data folder",
+      "description": "Where Wilson keeps your books. Leave it as is unless you moved your Open Accountant folder.",
+      "default": "${HOME}/.openaccountant",
+      "required": false
+    },
+    "allow_changes": {
+      "type": "boolean",
+      "title": "Allow imports and changes",
+      "description": "Let Claude import files and change categories, budgets and goals (it still asks you first). Turn off for read-only access.",
+      "default": true,
+      "required": false
+    }
+  }
+}
