@@ -8,14 +8,18 @@ on:
 
 jobs:
   check:
-    # Both OSes: the WebGPU model path resolves execution providers from
-    # platform-specific onnxruntime-node prebuilds, so Linux-only coverage
-    # would miss half of it.
+    # All three OSes: the WebGPU model path resolves execution providers from
+    # platform-specific onnxruntime-node prebuilds, and Windows has its own
+    # secret store (DPAPI), path rules and process model.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        # Git Bash on Windows, so the per-file test loop below runs unchanged.
+        shell: bash
     steps:
       - uses: actions/checkout@v7
 
@@ -47,6 +51,12 @@ jobs:
             fi
           done
           exit $FAIL
+
+      - name: Smoke (CLI entrypoint + CSV import + secret store)
+        run: |
+          bun run src/index.tsx --version
+          bun run src/index.tsx --help > /dev/null
+          bun run scripts/smoke-cross-platform.ts
 
   # Encryption tests need the SQLCipher dylib, which only bun:sqlite on macOS
   # can load (Database.setCustomSQLite is a no-op elsewhere). Each file runs in

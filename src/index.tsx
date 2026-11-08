@@ -11,6 +11,13 @@ if (args.includes("--debug")) {
   process.env.OA_DEBUG = "1";
 }
 
+if (args.includes("--version")) {
+  const { readFileSync } = await import("node:fs");
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8"));
+  console.log(pkg.version);
+  process.exit(0);
+}
+
 // ── Profile selection (must happen before any DB/config access) ───────────
 import {
   setActiveProfile,
@@ -75,6 +82,7 @@ Usage:
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
+  wilson --version                 Print the version
   wilson --help                    Show this help`);
 } else if (args.includes("--status")) {
   const { printStatus } = await import("./reports.js");
