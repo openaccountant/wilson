@@ -33,7 +33,7 @@ describe('build:hybrid enforces scripts/check-hybrid-build.ts', () => {
 
   test('the path in the script resolves, from the ui directory, to the real check script', () => {
     const rel = script.split('&&').map((s) => s.trim()).find((s) => s.includes('check-hybrid-build.ts'))!.replace(/^bun run /, '');
-    expect(existsSync(resolve(uiDir.pathname, rel))).toBe(true);
+    expect(existsSync(resolve(fileURLToPath(uiDir), rel))).toBe(true);
   });
 
   test('run as a program, the check exits 1 on missing or broken builds and 0 on a clean one', () => {
