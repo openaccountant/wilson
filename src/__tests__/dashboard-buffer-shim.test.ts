@@ -13,6 +13,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const UI_SRC = new URL('../dashboard/ui/src/', import.meta.url);
 
@@ -26,7 +27,7 @@ function sources(dir: string): string[] {
 
 describe('dashboard Buffer polyfill', () => {
   test("every module that imports the statement parsers imports '@/buffer-shim' first", () => {
-    const root = UI_SRC.pathname;
+    const root = fileURLToPath(UI_SRC);
     const importers = sources(root).filter((p) => /from '@import-tools\//.test(readFileSync(p, 'utf8')));
     expect(importers.length).toBeGreaterThan(0);
     for (const p of importers) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { ALLOWED_READONLY_INPUTS, FIELD_LOCK_CLASS, fieldLock } from '../dashboard/declarative-submit-core.js';
 
 /**
@@ -48,7 +48,7 @@ const walk = (dir: string): string[] =>
 const strip = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 /** Every file that wires a declarative form (the hook itself excluded). */
 const formFiles = walk(uiRoot).filter((f) => /useDeclarativeTool\(\{/.test(readFileSync(f, 'utf8')) && !f.endsWith('useDeclarativeTool.ts'));
-const rel = (f: string) => f.slice(uiRoot.length + 1);
+const rel = (f: string) => f.slice(uiRoot.length + 1).split(sep).join('/'); // posix form on Windows too
 
 interface El {
   tag: string;

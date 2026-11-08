@@ -12,6 +12,7 @@ import { checkAlerts } from '../alerts/engine.js';
 import { getNetWorthSummary } from '../db/net-worth-queries.js';
 import { getActiveGoals, resolveGoalTarget } from '../db/goal-queries.js';
 import { getActiveMemories, pruneExpiredMemories } from '../db/memory-queries.js';
+import { readEmbeddedText } from '../utils/embedded-assets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,6 +44,9 @@ export async function loadSoulDocument(): Promise<string | null> {
   } catch {
     // Continue to bundled fallback when user override is missing/unreadable.
   }
+
+  const embeddedSoul = await readEmbeddedText('SOUL.md');
+  if (embeddedSoul !== null) return embeddedSoul;
 
   const bundledSoulPath = join(__dirname, '../../SOUL.md');
   try {

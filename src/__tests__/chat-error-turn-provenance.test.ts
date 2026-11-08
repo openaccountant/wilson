@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { createTestDb, ensureTestProfile } from './helpers.js';
 import { Agent } from '../agent/agent.js';
 import type { AgentEvent } from '../agent/types.js';
@@ -36,6 +36,14 @@ function agentYielding(events: AgentEvent[]) {
 }
 
 const spies: Array<{ mockRestore: () => void }> = [];
+// A successful turn's saveAnswer awaits generateSummary(), a real callLlm to the default local model.
+// On a machine with Ollama running that takes seconds and races the 5s test timeout; stub it.
+beforeEach(() => {
+  spies.push(
+    spyOn(InMemoryChatHistory.prototype as unknown as { generateSummary: () => Promise<string> }, 'generateSummary')
+      .mockImplementation(async () => 'summary'),
+  );
+});
 afterEach(() => {
   for (const s of spies) s.mockRestore();
   spies.length = 0;

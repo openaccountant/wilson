@@ -395,7 +395,9 @@ const lanIp = (() => {
   return null;
 })();
 
-describe.skipIf(lanIp === null)('prelabel over a real socket from a non-loopback peer', () => {
+// Also skipped on Windows: the firewall drops (not refuses) a LAN-address connect to a loopback-bound server,
+// so the probe times out instead of being answered.
+describe.skipIf(lanIp === null || process.platform === 'win32')('prelabel over a real socket from a non-loopback peer', () => {
   let dir: string;
   let server: Awaited<ReturnType<typeof startDashboardServer>>['server'];
 

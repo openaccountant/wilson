@@ -44,6 +44,12 @@ function writeCrontab(content: string): void {
  * Removes all previous wilson-managed entries and writes current ones.
  */
 export function syncCrontab(): void {
+  if (process.platform === "win32") {
+    throw new Error(
+      "Scheduled runs use cron, which Windows doesn't have. The schedule was saved; to run it " +
+        "automatically, create a Task Scheduler task that runs: wilson --run \"<your query>\"",
+    );
+  }
   const existing = readCrontab();
 
   // Remove all wilson-managed lines
@@ -78,6 +84,7 @@ export function syncCrontab(): void {
  * Remove all OA-managed entries from the crontab.
  */
 export function clearCrontab(): void {
+  if (process.platform === "win32") return;
   const existing = readCrontab();
   if (!existing) return;
 

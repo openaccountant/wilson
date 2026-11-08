@@ -1,17 +1,32 @@
 import { ensureHandoffSecret } from '../training/handoff-tag.js';
 import { Database } from './compat-sqlite.js';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { basename, dirname } from 'path';
 import { runMigrations } from './migrations.js';
 import { applyToolRenames } from '../mcp/tool-rename.js';
 import { getActiveProfile } from '../profile/active.js';
-import { encryptionAvailable, initSqlcipher } from './sqlcipher-dylib.js';
+import { encryptionAvailable, encryptionUnavailableHint, initSqlcipher } from './sqlcipher-dylib.js';
 import { getOrInitEncryptionKey } from './encryption-key.js';
 import { isPlaintextSqliteFile, migrateToEncrypted } from './encrypt-migrate.js';
 import { logger } from '../utils/logger.js';
 
 /** Warn at most once per process when encryption is unavailable on macOS. */
 let warnedNoEncryption = false;
+
+/**
+ * Print the "stored unencrypted" notice the first time a given database is opened
+ * without encryption. A marker beside the DB keeps it to once, not every launch.
+ */
+export function noticeUnencryptedOnce(dbPath: string, hint: string): void {
+  const marker = `${dbPath}.unencrypted-notice`;
+  if (existsSync(marker)) return;
+  process.stderr.write(`[wilson] ${hint}\n`);
+  try {
+    writeFileSync(marker, `${new Date().toISOString()} ${hint}\n`);
+  } catch {
+    // Read-only dir: the notice just repeats next time.
+  }
+}
 
 /**
  * Derive the profile name from a database path. Wilson databases always live at
@@ -86,12 +101,13 @@ function openConnection(
   }
 
   if (!encryptionAvailable()) {
-    if (process.platform === 'darwin' && !warnedNoEncryption) {
+    if (!warnedNoEncryption) {
       warnedNoEncryption = true;
-      logger.info('db:encryption:unavailable', {
-        path: resolvedPath,
-        hint: 'Install SQLCipher for encryption at rest: brew install sqlcipher',
-      });
+      const hint = encryptionUnavailableHint();
+      logger.info('db:encryption:unavailable', { path: resolvedPath, hint });
+      // macOS keeps its quiet log-only notice; elsewhere there is nothing to install,
+      // so say it out loud once per database rather than leave people assuming.
+      if (process.platform !== 'darwin') noticeUnencryptedOnce(resolvedPath, hint);
     }
     return new Database(resolvedPath);
   }
@@ -99,10 +115,12 @@ function openConnection(
   const name =
     explicitProfileName ??
     (pathWasExplicit ? deriveProfileName(resolvedPath) : getActiveProfile().name);
-  const key = getOrInitEncryptionKey(name);
+  // Throws (EncryptionKeyError) rather than mint a key when the keychain can't be read or
+  // the file is already encrypted under a key we can't find: a fresh key there loses data.
+  const key = getOrInitEncryptionKey(name, resolvedPath);
 
-  // Encryption available but no key could be obtained (e.g. keychain write
-  // failed): fall back to plaintext rather than lock the user out of their data.
+  // No secure store to put a new key in (and nothing encrypted yet): fall back to
+  // plaintext rather than lock the user out of their data.
   if (!key) {
     return new Database(resolvedPath);
   }

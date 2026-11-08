@@ -1,0 +1,3 @@
+# LF everywhere, including Windows checkouts (Actions sets core.autocrlf=true there).
+# Source-guard tests match multi-line regexes and file hashes; CRLF breaks both.
+* text=auto eol=lf

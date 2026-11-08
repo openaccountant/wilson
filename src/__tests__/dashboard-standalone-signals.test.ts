@@ -8,7 +8,8 @@ import { join } from 'node:path';
  * but leave Bun.serve running, so the process (and the port) stayed up and
  * only kill -9 stopped it — process managers and restarts could not work.
  */
-describe('wilson --dashboard signals', () => {
+// Skipped on Windows: POSIX signals: Windows has no SIGTERM delivery to a child, and Ctrl+C is a console event, not a signal.
+describe.skipIf(process.platform === 'win32')('wilson --dashboard signals', () => {
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     test(`exits on ${signal}`, async () => {
       const home = mkdtempSync(join(tmpdir(), 'wilson-signal-'));

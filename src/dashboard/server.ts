@@ -1,8 +1,11 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { stat } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { getDashboardHtml } from './html.js';
 import { compressBytes, negotiateEncoding, varyWithEncoding, type Encoding } from './compression.js';
+import { extractEmbeddedDir, readEmbeddedText } from '../utils/embedded-assets.js';
+import { consumeInitialAdminPasswordFile } from './bootstrap.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
@@ -87,11 +90,17 @@ function resolveBindHost(): string {
   return process.env.WILSON_DASHBOARD_HOST?.trim() || getGlobalAgentState().dashboardHost || LOOPBACK_DEFAULT;
 }
 
-/** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
+/**
+ * Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup.
+ * A compiled binary has no source to bundle, so it carries the script prebuilt
+ * by scripts/build-binaries.ts instead.
+ */
 async function buildWebMcpBridgeScript(): Promise<string> {
+  const prebuilt = await readEmbeddedText('src/dashboard/webmcp-bridge.js');
+  if (prebuilt !== null) return prebuilt;
   try {
     const result = await Bun.build({
-      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL('./webmcp-bridge.ts', import.meta.url))],
       target: 'browser',
       minify: false,
     });
@@ -113,7 +122,10 @@ function injectWebMcpBridge(html: string, port: number): string {
 // ── Static assets ───────────────────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
-export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows .pathname is `/C:/...`, and anywhere it keeps %20 for spaces.
+// A compiled binary carries these builds embedded (scripts/build-binaries.ts) and extracts them on first use.
+export const DASHBOARD_ASSETS_DIR =
+  extractEmbeddedDir('src/dashboard/ui/dist-hybrid') ?? fileURLToPath(new URL('./ui/dist-hybrid/', import.meta.url));
 
 /**
  * URL prefix and directory of the React dashboard's content-hashed build output (`assetsDir` in
@@ -121,7 +133,8 @@ export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url
  * the wa-sqlite wasm. index.html only references these; nothing is inlined into it.
  */
 export const DASHBOARD_APP_PREFIX = '/_app/';
-export const DASHBOARD_APP_DIR = new URL('./ui/dist/_app/', import.meta.url).pathname;
+export const DASHBOARD_APP_DIR =
+  extractEmbeddedDir('src/dashboard/ui/dist/_app') ?? fileURLToPath(new URL('./ui/dist/_app/', import.meta.url));
 
 /** A hashed file never changes under the same name, so a browser may keep it for a year without asking again. */
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
@@ -333,15 +346,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
     );
   }
 
-  // Load the React dashboard build (index.html; its scripts and styles are hashed files under /_app/),
-  // with fallback to legacy html.ts
-  let reactDashboardHtml: string | null = null;
-  try {
-    reactDashboardHtml = await Bun.file(
-      new URL('./ui/dist/index.html', import.meta.url)
-    ).text();
-  } catch {
-    // React build not available — fall back to legacy getDashboardHtml()
+  // Load the React dashboard build (index.html; its scripts and styles are hashed files under /_app/):
+  // embedded in a compiled binary, else from the source tree, else fall back to legacy html.ts.
+  let reactDashboardHtml: string | null = await readEmbeddedText('src/dashboard/ui/dist/index.html');
+  if (reactDashboardHtml === null) {
+    try {
+      reactDashboardHtml = await Bun.file(
+        new URL('./ui/dist/index.html', import.meta.url)
+      ).text();
+    } catch {
+      // React build not available — fall back to legacy getDashboardHtml()
+    }
   }
 
   // The served page (HTML + bridge tag) and its compressed bodies, filled on first request.
@@ -658,6 +673,8 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
           if (!result) {
             return Response.json({ error: 'Invalid credentials' }, { status: 401, headers });
           }
+          // A first-boot generated password (bootstrap.ts) has done its job once someone has signed in.
+          consumeInitialAdminPasswordFile();
           return Response.json({ token: result.token, user: result.user }, { headers });
         }
 

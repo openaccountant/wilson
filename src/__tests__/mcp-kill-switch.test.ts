@@ -336,7 +336,9 @@ describe('calls that reach the server after the switch', () => {
   });
 });
 
-describe('where the switch lives', () => {
+// Skipped on Windows: Bun's os.homedir() there ignores HOME (and USERPROFILE), so a child can't be pointed at a temp home.
+
+describe.skipIf(process.platform === 'win32')('where the switch lives', () => {
   test('it persists in the agent-access.json file, not in the profile settings.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'oa-ks-'));
     const file = join(dir, 'agent-access.json');

@@ -1,5 +1,6 @@
 // @invariant NN-10
 import { describe, expect, test } from 'bun:test';
+import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ import { TAB_IDS } from '../dashboard/webmcp-session.js';
  * text, and the mirror worker and its wasm are separate files.
  */
 
-const ROOT = new URL('../..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const UI = join(ROOT, 'src/dashboard/ui');
 const DIST = join(UI, 'dist');
 const built = existsSync(join(DIST, 'index.html')) && existsSync(join(DIST, '_app'));
@@ -82,7 +83,7 @@ describe.skipIf(!built)('built output (only when `bun run build` ran)', () => {
   });
 
   test('the model runtime and open-jev stay out of every chunk (guard reads the split build)', async () => {
-    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname)) as {
+    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).href)) as {
       readReactBuild(distDir: string): string | null;
     };
     const all = gate.readReactBuild(DIST)!;
@@ -94,7 +95,7 @@ describe.skipIf(!built)('built output (only when `bun run build` ran)', () => {
 
 describe('readReactBuild (scripts/check-hybrid-build.ts)', () => {
   test('includes chunk contents, so a runtime hidden in a lazy chunk fails the gate', async () => {
-    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname)) as {
+    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).href)) as {
       readReactBuild(distDir: string): string | null;
       checkHybridBuild(input: { indexHtml: string; hybridJs: string; hybridEntries: string[] }): string[];
     };
@@ -119,7 +120,12 @@ describe('readReactBuild (scripts/check-hybrid-build.ts)', () => {
 let lazyUi: Promise<{ registry: string[]; tabs: Record<string, string>; sharedImport: boolean; charts: Record<string, string> }> | undefined;
 function loadLazyUi() {
   lazyUi ??= (async () => {
-    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'src/__tests__/helpers/load-lazy-ui.ts')], { cwd: ROOT, stdout: 'pipe', stderr: 'pipe' });
+    // The child's global plugin rewrites `?worker` imports; with bun's on-disk transpiler cache on, that rewritten
+    // mirror-client.ts is cached and a later test process (mirror-client-wipe-race) loads it and can't resolve the stub.
+    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'src/__tests__/helpers/load-lazy-ui.ts')], {
+      cwd: ROOT, stdout: 'pipe', stderr: 'pipe',
+      env: { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0' },
+    });
     const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
     if (code !== 0) throw new Error(`load-lazy-ui exited ${code}: ${err}`);
     return JSON.parse(out.trim().split('\n').at(-1) ?? '{}');

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { createTestDb } from './helpers.js';
 import {
@@ -188,7 +189,7 @@ describe('dashboard server: page and /_app/ route', () => {
     expect(res.split('\r\n')[0]).toContain(' 421 ');
   });
 
-  const indexPath = new URL('../dashboard/ui/dist/index.html', import.meta.url).pathname;
+  const indexPath = fileURLToPath(new URL('../dashboard/ui/dist/index.html', import.meta.url));
   const built = existsSync(indexPath) && existsSync(DASHBOARD_APP_DIR);
 
   test.skipIf(!built)('every file the built page names is served, hashed and immutable, before login', async () => {

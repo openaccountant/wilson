@@ -5,6 +5,7 @@ import { defineTool } from '../define-tool.js';
 import { generateReport } from '../../report/generator.js';
 import { formatToolResult } from '../types.js';
 import type { ReportSection } from '../../report/templates.js';
+import { expandHome } from '../../utils/path-arg.js';
 
 let db: Database | null = null;
 
@@ -33,9 +34,7 @@ export const generateReportTool = defineTool({
   func: async ({ filePath, month, sections }) => {
     const database = getDb();
 
-    const resolvedPath = filePath.startsWith('~')
-      ? filePath.replace('~', process.env.HOME ?? '')
-      : filePath;
+    const resolvedPath = expandHome(filePath);
 
     const markdown = generateReport(database, month, sections as ReportSection[]);
 

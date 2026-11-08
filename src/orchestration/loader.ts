@@ -4,14 +4,15 @@ import { homedir } from 'os';
 import yaml from 'js-yaml';
 import type { ChainDef, ChainStep, TeamDef } from './types.js';
 import { fetchPaidChainSteps } from '../content/fetcher.js';
+import { extractEmbeddedDir } from '../utils/embedded-assets.js';
 
 /**
  * Directories to search for chain/team YAML definitions (in priority order).
  */
 function getSearchDirs(kind: 'chains' | 'teams'): string[] {
   return [
-    // Built-in
-    join(import.meta.dir ?? '.', kind),
+    // Built-in (extracted from a compiled binary, else next to this file)
+    extractEmbeddedDir(`src/orchestration/${kind}`) ?? join(import.meta.dir ?? '.', kind),
     // User-level
     join(homedir(), '.openaccountant', kind),
     // Project-level

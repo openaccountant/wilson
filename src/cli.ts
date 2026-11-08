@@ -19,6 +19,7 @@ import type {
 import { getModelDisplayName } from './utils/model.js';
 import { getApiKeyNameForProvider, getProviderDisplayName } from './utils/env.js';
 import { parseFilePathArg } from './utils/path-arg.js';
+import { WHERE, windowsSystemBinary } from './utils/windows-bin.js';
 import type { DisplayEvent } from './agent/types.js';
 import { logger } from './utils/logger.js';
 import { traceStore } from './utils/trace-store.js';
@@ -395,7 +396,12 @@ export async function runCli() {
   // Detect fd on PATH for @ fuzzy file search (faster, respects .gitignore)
   let fdPath: string | null = null;
   try {
-    fdPath = execFileSync('which', ['fd'], { encoding: 'utf-8' }).trim() || null;
+    // `where` is the Windows `which` (absolute System32 path, so a planted where.exe in the CWD
+    // can't run); it may list several matches, one per line.
+    const finder = process.platform === 'win32' ? windowsSystemBinary(WHERE) : 'which';
+    if (!finder) throw new Error('where.exe not found');
+    const found = execFileSync(finder, ['fd'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+    fdPath = found.split(/\r?\n/)[0]?.trim() || null;
   } catch {
     // fd not found — will fall back to directory-walking for @ file completion
   }
