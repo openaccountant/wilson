@@ -139,6 +139,13 @@ function collectEmbeds(bridgePath: string, withHybrid: boolean): Map<string, str
     throw new Error(`${uiHtml} is missing. Build the dashboard UI first (drop --skip-ui).`);
   }
   add(uiHtml);
+  // index.html only references the content-hashed scripts, styles and wasm under dist/_app/;
+  // src/dashboard/server.ts serves them from extractEmbeddedDir('src/dashboard/ui/dist/_app').
+  const appAssets = walk(join(UI_DIR, 'dist/_app'));
+  if (appAssets.length === 0) {
+    throw new Error('src/dashboard/ui/dist/_app is empty. Build the dashboard UI first (drop --skip-ui).');
+  }
+  for (const rel of appAssets) add(rel);
   files.set('src/dashboard/webmcp-bridge.js', bridgePath);
 
   // Builtin skills: every non-code file in each skill directory.
