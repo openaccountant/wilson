@@ -1,13 +1,21 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createTestDb } from './helpers.js';
-import { buildStdioServer, envFlag, resolveUserPath } from '../mcp/stdio-server.js';
+import {
+  buildStdioServer,
+  DEFAULT_IMPORT_FOLDERS,
+  envFlag,
+  MAX_IMPORT_FILE_BYTES,
+  parseImportFolders,
+  resolveImportTarget,
+  resolveUserPath,
+} from '../mcp/stdio-server.js';
 import { getUncategorizedCount } from '../db/queries.js';
 import type { Database } from '../db/compat-sqlite.js';
 import { envPathOverride } from '../profile/context.js';
@@ -48,7 +56,7 @@ describe('wilson --mcp-server (stdio round trip)', () => {
 
     const transport = new StdioClientTransport({
       command: 'bun',
-      args: ['run', join(ROOT, 'src', 'index.tsx'), '--mcp-server'],
+      args: ['run', join(ROOT, 'src', 'index.tsx'), '--mcp-server', '--import-folders', join(ROOT, 'data')],
       cwd: ROOT,
       env: {
         ...(process.env as Record<string, string>),
@@ -125,6 +133,7 @@ async function connect(
     profile: 'test',
     // Tests opt out explicitly; production defaults to off (see 'fail closed').
     allowChanges: 'allowChanges' in opts ? opts.allowChanges : true,
+    importFolders: [join(ROOT, 'data')],
     trustHostApproval: opts.trustHostApproval,
     launchDashboard: async () => ({ url: 'http://127.0.0.1:3141', started: true, opened: false }),
   });
@@ -208,15 +217,18 @@ describe('buildStdioServer', () => {
     expect(getUncategorizedCount(db)).toBe(before);
   });
 
-  test('import_file refuses files that are not bank exports, and missing paths', async () => {
+  test('import_file refuses paths outside the import folders, non-bank files and missing paths', async () => {
     const db = createTestDb();
-    const { client } = await connect(db);
-    const notBank = await client.callTool({ name: 'import_file', arguments: { path: join(ROOT, 'package.json') } });
+    const { client } = await connect(db, { trustHostApproval: true });
+    const outside = await client.callTool({ name: 'import_file', arguments: { path: join(ROOT, 'package.json') } });
+    expect(outside.isError).toBe(true);
+    expect(textOf(outside)).toContain('outside the import folders');
+    const notBank = await client.callTool({ name: 'import_file', arguments: { path: join(ROOT, 'data', 'api', 'plaid-standard.json') } });
     expect(notBank.isError).toBe(true);
-    expect(textOf(notBank)).toContain('.csv, .ofx, .qfx and .qif');
-    const missing = await client.callTool({ name: 'import_file', arguments: { path: '/no/such/file.csv' } });
+    const missing = await client.callTool({ name: 'import_file', arguments: { path: join(ROOT, 'data', 'no-such-file.csv') } });
     expect(missing.isError).toBe(true);
     expect(textOf(missing)).toContain('No file or folder');
+    expect(auditRows(db, 'import_file')[0]).toEqual({ decision: 'denied_policy', error_code: 'outside_import_folders' });
   });
 
   test('allowChanges=false offers only reads and the dashboard', async () => {
@@ -298,6 +310,80 @@ describe('fail closed', () => {
   });
 });
 
+describe('import containment', () => {
+  const base = mkdtempSync(join(tmpdir(), 'wilson-import-'));
+  tempDirs.push(base);
+  const root = join(base, 'Downloads');
+  const out = join(base, 'secrets');
+  mkdirSync(join(root, '.hidden'), { recursive: true });
+  mkdirSync(join(root, 'big'), { recursive: true });
+  mkdirSync(out, { recursive: true });
+  const csv = readFileSync(CHASE_CSV, 'utf-8');
+  writeFileSync(join(root, 'ok.csv'), csv);
+  writeFileSync(join(root, 'notes.txt'), 'hello');
+  writeFileSync(join(root, '.hidden', 'x.csv'), csv);
+  writeFileSync(join(out, 'secret.csv'), csv);
+  writeFileSync(join(out, 'id_rsa'), 'PRIVATE KEY');
+  symlinkSync(join(out, 'secret.csv'), join(root, 'link-out.csv'));
+  symlinkSync(join(out, 'id_rsa'), join(root, 'key.csv'));
+  symlinkSync(out, join(root, 'linkdir'));
+  writeFileSync(join(root, 'big', 'huge.csv'), '');
+  truncateSync(join(root, 'big', 'huge.csv'), MAX_IMPORT_FILE_BYTES + 1);
+  const folders = [root];
+  const deny = (p: string) => {
+    const r = resolveImportTarget(p, folders);
+    expect(r.ok).toBe(false);
+    return r as Extract<ReturnType<typeof resolveImportTarget>, { ok: false }>;
+  };
+
+  test('a file in an import folder is allowed', () => {
+    const r = resolveImportTarget(join(root, 'ok.csv'), folders);
+    expect(r.ok && r.files.map((f) => basename(f))).toEqual(['ok.csv']);
+  });
+
+  test('outside the folders, symlinks out, and dot-folders are refused by policy', () => {
+    expect(deny(join(out, 'secret.csv'))).toMatchObject({ decision: 'denied_policy', code: 'outside_import_folders' });
+    expect(deny(join(root, 'link-out.csv'))).toMatchObject({ decision: 'denied_policy', code: 'outside_import_folders' });
+    expect(deny(join(root, 'key.csv'))).toMatchObject({ decision: 'denied_policy', code: 'outside_import_folders' });
+    expect(deny(join(root, 'linkdir', 'secret.csv'))).toMatchObject({ decision: 'denied_policy', code: 'outside_import_folders' });
+    expect(deny(join(root, '.hidden', 'x.csv'))).toMatchObject({ decision: 'denied_policy', code: 'hidden_folder' });
+    expect(deny(join(root, '..', 'secrets', 'secret.csv')).decision).toBe('denied_policy');
+    expect(deny('~/.ssh/id_rsa').decision).toBe('denied_policy');
+  });
+
+  test('only bank file types, and a size cap', () => {
+    expect(deny(join(root, 'notes.txt'))).toMatchObject({ decision: 'denied_policy', code: 'bad_extension' });
+    expect(deny(join(root, 'big'))).toMatchObject({ decision: 'denied_policy', code: 'file_too_large' });
+  });
+
+  test('a folder import takes only its own regular bank files: no dotfiles, no links out, no subfolders', () => {
+    const r = resolveImportTarget(root, folders);
+    expect(r.ok && r.files.map((f) => basename(f))).toEqual(['ok.csv']);
+  });
+
+  test('no folders configured means no imports', () => {
+    expect(resolveImportTarget(join(root, 'ok.csv'), [])).toMatchObject({ ok: false, code: 'no_import_folders' });
+  });
+
+  test("the owner's Off policy for import_file refuses it, audited denied_policy", async () => {
+    const db = createTestDb();
+    db.prepare(`INSERT INTO mcp_tool_policies (user_key, tool_name, policy, updated_at) VALUES (0, 'import_file', 'off', datetime('now'))`).run();
+    const { client } = await connect(db, { trustHostApproval: true });
+    const res = await client.callTool({ name: 'import_file', arguments: { path: CHASE_CSV } });
+    expect(res.isError).toBe(true);
+    expect(auditRows(db, 'import_file').at(-1)).toEqual({ decision: 'denied_policy', error_code: 'policy_off' });
+  });
+
+  test('parseImportFolders', () => {
+    expect(parseImportFolders(['--mcp-server', '--import-folders', '/a', '/b'], undefined)).toEqual(['/a', '/b']);
+    expect(parseImportFolders(['--import-folders', '/a', '--profile', 'x'], undefined)).toEqual(['/a']);
+    expect(parseImportFolders(['--import-folders', '${user_config.import_folders}'], undefined)).toEqual(DEFAULT_IMPORT_FOLDERS);
+    expect(parseImportFolders(['--import-folders'], undefined)).toEqual([]);
+    expect(parseImportFolders([], `/x${delimiter}/y`)).toEqual(['/x', '/y']);
+    expect(parseImportFolders([], undefined)).toEqual(DEFAULT_IMPORT_FOLDERS);
+  });
+});
+
 describe('mcpb/manifest.json', () => {
   test('lists exactly the tools the server offers', async () => {
     const manifest = JSON.parse(readFileSync(join(ROOT, 'mcpb', 'manifest.json'), 'utf-8')) as {
@@ -311,8 +397,8 @@ describe('mcpb/manifest.json', () => {
     expect(manifest.tools.map((t) => t.name).sort()).toEqual(offered);
     // Both launch paths start the stdio server flag (not `--mcp`, which lists MCP client connections).
     const cfg = manifest.server.mcp_config as unknown as { args: string[]; platform_overrides: { win32: { args: string[] } } };
-    expect(cfg.args.at(-1)).toBe('--mcp-server');
-    expect(cfg.platform_overrides.win32.args).toEqual(['--mcp-server']);
+    expect(cfg.args.slice(1)).toEqual(['--mcp-server', '--import-folders', '${user_config.import_folders}']);
+    expect(cfg.platform_overrides.win32.args).toEqual(['--mcp-server', '--import-folders', '${user_config.import_folders}']);
     // The settings reach the server through these variables.
     expect(Object.keys(manifest.server.mcp_config.env).sort()).toEqual([
       'WILSON_HOME',

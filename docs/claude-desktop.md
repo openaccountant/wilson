@@ -55,6 +55,7 @@ Open **Settings → Extensions → Open Accountant (Wilson) → Configure** in C
 |---|---|
 | **Profile** | Which set of books to open. Use different names to keep things apart, for example `household` and `business`. The default is `default`. |
 | **Data folder** | Where your books are stored. Leave the default (`.openaccountant` in your home folder) unless you moved it. If you also use the Wilson command-line app, the default means both see the same books. |
+| **Folders Wilson may import from** | Claude can only import bank files that are inside these folders. The defaults are your Downloads and Documents folders. Hidden folders (names starting with a dot) and links that point outside are never read. If you save bank exports somewhere else, add that folder here. |
 | **Allow imports and changes** | Turn it off if you want Claude to read only. Claude then can't import files or change categories, budgets or goals. |
 
 ## Privacy
@@ -66,10 +67,11 @@ Open **Settings → Extensions → Open Accountant (Wilson) → Configure** in C
 ## Troubleshooting
 
 - **"No file or folder at …"**: check the file name and where it is. Downloads usually go to your Downloads folder. A path that starts with `~/` means "in my home folder".
+- **"That path is outside the import folders"**: move the file into Downloads or Documents, or add its folder under **Folders Wilson may import from** in the extension's settings. This is on purpose: it stops anything from tricking Claude into reading other files on your computer.
 - **"This file was already imported"**: Wilson skips files and transactions it has seen before, so importing twice doesn't double-count.
 - **Claude says the tools aren't available**: in **Settings → Extensions**, make sure Open Accountant is turned on, then start a new chat.
 - **Agent access is turned off**: someone switched off agent access in the dashboard. Open the dashboard and go to **Settings → Agent access** to turn it back on.
 
 ## For developers
 
-The extension runs `wilson --mcp-server`, an MCP server on stdio. See `src/mcp/stdio-server.ts`. It reuses the dashboard's MCP tool catalog, argument checks and audit log. Change tools exist only when `WILSON_MCP_ALLOW_CHANGES` is explicitly true. Each change is confirmed through MCP elicitation when the client supports it. A client without elicitation has every change refused, unless `WILSON_MCP_TRUST_HOST_APPROVAL=1` says its host asks before each tool call; the Claude Desktop manifest sets this. The bundle is built with `bun run build:mcpb` from the binaries in `dist/bin` (`scripts/build-mcpb.ts`, manifest in `mcpb/manifest.json`, MCPB `manifest_version` 0.3). Environment variables: `WILSON_PROFILE`, `WILSON_HOME` (data folder), `WILSON_MCP_ALLOW_CHANGES`, `WILSON_DASHBOARD_PORT` (default 3141), `WILSON_MCP_EMBED=1` (keep on-device embedding on import; off by default, so run `wilson --index` later).
+The extension runs `wilson --mcp-server`, an MCP server on stdio. See `src/mcp/stdio-server.ts`. It reuses the dashboard's MCP tool catalog, argument checks and audit log. Change tools exist only when `WILSON_MCP_ALLOW_CHANGES` is explicitly true. Each change is confirmed through MCP elicitation when the client supports it. A client without elicitation has every change refused, unless `WILSON_MCP_TRUST_HOST_APPROVAL=1` says its host asks before each tool call; the Claude Desktop manifest sets this. The bundle is built with `bun run build:mcpb` from the binaries in `dist/bin` (`scripts/build-mcpb.ts`, manifest in `mcpb/manifest.json`, MCPB `manifest_version` 0.3). Imports are limited to the folders after `--import-folders` (or `WILSON_IMPORT_FOLDERS`, default `~/Downloads` and `~/Documents`). Paths are resolved through symlinks first, and dot-folders are refused. Each file is capped at 50 MB, each call at 50 files and 200 MB. An owner `off` row for `import_file` in `mcp_tool_policies` disables imports. Environment variables: `WILSON_PROFILE`, `WILSON_HOME` (data folder), `WILSON_MCP_ALLOW_CHANGES`, `WILSON_DASHBOARD_PORT` (default 3141), `WILSON_MCP_EMBED=1` (keep on-device embedding on import; off by default, so run `wilson --index` later).

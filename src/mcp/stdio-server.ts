@@ -28,9 +28,9 @@
  * before this runs; nothing here prints.
  */
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { readdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, extname, isAbsolute, join, resolve } from 'node:path';
+import { basename, delimiter, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -71,7 +71,11 @@ const STDIO_ORIGIN = 'stdio';
 /** Bank files `import_file` reads. QFX is Quicken's name for OFX. */
 export const IMPORTABLE_EXTENSIONS = new Set(['.csv', '.ofx', '.qfx', '.qif']);
 /** One import call reads at most this many files from a folder. */
-const MAX_FILES_PER_IMPORT = 50;
+export const MAX_FILES_PER_IMPORT = 50;
+/** No bank export is this big; a larger file is refused before it is read. */
+export const MAX_IMPORT_FILE_BYTES = 50 * 1_048_576;
+/** And one call reads at most this much in total. */
+export const MAX_IMPORT_TOTAL_BYTES = 200 * 1_048_576;
 /** One categorize_transactions call changes at most this many rows. */
 export const MAX_CATEGORIZE_BATCH = 100;
 /** How many lines of a batch a confirmation prompt lists before "…and N more". */
@@ -120,6 +124,11 @@ export interface StdioServerOptions {
    * prompt for every non-read-only tool call (Claude Desktop does). Default false: such a client's changes are refused.
    */
   trustHostApproval?: boolean;
+  /**
+   * The only folders `import_file` may read from (the extension's "Folders Wilson may import from" setting). A path
+   * outside them, reached through a symlink out of them, or inside a dot-folder is refused. Empty = no imports.
+   */
+  importFolders?: string[];
   /** Starts (or finds) the dashboard. Injectable for tests. */
   launchDashboard?: (opts: { openBrowser: boolean }) => Promise<DashboardLaunch>;
   version?: string;
@@ -168,12 +177,142 @@ export function resolveUserPath(raw: string): string {
   return isAbsolute(p) ? resolve(p) : resolve(homedir(), p);
 }
 
+// ── Import containment ───────────────────────────────────────────────────────
+
+export type ImportTarget =
+  | { ok: true; files: string[]; label: string }
+  | { ok: false; decision: 'denied_policy' | 'invalid_args'; code: string; message: string };
+
+/** A path in the form containment compares (case-folded where the file system usually is: Windows). */
+function cmpForm(p: string): string {
+  return process.platform === 'win32' ? p.toLowerCase() : p;
+}
+
+/** `target` relative to `root` when it is the root or inside it, else null. Both must already be canonical. */
+function within(root: string, target: string): string | null {
+  const rel = relative(cmpForm(root), cmpForm(target));
+  if (rel === '') return '';
+  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
+  return rel;
+}
+
+function hasDotSegment(rel: string): boolean {
+  return rel !== '' && rel.split(/[\\/]/).some((seg) => seg.startsWith('.'));
+}
+
+function realOrNull(p: string): string | null {
+  try {
+    return realpathSync.native(p);
+  } catch {
+    return null;
+  }
+}
+
+/** The configured import folders that exist, canonical (symlinks resolved). */
+export function canonicalImportRoots(folders: string[]): string[] {
+  return [...new Set(folders.map((f) => realOrNull(resolveUserPath(f))).filter((r): r is string => r !== null))];
+}
+
+/**
+ * What `import_file` may read for `raw`: files only, only .csv/.ofx/.qfx/.qif, only inside an import folder after every
+ * symlink is resolved (the target and each file in a folder), never inside a dot-folder, never recursing, and within the
+ * file-count and size caps. A path outside the folders is refused before anything about it is looked up.
+ */
+export function resolveImportTarget(raw: string, folders: string[]): ImportTarget {
+  const roots = canonicalImportRoots(folders);
+  const allowedList = roots.length > 0 ? roots.join(', ') : '(none configured)';
+  const outside = (code: string, why: string): ImportTarget => ({
+    ok: false,
+    decision: 'denied_policy',
+    code,
+    message: `${why} Wilson only imports from these folders: ${allowedList}. Move the file there, or add its folder in the extension's settings.`,
+  });
+  if (roots.length === 0) return outside('no_import_folders', 'No import folders are set up.');
+
+  const target = resolveUserPath(raw);
+  // Lexical check first, so nothing outside the folders is even stat'ed (no probing for what exists elsewhere).
+  const lexicalRoots = folders.map((f) => resolveUserPath(f));
+  if (![...roots, ...lexicalRoots].some((r) => within(r, target) !== null)) return outside('outside_import_folders', 'That path is outside the import folders.');
+
+  const real = realOrNull(target);
+  if (real === null) {
+    return { ok: false, decision: 'invalid_args', code: 'not_found', message: `No file or folder at ${target}. Check the path (e.g. ~/Downloads/statement.csv).` };
+  }
+  const root = roots.find((r) => within(r, real) !== null);
+  if (!root) return outside('outside_import_folders', 'That path leads (through a link) outside the import folders.');
+  if (hasDotSegment(within(root, real)!)) return outside('hidden_folder', 'Hidden files and folders (names starting with ".") are not imported.');
+
+  const importable = (name: string) => IMPORTABLE_EXTENSIONS.has(extname(name).toLowerCase());
+  let files: string[];
+  let label: string;
+  const st = statSync(real);
+  if (st.isDirectory()) {
+    let skippedOutside = 0;
+    files = [];
+    for (const entry of readdirSync(real, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      if (entry.name.startsWith('.') || !importable(entry.name)) continue;
+      const file = realOrNull(join(real, entry.name));
+      const rel = file === null ? null : within(root, file);
+      if (file === null || rel === null || hasDotSegment(rel) || !importable(file) || !statSync(file).isFile()) {
+        skippedOutside++;
+        continue;
+      }
+      files.push(file);
+    }
+    if (files.length === 0) {
+      return skippedOutside > 0
+        ? outside('outside_import_folders', `The bank files in ${real} link outside the import folders.`)
+        : { ok: false, decision: 'invalid_args', code: 'no_files', message: `No .csv, .ofx, .qfx or .qif files in ${real}.` };
+    }
+    if (files.length > MAX_FILES_PER_IMPORT) {
+      return { ok: false, decision: 'denied_policy', code: 'too_many_files', message: `That folder has ${files.length} bank files; import at most ${MAX_FILES_PER_IMPORT} at a time.` };
+    }
+    label = `${files.length} file${files.length === 1 ? '' : 's'} from ${real}`;
+  } else if (st.isFile()) {
+    if (!importable(target) || !importable(real)) {
+      return { ok: false, decision: 'denied_policy', code: 'bad_extension', message: `Wilson imports .csv, .ofx, .qfx and .qif bank files; "${basename(target)}" is not one of those.` };
+    }
+    files = [real];
+    label = basename(real);
+  } else {
+    return { ok: false, decision: 'denied_policy', code: 'not_a_file', message: `${target} is not a regular file or folder.` };
+  }
+
+  let total = 0;
+  for (const file of files) {
+    const size = statSync(file).size;
+    if (size > MAX_IMPORT_FILE_BYTES) {
+      return { ok: false, decision: 'denied_policy', code: 'file_too_large', message: `${basename(file)} is ${(size / 1_048_576).toFixed(0)} MB; Wilson imports files up to ${MAX_IMPORT_FILE_BYTES / 1_048_576} MB.` };
+    }
+    total += size;
+  }
+  if (total > MAX_IMPORT_TOTAL_BYTES) {
+    return { ok: false, decision: 'denied_policy', code: 'too_large', message: `Those files add up to more than ${MAX_IMPORT_TOTAL_BYTES / 1_048_576} MB; import fewer at a time.` };
+  }
+  return { ok: true, files, label };
+}
+
+/**
+ * The owner's policy for `import_file`. It is not a dashboard catalog tool (no browser transport offers it), so its row
+ * is read directly: any `off` row in mcp_tool_policies for it, for any user, turns it off. Default: on (each import is
+ * still confirmed).
+ */
+export function importPolicyOff(db: Database): boolean {
+  try {
+    const row = db.prepare(`SELECT 1 AS off FROM mcp_tool_policies WHERE tool_name = 'import_file' AND policy = 'off' LIMIT 1`).get();
+    return row !== undefined && row !== null;
+  } catch {
+    return false;
+  }
+}
+
 // ── Server ──────────────────────────────────────────────────────────────────
 
 export function buildStdioServer(opts: StdioServerOptions): McpServer {
   const { db, profile } = opts;
   const allowChanges = opts.allowChanges === true;
   const trustHostApproval = opts.trustHostApproval === true;
+  const importFolders = opts.importFolders ?? [];
   const launchDashboard = opts.launchDashboard ?? ((o: { openBrowser: boolean }) => defaultLaunchDashboard(profile, o));
   const server = new McpServer({ name: 'wilson', version: opts.version ?? '0.0.0' }, { instructions: INSTRUCTIONS });
 
@@ -574,7 +713,8 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     {
       description:
         'Import transactions from a bank export on this computer: a CSV (Chase, Amex, Bank of America or most other banks), OFX, ' +
-        'QFX or QIF file, or a folder of them. Give the full path, e.g. "~/Downloads/chase.csv" or "C:\\Users\\me\\Downloads\\chase.csv". ' +
+        'QFX or QIF file, or a folder of them (not its subfolders). Only files inside the folders the user allowed for imports ' +
+        '(by default Downloads and Documents) can be read. Give the full path, e.g. "~/Downloads/chase.csv" or "C:\\Users\\me\\Downloads\\chase.csv". ' +
         'The bank and format are detected automatically. A file imported before is skipped, and duplicate transactions are skipped. ' +
         'The user is asked to confirm before anything is added.',
       inputSchema: z
@@ -589,37 +729,19 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       const tool = 'import_file';
       const killed = refusedByKillSwitch(tool, 'mutating', args);
       if (killed) return killed;
-      const target = resolveUserPath(args.path);
-      let files: string[];
-      try {
-        const st = statSync(target);
-        if (st.isDirectory()) {
-          files = readdirSync(target)
-            .filter((f) => IMPORTABLE_EXTENSIONS.has(extname(f).toLowerCase()))
-            .sort()
-            .map((f) => join(target, f));
-          if (files.length === 0) {
-            audit(tool, 'mutating', 'invalid_args', args, 'no_files');
-            return errorResult(`No .csv, .ofx, .qfx or .qif files in ${target}.`);
-          }
-          if (files.length > MAX_FILES_PER_IMPORT) {
-            audit(tool, 'mutating', 'invalid_args', args, 'too_many_files');
-            return errorResult(`That folder has ${files.length} bank files; import at most ${MAX_FILES_PER_IMPORT} at a time (pick a smaller folder or single files).`);
-          }
-        } else {
-          if (!IMPORTABLE_EXTENSIONS.has(extname(target).toLowerCase())) {
-            audit(tool, 'mutating', 'invalid_args', args, 'bad_extension');
-            return errorResult(`Wilson imports .csv, .ofx, .qfx and .qif bank files; "${basename(target)}" is not one of those.`);
-          }
-          files = [target];
-        }
-      } catch {
-        audit(tool, 'mutating', 'invalid_args', args, 'not_found');
-        return errorResult(`No file or folder at ${target}. Check the path (e.g. ~/Downloads/statement.csv).`);
+      if (importPolicyOff(db)) {
+        audit(tool, 'mutating', 'denied_policy', args, 'policy_off');
+        return errorResult('Importing by agents is turned off for this profile (Settings → Agent access).');
       }
+      const resolved = resolveImportTarget(args.path, importFolders);
+      if (!resolved.ok) {
+        audit(tool, 'mutating', resolved.decision, args, resolved.code);
+        return errorResult(resolved.message);
+      }
+      const files = resolved.files;
 
       const refusal = await confirmChange(
-        `Wilson wants to import ${files.length === 1 ? basename(files[0]) : `${files.length} files from ${target}`} into profile "${profile}".`
+        `Wilson wants to import ${resolved.label} into profile "${profile}".`
       );
       if (refusal) return refusedChange(tool, args, refusal);
 
@@ -738,6 +860,29 @@ export function envFlag(value: string | undefined, fallback: boolean): boolean {
   return !['0', 'false', 'no', 'off'].includes(v);
 }
 
+/** Used when neither `--import-folders` nor WILSON_IMPORT_FOLDERS is given. */
+export const DEFAULT_IMPORT_FOLDERS = ['~/Downloads', '~/Documents'];
+
+/**
+ * The import folders: the arguments after `--import-folders` (the manifest expands its multi-folder setting into
+ * separate arguments there), else WILSON_IMPORT_FOLDERS (path-delimiter separated), else Downloads and Documents.
+ * Unexpanded host placeholders are dropped. `--import-folders` with nothing after it means no imports.
+ */
+export function parseImportFolders(argv: string[], env: string | undefined): string[] {
+  const usable = (f: string) => f.trim() !== '' && !f.trim().startsWith('${');
+  const idx = argv.indexOf('--import-folders');
+  if (idx !== -1) {
+    const after = argv.slice(idx + 1);
+    const end = after.findIndex((a) => a.startsWith('--'));
+    const given = end === -1 ? after : after.slice(0, end);
+    // Only a placeholder the host left unexpanded: the setting was never filled in, so use the defaults.
+    if (given.length > 0 && given.every((f) => f.trim().startsWith('${'))) return DEFAULT_IMPORT_FOLDERS;
+    return given.filter(usable);
+  }
+  if (env !== undefined && usable(env)) return env.split(delimiter).filter(usable);
+  return DEFAULT_IMPORT_FOLDERS;
+}
+
 /** Run until stdin closes. The active profile must already be set (src/index.tsx). */
 export async function runStdioServer(): Promise<void> {
   const { initDatabase } = await import('../db/database.js');
@@ -759,6 +904,7 @@ export async function runStdioServer(): Promise<void> {
     // Fail closed: changes only when the setting says so, and a client without elicitation only when its host is trusted.
     allowChanges: envFlag(process.env.WILSON_MCP_ALLOW_CHANGES, false),
     trustHostApproval: envFlag(process.env.WILSON_MCP_TRUST_HOST_APPROVAL, false),
+    importFolders: parseImportFolders(process.argv.slice(2), process.env.WILSON_IMPORT_FOLDERS),
     version: packageJson.version,
   });
   const transport = new StdioServerTransport();
