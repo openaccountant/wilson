@@ -34,7 +34,9 @@ import { basename, delimiter, extname, isAbsolute, join, relative, resolve, sep 
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { CallToolResult, JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
 import type { Database } from '../db/compat-sqlite.js';
 import {
   commitMutation,
@@ -92,6 +94,21 @@ const READ_CATALOG_TOOLS = [
 
 const CHANGE_CATALOG_TOOLS = ['set_budget', 'update_goal', 'set_tax_flag'] as const;
 
+/**
+ * Which owner policy (Settings → Agent access row) governs a tool that is not itself in the dashboard catalog: the
+ * catalog tool that reads or changes the same data. null = governed by the kill switch only (no transaction data).
+ * Catalog tools use their own row; import_file has its own (importPolicyOff).
+ */
+const POLICY_KEY: Record<string, string | null> = {
+  list_uncategorized: 'search_transactions',
+  get_budgets: 'get_spending_summary',
+  categorize_transactions: 'categorize_transaction',
+  list_goals: null,
+  get_overview: null,
+  list_categories: null,
+  open_dashboard: null,
+};
+
 /** The catalog wording is about the dashboard's confirmation card; here the host asks instead. */
 function stdioDescription(description: string): string {
   return description.replace(
@@ -129,6 +146,8 @@ export interface StdioServerOptions {
    * outside them, reached through a symlink out of them, or inside a dot-folder is refused. Empty = no imports.
    */
   importFolders?: string[];
+  /** Re-read the owner's policies this often (ms) so the tool listing follows the dashboard. 0/unset = only on each call. */
+  policyPollMs?: number;
   /** Starts (or finds) the dashboard. Injectable for tests. */
   launchDashboard?: (opts: { openBrowser: boolean }) => Promise<DashboardLaunch>;
   version?: string;
@@ -336,11 +355,86 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     }
   }
 
-  /** The kill switch, checked on every call (it can flip while the server runs). */
-  function refusedByKillSwitch(toolName: string, classification: string, args: unknown): CallToolResult | null {
-    if (isAgentAccessEnabled()) return null;
-    audit(toolName, classification, 'denied_kill_switch', args, 'kill_switch');
-    return errorResult(`kill_switch: ${KILL_SWITCH_MESSAGE}`);
+  /** Whether the owner has `name` turned off right now (the kill switch turns everything off). Read live, never cached. */
+  function isOff(name: string): boolean {
+    if (!isAgentAccessEnabled()) return true;
+    if (name === 'import_file') return importPolicyOff(db);
+    const key = name in POLICY_KEY ? POLICY_KEY[name] : getToolDef(name) ? name : null;
+    return key !== null && getEffectivePolicy(db, null, key) === 'off';
+  }
+
+  /**
+   * The call-time gate every handler runs first: the kill switch and the owner's policy as they are NOW (either can change
+   * while the server runs), audited when they refuse. Also re-syncs which tools are listed.
+   */
+  function refused(toolName: string, classification: string, args: unknown): CallToolResult | null {
+    refreshListing();
+    if (!isAgentAccessEnabled()) {
+      audit(toolName, classification, 'denied_kill_switch', args, 'kill_switch');
+      return errorResult(`kill_switch: ${KILL_SWITCH_MESSAGE}`);
+    }
+    if (isOff(toolName)) {
+      audit(toolName, classification, 'denied_policy', args, 'policy_off');
+      return errorResult(`${toolName} is turned off for agents in Settings → Agent access.`);
+    }
+    return null;
+  }
+
+  // Every registered tool, so the listing can follow policy changes (enable/disable sends notifications/tools/list_changed).
+  const registered = new Map<string, RegisteredTool>();
+  {
+    const original = server.registerTool.bind(server) as (...a: unknown[]) => RegisteredTool;
+    server.registerTool = ((...a: unknown[]) => {
+      const tool = original(...a);
+      registered.set(a[0] as string, tool);
+      return tool;
+    }) as typeof server.registerTool;
+  }
+
+  /** List exactly the tools the owner has not turned off. Cheap: a few indexed reads. */
+  function refreshListing(): void {
+    for (const [name, tool] of registered) {
+      const want = !isOff(name);
+      if (tool.enabled !== want) {
+        if (want) tool.enable();
+        else tool.disable();
+      }
+    }
+  }
+
+  /**
+   * Wire up what needs the finished tool set: the initial listing, an audit row for a call to a tool that is no longer
+   * listed (the SDK refuses it before any handler runs), and an optional poll so the listing follows the dashboard.
+   */
+  function finish(): McpServer {
+    refreshListing();
+    const connect = server.connect.bind(server);
+    server.connect = async (transport: Transport) => {
+      await connect(transport);
+      const deliver = transport.onmessage;
+      transport.onmessage = (message: JSONRPCMessage, extra?: MessageExtraInfo) => {
+        const m = message as { method?: string; params?: { name?: unknown; arguments?: unknown } };
+        if (m.method === 'tools/call' && typeof m.params?.name === 'string' && registered.has(m.params.name)) {
+          refreshListing();
+          if (!registered.get(m.params.name)!.enabled) {
+            const killed = !isAgentAccessEnabled();
+            audit(m.params.name, 'unknown', killed ? 'denied_kill_switch' : 'denied_policy', m.params.arguments, killed ? 'kill_switch' : 'policy_off');
+          }
+        }
+        deliver?.call(transport, message, extra);
+      };
+    };
+    if (opts.policyPollMs && opts.policyPollMs > 0) {
+      const timer = setInterval(() => {
+        try {
+          refreshListing();
+        } catch (err) {
+          console.error('[wilson --mcp-server] policy refresh failed:', err);
+        }
+      }, opts.policyPollMs);
+      timer.unref?.();
+    }
+    return server;
   }
 
   /**
@@ -382,15 +476,12 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       : { ...textResult({ outcome: 'refused', reason: refusal.message }), isError: true };
   }
 
-  function offered(name: string): boolean {
-    return getEffectivePolicy(db, null, name) !== 'off';
-  }
 
   // ── Catalog reads ─────────────────────────────────────────────────────────
 
   for (const name of READ_CATALOG_TOOLS) {
     const def = getToolDef(name);
-    if (!def || !offered(name)) continue;
+    if (!def) continue;
     server.registerTool(
       name,
       {
@@ -399,7 +490,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
       async (args: Record<string, unknown>) => {
-        const killed = refusedByKillSwitch(name, 'read', args);
+        const killed = refused(name, 'read', args);
         if (killed) return killed;
         const parsed = parseToolArgs(name, args);
         if (!parsed.ok) {
@@ -428,7 +519,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       name,
       { description, inputSchema: z.object(shape).strict(), annotations: { readOnlyHint: true, openWorldHint: false } },
       async (args: ReadArgs) => {
-        const killed = refusedByKillSwitch(name, 'read', args);
+        const killed = refused(name, 'read', args);
         if (killed) return killed;
         try {
           const data = run(args);
@@ -559,7 +650,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async (args: { openBrowser?: boolean }) => {
-      const killed = refusedByKillSwitch('open_dashboard', 'page', args);
+      const killed = refused('open_dashboard', 'page', args);
       if (killed) return killed;
       try {
         const launch = await launchDashboard({ openBrowser: args.openBrowser !== false });
@@ -577,7 +668,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     }
   );
 
-  if (!allowChanges) return server;
+  if (!allowChanges) return finish();
 
   // ── Changes ───────────────────────────────────────────────────────────────
 
@@ -593,12 +684,12 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
 
   for (const name of CHANGE_CATALOG_TOOLS) {
     const def = getToolDef(name);
-    if (!def || !offered(name)) continue;
+    if (!def) continue;
     server.registerTool(
       name,
       { description: stdioDescription(def.description), inputSchema: z.object(def.zodShape).strict(), annotations: changeAnnotations },
       async (args: Record<string, unknown>) => {
-        const killed = refusedByKillSwitch(name, 'mutating', args);
+        const killed = refused(name, 'mutating', args);
         if (killed) return killed;
         const parsed = parseToolArgs(name, args);
         if (!parsed.ok) {
@@ -650,12 +741,8 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     },
     async (args: { items: Array<{ id: number; category: string }> }) => {
       const tool = 'categorize_transactions';
-      const killed = refusedByKillSwitch(tool, 'mutating', args);
+      const killed = refused(tool, 'mutating', args);
       if (killed) return killed;
-      if (!offered('categorize_transaction')) {
-        audit(tool, 'mutating', 'denied_policy', args, 'policy_off');
-        return errorResult('Categorizing by agents is turned off in Settings → Agent access.');
-      }
       const seen = new Set<number>();
       const prepared: PreparedMutation[] = [];
       const problems: string[] = [];
@@ -727,12 +814,8 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     },
     async (args: { path: string; bank?: 'auto' | 'chase' | 'amex' | 'bofa' }) => {
       const tool = 'import_file';
-      const killed = refusedByKillSwitch(tool, 'mutating', args);
+      const killed = refused(tool, 'mutating', args);
       if (killed) return killed;
-      if (importPolicyOff(db)) {
-        audit(tool, 'mutating', 'denied_policy', args, 'policy_off');
-        return errorResult('Importing by agents is turned off for this profile (Settings → Agent access).');
-      }
       const resolved = resolveImportTarget(args.path, importFolders);
       if (!resolved.ok) {
         audit(tool, 'mutating', resolved.decision, args, resolved.code);
@@ -782,7 +865,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
     }
   );
 
-  return server;
+  return finish();
 }
 
 // ── Dashboard launcher ─────────────────────────────────────────────────────
@@ -905,6 +988,7 @@ export async function runStdioServer(): Promise<void> {
     allowChanges: envFlag(process.env.WILSON_MCP_ALLOW_CHANGES, false),
     trustHostApproval: envFlag(process.env.WILSON_MCP_TRUST_HOST_APPROVAL, false),
     importFolders: parseImportFolders(process.argv.slice(2), process.env.WILSON_IMPORT_FOLDERS),
+    policyPollMs: 5_000,
     version: packageJson.version,
   });
   const transport = new StdioServerTransport();

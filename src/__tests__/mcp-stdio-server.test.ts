@@ -5,7 +5,9 @@ import { basename, delimiter, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ElicitRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitRequestSchema, ToolListChangedNotificationSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { setPolicy, type PolicyActor } from '../mcp/policies.js';
+import { setGlobalAgentState } from '../mcp/global-state.js';
 import { createTestDb } from './helpers.js';
 import {
   buildStdioServer,
@@ -381,6 +383,72 @@ describe('import containment', () => {
     expect(parseImportFolders(['--import-folders'], undefined)).toEqual([]);
     expect(parseImportFolders([], `/x${delimiter}/y`)).toEqual(['/x', '/y']);
     expect(parseImportFolders([], undefined)).toEqual(DEFAULT_IMPORT_FOLDERS);
+  });
+});
+
+describe('policy is re-checked at call time', () => {
+  const owner: PolicyActor = { userId: null, role: 'admin', authEnabled: false };
+
+  async function callAnyway(client: Client, name: string, args: Record<string, unknown>): Promise<boolean> {
+    // A tool hidden from the listing is refused by the SDK (an error); a listed one by our gate (isError). Both refuse.
+    try {
+      return (await client.callTool({ name, arguments: args })).isError === true;
+    } catch {
+      return true;
+    }
+  }
+
+  test('turning a tool Off after start refuses the next call, audited denied_policy, and notifies tools/list_changed', async () => {
+    const db = createTestDb();
+    const { client } = await connect(db, { trustHostApproval: true });
+    let changed = 0;
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      changed++;
+    });
+    expect((await client.callTool({ name: 'search_transactions', arguments: { query: 'coffee' } })).isError).toBeFalsy();
+
+    expect(setPolicy(db, owner, 'search_transactions', 'off').ok).toBe(true);
+    expect(await callAnyway(client, 'search_transactions', { query: 'coffee' })).toBe(true);
+    expect(auditRows(db, 'search_transactions').at(-1)).toEqual({ decision: 'denied_policy', error_code: 'policy_off' });
+    // list_uncategorized reads the same data, so the same row governs it.
+    expect(await callAnyway(client, 'list_uncategorized', {})).toBe(true);
+    await Bun.sleep(20);
+    expect(changed).toBeGreaterThan(0);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).not.toContain('search_transactions');
+    expect(names).not.toContain('list_uncategorized');
+
+    // And back on: listed and callable again.
+    expect(setPolicy(db, owner, 'search_transactions', 'allow').ok).toBe(true);
+    expect((await client.callTool({ name: 'get_overview', arguments: {} })).isError).toBeFalsy();
+    expect((await client.listTools()).tools.map((t) => t.name)).toContain('search_transactions');
+    expect((await client.callTool({ name: 'search_transactions', arguments: { query: 'coffee' } })).isError).toBeFalsy();
+  });
+
+  test('categorize_transactions follows the categorize_transaction row at call time', async () => {
+    const db = createTestDb();
+    const { client } = await connect(db, { trustHostApproval: true });
+    await client.callTool({ name: 'import_file', arguments: { path: CHASE_CSV } });
+    const id = (jsonOf(await client.callTool({ name: 'list_uncategorized', arguments: { limit: 1 } })).items as Array<{ id: number }>)[0].id;
+    const before = getUncategorizedCount(db);
+    expect(setPolicy(db, owner, 'categorize_transaction', 'off').ok).toBe(true);
+    expect(await callAnyway(client, 'categorize_transactions', { items: [{ id, category: 'Groceries' }] })).toBe(true);
+    expect(getUncategorizedCount(db)).toBe(before);
+    expect(auditRows(db, 'categorize_transactions').at(-1)?.decision).toBe('denied_policy');
+  });
+
+  test('the kill switch flipped after start refuses every call', async () => {
+    const db = createTestDb();
+    const { client } = await connect(db);
+    try {
+      setGlobalAgentState({ enabled: false });
+      expect(await callAnyway(client, 'get_overview', {})).toBe(true);
+      expect(auditRows(db, 'get_overview').at(-1)?.decision).toBe('denied_kill_switch');
+      expect((await client.listTools()).tools).toEqual([]);
+    } finally {
+      setGlobalAgentState({ enabled: true });
+    }
+    expect((await client.callTool({ name: 'get_overview', arguments: {} })).isError).toBeFalsy();
   });
 });
 
