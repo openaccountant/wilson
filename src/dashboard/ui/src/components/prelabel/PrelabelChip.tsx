@@ -1,6 +1,7 @@
 import type { LaneRoute } from '@/prelabel/core';
+import { InfoTooltip } from '@/components/InfoTooltip';
 
-const TOOLTIP =
+export const PRELABEL_CHIP_TOOLTIP =
   "open-jev's margin between its top two choices, not the LLM's confidence. It is a second opinion only; nothing is applied until you click.";
 
 /**
@@ -16,13 +17,13 @@ export function PrelabelChip({ route }: { route: LaneRoute }) {
         ? 'border-yellow/40 text-yellow'
         : 'border-border text-text-muted';
   return (
-    <span
-      title={TOOLTIP}
+    <InfoTooltip
+      text={PRELABEL_CHIP_TOOLTIP}
       data-testid="prelabel-chip"
       data-kind={route.kind}
       className={`inline-block text-[10px] px-1.5 py-0.5 border font-mono uppercase tracking-wide whitespace-nowrap ${tone}`}
     >
       {route.chip}
-    </span>
+    </InfoTooltip>
   );
 }
