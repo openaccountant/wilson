@@ -66,7 +66,7 @@ function toInsert(t: ParsedTransaction, filePath: string): TransactionInsert {
   };
 }
 
-interface SingleFileResult {
+export interface SingleFileResult {
   status: 'imported' | 'skipped' | 'failed';
   file: string;
   transactionsImported: number;
@@ -79,7 +79,7 @@ interface SingleFileResult {
   error?: string;
 }
 
-async function importSingleFile(
+export async function importSingleFile(
   database: Database,
   filePath: string,
   bank?: 'chase' | 'amex' | 'bofa' | 'auto',
