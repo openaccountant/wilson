@@ -57,6 +57,9 @@ describe('wilson --mcp-server (stdio round trip)', () => {
         PATH: `${bin}:${process.env.PATH ?? ''}`,
         // Never "default": the keychain account is per profile name and not scoped by HOME.
         WILSON_PROFILE: PROFILE,
+        // What the Claude Desktop manifest sets: changes on, and its own approval prompt trusted (this client has no elicitation).
+        WILSON_MCP_ALLOW_CHANGES: 'true',
+        WILSON_MCP_TRUST_HOST_APPROVAL: '1',
       },
       stderr: 'pipe',
     });
@@ -113,11 +116,16 @@ describe('wilson --mcp-server (stdio round trip)', () => {
   }, 60_000);
 });
 
-async function connect(db: Database, opts: { elicit?: 'accept' | 'decline'; allowChanges?: boolean } = {}) {
+async function connect(
+  db: Database,
+  opts: { elicit?: 'accept' | 'decline'; allowChanges?: boolean; trustHostApproval?: boolean } = {}
+) {
   const server = buildStdioServer({
     db,
     profile: 'test',
-    allowChanges: opts.allowChanges,
+    // Tests opt out explicitly; production defaults to off (see 'fail closed').
+    allowChanges: 'allowChanges' in opts ? opts.allowChanges : true,
+    trustHostApproval: opts.trustHostApproval,
     launchDashboard: async () => ({ url: 'http://127.0.0.1:3141', started: true, opened: false }),
   });
   const client = new Client({ name: 'wilson-test', version: '1.0.0' }, { capabilities: opts.elicit ? { elicitation: {} } : {} });
@@ -185,7 +193,7 @@ describe('buildStdioServer', () => {
 
   test('one bad item refuses the whole batch', async () => {
     const db = createTestDb();
-    const { client } = await connect(db);
+    const { client } = await connect(db, { trustHostApproval: true });
     await client.callTool({ name: 'import_file', arguments: { path: CHASE_CSV } });
     const page = jsonOf(await client.callTool({ name: 'list_uncategorized', arguments: { limit: 1 } }));
     const id = (page.items as Array<{ id: number }>)[0].id;
@@ -237,6 +245,59 @@ describe('buildStdioServer', () => {
   });
 });
 
+function auditRows(db: Database, tool: string): Array<{ decision: string; error_code: string | null }> {
+  return db
+    .prepare(`SELECT decision, error_code FROM mcp_audit_log WHERE transport = 'stdio' AND tool_name = @tool ORDER BY id`)
+    .all({ tool }) as Array<{ decision: string; error_code: string | null }>;
+}
+
+describe('fail closed', () => {
+  test('change tools are absent unless allowChanges is exactly true', async () => {
+    const db = createTestDb();
+    const server = buildStdioServer({ db, profile: 'test' });
+    const client = new Client({ name: 't', version: '1' });
+    const [c, s] = InMemoryTransport.createLinkedPair();
+    await server.connect(s);
+    await client.connect(c);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).not.toContain('import_file');
+    expect(names).not.toContain('categorize_transactions');
+    expect(names).toContain('get_overview');
+  });
+
+  test('no elicitation and no trusted host: every change is refused, audited denied_policy, nothing written', async () => {
+    const db = createTestDb();
+    const { client } = await connect(db);
+    const res = await client.callTool({ name: 'import_file', arguments: { path: CHASE_CSV } });
+    expect(res.isError).toBe(true);
+    expect(textOf(res)).toContain('cannot ask the user to confirm');
+    expect((db.prepare('SELECT COUNT(*) AS n FROM transactions').get() as { n: number }).n).toBe(0);
+    expect(auditRows(db, 'import_file').at(-1)).toEqual({ decision: 'denied_policy', error_code: 'no_confirmation' });
+
+    const cat = db.prepare('SELECT id FROM categories ORDER BY id LIMIT 1').get() as { id: number };
+    const budget = await client.callTool({ name: 'set_budget', arguments: { category_id: cat.id, monthly_limit: 500 } });
+    expect(textOf(budget)).toContain('cannot ask the user to confirm');
+    expect(budget.isError).toBe(true);
+    expect(auditRows(db, 'set_budget').at(-1)?.decision).toBe('denied_policy');
+  });
+
+  test('a trusted host (its own approval prompt) may change data without elicitation', async () => {
+    const db = createTestDb();
+    const { client } = await connect(db, { trustHostApproval: true });
+    const res = jsonOf(await client.callTool({ name: 'import_file', arguments: { path: CHASE_CSV } }));
+    expect(res.outcome).toBe('imported');
+  });
+
+  test('change tools are never marked read-only', async () => {
+    const { client } = await connect(createTestDb());
+    const tools = (await client.listTools()).tools;
+    for (const name of ['import_file', 'categorize_transactions', 'set_budget', 'update_goal', 'set_tax_flag']) {
+      expect(tools.find((t) => t.name === name)?.annotations?.readOnlyHint).toBe(false);
+    }
+    expect(tools.find((t) => t.name === 'set_budget')?.annotations?.destructiveHint).toBe(true);
+  });
+});
+
 describe('mcpb/manifest.json', () => {
   test('lists exactly the tools the server offers', async () => {
     const manifest = JSON.parse(readFileSync(join(ROOT, 'mcpb', 'manifest.json'), 'utf-8')) as {
@@ -253,7 +314,13 @@ describe('mcpb/manifest.json', () => {
     expect(cfg.args.at(-1)).toBe('--mcp-server');
     expect(cfg.platform_overrides.win32.args).toEqual(['--mcp-server']);
     // The settings reach the server through these variables.
-    expect(Object.keys(manifest.server.mcp_config.env).sort()).toEqual(['WILSON_HOME', 'WILSON_MCP_ALLOW_CHANGES', 'WILSON_PROFILE']);
+    expect(Object.keys(manifest.server.mcp_config.env).sort()).toEqual([
+      'WILSON_HOME',
+      'WILSON_MCP_ALLOW_CHANGES',
+      'WILSON_MCP_TRUST_HOST_APPROVAL',
+      'WILSON_PROFILE',
+    ]);
+    expect(manifest.server.mcp_config.env.WILSON_MCP_TRUST_HOST_APPROVAL).toBe('1');
   });
 });
 

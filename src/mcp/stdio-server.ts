@@ -15,11 +15,14 @@
  *     catalog tool the owner turned Off is not offered.
  *   - Every call is audited (transport `stdio`).
  *   - Reads run at once. Anything that changes data is described by the
- *     server (never by the agent's own prose) and needs the person's OK:
- *     through MCP elicitation when the host supports it, otherwise through the
- *     host's own tool-approval prompt (Claude Desktop asks before running a
- *     tool that is not read-only). `WILSON_MCP_ALLOW_CHANGES=false` removes the
- *     change tools entirely.
+ *     server (never by the agent's own prose) and needs the person's OK. Fail
+ *     closed: the change tools exist only when `WILSON_MCP_ALLOW_CHANGES` is
+ *     explicitly true, and a change is confirmed through MCP elicitation when
+ *     the client supports it. A client without elicitation gets every change
+ *     refused, unless it is a host whose own per-tool approval prompt is
+ *     trusted (`WILSON_MCP_TRUST_HOST_APPROVAL=1`, set by the Claude Desktop
+ *     manifest; Claude Desktop asks before running a tool that is not
+ *     read-only). Nothing proceeds silently.
  *
  * stdout carries JSON-RPC only. src/index.tsx routes console output to stderr
  * before this runs; nothing here prints.
@@ -93,6 +96,12 @@ function stdioDescription(description: string): string {
   );
 }
 
+interface Refusal {
+  decision: 'rejected' | 'denied_policy';
+  errorCode?: string;
+  message: string;
+}
+
 export interface DashboardLaunch {
   url: string;
   /** False when a dashboard was already running at that address. */
@@ -104,8 +113,13 @@ export interface DashboardLaunch {
 export interface StdioServerOptions {
   db: Database;
   profile: string;
-  /** False removes every tool that changes data. Default true. */
+  /** The tools that change data exist only when this is exactly true. Default false. */
   allowChanges?: boolean;
+  /**
+   * A client without elicitation may change data only when this is exactly true: the host shows its own approval
+   * prompt for every non-read-only tool call (Claude Desktop does). Default false: such a client's changes are refused.
+   */
+  trustHostApproval?: boolean;
   /** Starts (or finds) the dashboard. Injectable for tests. */
   launchDashboard?: (opts: { openBrowser: boolean }) => Promise<DashboardLaunch>;
   version?: string;
@@ -158,7 +172,8 @@ export function resolveUserPath(raw: string): string {
 
 export function buildStdioServer(opts: StdioServerOptions): McpServer {
   const { db, profile } = opts;
-  const allowChanges = opts.allowChanges !== false;
+  const allowChanges = opts.allowChanges === true;
+  const trustHostApproval = opts.trustHostApproval === true;
   const launchDashboard = opts.launchDashboard ?? ((o: { openBrowser: boolean }) => defaultLaunchDashboard(profile, o));
   const server = new McpServer({ name: 'wilson', version: opts.version ?? '0.0.0' }, { instructions: INSTRUCTIONS });
 
@@ -191,20 +206,41 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
 
   /**
    * Ask the person before a change. The message is built by the server from the stored rows.
-   * Returns null when the change may go ahead, else the refusal to hand back.
+   * Returns null when the change may go ahead, else the refusal (and how to audit it). Fails closed.
    */
-  async function confirmChange(message: string): Promise<string | null> {
+  async function confirmChange(message: string): Promise<Refusal | null> {
     const caps = server.server.getClientCapabilities();
-    // No elicitation: the host's own approval prompt for this (non-read-only) tool is the confirmation.
-    if (!caps?.elicitation) return null;
+    if (!caps?.elicitation) {
+      // The host's own approval prompt for this non-read-only tool is the confirmation, only for a host trusted to show one.
+      if (trustHostApproval) return null;
+      return {
+        decision: 'denied_policy',
+        errorCode: 'no_confirmation',
+        message:
+          'Nothing was changed: this MCP client cannot ask the user to confirm changes (no elicitation support), and Wilson ' +
+          'does not make changes without a confirmation. Use a client that supports elicitation, or set ' +
+          'WILSON_MCP_TRUST_HOST_APPROVAL=1 only for a host that asks the user before every tool call.',
+      };
+    }
     try {
       const res = await server.server.elicitInput({ message, requestedSchema: { type: 'object', properties: {} } });
       if (res.action === 'accept') return null;
-      return res.action === 'decline' ? 'The user declined this change. Nothing was changed.' : 'The user dismissed the confirmation. Nothing was changed.';
+      return {
+        decision: 'rejected',
+        message: res.action === 'decline' ? 'The user declined this change. Nothing was changed.' : 'The user dismissed the confirmation. Nothing was changed.',
+      };
     } catch (err) {
       console.error('[wilson --mcp-server] elicitation failed:', err);
-      return 'Could not ask the user to confirm, so nothing was changed.';
+      return { decision: 'denied_policy', errorCode: 'confirmation_failed', message: 'Could not ask the user to confirm, so nothing was changed.' };
     }
+  }
+
+  /** The tool result for a refused change, audited. A declined prompt is an answer; anything else is an error. */
+  function refusedChange(tool: string, args: unknown, refusal: Refusal): CallToolResult {
+    audit(tool, 'mutating', refusal.decision, args, refusal.errorCode);
+    return refusal.decision === 'rejected'
+      ? textResult({ outcome: 'rejected', reason: refusal.message })
+      : { ...textResult({ outcome: 'refused', reason: refusal.message }), isError: true };
   }
 
   function offered(name: string): boolean {
@@ -406,7 +442,9 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
 
   // ── Changes ───────────────────────────────────────────────────────────────
 
-  const changeAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+  // Never read-only, so a host asks before running them. Updates overwrite a stored value (destructive); an import only adds rows.
+  const changeAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+  const importAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 
   /** One prepared change, as the person sees it: the server's summary, then the bank text on its own line. */
   function describePrepared(p: PreparedMutation): string {
@@ -436,10 +474,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
           return errorResult(describeError(err));
         }
         const refusal = await confirmChange(`Wilson (profile "${profile}") wants to make this change:\n${describePrepared(prepared)}`);
-        if (refusal) {
-          audit(name, 'mutating', 'rejected', parsed.args);
-          return textResult({ outcome: 'rejected', reason: refusal });
-        }
+        if (refusal) return refusedChange(name, parsed.args, refusal);
         const result = commitMutation(db, name, prepared.args, prepared.revision, prepared.before);
         audit(name, 'mutating', result.outcome === 'committed' ? 'committed' : result.outcome === 'stale' ? 'stale' : 'error', parsed.args);
         if (result.outcome === 'stale') return textResult({ outcome: 'stale', reason: 'The record changed since it was read. Read it again and retry.' });
@@ -512,10 +547,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       const refusal = await confirmChange(
         `Wilson (profile "${profile}") wants to categorize ${prepared.length} transaction${prepared.length === 1 ? '' : 's'}:\n${lines.join('\n')}`
       );
-      if (refusal) {
-        audit(tool, 'mutating', 'rejected', args);
-        return textResult({ outcome: 'rejected', reason: refusal });
-      }
+      if (refusal) return refusedChange(tool, args, refusal);
 
       let committed = 0;
       const stale: number[] = [];
@@ -551,7 +583,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
           bank: z.enum(['auto', 'chase', 'amex', 'bofa']).optional().describe('Force a CSV layout (default: detect)'),
         })
         .strict(),
-      annotations: changeAnnotations,
+      annotations: importAnnotations,
     },
     async (args: { path: string; bank?: 'auto' | 'chase' | 'amex' | 'bofa' }) => {
       const tool = 'import_file';
@@ -589,10 +621,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       const refusal = await confirmChange(
         `Wilson wants to import ${files.length === 1 ? basename(files[0]) : `${files.length} files from ${target}`} into profile "${profile}".`
       );
-      if (refusal) {
-        audit(tool, 'mutating', 'rejected', args);
-        return textResult({ outcome: 'rejected', reason: refusal });
-      }
+      if (refusal) return refusedChange(tool, args, refusal);
 
       const results: SingleFileResult[] = [];
       for (const file of files) {
@@ -727,7 +756,9 @@ export async function runStdioServer(): Promise<void> {
   const server = buildStdioServer({
     db,
     profile: getActiveProfileName(),
-    allowChanges: envFlag(process.env.WILSON_MCP_ALLOW_CHANGES, true),
+    // Fail closed: changes only when the setting says so, and a client without elicitation only when its host is trusted.
+    allowChanges: envFlag(process.env.WILSON_MCP_ALLOW_CHANGES, false),
+    trustHostApproval: envFlag(process.env.WILSON_MCP_TRUST_HOST_APPROVAL, false),
     version: packageJson.version,
   });
   const transport = new StdioServerTransport();
