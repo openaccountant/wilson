@@ -1,0 +1,86 @@
+# Open Accountant (wilson) on a home server.
+#
+#   docker compose up -d                          # dashboard only (bring your own LLM key or Ollama)
+#   docker compose --profile local-ai up -d       # + a local Ollama running granite4.1:3b
+#   docker compose logs wilson                    # first boot prints the admin password
+#
+# Then open http://<this-machine>:3141. Full guide: docs/self-hosting/docker.md
+# Settings go in a .env file next to this one (copy env.example).
+
+name: wilson
+
+services:
+  wilson:
+    image: ${WILSON_IMAGE:-ghcr.io/openaccountant/wilson:latest}
+    build: .
+    restart: unless-stopped
+    ports:
+      # Keep the right-hand side 3141. If you change the left-hand side, set WILSON_HOST_PORT to match.
+      - "${WILSON_HOST_PORT:-3141}:3141"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Names/IPs you will type in the browser (comma-separated), e.g. nas.local,192.168.1.20.
+      # Anything else is refused (DNS-rebinding protection). localhost always works.
+      WILSON_LAN_HOSTS: ${WILSON_LAN_HOSTS:-}
+      WILSON_HOST_PORT: ${WILSON_HOST_PORT:-3141}
+      # Admin account for the first boot only. Leave WILSON_ADMIN_PASSWORD empty to get a
+      # random one in `docker compose logs wilson` (and in /data/.../initial-admin-password).
+      WILSON_ADMIN_USERNAME: ${WILSON_ADMIN_USERNAME:-admin}
+      WILSON_ADMIN_PASSWORD: ${WILSON_ADMIN_PASSWORD:-}
+      # Local AI (used with --profile local-ai). Its own variable, so OLLAMA_BASE_URL=127.0.0.1 from a
+      # copied env.example cannot point the container at itself. Set it to use an Ollama elsewhere on your LAN.
+      OLLAMA_BASE_URL: ${WILSON_OLLAMA_URL:-http://ollama:11434}
+      # The chat model until you pick one in Settings (never overrides a choice you made).
+      WILSON_DEFAULT_MODEL: ${WILSON_DEFAULT_MODEL:-ollama:${OLLAMA_MODEL:-granite4.1:3b}}
+    volumes:
+      # Everything wilson keeps: database, settings, logs, models. Back this up.
+      - wilson-data:/data
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:3141/api/auth/status').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    profiles: ["local-ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    # Not published on the host: only wilson talks to it. Uncomment to use it from other machines.
+    # ports:
+    #   - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    # NVIDIA GPU (needs the NVIDIA Container Toolkit on the host):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot: downloads the model into the ollama volume, then exits.
+  ollama-pull:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    profiles: ["local-ai"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull"]
+    command: ["${OLLAMA_MODEL:-granite4.1:3b}"]
+    restart: "no"
+
+volumes:
+  wilson-data:
+  ollama-models:
