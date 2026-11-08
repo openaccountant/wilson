@@ -120,7 +120,12 @@ describe('readReactBuild (scripts/check-hybrid-build.ts)', () => {
 let lazyUi: Promise<{ registry: string[]; tabs: Record<string, string>; sharedImport: boolean; charts: Record<string, string> }> | undefined;
 function loadLazyUi() {
   lazyUi ??= (async () => {
-    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'src/__tests__/helpers/load-lazy-ui.ts')], { cwd: ROOT, stdout: 'pipe', stderr: 'pipe' });
+    // The child's global plugin rewrites `?worker` imports; with bun's on-disk transpiler cache on, that rewritten
+    // mirror-client.ts is cached and a later test process (mirror-client-wipe-race) loads it and can't resolve the stub.
+    const proc = Bun.spawn(['bun', 'run', join(ROOT, 'src/__tests__/helpers/load-lazy-ui.ts')], {
+      cwd: ROOT, stdout: 'pipe', stderr: 'pipe',
+      env: { ...process.env, BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0' },
+    });
     const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
     if (code !== 0) throw new Error(`load-lazy-ui exited ${code}: ${err}`);
     return JSON.parse(out.trim().split('\n').at(-1) ?? '{}');
