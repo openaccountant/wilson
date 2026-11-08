@@ -17,7 +17,7 @@ plugin({
 });
 
 const UI_SRC = new URL('../../dashboard/ui/src/', import.meta.url);
-const lazyTabs = (await import(new URL('tabs/lazyTabs.ts', UI_SRC).pathname)) as {
+const lazyTabs = (await import(new URL('tabs/lazyTabs.ts', UI_SRC).href)) as {
   TAB_COMPONENTS: Record<string, unknown>;
   loadTab(tab: string): Promise<{ default: { name: string } }>;
 };
@@ -30,7 +30,7 @@ for (const tab of TAB_IDS) {
 
 const charts: Record<string, string> = {};
 for (const name of ['SavingsSparklineChart', 'CashflowFanChart', 'SpendingDonut']) {
-  const mod = (await import(new URL(`charts/${name}.tsx`, UI_SRC).pathname)) as Record<string, unknown>;
+  const mod = (await import(new URL(`charts/${name}.tsx`, UI_SRC).href)) as Record<string, unknown>;
   charts[name] = typeof mod[name];
 }
 

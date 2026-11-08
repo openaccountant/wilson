@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, delimiter, join } from 'node:path';
+import { basename, delimiter, join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -491,11 +491,11 @@ describe('helpers', () => {
     expect(envPathOverride(undefined)).toBeNull();
     expect(envPathOverride('  ')).toBeNull();
     expect(envPathOverride('${user_config.data_dir}')).toBeNull();
-    expect(envPathOverride('/tmp/books')).toBe('/tmp/books');
+    expect(envPathOverride('/tmp/books')).toBe(resolve('/tmp/books'));
   });
 
   test('resolveUserPath expands ~ and strips quotes', () => {
     expect(resolveUserPath('"~/Downloads/a.csv"').endsWith(join('Downloads', 'a.csv'))).toBe(true);
-    expect(resolveUserPath('/tmp/x.csv')).toBe('/tmp/x.csv');
+    expect(resolveUserPath('/tmp/x.csv')).toBe(resolve('/tmp/x.csv'));
   });
 });

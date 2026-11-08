@@ -1,5 +1,6 @@
 // @invariant NN-10
 import { describe, expect, test } from 'bun:test';
+import { fileURLToPath } from 'node:url';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,7 +13,7 @@ import { TAB_IDS } from '../dashboard/webmcp-session.js';
  * text, and the mirror worker and its wasm are separate files.
  */
 
-const ROOT = new URL('../..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const UI = join(ROOT, 'src/dashboard/ui');
 const DIST = join(UI, 'dist');
 const built = existsSync(join(DIST, 'index.html')) && existsSync(join(DIST, '_app'));
@@ -82,7 +83,7 @@ describe.skipIf(!built)('built output (only when `bun run build` ran)', () => {
   });
 
   test('the model runtime and open-jev stay out of every chunk (guard reads the split build)', async () => {
-    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname)) as {
+    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).href)) as {
       readReactBuild(distDir: string): string | null;
     };
     const all = gate.readReactBuild(DIST)!;
@@ -94,7 +95,7 @@ describe.skipIf(!built)('built output (only when `bun run build` ran)', () => {
 
 describe('readReactBuild (scripts/check-hybrid-build.ts)', () => {
   test('includes chunk contents, so a runtime hidden in a lazy chunk fails the gate', async () => {
-    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname)) as {
+    const gate = (await import(new URL('../../scripts/check-hybrid-build.ts', import.meta.url).href)) as {
       readReactBuild(distDir: string): string | null;
       checkHybridBuild(input: { indexHtml: string; hybridJs: string; hybridEntries: string[] }): string[];
     };
