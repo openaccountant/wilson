@@ -115,10 +115,12 @@ function openConnection(
   const name =
     explicitProfileName ??
     (pathWasExplicit ? deriveProfileName(resolvedPath) : getActiveProfile().name);
-  const key = getOrInitEncryptionKey(name);
+  // Throws (EncryptionKeyError) rather than mint a key when the keychain can't be read or
+  // the file is already encrypted under a key we can't find: a fresh key there loses data.
+  const key = getOrInitEncryptionKey(name, resolvedPath);
 
-  // Encryption available but no key could be obtained (e.g. keychain write
-  // failed): fall back to plaintext rather than lock the user out of their data.
+  // No secure store to put a new key in (and nothing encrypted yet): fall back to
+  // plaintext rather than lock the user out of their data.
   if (!key) {
     return new Database(resolvedPath);
   }

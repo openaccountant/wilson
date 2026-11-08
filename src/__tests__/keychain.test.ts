@@ -285,3 +285,98 @@ describe.skipIf(process.platform !== 'win32')('Windows DPAPI (real PowerShell)',
     expect(store.get('ci-roundtrip')).toBeNull();
   }, 60_000);
 });
+
+describe('three-valued reads (data-loss guard)', () => {
+  const darwinWith = (status: number | 'timeout') =>
+    createSecretStore({
+      ...baseOpts(),
+      platform: 'darwin',
+      exec: () => {
+        if (status === 'timeout') throw Object.assign(new Error('spawnSync security ETIMEDOUT'), { code: 'ETIMEDOUT' });
+        exitCode(status);
+      },
+    });
+
+  test('macOS: only exit 44 means not-found', () => {
+    expect(darwinWith(44).read('db-encryption-x')).toEqual({ status: 'not-found' });
+    for (const s of [1, 36, 51, 128]) {
+      const r = darwinWith(s).read('db-encryption-x');
+      expect(r.status).toBe('error');
+    }
+  });
+
+  test('macOS: a timeout is an error, and says why', () => {
+    const r = darwinWith('timeout').read('db-encryption-x');
+    expect(r).toEqual({ status: 'error', reason: expect.stringContaining('timed out') });
+  });
+
+  test('macOS: create never deletes or passes -U, and reports a duplicate as exists', () => {
+    const { exec, calls } = fakeExec(() => exitCode(45));
+    const store = createSecretStore({ ...baseOpts(), platform: 'darwin', exec });
+    expect(store.create('db-encryption-x', 'k')).toEqual({ status: 'exists' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args[0]).toBe('add-generic-password');
+    expect(calls[0]!.args).not.toContain('-U');
+  });
+
+  test('error reasons never carry the secret (exec messages embed argv)', () => {
+    const { exec } = fakeExec(({ args }) => {
+      throw Object.assign(new Error(`Command failed: security ${args.join(' ')}`), { status: 1 });
+    });
+    const store = createSecretStore({ ...baseOpts(), platform: 'darwin', exec });
+    const r = store.create('db-encryption-x', 'TOP-SECRET-VALUE');
+    expect(r.status).toBe('failed');
+    expect(JSON.stringify(r)).not.toContain('TOP-SECRET-VALUE');
+  });
+
+  test('linux: a silent exit 1 is not-found; exit 1 with a D-Bus error is an error', () => {
+    const quiet = createSecretStore({ ...baseOpts(), platform: 'linux', exec: () => exitCode(1) });
+    expect(quiet.read('a')).toEqual({ status: 'not-found' });
+    const loud = createSecretStore({
+      ...baseOpts(),
+      platform: 'linux',
+      exec: () => {
+        throw Object.assign(new Error('x'), { status: 1, stderr: 'secret-tool: Cannot autolaunch D-Bus without X11 $DISPLAY' });
+      },
+    });
+    expect(loud.read('a').status).toBe('error');
+  });
+
+  test('windows: a ciphertext file that will not decrypt is an error, not not-found', () => {
+    const { exec } = fakeExec(({ args }) => {
+      const script = Buffer.from(args[args.indexOf('-EncodedCommand') + 1]!, 'base64').toString('utf16le');
+      if (script.includes('::Unprotect(')) exitCode(1);
+      return Buffer.from('blob').toString('base64');
+    });
+    const store = createSecretStore({ ...baseOpts(), platform: 'win32', exec });
+    expect(store.create('k', 'v')).toEqual({ status: 'created' });
+    expect(store.create('k', 'v2')).toEqual({ status: 'exists' });
+    expect(store.read('k').status).toBe('error');
+  });
+
+  test('file backend create is create-only', () => {
+    const store = createSecretStore({ ...baseOpts(), env: { OA_SECRET_BACKEND: 'file' }, platform: 'linux' });
+    expect(store.create('k', 'one')).toEqual({ status: 'created' });
+    expect(store.create('k', 'two')).toEqual({ status: 'exists' });
+    expect(store.get('k')).toBe('one');
+  });
+
+  // A real child process that never answers (a keychain prompt nobody clicks).
+  test.skipIf(process.platform === 'win32')('the default runner times out instead of hanging', () => {
+    const bin = join(oaRoot, 'bin');
+    require('node:fs').mkdirSync(bin);
+    const shim = join(bin, 'security');
+    require('node:fs').writeFileSync(shim, '#!/bin/sh\nsleep 30\n', { mode: 0o755 });
+    const oldPath = process.env.PATH;
+    process.env.PATH = `${bin}:${oldPath}`;
+    try {
+      const store = createSecretStore({ ...baseOpts(), platform: 'darwin', execTimeoutMs: 300 });
+      const started = Date.now();
+      const r = store.read('db-encryption-x');
+      expect(r).toEqual({ status: 'error', reason: expect.stringContaining('timed out') });
+      expect(Date.now() - started).toBeLessThan(10_000);
+    } finally {
+      process.env.PATH = oldPath;
+    }
+  });
+});

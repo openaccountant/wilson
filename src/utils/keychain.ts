@@ -9,7 +9,7 @@ const SERVICE = 'openaccountant';
 /**
  * OS secret storage, one backend per platform:
  *
- *   darwin  → macOS Keychain via the `security` CLI (unchanged since 0.9; no file fallback).
+ *   darwin  → macOS Keychain via the `security` CLI (no file fallback).
  *   win32   → DPAPI (CurrentUser scope) via Windows PowerShell. The ciphertext lives in
  *             ~/.openaccountant/secrets/<account>.dpapi; only this Windows user on this machine
  *             can decrypt it. Same protection class as Credential Manager (which is DPAPI too),
@@ -23,9 +23,27 @@ const SERVICE = 'openaccountant';
  *
  * `OA_SECRET_BACKEND` forces a backend: auto (default) | keychain | dpapi | secret-tool | file | none.
  * `file` is the sane choice for headless Linux and containers; `none` disables secret storage.
+ *
+ * Reads are three-valued (`readSecret`): found, not-found, or error. A locked keychain, a denied
+ * prompt or a timeout is an *error*, never "not found" — callers that would otherwise create a
+ * fresh secret (the database key) must not mistake one for the other. `createSecret` never
+ * overwrites: it reports `exists` instead.
+ *
+ * Secrets never appear in logs: exec failures are reported by exit status / error code only,
+ * because a child-process error message embeds the full argv.
  */
 
 export type SecretBackendName = 'keychain' | 'dpapi' | 'secret-tool' | 'file' | 'none';
+
+export type SecretRead =
+  | { status: 'found'; value: string }
+  | { status: 'not-found' }
+  | { status: 'error'; reason: string };
+
+export type SecretCreate =
+  | { status: 'created' }
+  | { status: 'exists' }
+  | { status: 'failed'; reason: string };
 
 /** Minimal process runner, injectable so tests can fake `security` / `secret-tool` / PowerShell. */
 export type ExecFn = (
@@ -38,8 +56,11 @@ export interface SecretBackend {
   readonly name: SecretBackendName;
   /** Whether a secret written here is protected by the OS (not a plaintext file). */
   readonly secure: boolean;
+  /** Create or replace. */
   set(account: string, secret: string): boolean;
-  get(account: string): string | null;
+  read(account: string): SecretRead;
+  /** Create only if absent; never replaces an existing secret. */
+  create(account: string, secret: string): SecretCreate;
   delete(account: string): boolean;
 }
 
@@ -51,6 +72,8 @@ export interface SecretStoreOptions {
   env?: Record<string, string | undefined>;
   /** Called once per store, the first time a secret lands in the plaintext file fallback. */
   warn?: (message: string) => void;
+  /** Per-call timeout for the default runner (default SECRET_EXEC_TIMEOUT_MS). */
+  execTimeoutMs?: number;
 }
 
 export interface SetSecretOptions {
@@ -65,18 +88,45 @@ export interface SecretStore {
   /** Backend that is tried first. */
   readonly primary: SecretBackend;
   set(account: string, secret: string, opts?: SetSecretOptions): boolean;
+  read(account: string): SecretRead;
+  create(account: string, secret: string, opts?: SetSecretOptions): SecretCreate;
   get(account: string): string | null;
   delete(account: string): boolean;
 }
+
+/** A keychain prompt nobody answers (or a hung D-Bus) must not hang wilson forever. */
+export const SECRET_EXEC_TIMEOUT_MS = 30_000;
 
 const defaultExec: ExecFn = (file, args, opts) =>
   execFileSync(file, args, {
     input: opts.input,
     encoding: 'utf-8',
     stdio: 'pipe',
-    timeout: opts.timeoutMs,
+    timeout: opts.timeoutMs ?? SECRET_EXEC_TIMEOUT_MS,
     windowsHide: true,
   });
+
+interface ExecError {
+  status?: number | null;
+  signal?: string | null;
+  code?: string;
+  stderr?: string | Buffer;
+}
+
+/** Describe a child-process failure without its message (which contains the argv, i.e. secrets). */
+export function describeExecError(err: unknown): string {
+  const e = (err ?? {}) as ExecError;
+  if (e.code === 'ETIMEDOUT') return 'timed out (a keychain prompt may be waiting)';
+  if (e.code) return e.code;
+  if (typeof e.status === 'number') return `exit ${e.status}`;
+  if (e.signal) return `killed by ${e.signal}`;
+  return err instanceof Error ? err.name : 'unknown error';
+}
+
+const exitStatus = (err: unknown): number | undefined => {
+  const s = (err as ExecError | undefined)?.status;
+  return typeof s === 'number' ? s : undefined;
+};
 
 /** Map an account name to a safe, reversible file name on every OS. */
 export function accountFileStem(account: string): string {
@@ -87,7 +137,11 @@ export function accountFileStem(account: string): string {
 
 // ── macOS Keychain ──────────────────────────────────────────────────────────
 
-/** The original 0.9 implementation, kept call-for-call identical. */
+/** errSecItemNotFound, as `security` reports it. */
+const SECURITY_NOT_FOUND = 44;
+/** errSecDuplicateItem. */
+const SECURITY_DUPLICATE = 45;
+
 export function macKeychainBackend(exec: ExecFn = defaultExec): SecretBackend {
   return {
     name: 'keychain',
@@ -104,16 +158,28 @@ export function macKeychainBackend(exec: ExecFn = defaultExec): SecretBackend {
         ], {});
         return true;
       } catch (err) {
-        logger.info('keychain:set:error', { account, error: String(err) });
+        logger.info('keychain:set:error', { account, error: describeExecError(err) });
         return false;
       }
     },
-    get(account) {
+    read(account) {
       try {
         const result = exec('security', ['find-generic-password', '-s', SERVICE, '-a', account, '-w'], {});
-        return result.trim();
-      } catch {
-        return null;
+        return { status: 'found', value: result.trim() };
+      } catch (err) {
+        if (exitStatus(err) === SECURITY_NOT_FOUND) return { status: 'not-found' };
+        return { status: 'error', reason: `security find-generic-password: ${describeExecError(err)}` };
+      }
+    },
+    create(account, secret) {
+      // No delete, no -U: an existing item makes add fail with errSecDuplicateItem
+      // instead of being replaced.
+      try {
+        exec('security', ['add-generic-password', '-s', SERVICE, '-a', account, '-w', secret], {});
+        return { status: 'created' };
+      } catch (err) {
+        if (exitStatus(err) === SECURITY_DUPLICATE) return { status: 'exists' };
+        return { status: 'failed', reason: `security add-generic-password: ${describeExecError(err)}` };
       }
     },
     delete(account) {
@@ -156,36 +222,52 @@ function runPowerShell(exec: ExecFn, script: string, inputB64: string): string {
   return exec(
     'powershell.exe',
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodePs(script)],
-    { input: inputB64, timeoutMs: 30_000 },
+    { input: inputB64 },
   ).trim();
 }
 
 export function windowsDpapiBackend(secretsDir: string, exec: ExecFn = defaultExec): SecretBackend {
   const pathFor = (account: string) => join(secretsDir, `${accountFileStem(account)}.dpapi`);
+  const protect = (secret: string): string => {
+    const blob = runPowerShell(exec, PS_PROTECT, Buffer.from(secret, 'utf-8').toString('base64'));
+    if (!blob) throw new Error('DPAPI returned no ciphertext');
+    return blob;
+  };
   return {
     name: 'dpapi',
     secure: true,
     set(account, secret) {
       try {
-        const blob = runPowerShell(exec, PS_PROTECT, Buffer.from(secret, 'utf-8').toString('base64'));
-        if (!blob) throw new Error('DPAPI returned no ciphertext');
+        const blob = protect(secret);
         ensurePrivateDir(secretsDir);
         writeFileSync(pathFor(account), blob, { mode: 0o600 });
         return true;
       } catch (err) {
-        logger.info('keychain:dpapi:set:error', { account, error: String(err) });
+        logger.info('keychain:dpapi:set:error', { account, error: describeExecError(err) });
         return false;
       }
     },
-    get(account) {
+    read(account) {
       const p = pathFor(account);
-      if (!existsSync(p)) return null;
+      if (!existsSync(p)) return { status: 'not-found' };
       try {
         const out = runPowerShell(exec, PS_UNPROTECT, readFileSync(p, 'utf-8').trim());
-        return Buffer.from(out, 'base64').toString('utf-8');
+        return { status: 'found', value: Buffer.from(out, 'base64').toString('utf-8') };
       } catch (err) {
-        logger.info('keychain:dpapi:get:error', { account, error: String(err) });
-        return null;
+        return { status: 'error', reason: `DPAPI unprotect of ${p}: ${describeExecError(err)}` };
+      }
+    },
+    create(account, secret) {
+      const p = pathFor(account);
+      if (existsSync(p)) return { status: 'exists' };
+      try {
+        const blob = protect(secret);
+        ensurePrivateDir(secretsDir);
+        writeFileSync(p, blob, { mode: 0o600, flag: 'wx' });
+        return { status: 'created' };
+      } catch (err) {
+        if ((err as ExecError).code === 'EEXIST') return { status: 'exists' };
+        return { status: 'failed', reason: `DPAPI protect: ${describeExecError(err)}` };
       }
     },
     delete(account) {
@@ -204,34 +286,55 @@ export function secretToolBackend(exec: ExecFn = defaultExec): SecretBackend {
   // secret-tool missing (ENOENT) never gets better within a process; stop spawning it.
   let missing = false;
   const run = (args: string[], input?: string): string => {
-    if (missing) throw new Error('secret-tool not installed');
+    if (missing) throw Object.assign(new Error('secret-tool not installed'), { code: 'ENOENT' });
     try {
-      return exec('secret-tool', args, { input, timeoutMs: 20_000 });
+      return exec('secret-tool', args, { input });
     } catch (err) {
-      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') missing = true;
+      if ((err as ExecError)?.code === 'ENOENT') missing = true;
       throw err;
     }
   };
+  const read = (account: string): SecretRead => {
+    try {
+      // lookup only appends a newline when stdout is a TTY, so a piped result is the exact
+      // secret — don't trim (PEM keys end in \n).
+      const out = run(['lookup', ...attrs(account)]);
+      return out === '' ? { status: 'not-found' } : { status: 'found', value: out };
+    } catch (err) {
+      const e = err as ExecError;
+      // Not installed: nothing can be stored there.
+      if (e.code === 'ENOENT') return { status: 'not-found' };
+      // lookup exits 1 silently when nothing matches; a D-Bus / locked-keyring failure
+      // also exits non-zero but says why on stderr.
+      const stderr = String(e.stderr ?? '').trim();
+      if (exitStatus(err) === 1 && stderr === '') return { status: 'not-found' };
+      return { status: 'error', reason: `secret-tool lookup: ${describeExecError(err)}` };
+    }
+  };
+  const store = (account: string, secret: string) =>
+    run(['store', '--label', `Open Accountant (${account})`, ...attrs(account)], secret);
   return {
     name: 'secret-tool',
     secure: true,
     set(account, secret) {
       try {
-        run(['store', '--label', `Open Accountant (${account})`, ...attrs(account)], secret);
+        store(account, secret);
         return true;
       } catch (err) {
-        logger.info('keychain:secret-tool:set:error', { account, error: String(err) });
+        logger.info('keychain:secret-tool:set:error', { account, error: describeExecError(err) });
         return false;
       }
     },
-    get(account) {
+    read,
+    create(account, secret) {
+      const existing = read(account);
+      if (existing.status === 'found') return { status: 'exists' };
+      if (existing.status === 'error') return { status: 'failed', reason: existing.reason };
       try {
-        // lookup exits 1 when nothing matches. It only appends a newline when stdout is a
-        // TTY, so a piped result is the exact secret — don't trim (PEM keys end in \n).
-        const out = run(['lookup', ...attrs(account)]);
-        return out === '' ? null : out;
-      } catch {
-        return null;
+        store(account, secret);
+        return { status: 'created' };
+      } catch (err) {
+        return { status: 'failed', reason: `secret-tool store: ${describeExecError(err)}` };
       }
     },
     delete(account) {
@@ -253,29 +356,41 @@ function ensurePrivateDir(dir: string): void {
 
 export function fileBackend(secretsDir: string): SecretBackend {
   const pathFor = (account: string) => join(secretsDir, `${accountFileStem(account)}.secret`);
+  const write = (account: string, secret: string, flag: 'w' | 'wx') => {
+    ensurePrivateDir(secretsDir);
+    const p = pathFor(account);
+    writeFileSync(p, secret, { mode: 0o600, flag });
+    // writeFileSync's mode only applies on create; tighten a pre-existing file too.
+    chmodSync(p, 0o600);
+  };
   return {
     name: 'file',
     secure: false,
     set(account, secret) {
       try {
-        ensurePrivateDir(secretsDir);
-        const p = pathFor(account);
-        writeFileSync(p, secret, { mode: 0o600 });
-        // writeFileSync's mode only applies on create; tighten a pre-existing file too.
-        chmodSync(p, 0o600);
+        write(account, secret, 'w');
         return true;
       } catch (err) {
-        logger.info('keychain:file:set:error', { account, error: String(err) });
+        logger.info('keychain:file:set:error', { account, error: describeExecError(err) });
         return false;
       }
     },
-    get(account) {
+    read(account) {
       const p = pathFor(account);
-      if (!existsSync(p)) return null;
+      if (!existsSync(p)) return { status: 'not-found' };
       try {
-        return readFileSync(p, 'utf-8');
-      } catch {
-        return null;
+        return { status: 'found', value: readFileSync(p, 'utf-8') };
+      } catch (err) {
+        return { status: 'error', reason: `read ${p}: ${describeExecError(err)}` };
+      }
+    },
+    create(account, secret) {
+      try {
+        write(account, secret, 'wx');
+        return { status: 'created' };
+      } catch (err) {
+        if ((err as ExecError).code === 'EEXIST') return { status: 'exists' };
+        return { status: 'failed', reason: `write: ${describeExecError(err)}` };
       }
     },
     delete(account) {
@@ -291,7 +406,8 @@ const noneBackend: SecretBackend = {
   name: 'none',
   secure: false,
   set: () => false,
-  get: () => null,
+  read: () => ({ status: 'not-found' }),
+  create: () => ({ status: 'failed', reason: 'secret storage disabled (OA_SECRET_BACKEND=none)' }),
   delete: () => false,
 };
 
@@ -323,14 +439,15 @@ const defaultWarn = (message: string) => {
 export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
   const platform = opts.platform ?? osPlatform();
   const env = opts.env ?? process.env;
-  const exec = opts.exec ?? defaultExec;
+  const exec: ExecFn =
+    opts.exec ?? ((file, args, o) => defaultExec(file, args, { ...o, timeoutMs: o.timeoutMs ?? opts.execTimeoutMs }));
   const secretsDir = join(opts.oaRoot ?? join(homedir(), '.openaccountant'), 'secrets');
   const forced = env.OA_SECRET_BACKEND && env.OA_SECRET_BACKEND !== 'auto' ? env.OA_SECRET_BACKEND : undefined;
   const primary = primaryFor(platform, forced, secretsDir, exec);
   const warn = opts.warn ?? defaultWarn;
 
-  // macOS keeps its 0.9 contract exactly: Keychain or nothing. Forced backends and the
-  // insecure backends themselves get no second tier either.
+  // macOS: Keychain or nothing. Forced backends and the insecure backends themselves get no
+  // second tier either.
   const fallback: SecretBackend | null =
     platform !== 'darwin' && !forced && primary.secure ? fileBackend(secretsDir) : null;
 
@@ -348,6 +465,15 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
       (platform === 'linux' ? ' Install libsecret-tools (secret-tool) and a keyring to fix this.' : '');
     logger.warn('keychain:insecure-fallback', { dir: secretsDir, primary: primary.name });
     warn(msg);
+  };
+
+  const read = (account: string): SecretRead => {
+    const r = primary.read(account);
+    if (r.status === 'found' || !fallback) return r;
+    const f = fallback.read(account);
+    if (f.status === 'found') return f;
+    // An error in the OS store wins over "not in the fallback file": it is not proof of absence.
+    return r.status === 'error' ? r : f;
   };
 
   return {
@@ -369,8 +495,20 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
       warnOnce(fallback);
       return true;
     },
+    read,
+    create(account, secret, setOpts = {}) {
+      if (setOpts.requireSecure && !primary.secure) {
+        return { status: 'failed', reason: `${primary.name} is not a secure store` };
+      }
+      const c = primary.create(account, secret);
+      if (c.status !== 'failed' || !fallback || setOpts.requireSecure) return c;
+      const f = fallback.create(account, secret);
+      if (f.status === 'created') warnOnce(fallback);
+      return f;
+    },
     get(account) {
-      return primary.get(account) ?? fallback?.get(account) ?? null;
+      const r = read(account);
+      return r.status === 'found' ? r.value : null;
     },
     delete(account) {
       const a = primary.delete(account);
@@ -398,7 +536,7 @@ export function secretBackendName(): SecretBackendName {
 }
 
 /**
- * Store a secret in the OS secret store (see the module comment for the per-platform backend).
+ * Store (create or replace) a secret in the OS secret store.
  * Returns false when it could not be stored anywhere acceptable.
  */
 export function setSecret(account: string, secret: string, opts?: SetSecretOptions): boolean {
@@ -406,10 +544,21 @@ export function setSecret(account: string, secret: string, opts?: SetSecretOptio
 }
 
 /**
- * Retrieve a secret from the OS secret store.
+ * Retrieve a secret, or null when it is absent OR unreadable. Callers that would act on
+ * absence (create a replacement) must use `readSecret` instead.
  */
 export function getSecret(account: string): string | null {
   return store().get(account);
+}
+
+/** Three-valued read: found / not-found / error (locked keychain, denied prompt, timeout…). */
+export function readSecret(account: string): SecretRead {
+  return store().read(account);
+}
+
+/** Create a secret only if none exists. Never overwrites. */
+export function createSecret(account: string, secret: string, opts?: SetSecretOptions): SecretCreate {
+  return store().create(account, secret, opts);
 }
 
 /**
