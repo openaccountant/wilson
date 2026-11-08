@@ -62,7 +62,8 @@ jobs:
   # can load (Database.setCustomSQLite is a no-op elsewhere). Each file runs in
   # its own process so initSqlcipher() executes before any Database exists.
   check-encryption:
-    runs-on: macos-14
+    # macos-14 images are retired ("macos-14-arm64-us-default is not supported").
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
 
