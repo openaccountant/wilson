@@ -47,7 +47,17 @@ export async function gateToolCall(
   const session = sessionApprovalScope(toolName, tool, args);
   if (session && sessionApprovedTools?.has(session.key)) return { asked: false, decision: null, allowed: true };
 
-  const decision = (await requestToolApproval?.({ tool: toolName, args, session })) ?? 'deny';
+  // The card shows what will actually be sent (a remote MCP tool's scrubbed payload). A preview that throws
+  // fails closed: nothing is asked and the call is denied.
+  let shownArgs = args;
+  if (tool?.approvalArgs) {
+    try {
+      shownArgs = tool.approvalArgs(args ?? {});
+    } catch {
+      return { asked: false, decision: null, allowed: false };
+    }
+  }
+  const decision = (await requestToolApproval?.({ tool: toolName, args: shownArgs, session })) ?? 'deny';
   if (decision !== 'deny' && mayWrite && !mayWrite()) return { asked: true, decision: 'deny', allowed: false };
   if (decision === 'allow-session' && session) {
     // Only this tool (or tool + action): approving bulk categorize for the

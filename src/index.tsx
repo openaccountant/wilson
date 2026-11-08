@@ -152,6 +152,9 @@ Usage:
   await runStandalone(port);
 } else if (args.includes("--mcp")) {
   const { initMcpClients, getConnectedServers, getMcpClient, closeMcpClients } = await import("./mcp/client.js");
+  const { loadMcpConfig, resolveHiddenTools, isHiddenTool } = await import("./mcp/config.js");
+  const { formatMcpToolListLine } = await import("./mcp/mcp-command.js");
+  const mcpConfig = loadMcpConfig();
   const connected = await initMcpClients();
   if (connected.length === 0) {
     console.log("No MCP servers configured. Add servers to ~/.openaccountant/mcp.json");
@@ -161,8 +164,10 @@ Usage:
       const client = getMcpClient(name)!;
       const { tools } = await client.listTools();
       console.log(`  ${name} (${tools.length} tool${tools.length === 1 ? '' : 's'})`);
+      const hidden = resolveHiddenTools(name, mcpConfig.servers[name]);
       for (const tool of tools) {
-        console.log(`    - ${tool.name}: ${tool.description?.slice(0, 80) ?? '(no description)'}`);
+        // Server-supplied text: control characters are removed before it reaches the terminal.
+        console.log(formatMcpToolListLine(tool.name, tool.description, isHiddenTool(tool.name, hidden)));
       }
     }
     await closeMcpClients();

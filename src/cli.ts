@@ -88,6 +88,7 @@ import { hasLocalCoinbaseCreds, validateCoinbaseKey } from './coinbase/client.js
 import { initCoinbaseSyncTool } from './tools/import/coinbase-sync.js';
 import { initMcpClients } from './mcp/client.js';
 import { loadMcpTools } from './mcp/adapter.js';
+import { runMcpCommand } from './mcp/mcp-command.js';
 import { pullOllamaModel, RECOMMENDED_OLLAMA_MODELS } from './utils/model-downloader.js';
 import { discoverSkills } from './skills/registry.js';
 import { validateLicense, getLicenseInfo, deactivateLicense, hasLicense } from './licensing/license.js';
@@ -381,6 +382,7 @@ export async function runCli() {
     { name: 'dashboard', description: 'Open browser dashboard' },
     { name: 'schedule', description: 'Manage scheduled tasks (add/remove/pause/resume)' },
     { name: 'profile', description: 'Show or switch profile (e.g. /profile switch business)' },
+    { name: 'mcp', description: 'Manage MCP servers (list/add/remove, e.g. /mcp add openaccountants)' },
     { name: 'upgrade', description: 'Upgrade to Open Accountant Pro' },
     { name: 'help', description: 'Show available commands' },
     ...RECOMMENDED_OLLAMA_MODELS.map((m) => ({
@@ -477,7 +479,8 @@ export async function runCli() {
         '  /license <key> — Activate a license key',
         '  /schedule     — Manage scheduled tasks',
         '  /profile      — Show or switch profile',
-        '  /help         — Show this help message',
+        '  /mcp          — Manage MCP servers (list, add, remove)',
+        '  /help        — Show this help message',
       ];
       const skills = discoverSkills();
       const freeSkills = skills.filter((s) => s.tier !== 'paid').map((s) => s.name);
@@ -874,6 +877,13 @@ export async function runCli() {
         }
         refreshError();
       }
+      tui.requestRender();
+      return;
+    }
+
+    if (query === '/mcp' || query.startsWith('/mcp ')) {
+      chatLog.addQuery(query);
+      chatLog.finalizeAnswer(runMcpCommand(query.slice(4)));
       tui.requestRender();
       return;
     }

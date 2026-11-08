@@ -98,9 +98,9 @@ export function stripMarks(s: string): string {
 
 // Every quantifier is bounded (RFC 5321 limits: local part 64, label 63), so a long run with no `@` costs
 // at most 64 steps per start position instead of rescanning to the end of the run (which was quadratic).
-const EMAIL_RE = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,8}/g;
+export const EMAIL_RE = /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){1,8}/g;
 // NANP with separators: 415-555-0134, (415) 555-0134, 415.555.0134, optional +1 / 1 prefix. E.164: +14155550134.
-const PHONE_RE = /(?:\+?1[ .-]?)?\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b|\+\d{8,15}\b/g;
+export const PHONE_RE = /(?:\+?1[ .-]?)?\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b|\+\d{8,15}\b/g;
 // Digit runs of 5+ (any run of spaces or hyphens allowed between digits), never part of a decimal amount.
 const DIGIT_RUN_RE = /(?<!\d)(?<!\d\.)\d(?:[ -]*\d){4,}(?!\d|\.\d)/;
 // Digit runs of 12+ (account / card numbers) may also be split by dots and slashes: 4111.1111.1111.1234, 4111/1111/1111/1234.

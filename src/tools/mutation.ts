@@ -67,6 +67,9 @@ export interface SessionApprovalScope {
 /**
  * The scope 'allow-session' would grant for this call, or null when the call
  * must be approved every time.
+ * - Tools with `approveEachCall` (remote MCP tools): null. Their arguments are
+ *   free text sent to a third party, so approving one payload must not
+ *   approve the next.
  * - Chain/team tools: null. What a run does is chosen by its step/member
  *   models, so each run is approved on its own (each write inside it is also
  *   gated, see src/orchestration/tool-calls.ts).
@@ -77,9 +80,10 @@ export interface SessionApprovalScope {
  */
 export function sessionApprovalScope(
   toolName: string,
-  tool: Pick<ToolDef, 'mutates' | 'usesTools'> | undefined,
+  tool: Pick<ToolDef, 'mutates' | 'usesTools' | 'approveEachCall'> | undefined,
   args: Record<string, unknown>,
 ): SessionApprovalScope | null {
+  if (tool?.approveEachCall) return null;
   if (tool?.usesTools !== undefined || toolName.startsWith('chain_') || toolName.startsWith('team_')) return null;
   if (typeof tool?.mutates === 'function' && typeof args?.action === 'string') {
     return { key: `${toolName}:${args.action}`, action: args.action };

@@ -40,6 +40,10 @@ export function defineTool<T extends z.ZodType>(config: {
   mutates?: MutationFlag;
   /** Orchestration tools only — see ToolDef.usesTools. */
   usesTools?: readonly string[];
+  /** What the approval card shows instead of the raw args — see ToolDef.approvalArgs. */
+  approvalArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
+  /** Never approvable for the session — see ToolDef.approveEachCall. */
+  approveEachCall?: boolean;
 }): ToolDef<T> {
   const { name, schema, func } = config;
 
