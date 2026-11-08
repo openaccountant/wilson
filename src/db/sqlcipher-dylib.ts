@@ -10,9 +10,12 @@
  *   - `setCustomSQLite` MUST run BEFORE any Database is constructed.
  *   - Passing a path that does not exist SEGFAULTS Bun (oven-sh/bun#18811), so
  *     every candidate is guarded with `existsSync` before it is handed to Bun.
- *   - Only meaningful on darwin; returns null / false elsewhere.
+ *   - Only effective on darwin: on Linux/Windows Bun links SQLite statically and
+ *     `setCustomSQLite` is a silent no-op, so activation is verified by probe.
  */
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 
 /** arm64 Homebrew prefix. */
@@ -20,30 +23,96 @@ const BREW_ARM64_DYLIB = '/opt/homebrew/opt/sqlcipher/lib/libsqlcipher.dylib';
 /** Intel Homebrew prefix. */
 const BREW_INTEL_DYLIB = '/usr/local/opt/sqlcipher/lib/libsqlcipher.dylib';
 
+/** Distro packages (Debian/Ubuntu multiarch, Fedora/RHEL lib64, Arch, source installs). */
+const LINUX_CANDIDATES = [
+  '/usr/lib/x86_64-linux-gnu/libsqlcipher.so.1',
+  '/usr/lib/x86_64-linux-gnu/libsqlcipher.so.0',
+  '/usr/lib/aarch64-linux-gnu/libsqlcipher.so.1',
+  '/usr/lib/aarch64-linux-gnu/libsqlcipher.so.0',
+  '/usr/lib64/libsqlcipher.so.0',
+  '/usr/lib/libsqlcipher.so.0',
+  '/usr/local/lib/libsqlcipher.so',
+];
+
+/** Where a Windows user would plausibly drop a SQLCipher build. */
+function windowsCandidates(env: Record<string, string | undefined>, home: string): string[] {
+  const out = [join(home, '.openaccountant', 'lib', 'sqlcipher.dll')];
+  if (env.LOCALAPPDATA) out.push(join(env.LOCALAPPDATA, 'openaccountant', 'sqlcipher.dll'));
+  if (env.ProgramFiles) out.push(join(env.ProgramFiles, 'SQLCipher', 'sqlcipher.dll'));
+  return out;
+}
+
+export interface ResolveOptions {
+  platform?: NodeJS.Platform;
+  env?: Record<string, string | undefined>;
+  home?: string;
+  exists?: (path: string) => boolean;
+}
+
 /**
- * Resolve the path to a usable SQLCipher dylib, or null if none is available.
+ * Resolve the path to a SQLCipher shared library, or null if none is available.
  *
- * darwin only. Resolution order:
- *   1. `WILSON_SQLCIPHER_DYLIB` env override
- *   2. arm64 Homebrew path
- *   3. Intel Homebrew path
+ * Resolution order:
+ *   1. `OA_SQLCIPHER_LIB` env override (any platform)
+ *   2. `WILSON_SQLCIPHER_DYLIB` (legacy name, any platform)
+ *   3. platform locations: Homebrew arm64/Intel on darwin, distro paths on Linux,
+ *      ~/.openaccountant/lib, %LOCALAPPDATA%, %ProgramFiles% on Windows
  *
  * Every candidate must pass `existsSync` — a non-existent path passed to
  * `setCustomSQLite` segfaults Bun, so we never return one we cannot stat.
+ *
+ * A resolved path is necessary, not sufficient: only Bun on macOS loads SQLite
+ * dynamically. On Linux and Windows Bun links SQLite statically and
+ * `setCustomSQLite` returns true without swapping anything, so `initSqlcipher`
+ * probes for `cipher_version` before declaring encryption active.
  */
-export function resolveSqlcipherDylibPath(): string | null {
-  if (process.platform !== 'darwin') return null;
+export function resolveSqlcipherDylibPath(opts: ResolveOptions = {}): string | null {
+  const platform = opts.platform ?? process.platform;
+  const env = opts.env ?? process.env;
+  const exists = opts.exists ?? existsSync;
 
-  const candidates = [
-    process.env.WILSON_SQLCIPHER_DYLIB,
-    BREW_ARM64_DYLIB,
-    BREW_INTEL_DYLIB,
-  ];
+  const candidates: (string | undefined)[] = [env.OA_SQLCIPHER_LIB, env.WILSON_SQLCIPHER_DYLIB];
+  if (platform === 'darwin') candidates.push(BREW_ARM64_DYLIB, BREW_INTEL_DYLIB);
+  else if (platform === 'linux') candidates.push(...LINUX_CANDIDATES);
+  else if (platform === 'win32') candidates.push(...windowsCandidates(env, opts.home ?? homedir()));
 
   for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) return candidate;
+    if (candidate && exists(candidate)) return candidate;
   }
   return null;
+}
+
+/**
+ * Platform-appropriate advice for when encryption at rest is unavailable.
+ * Bun only honours a custom SQLite on macOS, so elsewhere there is no library
+ * to install yet — point people at full-disk encryption instead.
+ */
+export function encryptionUnavailableHint(platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'darwin') return 'Install SQLCipher for encryption at rest: brew install sqlcipher';
+  if (platform === 'win32') {
+    return 'Database encryption at rest is not yet supported on Windows; your data is stored unencrypted. ' +
+      'Turn on BitLocker or Device Encryption to protect it.';
+  }
+  return 'Database encryption at rest is not yet supported on this platform; your data is stored unencrypted. ' +
+    'Use full-disk encryption (e.g. LUKS) to protect it.';
+}
+
+/**
+ * Whether the SQLite that `bun:sqlite` is now using is really SQLCipher.
+ * `PRAGMA cipher_version` returns a row only from SQLCipher; plain SQLite
+ * ignores the unknown pragma and returns nothing.
+ */
+function sqlcipherIsLoaded(): boolean {
+  let db: Database | null = null;
+  try {
+    db = new Database(':memory:');
+    const rows = db.prepare('PRAGMA cipher_version').all();
+    return rows.length > 0;
+  } catch {
+    return false;
+  } finally {
+    db?.close();
+  }
 }
 
 let initialized = false;
@@ -65,9 +134,16 @@ export function initSqlcipher(): boolean {
   const dylibPath = resolveSqlcipherDylibPath();
   if (!dylibPath) return false;
 
+  // Off macOS, Bun's statically linked SQLite ignores setCustomSQLite (verified on
+  // Linux with Bun 1.4.2). Only try when someone explicitly points us at a library;
+  // the probe below keeps that honest.
+  if (process.platform !== 'darwin' && !process.env.OA_SQLCIPHER_LIB) return false;
+
   try {
     Database.setCustomSQLite(dylibPath);
-    active = true;
+    // Never report encryption on a plain SQLite: keyed opens would silently
+    // write plaintext (PRAGMA key is a no-op there).
+    active = sqlcipherIsLoaded();
   } catch {
     // Leave SQLCipher inactive; caller falls back to plaintext SQLite.
     active = false;
