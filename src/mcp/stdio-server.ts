@@ -1,5 +1,5 @@
 /**
- * `wilson mcp`: Wilson as an MCP server over stdio, for Claude Desktop (the
+ * `wilson --mcp-server`: Wilson as an MCP server over stdio, for Claude Desktop (the
  * .mcpb extension) and any other local MCP host. The host's model is the
  * brain: nothing here calls an LLM, so no API key is needed. Categorizing is
  * "list_uncategorized + list_categories, then categorize_transactions", with
@@ -134,7 +134,7 @@ function errorResult(message: string): CallToolResult {
 function describeError(err: unknown): string {
   if (err instanceof NotFoundError || err instanceof PrepareError) return err.message;
   if (err instanceof CursorError) return 'That nextCursor belongs to a different query. Repeat the same arguments, or omit cursor for page 1.';
-  console.error('[wilson mcp] tool error:', err);
+  console.error('[wilson --mcp-server] tool error:', err);
   return `Something went wrong: ${err instanceof Error ? sanitizeUntrustedText(err.message, 200) : 'unknown error'}`;
 }
 
@@ -178,7 +178,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
         errorCode: errorCode ?? null,
       });
     } catch (err) {
-      console.error('[wilson mcp] audit write failed:', err);
+      console.error('[wilson --mcp-server] audit write failed:', err);
     }
   }
 
@@ -202,7 +202,7 @@ export function buildStdioServer(opts: StdioServerOptions): McpServer {
       if (res.action === 'accept') return null;
       return res.action === 'decline' ? 'The user declined this change. Nothing was changed.' : 'The user dismissed the confirmation. Nothing was changed.';
     } catch (err) {
-      console.error('[wilson mcp] elicitation failed:', err);
+      console.error('[wilson --mcp-server] elicitation failed:', err);
       return 'Could not ask the user to confirm, so nothing was changed.';
     }
   }
@@ -687,7 +687,7 @@ async function defaultLaunchDashboard(profile: string, opts: { openBrowser: bool
       windowsHide: true,
       env: process.env,
     });
-    child.on('error', (err) => console.error('[wilson mcp] dashboard failed to start:', err));
+    child.on('error', (err) => console.error('[wilson --mcp-server] dashboard failed to start:', err));
     child.unref();
     const deadline = Date.now() + 20_000;
     while (!(await isUp(url))) {
@@ -719,7 +719,7 @@ export async function runStdioServer(): Promise<void> {
   // tool call. Rows are left for `wilson --index`; WILSON_MCP_EMBED=1 keeps embed-on-write.
   if (!envFlag(process.env.WILSON_MCP_EMBED, false)) {
     setEmbedOnWriteEmbedder(async () => {
-      throw new Error('embed-on-write is off in `wilson mcp` (run `wilson --index` to build the semantic index)');
+      throw new Error('embed-on-write is off in `wilson --mcp-server` (run `wilson --index` to build the semantic index)');
     });
   }
 
@@ -736,7 +736,7 @@ export async function runStdioServer(): Promise<void> {
     process.stdin.once('end', () => resolveClosed());
   });
   await server.connect(transport);
-  console.error(`[wilson mcp] ready (profile "${getActiveProfileName()}")`);
+  console.error(`[wilson --mcp-server] ready (profile "${getActiveProfileName()}")`);
   await closed;
   try {
     db.close();

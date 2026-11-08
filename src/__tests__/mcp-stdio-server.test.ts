@@ -24,36 +24,39 @@ function jsonOf(result: unknown): Record<string, unknown> {
   return JSON.parse(textOf(result)) as Record<string, unknown>;
 }
 
+const PROFILE = `mcpbtest-${Math.random().toString(36).slice(2, 10)}`;
 const tempDirs: string[] = [];
 afterAll(() => {
   for (const d of tempDirs) rmSync(d, { recursive: true, force: true });
 });
 
 /**
- * The real thing, the way Claude Desktop runs it: `wilson mcp` as a child process speaking JSON-RPC on stdio,
+ * The real thing, the way Claude Desktop runs it: `wilson --mcp-server` as a child process speaking JSON-RPC on stdio,
  * against a throwaway HOME. A fake `security` keeps it off the developer's real keychain (the keychain is not
  * scoped by HOME). Any non-JSON line on stdout would surface as a transport error, so this also proves stdout
  * carries only protocol messages.
  */
-describe('wilson mcp (stdio round trip)', () => {
+describe('wilson --mcp-server (stdio round trip)', () => {
   test('initialize, tools/list, import a Chase CSV, then a spending summary', async () => {
     const home = mkdtempSync(join(tmpdir(), 'wilson-mcp-'));
     tempDirs.push(home);
     const bin = join(home, 'bin');
     mkdirSync(bin);
-    writeFileSync(join(bin, 'security'), '#!/bin/sh\nexit 1\n');
+    // Same pattern as .webmcp-live-bin/security: refuse every keychain call, loudly.
+    writeFileSync(join(bin, 'security'), '#!/bin/sh\necho "mcp-stdio test: real keychain access is blocked" >&2\nexit 44\n');
     chmodSync(join(bin, 'security'), 0o755);
 
     const transport = new StdioClientTransport({
       command: 'bun',
-      args: ['run', join(ROOT, 'src', 'index.tsx'), 'mcp'],
+      args: ['run', join(ROOT, 'src', 'index.tsx'), '--mcp-server'],
       cwd: ROOT,
       env: {
         ...(process.env as Record<string, string>),
         HOME: home,
         USERPROFILE: home,
         PATH: `${bin}:${process.env.PATH ?? ''}`,
-        WILSON_PROFILE: 'mcp-test',
+        // Never "default": the keychain account is per profile name and not scoped by HOME.
+        WILSON_PROFILE: PROFILE,
       },
       stderr: 'pipe',
     });
@@ -96,7 +99,7 @@ describe('wilson mcp (stdio round trip)', () => {
       expect(again.outcome).toBe('nothing_new');
 
       const overview = jsonOf(await client.callTool({ name: 'get_overview', arguments: {} }));
-      expect(overview.profile).toBe('mcp-test');
+      expect(overview.profile).toBe(PROFILE);
       expect(overview.transactions).toBe(9);
 
       const summary = jsonOf(await client.callTool({ name: 'get_spending_summary', arguments: { period: 'year', compareWithPrevious: false } }));
@@ -245,6 +248,10 @@ describe('mcpb/manifest.json', () => {
     const { client } = await connect(createTestDb());
     const offered = (await client.listTools()).tools.map((t) => t.name).sort();
     expect(manifest.tools.map((t) => t.name).sort()).toEqual(offered);
+    // Both launch paths start the stdio server flag (not `--mcp`, which lists MCP client connections).
+    const cfg = manifest.server.mcp_config as unknown as { args: string[]; platform_overrides: { win32: { args: string[] } } };
+    expect(cfg.args.at(-1)).toBe('--mcp-server');
+    expect(cfg.platform_overrides.win32.args).toEqual(['--mcp-server']);
     // The settings reach the server through these variables.
     expect(Object.keys(manifest.server.mcp_config.env).sort()).toEqual(['WILSON_HOME', 'WILSON_MCP_ALLOW_CHANGES', 'WILSON_PROFILE']);
   });

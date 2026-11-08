@@ -6,11 +6,13 @@ config({ quiet: true });
 
 const args = process.argv.slice(2);
 
-// `wilson mcp` speaks JSON-RPC on stdout, so nothing else may print there: send
-// every console line to stderr before any profile/DB code can log.
-const mcpMode = args[0] === "mcp";
+// `wilson --mcp-server` speaks JSON-RPC on stdout, so nothing else may print
+// there: send every console line to stderr before any profile/DB code can log.
+// (Not to be confused with `--mcp`, which lists Wilson's MCP *client* connections.)
+const mcpServerIdx = args.indexOf("--mcp-server");
+const mcpMode = mcpServerIdx !== -1;
 if (mcpMode) {
-  args.shift();
+  args.splice(mcpServerIdx, 1);
   const toStderr = (...a: unknown[]) => console.error(...a);
   console.log = toStderr;
   console.info = toStderr;
@@ -101,7 +103,7 @@ Usage:
   wilson --sync                    Sync all linked accounts (Plaid, Monarch, Firefly III)
   wilson --index                   Build the local semantic index for existing transactions (on-device)
   wilson --mcp                     Show MCP server connections and available tools
-  wilson mcp                       Run as an MCP server on stdio (Claude Desktop extension)
+  wilson --mcp-server              Run as an MCP server on stdio (Claude Desktop extension)
   wilson --report <path>           Generate Markdown report (--month M)
   wilson --export <path>           Export transactions (--format csv|xlsx)
   wilson --debug                   Enable debug logging to ~/.openaccountant/logs/
