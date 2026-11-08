@@ -1,6 +1,7 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { stat } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { getDashboardHtml } from './html.js';
 import { compressBytes, negotiateEncoding, varyWithEncoding, type Encoding } from './compression.js';
 import {
@@ -91,7 +92,7 @@ function resolveBindHost(): string {
 async function buildWebMcpBridgeScript(): Promise<string> {
   try {
     const result = await Bun.build({
-      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL('./webmcp-bridge.ts', import.meta.url))],
       target: 'browser',
       minify: false,
     });
@@ -113,7 +114,8 @@ function injectWebMcpBridge(html: string, port: number): string {
 // ── Static assets ───────────────────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
-export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows .pathname is `/C:/...`, and anywhere it keeps %20 for spaces.
+export const DASHBOARD_ASSETS_DIR = fileURLToPath(new URL('./ui/dist-hybrid/', import.meta.url));
 
 /**
  * URL prefix and directory of the React dashboard's content-hashed build output (`assetsDir` in
@@ -121,7 +123,7 @@ export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url
  * the wa-sqlite wasm. index.html only references these; nothing is inlined into it.
  */
 export const DASHBOARD_APP_PREFIX = '/_app/';
-export const DASHBOARD_APP_DIR = new URL('./ui/dist/_app/', import.meta.url).pathname;
+export const DASHBOARD_APP_DIR = fileURLToPath(new URL('./ui/dist/_app/', import.meta.url));
 
 /** A hashed file never changes under the same name, so a browser may keep it for a year without asking again. */
 export const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';

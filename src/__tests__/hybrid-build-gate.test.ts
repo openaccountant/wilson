@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,7 +33,7 @@ describe('build:hybrid enforces scripts/check-hybrid-build.ts', () => {
 
   test('the path in the script resolves, from the ui directory, to the real check script', () => {
     const rel = script.split('&&').map((s) => s.trim()).find((s) => s.includes('check-hybrid-build.ts'))!.replace(/^bun run /, '');
-    expect(existsSync(resolve(uiDir.pathname, rel))).toBe(true);
+    expect(existsSync(resolve(fileURLToPath(uiDir), rel))).toBe(true);
   });
 
   test('run as a program, the check exits 1 on missing or broken builds and 0 on a clean one', () => {
@@ -66,7 +67,7 @@ describe('build:hybrid enforces scripts/check-hybrid-build.ts', () => {
 });
 
 // scripts/ sits outside tsconfig's rootDir (src), so load it through a computed specifier.
-const gatePath = new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname;
+const gatePath = fileURLToPath(new URL('../../scripts/check-hybrid-build.ts', import.meta.url));
 const { checkHybridBuild, mainThreadPart } = (await import(gatePath)) as {
   checkHybridBuild(input: { indexHtml: string; hybridJs: string; hybridEntries: string[] }): string[];
   mainThreadPart(hybridJs: string): string | null;

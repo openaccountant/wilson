@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   AgentFormSession,
   BUSY_MESSAGE,
@@ -242,7 +242,7 @@ describe('T1 source guards: every form that locks its fields for a person\'s sav
     });
   const strip = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   const lockers = walk(uiRoot).filter((f) => /\bfieldLock\(/.test(strip(readFileSync(f, 'utf8'))));
-  const rel = (f: string) => f.slice(uiRoot.length + 1);
+  const rel = (f: string) => f.slice(uiRoot.length + 1).split(sep).join('/'); // posix form on Windows too
 
   test('the scanner finds the forms that use fieldLock', () => {
     expect(lockers.map(rel).sort()).toEqual(['tabs/GoalsTab.tsx', 'tabs/ReviewTab.tsx']);

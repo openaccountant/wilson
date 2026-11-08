@@ -37,7 +37,9 @@ async function runSeed(home: string, homeEnv = home) {
   return { code: await proc.exited, stdout, stderr };
 }
 
-describe('the live-check seed script', () => {
+// Skipped on Windows: the seed script only accepts a macOS /private/tmp scratch HOME.
+
+describe.skipIf(process.platform === 'win32')('the live-check seed script', () => {
   const source = readFileSync(SCRIPT, 'utf8');
   const guardSource = readFileSync(join(import.meta.dir, '../../scripts/webmcp-live-seed-guard.ts'), 'utf8');
 

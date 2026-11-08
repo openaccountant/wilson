@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 import {
   CUT_GRID,
@@ -195,7 +196,7 @@ describe('the eval harness applies the guard before it opens the held-out file',
     try {
       // The path does not exist: if the harness read it first, it would crash with ENOENT (exit 1), not 8.
       const missing = join(dir, 'heldout-router.v4.jsonl');
-      const script = new URL('../../scripts/subagent-route-eval.mjs', import.meta.url).pathname;
+      const script = fileURLToPath(new URL('../../scripts/subagent-route-eval.mjs', import.meta.url));
       const r = Bun.spawnSync(['node', script, '--arm', 'O', '--sets', 'heldout', '--heldout', missing, '--out', join(dir, 'out')]);
       expect(r.exitCode).toBe(8);
       expect(new TextDecoder().decode(r.stderr)).toContain('--frozen-sha');

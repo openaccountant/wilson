@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,7 @@ import { join } from 'node:path';
  * banner in EACH bundle, and no open-jev library in the chat chunk or the singlefile app.
  */
 
-const gatePath = new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname;
+const gatePath = fileURLToPath(new URL('../../scripts/check-hybrid-build.ts', import.meta.url));
 const gate = (await import(gatePath)) as {
   ALLOWED_HYBRID_JS: readonly string[];
   checkHybridBuild(input: { indexHtml: string; hybridJs: string; hybridEntries: string[]; prelabelJs?: string | null }): string[];

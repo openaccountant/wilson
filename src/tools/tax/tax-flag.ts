@@ -10,6 +10,7 @@ import { toolUpsell } from '../../licensing/upsell.js';
 import { buildScheduleC, scheduleCToCsv, scheduleCToSheets } from './schedule-c.js';
 import { writeFileSync } from 'fs';
 import { writeXlsxFile } from '../../utils/xlsx-writer.js';
+import { expandHome } from '../../utils/path-arg.js';
 
 let db: Database | null = null;
 
@@ -112,7 +113,7 @@ export const taxFlagTool = defineTool({
         if (report.details.length === 0) {
           return formatToolResult({ success: false, message: `No tax deductions flagged for ${year}; nothing to export.` });
         }
-        const resolvedPath = filePath.startsWith('~') ? filePath.replace('~', process.env.HOME ?? '') : filePath;
+        const resolvedPath = expandHome(filePath);
         try {
           if (fmt === 'csv') writeFileSync(resolvedPath, scheduleCToCsv(report));
           else await writeXlsxFile(scheduleCToSheets(report), resolvedPath);

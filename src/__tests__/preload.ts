@@ -15,7 +15,7 @@
 import { mock } from 'bun:test';
 import * as realOs from 'node:os';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 const testHome = join(realOs.tmpdir(), `wilson-test-home-${process.pid}`);
 mkdirSync(testHome, { recursive: true });
@@ -35,4 +35,8 @@ const shimDir = join(testHome, '.test-bin');
 mkdirSync(shimDir, { recursive: true });
 writeFileSync(join(shimDir, 'security'), '#!/bin/sh\necho "test preload: real keychain access is blocked in tests" >&2\nexit 44\n');
 chmodSync(join(shimDir, 'security'), 0o755);
-process.env.PATH = `${shimDir}:${process.env.PATH ?? ''}`;
+process.env.PATH = `${shimDir}${delimiter}${process.env.PATH ?? ''}`;
+
+// Same rule for the Linux keyring (secret-tool) and Windows DPAPI backends: tests that exercise them build their
+// own store via createSecretStore(); everything else sees a store that holds nothing.
+process.env.OA_SECRET_BACKEND ??= 'none';
