@@ -54,7 +54,7 @@ jobs:
 
       - name: Smoke (CLI entrypoint + CSV import + secret store)
         run: |
-          bun run src/index.tsx --version
+          # --version lands with #215 (feat/release-binaries-docker); --help until then.
           bun run src/index.tsx --help > /dev/null
           bun run scripts/smoke-cross-platform.ts
 
