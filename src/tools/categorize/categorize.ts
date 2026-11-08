@@ -7,9 +7,10 @@ import { CATEGORIES } from './categories.js';
 import { formatToolResult } from '../types.js';
 import { callLlm } from '../../model/llm.js';
 import { CALL_TYPE_CATEGORIZATION, getTaskModel } from '../../model/task-models.js';
-import { getCategorizationConfidenceThreshold } from '../../utils/config.js';
+import { getCategorizationConfidenceThreshold, getCategorizationConcurrency } from '../../utils/config.js';
 import { addPendingCategorizationReview, deletePendingCategorizationReview } from '../../db/categorization-review-queries.js';
 import { resolveProvider } from '../../providers.js';
+import { isModelLocal } from '../../model/locality.js';
 import { isConstrainedDecodingActive } from '../../model/providers/transformers.js';
 import { numberLiteralUnion } from '../literal-union.js';
 
@@ -111,7 +112,8 @@ const MAX_CONSECUTIVE_BATCH_FAILURES = 2;
 
 /**
  * Categorize tool — uses LLM to categorize uncategorized transactions.
- * Processes in batches of 50, updates the database, and returns a summary.
+ * Processes in batches of 50 (several in flight at once on cloud providers),
+ * updates the database, and returns a summary.
  */
 export const categorizeTool = defineTool({
   name: 'categorize',
@@ -206,21 +208,29 @@ export const categorizeTool = defineTool({
       }
     }
 
-    // 2. Process remaining in batches via LLM
-    const batchSize = resolveProvider(getTaskModel('categorization')).id === 'transformers' ? LOCAL_BATCH_SIZE : BATCH_SIZE;
+    // 2. Process remaining in batches via LLM, up to `concurrency` at a time.
+    // A cloud provider answers several requests at once; local Ollama only
+    // when the user opts in (see getCategorizationConcurrency); an in-process
+    // model is one pipeline, so it always runs one batch at a time.
+    const categorizationModel = getTaskModel('categorization');
+    const inProcess = resolveProvider(categorizationModel).id === 'transformers';
+    const batchSize = inProcess ? LOCAL_BATCH_SIZE : BATCH_SIZE;
     const batches = Math.ceil(needsLlm.length / batchSize);
-    const reportProgress = (batch: number, llmRowsHandled: number) =>
-      config?.onProgress?.({ done: ruleMatchCount + llmRowsHandled, total: uncategorized.length, batch, batches });
-    if (batches > 0) reportProgress(0, 0);
+    const concurrency = inProcess ? 1 : getCategorizationConcurrency(isModelLocal(categorizationModel));
+    let batchesDone = 0;
+    let llmRowsHandled = 0;
+    const reportProgress = () =>
+      config?.onProgress?.({ done: ruleMatchCount + llmRowsHandled, total: uncategorized.length, batch: batchesDone, batches });
+    if (batches > 0) reportProgress();
+    // Batches finish out of order: errors carry their batch number and are reported sorted.
+    const batchErrors: { batch: number; message: string }[] = [];
+    // Counted in completion order; once it trips, no new batch starts.
     let consecutiveFailures = 0;
-    let notAttempted = 0;
-    for (let i = 0; i < needsLlm.length; i += batchSize) {
-      if (consecutiveFailures >= MAX_CONSECUTIVE_BATCH_FAILURES) {
-        notAttempted = needsLlm.length - i;
-        break;
-      }
-      throwIfAborted();
-      const batch = needsLlm.slice(i, i + batchSize);
+    let nextStart = 0;
+
+    const runBatch = async (start: number) => {
+      const batchNo = start / batchSize + 1;
+      const batch = needsLlm.slice(start, start + batchSize);
       const inputs: CategorizationInput[] = batch.map((t: TransactionRow) => ({
         id: t.id,
         description: t.description,
@@ -259,11 +269,12 @@ export const categorizeTool = defineTool({
         // batch's transactions stay uncategorized.
         const categorizations = result.response.structured as { transactions: { id: number; category: string; confidence: number }[] };
 
-        // 4. Update categories in database
+        // 4. Update categories in database. bun:sqlite is synchronous, so a
+        // batch's writes run start to finish without another batch interleaving.
         for (const cat of categorizations.transactions) {
           // Whatever the provider enforced, an id outside this batch is never written.
           if (!batchIds.has(cat.id)) {
-            errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ignored id ${cat.id} not in batch`);
+            batchErrors.push({ batch: batchNo, message: `Batch ${batchNo}: ignored id ${cat.id} not in batch` });
             continue;
           }
           // Validate category: try DB lookup first, fall back to hardcoded list, then 'Other'
@@ -298,12 +309,31 @@ export const categorizeTool = defineTool({
         // A cancel is not a failed batch: stop the run (the caller reports it) instead of counting it.
         if (signal?.aborted || writeRevoked) throw err;
         consecutiveFailures++;
-        errors.push(
-          `Batch ${Math.floor(i / batchSize) + 1}: ${err instanceof Error ? err.message : String(err)}`
-        );
+        batchErrors.push({
+          batch: batchNo,
+          message: `Batch ${batchNo}: ${err instanceof Error ? err.message : String(err)}`,
+        });
       }
-      reportProgress(Math.floor(i / batchSize) + 1, i + batch.length);
-    }
+      batchesDone++;
+      llmRowsHandled += batch.length;
+      reportProgress();
+    };
+
+    const worker = async () => {
+      while (nextStart < needsLlm.length && consecutiveFailures < MAX_CONSECUTIVE_BATCH_FAILURES) {
+        throwIfAborted();
+        const start = nextStart;
+        nextStart += batchSize;
+        await runBatch(start);
+      }
+    };
+    // allSettled, not all: on a cancel, wait for the batches already in flight
+    // (each refuses to write once cancelled) so nothing lands after we return.
+    const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, batches) }, worker));
+    const rejected = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
+    if (rejected) throw rejected.reason;
+    const notAttempted = needsLlm.length - Math.min(nextStart, needsLlm.length);
+    errors.push(...batchErrors.sort((a, b) => a.batch - b.batch).map((e) => e.message));
 
     return formatToolResult({
       success: true,
