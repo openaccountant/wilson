@@ -14,7 +14,14 @@ if (import.meta.main) {
     console.error(`check-npm-pack: npm pack failed\n${run.stderr}`);
     process.exit(1);
   }
-  const [pack] = JSON.parse(run.stdout) as { files: { path: string }[]; unpackedSize: number; entryCount: number }[];
+  type PackResult = { files: { path: string }[]; unpackedSize: number; entryCount: number };
+  // npm <= 11 prints an array of results; npm 12 prints an object keyed by package name.
+  const parsed = JSON.parse(run.stdout) as PackResult[] | Record<string, PackResult>;
+  const pack = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+  if (!pack?.files) {
+    console.error(`check-npm-pack: unexpected npm pack --json output\n${run.stdout.slice(0, 500)}`);
+    process.exit(1);
+  }
   const problems = checkPackFiles(pack.files.map((f) => f.path), pack.unpackedSize);
   if (problems.length > 0) {
     console.error(`check-npm-pack: FAILED\n${problems.map((p) => `  - ${p}`).join('\n')}`);
