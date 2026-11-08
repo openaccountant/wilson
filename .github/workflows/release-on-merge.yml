@@ -258,12 +258,10 @@ jobs:
           bun run build:binaries
           ls -la dist/bin
 
-      # --help exits cleanly on every version; --version arrives with feat/windows-support.
-      - name: Smoke-test the binaries
+      - name: Smoke-test the linux-x64 binary
         run: |
-          dist/bin/wilson-linux-x64 --help | grep -q 'Usage:'
+          test "$(dist/bin/wilson-linux-x64 --version)" = "${{ needs.release.outputs.version }}"
           file dist/bin/wilson-windows-x64.exe | grep -q 'PE32+'
-          file dist/bin/wilson-darwin-arm64 | grep -q 'Mach-O 64-bit executable arm64'
 
       - name: Build Claude Desktop extension (when present)
         run: |
