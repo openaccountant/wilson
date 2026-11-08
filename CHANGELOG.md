@@ -1,5 +1,85 @@
 # Changelog
 
+## [v0.11.0] — 2026-11-08
+
+### Features
+
+- feat: restore wilson --version (kept on this branch per orchestrator) (763fe75)
+- feat(docker): home-server image and compose file (67a0270)
+- feat(dashboard): env-driven first boot for unattended servers (b9ee7a2)
+- feat(release): single-file binaries with the dashboard embedded (3f3ed9f)
+- feat(mcp): wilson mcp — stdio MCP server for Claude Desktop (ffa78dd)
+- feat(keychain): Windows DPAPI and Linux secret-tool backends with loud file fallback (7fb83a0)
+
+### Fixes
+
+- fix(release): embed dashboard /_app assets in compiled binaries (3dc8991)
+- fix(keychain): setSecret refuses db-encryption-* accounts (74246c2)
+- fix(db): skip a SQLCipher dylib built for another architecture (d1baea6)
+- fix(windows): run powershell, rundll32 and where by absolute System32 path (dcd787b)
+- fix(keychain): never mint a DB key when the keychain read failed (data loss) (22b73fe)
+- fix(mcp): re-check owner policy and kill switch on every call (717cebb)
+- fix(dashboard): never log the generated admin password (0abd0f8)
+- fix(mcp): contain import_file to the user's import folders (c7890b4)
+- fix(mcp): fail closed when a change cannot be confirmed (b8380b4)
+- fix(tools): resolve registry tools with literal requires (2d15b69)
+- fix(mcp): start the stdio server with --mcp-server, not a positional 'mcp' (22e10b5)
+- fix: Windows path, browser, fd lookup and cron assumptions (d81a600)
+- fix(db): verify SQLCipher by probe; platform hints when running unencrypted (5cdc0c0)
+- fix(webmcp): tools run when Chrome passes no options to execute (c148675)
+- fix(mcp): identical retries join the pending operation instead of stacking cards (7688c31)
+- fix(llm): Judge queue refreshes when an agent's card is decided (9486bb7)
+- fix(security): recorded LLM interactions are admin-only with auth on; no store rebind on profile switch (bf56ea5)
+- fix(dashboard): wilson --dashboard records Chat's LLM interactions (3b600af)
+- fix(agent): "this month" reaches transaction_search for Ollama models too (2fb45cc)
+- fix(dashboard): Ollama models in Settings -> Models say 'not installed — run ollama pull', not 'downloads on first use' (#196) (d1bd828)
+- fix(dashboard): 400 instead of 500 for bad judgement cursor and malformed policy path (a1d2c1b)
+- fix(review): queue shows only real decisions, honest empty state, clearer sign-in page (#191, #185, #193) (e388dda)
+- fix(chat): keep first turn in new sessions (#183); title sessions with the person's question (#194) (3c4bf5b)
+- fix(chat,settings): plain-language setup steps for a missing local model (#182, #189) (f6e5cf6)
+- perf(dashboard): split the UI build and serve hashed /_app/ assets (mobile LCP 4.8s -> 0.92s, NN-10) (ff2f264)
+- fix(import): generic CSV Debit/Credit — Amount fallback sign, 0.00 placeholders, blank rows (NN-07) (4a05e71)
+- fix(dashboard): non-object JSON bodies are 400; strengthen error-hygiene tests, drop wrong NN-07 tag (1cc2808)
+- fix(import): fall back to Amount column when split debit/credit cells are blank; update fixture expectations (57921f7)
+- fix(embeddings): enforce no-download in the engine behind allowDownload (ddb68e8)
+- fix(dashboard): compress assets and page off the event loop with async zlib; share in-flight jobs (9857d61)
+- fix(import): cap top-level bank/filename, share field caps with agent tool validators, reuse isRealCalendarDate (b14fbdf)
+- fix(dashboard): 400 for bad request bodies, generic 500 for unexpected errors (ae468f2)
+- fix(embeddings): never download the model or block a write on embed-on-write (7dd2c0d)
+- fix(dashboard): serve gzip/br for the inlined HTML and /assets/* (34de7c4)
+- fix(import): validate calendar dates, field lengths and category markup on /api/import rows (0d2fced)
+- fix(export): neutralise formula-leading date/amount cells in dashboard CSV export (b60e4f6)
+- fix(import): don't negate signed generic CSVs that are mostly deposits (45e7f77)
+- fix(import): split Debit/Credit CSV columns take precedence over amount detection (129c1da)
+- fix(seed-guard): resolve HOME with realpath before requiring /private/tmp/ (4cf9d44)
+- fix(dashboard): Escape dismisses a hover-opened tooltip (#208) (53d9b7d)
+- fix(dashboard): tooltip tap-close, reposition on scroll/resize, flip+clamp, hoverable bubble (#208) (bb489d9)
+- fix(llm): restore the Bun fetch-timeout opt-out for local calls (#209) (5b8fb75)
+- fix(llm): don't retry a local call that failed slowly, whatever the error (#209) (38fac05)
+- fix(llm): drop the Bun fetch-timeout workaround, it does nothing (#209) (fdf8e77)
+- fix(prelabel): an offline open-jev load is a cache read, not a download (#206) (c404983)
+- fix(llm): explicit local LLM timeout, no blind retry of local timeouts (#209) (cb09373)
+- fix(dashboard): real tooltip on the JEV chip instead of native title (#208) (bb0df27)
+- fix(prelabel): open-jev pin check works offline from the cached config.json (#207) (195900b)
+- fix(prelabel): a cached open-jev load is not reported as a download (#206) (c48cb87)
+- fix(categorize): fan out LLM batches with bounded concurrency (#202) (ecf4e86)
+
+### Other
+
+- Merge pull request #212 from openaccountant/release/0.10.1 (a3d12b8)
+- Merge pull request #216 from openaccountant/integration/0.10.1-easy-install (bcdad2e)
+- Merge feat/claude-desktop-extension into integration/0.10.1-easy-install (30ae3b5)
+- Merge feat/release-binaries-docker into integration/0.10.1-easy-install (ba2850a)
+- Merge feat/windows-support into integration/0.10.1-easy-install (a7131ce)
+- Revert "test(webmcp): allow the documented fill_transaction_filters schema change (category_id 0 = Uncategorized, #200)" (dd57df4)
+- Revert "test(dashboard): error-hygiene 500 case no longer relies on an unvalidated PATCH entity_id" (8301553)
+- Merge branch 'fix/llm-local-timeout' into release/0.10.1 (37bfbde)
+- Merge branch 'fix/jev-chip-tooltip' into release/0.10.1 (8245959)
+- Merge branch 'fix/openjev-offline-load' into release/0.10.1 (1fa0766)
+- Merge branch 'fix/categorize-fanout' into release/0.10.1 (5b79d2a)
+- Merge pull request #179 from openaccountant/build/npm-files-allowlist (0e27bbf)
+
+
 ## [v0.10.0] — 2026-10-22
 
 ### Features
