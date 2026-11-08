@@ -17,7 +17,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test --isolate",
     "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "build:binaries": "bun run scripts/build-binaries.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.58",

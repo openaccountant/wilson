@@ -1,6 +1,7 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
 import { getDashboardHtml } from './html.js';
+import { extractEmbeddedDir, readEmbeddedText } from '../utils/embedded-assets.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
   apiTransactions, apiSemanticSearch, apiExportCsv, apiExportXlsx, apiExportPnlCsv, apiExportNetWorthCsv,
@@ -84,8 +85,14 @@ function resolveBindHost(): string {
   return process.env.WILSON_DASHBOARD_HOST?.trim() || getGlobalAgentState().dashboardHost || LOOPBACK_DEFAULT;
 }
 
-/** Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup. */
+/**
+ * Bundle webmcp-bridge.ts into browser-runnable JS once, at server startup.
+ * A compiled binary has no source to bundle, so it carries the script prebuilt
+ * by scripts/build-binaries.ts instead.
+ */
 async function buildWebMcpBridgeScript(): Promise<string> {
+  const prebuilt = await readEmbeddedText('src/dashboard/webmcp-bridge.js');
+  if (prebuilt !== null) return prebuilt;
   try {
     const result = await Bun.build({
       entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
@@ -110,7 +117,8 @@ function injectWebMcpBridge(html: string, port: number): string {
 // ── Static hybrid-chat assets ───────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
-export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+export const DASHBOARD_ASSETS_DIR =
+  extractEmbeddedDir('src/dashboard/ui/dist-hybrid') ?? new URL('./ui/dist-hybrid/', import.meta.url).pathname;
 
 const ASSET_MIME_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
@@ -249,14 +257,17 @@ export async function startDashboardServer(db: Database, preferredPort?: number,
     );
   }
 
-  // Load the React dashboard build (single-file HTML), with fallback to legacy html.ts
-  let reactDashboardHtml: string | null = null;
-  try {
-    reactDashboardHtml = await Bun.file(
-      new URL('./ui/dist/index.html', import.meta.url)
-    ).text();
-  } catch {
-    // React build not available — fall back to legacy getDashboardHtml()
+  // Load the React dashboard build (single-file HTML): embedded in a compiled
+  // binary, else from the source tree, else fall back to legacy html.ts.
+  let reactDashboardHtml: string | null = await readEmbeddedText('src/dashboard/ui/dist/index.html');
+  if (reactDashboardHtml === null) {
+    try {
+      reactDashboardHtml = await Bun.file(
+        new URL('./ui/dist/index.html', import.meta.url)
+      ).text();
+    } catch {
+      // React build not available — fall back to legacy getDashboardHtml()
+    }
   }
 
   // Bundle the WebMCP bridge once at startup — deliberately independent of
