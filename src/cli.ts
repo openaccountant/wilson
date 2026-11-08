@@ -395,7 +395,10 @@ export async function runCli() {
   // Detect fd on PATH for @ fuzzy file search (faster, respects .gitignore)
   let fdPath: string | null = null;
   try {
-    fdPath = execFileSync('which', ['fd'], { encoding: 'utf-8' }).trim() || null;
+    // `where` is the Windows `which`; it may list several matches, one per line.
+    const finder = process.platform === 'win32' ? 'where' : 'which';
+    const found = execFileSync(finder, ['fd'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+    fdPath = found.split(/\r?\n/)[0]?.trim() || null;
   } catch {
     // fd not found — will fall back to directory-walking for @ file completion
   }

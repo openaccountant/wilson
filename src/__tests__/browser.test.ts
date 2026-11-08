@@ -28,7 +28,8 @@ describe('openBrowser', () => {
     execSpy = spyOn(childProcess, 'execFileSync').mockReturnValue(Buffer.from(''));
     openBrowser('https://test.example.com');
     const args = execSpy.mock.calls[0];
-    expect(args[1]).toEqual(['https://test.example.com']);
+    // The URL is always the last argv entry, never shell-joined (Windows prefixes the handler).
+    expect(args[1].at(-1)).toBe('https://test.example.com');
   });
 
   test('uses xdg-open on linux', () => {
@@ -41,12 +42,13 @@ describe('openBrowser', () => {
     else Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   });
 
-  test('uses cmd on windows', () => {
+  test('uses rundll32 on windows (cmd /c start would split URLs on &)', () => {
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     execSpy = spyOn(childProcess, 'execFileSync').mockReturnValue(Buffer.from(''));
     openBrowser('https://example.com');
-    expect(execSpy.mock.calls[0][0]).toBe('cmd');
+    expect(execSpy.mock.calls[0][0]).toBe('rundll32');
+    expect(execSpy.mock.calls[0][1]).toEqual(['url.dll,FileProtocolHandler', 'https://example.com']);
     if (origPlatform) Object.defineProperty(process, 'platform', origPlatform);
     else Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   });

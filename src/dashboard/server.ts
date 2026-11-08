@@ -1,5 +1,6 @@
 import type { Database } from '../db/compat-sqlite.js';
 import { resolve as resolvePath, sep as pathSep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getDashboardHtml } from './html.js';
 import {
   apiSummary, apiPnl, apiBudgets, apiCoverage, apiBudgetLimits, apiCategories, apiCategoryOptions, apiSpendingBreakdown, apiSpendingSeries, apiSavings, apiCashflowMonthly, apiAlerts,
@@ -88,7 +89,7 @@ function resolveBindHost(): string {
 async function buildWebMcpBridgeScript(): Promise<string> {
   try {
     const result = await Bun.build({
-      entrypoints: [new URL('./webmcp-bridge.ts', import.meta.url).pathname],
+      entrypoints: [fileURLToPath(new URL('./webmcp-bridge.ts', import.meta.url))],
       target: 'browser',
       minify: false,
     });
@@ -110,7 +111,8 @@ function injectWebMcpBridge(html: string, port: number): string {
 // ── Static hybrid-chat assets ───────────────────────────────────────────────
 
 /** Output of the hybrid vite build (`npm run build:hybrid` in src/dashboard/ui). */
-export const DASHBOARD_ASSETS_DIR = new URL('./ui/dist-hybrid/', import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows .pathname is `/C:/...`, and anywhere it keeps %20 for spaces.
+export const DASHBOARD_ASSETS_DIR = fileURLToPath(new URL('./ui/dist-hybrid/', import.meta.url));
 
 const ASSET_MIME_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
