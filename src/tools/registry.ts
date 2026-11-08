@@ -1,4 +1,3 @@
-import { createRequire } from 'module';
 import type { ToolDef } from '../model/types.js';
 import { discoverSkills } from '../skills/index.js';
 import { skillTool, SKILL_TOOL_DESCRIPTION } from './skill.js';
@@ -7,7 +6,6 @@ import { getCachedMcpTools } from '../mcp/adapter.js';
 import { mayMutate } from './mutation.js';
 import { logger } from '../utils/logger.js';
 
-const require = createRequire(import.meta.url);
 
 /**
  * A registered tool with its rich description for system prompt injection.
@@ -801,11 +799,16 @@ Search the web for current information on any topic.
 
 /**
  * Safely require a module, returning null if it doesn't exist yet.
- * Uses createRequire for ESM compatibility.
+ *
+ * Takes a thunk around a literal `require('./x.js')` rather than a path: the
+ * bundler only resolves a literal specifier, and a compiled binary
+ * (`bun build --compile`) has no source tree to resolve a runtime path
+ * against, so `require(modulePath)` there found nothing and the registry came
+ * back empty. Bun allows `require` in ES modules.
  */
-function safeRequire<T>(modulePath: string): T | null {
+function safeRequire<T>(load: () => unknown): T | null {
   try {
-    return require(modulePath) as T;
+    return load() as T;
   } catch {
     return null;
   }
@@ -827,7 +830,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
 
   // Always-available tools (gracefully skip if not yet implemented)
 
-  const csvMod = safeRequire<{ csvImportTool: ToolDef }>('./import/csv-import.js');
+  const csvMod = safeRequire<{ csvImportTool: ToolDef }>(() => require('./import/csv-import.js'));
   if (csvMod?.csvImportTool) {
     tools.push({
       name: 'csv_import',
@@ -837,7 +840,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   }
 
   if (process.env.MONARCH_TOKEN || (process.env.MONARCH_EMAIL && process.env.MONARCH_PASSWORD)) {
-    const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>('./import/monarch.js');
+    const monarchMod = safeRequire<{ monarchImportTool: ToolDef }>(() => require('./import/monarch.js'));
     if (monarchMod?.monarchImportTool) {
       tools.push({
         name: 'monarch_import',
@@ -848,7 +851,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   }
 
   if (process.env.FIREFLY_API_URL && process.env.FIREFLY_API_TOKEN) {
-    const fireflyMod = safeRequire<{ fireflyImportTool: ToolDef }>('./import/firefly.js');
+    const fireflyMod = safeRequire<{ fireflyImportTool: ToolDef }>(() => require('./import/firefly.js'));
     if (fireflyMod?.fireflyImportTool) {
       tools.push({
         name: 'firefly_import',
@@ -858,7 +861,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     }
   }
 
-  const catMod = safeRequire<{ categorizeTool: ToolDef }>('./categorize/categorize.js');
+  const catMod = safeRequire<{ categorizeTool: ToolDef }>(() => require('./categorize/categorize.js'));
   if (catMod?.categorizeTool) {
     tools.push({
       name: 'categorize',
@@ -867,7 +870,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const catManageMod = safeRequire<{ categoryManageTool: ToolDef }>('./categorize/category-manage.js');
+  const catManageMod = safeRequire<{ categoryManageTool: ToolDef }>(() => require('./categorize/category-manage.js'));
   if (catManageMod?.categoryManageTool) {
     tools.push({
       name: 'category_manage',
@@ -877,28 +880,28 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   }
 
   // Goals & Memory tools (always available)
-  const goalMod = safeRequire<{ goalManageTool: ToolDef }>('./goals/goal-manage.js');
+  const goalMod = safeRequire<{ goalManageTool: ToolDef }>(() => require('./goals/goal-manage.js'));
   if (goalMod?.goalManageTool) {
     tools.push({ name: 'goal_manage', tool: goalMod.goalManageTool, description: GOAL_MANAGE_DESCRIPTION });
   }
 
-  const memoryMod = safeRequire<{ memoryManageTool: ToolDef }>('./memory/memory-manage.js');
+  const memoryMod = safeRequire<{ memoryManageTool: ToolDef }>(() => require('./memory/memory-manage.js'));
   if (memoryMod?.memoryManageTool) {
     tools.push({ name: 'memory_manage', tool: memoryMod.memoryManageTool, description: MEMORY_MANAGE_DESCRIPTION });
   }
 
   // Entity management
-  const entityMod = safeRequire<{ entityManageTool: ToolDef }>('./entity/entity-manage.js');
+  const entityMod = safeRequire<{ entityManageTool: ToolDef }>(() => require('./entity/entity-manage.js'));
   if (entityMod?.entityManageTool) {
     tools.push({ name: 'entity_manage', tool: entityMod.entityManageTool, description: ENTITY_MANAGE_DESCRIPTION });
   }
 
-  const entityClassifyMod = safeRequire<{ entityClassifyTool: ToolDef }>('./entity/entity-classify.js');
+  const entityClassifyMod = safeRequire<{ entityClassifyTool: ToolDef }>(() => require('./entity/entity-classify.js'));
   if (entityClassifyMod?.entityClassifyTool) {
     tools.push({ name: 'entity_classify', tool: entityClassifyMod.entityClassifyTool, description: ENTITY_CLASSIFY_DESCRIPTION });
   }
 
-  const txnMod = safeRequire<{ transactionSearchTool: ToolDef }>('./query/transaction-search.js');
+  const txnMod = safeRequire<{ transactionSearchTool: ToolDef }>(() => require('./query/transaction-search.js'));
   if (txnMod?.transactionSearchTool) {
     tools.push({
       name: 'transaction_search',
@@ -907,17 +910,17 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const editTxnMod = safeRequire<{ editTransactionTool: ToolDef }>('./query/edit-transaction.js');
+  const editTxnMod = safeRequire<{ editTransactionTool: ToolDef }>(() => require('./query/edit-transaction.js'));
   if (editTxnMod?.editTransactionTool) {
     tools.push({ name: 'edit_transaction', tool: editTxnMod.editTransactionTool, description: EDIT_TRANSACTION_DESCRIPTION });
   }
 
-  const deleteTxnMod = safeRequire<{ deleteTransactionTool: ToolDef }>('./query/delete-transaction.js');
+  const deleteTxnMod = safeRequire<{ deleteTransactionTool: ToolDef }>(() => require('./query/delete-transaction.js'));
   if (deleteTxnMod?.deleteTransactionTool) {
     tools.push({ name: 'delete_transaction', tool: deleteTxnMod.deleteTransactionTool, description: DELETE_TRANSACTION_DESCRIPTION });
   }
 
-  const sumMod = safeRequire<{ spendingSummaryTool: ToolDef }>('./query/spending-summary.js');
+  const sumMod = safeRequire<{ spendingSummaryTool: ToolDef }>(() => require('./query/spending-summary.js'));
   if (sumMod?.spendingSummaryTool) {
     tools.push({
       name: 'spending_summary',
@@ -926,7 +929,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const anomMod = safeRequire<{ anomalyDetectTool: ToolDef }>('./query/anomaly-detect.js');
+  const anomMod = safeRequire<{ anomalyDetectTool: ToolDef }>(() => require('./query/anomaly-detect.js'));
   if (anomMod?.anomalyDetectTool) {
     tools.push({
       name: 'anomaly_detect',
@@ -935,7 +938,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const exportMod = safeRequire<{ exportTransactionsTool: ToolDef }>('./export/export-transactions.js');
+  const exportMod = safeRequire<{ exportTransactionsTool: ToolDef }>(() => require('./export/export-transactions.js'));
   if (exportMod?.exportTransactionsTool) {
     tools.push({
       name: 'export_transactions',
@@ -945,7 +948,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   }
 
   // Budget tools (always available)
-  const budgetSetMod = safeRequire<{ budgetSetTool: ToolDef }>('./budget/budget-set.js');
+  const budgetSetMod = safeRequire<{ budgetSetTool: ToolDef }>(() => require('./budget/budget-set.js'));
   if (budgetSetMod?.budgetSetTool) {
     tools.push({
       name: 'budget_set',
@@ -954,7 +957,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const budgetCheckMod = safeRequire<{ budgetCheckTool: ToolDef }>('./budget/budget-check.js');
+  const budgetCheckMod = safeRequire<{ budgetCheckTool: ToolDef }>(() => require('./budget/budget-check.js'));
   if (budgetCheckMod?.budgetCheckTool) {
     tools.push({
       name: 'budget_check',
@@ -963,7 +966,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const plaidMod = safeRequire<{ plaidSyncTool: ToolDef }>('./import/plaid-sync.js');
+  const plaidMod = safeRequire<{ plaidSyncTool: ToolDef }>(() => require('./import/plaid-sync.js'));
   if (plaidMod?.plaidSyncTool) {
     tools.push({
       name: 'plaid_sync',
@@ -972,7 +975,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const plaidBalMod = safeRequire<{ plaidBalancesTool: ToolDef }>('./import/plaid-balances.js');
+  const plaidBalMod = safeRequire<{ plaidBalancesTool: ToolDef }>(() => require('./import/plaid-balances.js'));
   if (plaidBalMod?.plaidBalancesTool) {
     tools.push({
       name: 'plaid_balances',
@@ -981,7 +984,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const plaidRecMod = safeRequire<{ plaidRecurringTool: ToolDef }>('./import/plaid-recurring.js');
+  const plaidRecMod = safeRequire<{ plaidRecurringTool: ToolDef }>(() => require('./import/plaid-recurring.js'));
   if (plaidRecMod?.plaidRecurringTool) {
     tools.push({
       name: 'plaid_recurring',
@@ -990,7 +993,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
     });
   }
 
-  const coinbaseMod = safeRequire<{ coinbaseSyncTool: ToolDef }>('./import/coinbase-sync.js');
+  const coinbaseMod = safeRequire<{ coinbaseSyncTool: ToolDef }>(() => require('./import/coinbase-sync.js'));
   if (coinbaseMod?.coinbaseSyncTool) {
     tools.push({
       name: 'coinbase_sync',
@@ -1000,75 +1003,75 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
   }
 
   // P&L tools
-  const pnlMod = safeRequire<{ profitLossTool: ToolDef }>('./query/profit-loss.js');
+  const pnlMod = safeRequire<{ profitLossTool: ToolDef }>(() => require('./query/profit-loss.js'));
   if (pnlMod?.profitLossTool) {
     tools.push({ name: 'profit_loss', tool: pnlMod.profitLossTool, description: PROFIT_LOSS_DESCRIPTION });
   }
 
-  const diffMod = safeRequire<{ profitDiffTool: ToolDef }>('./query/profit-diff.js');
+  const diffMod = safeRequire<{ profitDiffTool: ToolDef }>(() => require('./query/profit-diff.js'));
   if (diffMod?.profitDiffTool) {
     tools.push({ name: 'profit_diff', tool: diffMod.profitDiffTool, description: PROFIT_DIFF_DESCRIPTION });
   }
 
   // Rules engine
-  const ruleMod = safeRequire<{ ruleManageTool: ToolDef }>('./rules/rule-manage.js');
+  const ruleMod = safeRequire<{ ruleManageTool: ToolDef }>(() => require('./rules/rule-manage.js'));
   if (ruleMod?.ruleManageTool) {
     tools.push({ name: 'rule_manage', tool: ruleMod.ruleManageTool, description: RULE_MANAGE_DESCRIPTION });
   }
 
   // Tax tracking
-  const taxMod = safeRequire<{ taxFlagTool: ToolDef }>('./tax/tax-flag.js');
+  const taxMod = safeRequire<{ taxFlagTool: ToolDef }>(() => require('./tax/tax-flag.js'));
   if (taxMod?.taxFlagTool) {
     tools.push({ name: 'tax_flag', tool: taxMod.taxFlagTool, description: TAX_FLAG_DESCRIPTION });
   }
 
   // Savings rate
-  const savingsMod = safeRequire<{ savingsRateTool: ToolDef }>('./query/savings-rate.js');
+  const savingsMod = safeRequire<{ savingsRateTool: ToolDef }>(() => require('./query/savings-rate.js'));
   if (savingsMod?.savingsRateTool) {
     tools.push({ name: 'savings_rate', tool: savingsMod.savingsRateTool, description: SAVINGS_RATE_DESCRIPTION });
   }
 
   // Alerts
-  const alertMod = safeRequire<{ alertCheckTool: ToolDef }>('./query/alert-check.js');
+  const alertMod = safeRequire<{ alertCheckTool: ToolDef }>(() => require('./query/alert-check.js'));
   if (alertMod?.alertCheckTool) {
     tools.push({ name: 'alert_check', tool: alertMod.alertCheckTool, description: ALERT_CHECK_DESCRIPTION });
   }
 
   // Report generation
-  const reportMod = safeRequire<{ generateReportTool: ToolDef }>('./export/generate-report.js');
+  const reportMod = safeRequire<{ generateReportTool: ToolDef }>(() => require('./export/generate-report.js'));
   if (reportMod?.generateReportTool) {
     tools.push({ name: 'generate_report', tool: reportMod.generateReportTool, description: GENERATE_REPORT_DESCRIPTION });
   }
 
   // Net worth tools
-  const acctMod = safeRequire<{ accountManageTool: ToolDef }>('./net-worth/account-manage.js');
+  const acctMod = safeRequire<{ accountManageTool: ToolDef }>(() => require('./net-worth/account-manage.js'));
   if (acctMod?.accountManageTool) {
     tools.push({ name: 'account_manage', tool: acctMod.accountManageTool, description: ACCOUNT_MANAGE_DESCRIPTION });
   }
 
-  const balMod = safeRequire<{ balanceUpdateTool: ToolDef }>('./net-worth/balance-update.js');
+  const balMod = safeRequire<{ balanceUpdateTool: ToolDef }>(() => require('./net-worth/balance-update.js'));
   if (balMod?.balanceUpdateTool) {
     tools.push({ name: 'balance_update', tool: balMod.balanceUpdateTool, description: BALANCE_UPDATE_DESCRIPTION });
   }
 
-  const nwMod = safeRequire<{ netWorthTool: ToolDef }>('./net-worth/net-worth.js');
+  const nwMod = safeRequire<{ netWorthTool: ToolDef }>(() => require('./net-worth/net-worth.js'));
   if (nwMod?.netWorthTool) {
     tools.push({ name: 'net_worth', tool: nwMod.netWorthTool, description: NET_WORTH_DESCRIPTION });
   }
 
-  const mortMod = safeRequire<{ mortgageManageTool: ToolDef }>('./net-worth/mortgage-manage.js');
+  const mortMod = safeRequire<{ mortgageManageTool: ToolDef }>(() => require('./net-worth/mortgage-manage.js'));
   if (mortMod?.mortgageManageTool) {
     tools.push({ name: 'mortgage_manage', tool: mortMod.mortgageManageTool, description: MORTGAGE_MANAGE_DESCRIPTION });
   }
 
-  const linkMod = safeRequire<{ linkTransactionsTool: ToolDef }>('./net-worth/link-transactions.js');
+  const linkMod = safeRequire<{ linkTransactionsTool: ToolDef }>(() => require('./net-worth/link-transactions.js'));
   if (linkMod?.linkTransactionsTool) {
     tools.push({ name: 'link_transactions', tool: linkMod.linkTransactionsTool, description: LINK_TRANSACTIONS_DESCRIPTION });
   }
 
   // Conditional: web_search (if any search API key is configured)
   if (process.env.EXASEARCH_API_KEY) {
-    const mod = safeRequire<{ exaSearch: ToolDef }>('./search/exa.js');
+    const mod = safeRequire<{ exaSearch: ToolDef }>(() => require('./search/exa.js'));
     if (mod?.exaSearch) {
       tools.push({
         name: 'web_search',
@@ -1077,7 +1080,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       });
     }
   } else if (process.env.PERPLEXITY_API_KEY) {
-    const mod = safeRequire<{ perplexitySearch: ToolDef }>('./search/perplexity.js');
+    const mod = safeRequire<{ perplexitySearch: ToolDef }>(() => require('./search/perplexity.js'));
     if (mod?.perplexitySearch) {
       tools.push({
         name: 'web_search',
@@ -1086,7 +1089,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       });
     }
   } else if (process.env.TAVILY_API_KEY) {
-    const mod = safeRequire<{ tavilySearch: ToolDef }>('./search/tavily.js');
+    const mod = safeRequire<{ tavilySearch: ToolDef }>(() => require('./search/tavily.js'));
     if (mod?.tavilySearch) {
       tools.push({
         name: 'web_search',
@@ -1095,7 +1098,7 @@ export async function getToolRegistry(model: string): Promise<RegisteredTool[]> 
       });
     }
   } else if (process.env.BRAVE_API_KEY) {
-    const mod = safeRequire<{ braveSearch: ToolDef }>('./search/brave.js');
+    const mod = safeRequire<{ braveSearch: ToolDef }>(() => require('./search/brave.js'));
     if (mod?.braveSearch) {
       tools.push({
         name: 'web_search',
