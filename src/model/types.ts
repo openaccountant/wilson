@@ -48,6 +48,19 @@ export interface ToolDef<TSchema extends z.ZodType = z.ZodType> {
    * when any of them is.
    */
   usesTools?: readonly string[];
+  /**
+   * What the approval card shows for a call, when that differs from the raw
+   * args: a remote MCP tool shows the payload after the egress guard
+   * scrubbed it (src/mcp/egress.ts), i.e. exactly what will be sent.
+   */
+  approvalArgs?: (args: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * Every call that needs approval is asked on its own: the card has no "don't ask again" option and a
+   * session approval never covers it (src/tools/mutation.ts::sessionApprovalScope). Set on remote MCP
+   * tools, whose arguments are free text sent to a third party, so approving one payload must not
+   * approve the next. Calls that need no approval (read-only short lookups) are unaffected.
+   */
+  approveEachCall?: boolean;
 }
 
 export type MutationFlag = boolean | ((args: Record<string, unknown>) => boolean);
