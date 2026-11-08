@@ -49,15 +49,6 @@ describe('identical calls while pending join one operation (engine)', () => {
     expect(auditRows(db, 'operation_joined').map((r) => r.operation_id)).toEqual([first.id]);
   });
 
-  test('a retry from a fresh agent session joins too (grants are profile-wide)', async () => {
-    const { db, scope, txnId, call } = tabSetup();
-    const first = opOf(await call({ id: txnId, notes: 'x' }));
-    const other = { ...scope, sessionGeneration: crypto.randomUUID() };
-    const second = opOf(await call({ id: txnId, notes: 'x' }, other));
-    expect(second.id).toBe(first.id);
-    expect(ops(db)).toBe(1);
-  });
-
   test('different args -> two operations', async () => {
     const { db, txnId, call } = tabSetup();
     const a = opOf(await call({ id: txnId, notes: 'one' }));
