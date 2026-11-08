@@ -25,6 +25,10 @@ export interface WorkerModelConfig {
   catalogDtype: string | null;
   /** Catalog first-use download size ('~3.6GB'), shown while the weights download; absent/null when unknown. */
   downloadSize?: string | null;
+  /** 40-hex Hub commit to load every file from; absent/null loads `main` (older servers). */
+  revision?: string | null;
+  /** Keep model weights in Cross-Origin Storage when the browser has it (specs/model-manager.md M4). */
+  crossOriginStorage?: boolean;
 }
 
 /** Speed Showdown single-row categorization (callbacks cannot cross postMessage). */
@@ -35,7 +39,18 @@ export interface WorkerCategorizeOpts {
 
 export type MainToWorker =
   /** origin = window.location.origin (absolute: a blob worker has no usable relative base). */
-  | { t: 'init'; v: typeof HYBRID_PROTOCOL_VERSION; origin: string; model: WorkerModelConfig }
+  | {
+      t: 'init';
+      v: typeof HYBRID_PROTOCOL_VERSION;
+      origin: string;
+      model: WorkerModelConfig;
+      /**
+       * A MessagePort (transferred) serving the page's Cross-Origin Storage
+       * (cos-bridge.ts), for when COS exists on the page but not in the worker
+       * (the COS browser extension). Sent only when the model enables COS.
+       */
+      cosPort?: unknown;
+    }
   | { t: 'probe'; id: number }
   | { t: 'load'; id: number }
   | { t: 'bundleAnswer'; id: number; runId: number; query: string; bundleText: string; today: string }
@@ -46,7 +61,12 @@ export type MainToWorker =
    * mirror side. It is the worker's only data access.
    */
   | ({ t: 'subagentRun'; id: number; runId: number; port: unknown } & SubagentRunInput)
-  | { t: 'cancel'; runId: number };
+  | { t: 'cancel'; runId: number }
+  /** Model weight cache inspection and cleanup (specs/model-manager.md M4). */
+  | { t: 'cacheStats'; id: number }
+  | { t: 'cacheClear'; id: number; repo: string; revision?: string }
+  /** Fixed-prompt benchmark of the loaded model (M6). Loads it first if needed. */
+  | { t: 'bench'; id: number };
 
 export type WorkerErrorPhase = LoadPhase | 'generate' | 'protocol' | 'cancelled';
 
@@ -78,6 +98,44 @@ export interface LoadResult {
   /** True iff this call initiated the model load. */
   loadFresh: boolean;
   dtype: string | null;
+  /** How the weights were served on this load (absent from engines without the model cache). */
+  cache?: LoadCacheReport;
+}
+
+/** Per-load cache report: which store served each file, and whether storage is persistent. */
+export interface LoadCacheReport {
+  hits: { cos: number; cache: number; migrated: number };
+  misses: number;
+  /** Bytes written to COS / the Cache API during this load. */
+  storedBytes: { cos: number; cache: number };
+  /** COS was usable for this load (flag on and the API present). */
+  cosActive: boolean;
+  /** navigator.storage.persist() outcome; null when the API is missing. */
+  persisted: boolean | null;
+}
+
+/** M6 benchmark result. Stored by the main thread under benchStorageKey(). */
+export interface BenchResult {
+  repo: string;
+  revision: string | null;
+  dtype: string | null;
+  loadMs: number;
+  /** The weights were already cached when the benchmark's load ran. */
+  cached: boolean | null;
+  firstTokenMs: number;
+  decodeTokPerSec: number;
+  promptTokens: number;
+  newTokens: number;
+  adapter: { vendor: string | null; architecture: string | null; shaderF16: boolean | null };
+  transformersVersion: string | null;
+  /** ISO time the benchmark finished. */
+  at: string;
+}
+
+export const BENCH_STORAGE_PREFIX = 'wilson-bench:v1:';
+
+export function benchStorageKey(repo: string, revision: string | null | undefined, dtype: string | null | undefined): string {
+  return `${BENCH_STORAGE_PREFIX}${repo}@${revision ?? 'main'}:${dtype ?? 'auto'}`;
 }
 export interface CategorizeResult {
   raw: string;
@@ -240,7 +298,9 @@ function isModelConfig(x: unknown): x is WorkerModelConfig {
     x.repo.length > 0 &&
     isStr(x.displayName) &&
     (x.catalogDtype === null || isStr(x.catalogDtype)) &&
-    (x.downloadSize === undefined || x.downloadSize === null || isStr(x.downloadSize))
+    (x.downloadSize === undefined || x.downloadSize === null || isStr(x.downloadSize)) &&
+    (x.revision === undefined || x.revision === null || (isStr(x.revision) && /^[0-9a-f]{40}$/.test(x.revision))) &&
+    (x.crossOriginStorage === undefined || typeof x.crossOriginStorage === 'boolean')
   );
 }
 
@@ -248,7 +308,12 @@ export function isMainToWorker(x: unknown): x is MainToWorker {
   if (!isRecord(x)) return false;
   switch (x.t) {
     case 'init':
-      return x.v === HYBRID_PROTOCOL_VERSION && isStr(x.origin) && isModelConfig(x.model);
+      return (
+        x.v === HYBRID_PROTOCOL_VERSION &&
+        isStr(x.origin) &&
+        isModelConfig(x.model) &&
+        (x.cosPort === undefined || (typeof x.cosPort === 'object' && x.cosPort !== null))
+      );
     case 'probe':
     case 'load':
       return isNum(x.id);
@@ -270,6 +335,11 @@ export function isMainToWorker(x: unknown): x is MainToWorker {
       );
     case 'cancel':
       return isNum(x.runId);
+    case 'cacheStats':
+    case 'bench':
+      return isNum(x.id);
+    case 'cacheClear':
+      return isNum(x.id) && isStr(x.repo) && x.repo.length > 0 && (x.revision === undefined || isStr(x.revision));
     default:
       return false;
   }

@@ -46,7 +46,7 @@ export type TransformersDevice = 'webgpu' | 'cpu';
 /** A resolved dtype, or `'auto'` when nothing better could be determined offline. */
 export type ResolvedDtype = OnnxDtype | 'auto';
 
-/** File suffix → dtype, mirroring DEFAULT_DTYPE_SUFFIX_MAPPING in transformers.js 4.3.0. */
+/** File suffix → dtype, mirroring DEFAULT_DTYPE_SUFFIX_MAPPING in transformers.js 4.3.x. */
 const SUFFIX_TO_DTYPE: Record<string, OnnxDtype> = {
   '': 'fp32',
   _fp16: 'fp16',
@@ -207,6 +207,11 @@ export interface HubRequestOptions {
    * repos.
    */
   hubToken?: string;
+  /**
+   * Hub commit to read metadata at (specs/model-manager.md M2). Absent = `main`.
+   * Pinned loads must resolve against the same revision they download.
+   */
+  revision?: string;
 }
 
 /** HTTP statuses that mean "this repo does not exist or you may not read it" — not an outage. */
@@ -253,17 +258,19 @@ async function fetchRepoMetadata(
   fetchImpl: DtypeFetch,
   hubUrl: string | undefined,
   hubToken: string | undefined,
+  revision?: string,
 ): Promise<RepoOnnxMetadata> {
   const hub = hubBase(hubUrl);
   const encoded = encodeRepo(repo);
   const init = hubInit(hubToken);
+  const rev = revision ? encodeURIComponent(revision) : null;
 
   // Both requests in parallel: the api/models response carries the file list,
   // but (verified 2026-10) not `transformers.js_config`, so config.json is
   // fetched alongside it. A config.json failure is non-fatal.
   const [apiRes, cfgRes] = await Promise.all([
-    fetchImpl(`${hub}/api/models/${encoded}`, init),
-    fetchImpl(`${hub}/${encoded}/resolve/main/config.json`, init).catch(() => null),
+    fetchImpl(rev ? `${hub}/api/models/${encoded}/revision/${rev}` : `${hub}/api/models/${encoded}`, init),
+    fetchImpl(`${hub}/${encoded}/resolve/${rev ?? 'main'}/config.json`, init).catch(() => null),
   ]);
   // 401/403/404: the repo is missing, private or gated — a definitive answer,
   // not an outage. Anything else (429, 5xx) is treated like a network failure.
@@ -294,12 +301,13 @@ async function fetchRepoMetadata(
  * 401/403/404, and with a plain Error on network failures, 429 and 5xx.
  */
 export function getRepoOnnxMetadata(repo: string, opts: HubRequestOptions = {}): Promise<RepoOnnxMetadata> {
-  const cached = metadataCache.get(repo);
+  const key = opts.revision ? `${repo}@${opts.revision}` : repo;
+  const cached = metadataCache.get(key);
   if (cached) return cached;
   const fetchImpl = opts.fetchImpl ?? (globalThis.fetch as unknown as DtypeFetch);
-  const p = fetchRepoMetadata(repo, fetchImpl, opts.hubUrl, opts.hubToken);
-  metadataCache.set(repo, p);
-  p.catch(() => metadataCache.delete(repo));
+  const p = fetchRepoMetadata(repo, fetchImpl, opts.hubUrl, opts.hubToken, opts.revision);
+  metadataCache.set(key, p);
+  p.catch(() => metadataCache.delete(key));
   return p;
 }
 

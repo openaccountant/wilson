@@ -24,17 +24,20 @@ import { isCorruptModelFileError } from '../../../../model/transformers-dtype.js
  * Bump when dtype resolution or load semantics change in a way that should
  * invalidate 'failed' verdicts persisted by older builds.
  * v1 (implicit, unkeyed): hardcoded fp16. v2: shared resolver + keyed verdicts.
+ * v3: revision-pinned loads (specs/model-manager.md M2); the key carries the revision.
  */
-export const HYBRID_RESOLVER_VERSION = 2;
+export const HYBRID_RESOLVER_VERSION = 3;
 
 /** The config fields a verdict depends on (subset of /api/config/local-chat). */
 export interface CapabilityConfig {
   repo: string;
   dtype?: string | null;
+  /** Pinned Hub commit; an update to a new revision re-probes the model. */
+  revision?: string | null;
 }
 
 export function capabilityKey(cfg: CapabilityConfig): string {
-  return `v${HYBRID_RESOLVER_VERSION}|${cfg.repo}|${cfg.dtype ?? 'resolve'}`;
+  return `v${HYBRID_RESOLVER_VERSION}|${cfg.repo}@${cfg.revision ?? 'main'}|${cfg.dtype ?? 'resolve'}`;
 }
 
 /** What sessionStorage holds. Older builds wrote `{ verdict, repo }` with no key. */

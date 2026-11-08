@@ -51,15 +51,19 @@ import {
 import { parseCategorizationDecision, type ParsedDecision } from '../demo/core.js';
 import { isOnnxDtype, type DtypeFetch } from '../../../../model/transformers-dtype.js';
 import { createModelEngine, type ProgressCb, type TransformersModule } from './model-engine.js';
+import { requestPersistentStorage, type PersistResult } from './model-cache.js';
 import {
   asWorkerError,
   createInThreadBackend,
   createWorkerBackend,
   type ModelBackend,
+  type ModelCacheStats,
   type WorkerLike,
 } from './model-backend.js';
 import {
+  benchStorageKey,
   clampSubagentLimits,
+  type BenchResult,
   workerErrorToCause,
   type RouteHint,
   type LoadResult,
@@ -78,6 +82,7 @@ import {
   type ToolChoice,
 } from './openjev-route.js';
 import { IN_TAB_PREPARING_LABEL } from './load-progress.js';
+import { openPageCosBridge } from './cos-bridge.js';
 import {
   capabilityKey,
   classifyLoadFailure,
@@ -147,6 +152,10 @@ export interface LocalChatConfigResponse {
   downloadSize: string;
   /** Catalog-pinned ONNX dtype (e.g. 'q4f16'); null → resolve from the Hub file list. */
   dtype?: string | null;
+  /** 40-hex Hub commit the files load from (absent/null from older servers = `main`). */
+  revision?: string | null;
+  /** Browser weight cache options (absent from older servers = Cache API only). */
+  cache?: { crossOriginStorage?: boolean };
   bundle: BundleParams;
   /**
    * Whether the server's chat model (and the task models its tools call) run on this machine (serverChatModelInfo).
@@ -214,6 +223,8 @@ function modelConfigOf(cfg: LocalChatConfigResponse): WorkerModelConfig {
     displayName: cfg.displayName,
     catalogDtype: isOnnxDtype(cfg.dtype) ? cfg.dtype : null,
     downloadSize: typeof cfg.downloadSize === 'string' ? cfg.downloadSize : null,
+    revision: typeof cfg.revision === 'string' && /^[0-9a-f]{40}$/.test(cfg.revision) ? cfg.revision : null,
+    crossOriginStorage: cfg.cache?.crossOriginStorage === true,
   };
 }
 
@@ -234,7 +245,7 @@ export function createHybridChat(opts: HybridOpts) {
         base || origin,
       );
     } else if (opts.createWorker) {
-      backendInstance = createWorkerBackend({ createWorker: opts.createWorker, origin });
+      backendInstance = createWorkerBackend({ createWorker: opts.createWorker, origin, cosBridge: () => openPageCosBridge() });
     } else backendInstance = null;
     return backendInstance;
   }
@@ -460,7 +471,8 @@ export function createHybridChat(opts: HybridOpts) {
     if (!cfg || !backend) return null;
 
     try {
-      const loaded = await backend.load(onProgress);
+      const [loaded, storage] = await Promise.all([backend.load(onProgress), persistOnce()]);
+      if (loaded.cache && !storage.unsupported) loaded.cache.persisted = storage.persisted;
       provenRepo = cfg.repo;
       lastLoadError = null;
       failureDetail = null;
@@ -890,11 +902,76 @@ export function createHybridChat(opts: HybridOpts) {
     markModelLost();
   }
 
+  // ── Model manager (specs/model-manager.md M4–M6) ─────────────────────────
+
+  /** Forget the cached config so a changed Browser model setting is picked up on the next use. */
+  async function refreshConfig(): Promise<LocalChatConfigResponse | null> {
+    configPromise = null;
+    return loadConfig();
+  }
+
+  // navigator.storage.persist() exists only on Window (not in workers), so the main thread asks.
+  let persistPromise: Promise<PersistResult> | null = null;
+  function persistOnce(): Promise<PersistResult> {
+    persistPromise ??= requestPersistentStorage((globalThis.navigator as { storage?: Parameters<typeof requestPersistentStorage>[0] } | undefined)?.storage);
+    return persistPromise;
+  }
+
+  async function cacheStats(): Promise<ModelCacheStats | null> {
+    const backend = getBackend();
+    if (!backend?.cacheStats || !(await loadConfig())) return null;
+    const [stats, storage] = await Promise.all([backend.cacheStats(), persistOnce()]);
+    return { ...stats, persisted: storage.unsupported ? stats.persisted : storage.persisted };
+  }
+
+  async function cacheClear(repo: string, revision?: string): Promise<{ removed: number } | null> {
+    const backend = getBackend();
+    if (!backend?.cacheClear || !(await loadConfig())) return null;
+    const result = await backend.cacheClear(repo, revision);
+    if (repo === provenRepo) {
+      readyOn = null;
+      setModelStatus({ state: 'idle' });
+    }
+    return result;
+  }
+
+  /** Run the benchmark on the configured model and keep the result in localStorage (M-D8). */
+  async function bench(onProgress?: ProgressCb): Promise<BenchResult | null> {
+    const cfg = await loadConfig();
+    const backend = getBackend();
+    if (!cfg || !backend?.bench) return null;
+    const [result] = await Promise.all([backend.bench(onProgress), persistOnce()]);
+    provenRepo = cfg.repo;
+    readyOn = backend;
+    setModelStatus({ state: 'ready' });
+    try {
+      localStorage.setItem(benchStorageKey(result.repo, result.revision, result.dtype), JSON.stringify(result));
+    } catch {
+      // private mode / quota: the result is still returned
+    }
+    return result;
+  }
+
+  /** The last stored benchmark for a model, or null. */
+  function lastBench(repo: string, revision: string | null, dtype: string | null): BenchResult | null {
+    try {
+      const raw = localStorage.getItem(benchStorageKey(repo, revision, dtype));
+      return raw ? (JSON.parse(raw) as BenchResult) : null;
+    } catch {
+      return null;
+    }
+  }
+
   return {
     probe,
     loadModel,
     tryLocal,
     categorizeSample,
+    refreshConfig,
+    cacheStats,
+    cacheClear,
+    bench,
+    lastBench,
     /** Current in-tab model status (HybridOpts.onModelStatus reports each change). */
     getModelStatus: (): InTabModelStatus => modelStatus,
     dispose,
