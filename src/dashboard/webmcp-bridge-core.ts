@@ -83,7 +83,7 @@ export interface RegistrableTool {
   description: string;
   inputSchema: unknown;
   annotations?: unknown;
-  execute: (args: Record<string, unknown>, options: { signal: AbortSignal }) => Promise<unknown>;
+  execute: (args: Record<string, unknown>, options?: { signal?: AbortSignal }) => Promise<unknown>;
 }
 
 /** Where the tab is right now: which tab shows, and whether React has mounted a handler for a page tool. */

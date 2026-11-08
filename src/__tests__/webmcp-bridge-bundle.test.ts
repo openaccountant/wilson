@@ -334,6 +334,19 @@ async function until(predicate: () => boolean, ms = 1000) {
 describe('page tools through the served bridge bundle', () => {
   const GRANT = ['open_tab', 'open_transaction', 'list_review_items', 'search_transactions'];
 
+  // Chrome 156.0.8078.74 calls execute(args) with no options object: open_tab failed with
+  // "Cannot read properties of undefined (reading 'signal')".
+  test('a tool runs when Chrome passes no options to execute', async () => {
+    const { registered, win } = await bootBridge({ tools: GRANT, expectRegistered: 3 });
+    const registry = (win as any).__wilsonPageTools;
+    registry.setActiveTab('overview');
+    mountHandler(registry, 'open_tab', 'global', async (args) => ({ tab: args.tab }));
+    await until(() => registered.has('open_tab'));
+    expect(await (registered.get('open_tab')!.execute as any)({ tab: 'transactions' })).toEqual({ tab: 'transactions' });
+    const search = (await (registered.get('search_transactions')!.execute as any)({ query: 'groceries' })) as any;
+    expect(search?.error).toBeUndefined();
+  });
+
   test('a tab tool is registered only while its tab shows and its handler is mounted; a global tool needs just its handler', async () => {
     const { registered, win } = await bootBridge({ tools: GRANT, expectRegistered: 1 });
     const registry = (win as any).__wilsonPageTools;
