@@ -5,7 +5,7 @@ import { describe, expect, test, beforeEach, mock } from 'bun:test';
 let store: Map<string, string>;
 let keychainAvailable = true;
 
-const mockSetSecret = mock((account: string, secret: string) => {
+const mockSetSecret = mock((account: string, secret: string, _opts?: { requireSecure?: boolean }) => {
   if (!keychainAvailable) return false;
   store.set(account, secret);
   return true;
@@ -73,6 +73,8 @@ describe('encryption-key', () => {
     expect(mockSetSecret).toHaveBeenCalledWith(
       `db-encryption-${PROFILE}`,
       expect.stringMatching(/^[0-9a-f]{64}$/),
+      // Never the plaintext-file fallback: the key must live apart from the DB it encrypts.
+      { requireSecure: true },
     );
   });
 

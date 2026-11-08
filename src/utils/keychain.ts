@@ -1,65 +1,420 @@
 import { execFileSync } from 'child_process';
-import { platform } from 'os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { homedir, platform as osPlatform } from 'os';
+import { join } from 'path';
 import { logger } from './logger.js';
 
 const SERVICE = 'openaccountant';
 
 /**
- * Store a secret in the OS keychain.
- * Uses macOS Keychain (security CLI), with a logged warning on unsupported platforms.
+ * OS secret storage, one backend per platform:
+ *
+ *   darwin  → macOS Keychain via the `security` CLI (unchanged since 0.9; no file fallback).
+ *   win32   → DPAPI (CurrentUser scope) via Windows PowerShell. The ciphertext lives in
+ *             ~/.openaccountant/secrets/<account>.dpapi; only this Windows user on this machine
+ *             can decrypt it. Same protection class as Credential Manager (which is DPAPI too),
+ *             with no native FFI and no npm dependency.
+ *   linux   → libsecret via `secret-tool` (GNOME Keyring / KWallet) when it is installed and a
+ *             Secret Service is reachable.
+ *
+ * When the platform store is unavailable (Linux without a keyring, Windows without PowerShell)
+ * secrets fall back to a plaintext file with 0600 perms under ~/.openaccountant/secrets/, and a
+ * one-time warning is printed. Degrade loudly, never silently.
+ *
+ * `OA_SECRET_BACKEND` forces a backend: auto (default) | keychain | dpapi | secret-tool | file | none.
+ * `file` is the sane choice for headless Linux and containers; `none` disables secret storage.
  */
-export function setSecret(account: string, secret: string): boolean {
-  if (platform() !== 'darwin') {
-    logger.info('keychain:unsupported', { platform: platform(), account });
-    return false;
-  }
 
-  try {
-    // Delete existing entry if it exists (ignore errors)
+export type SecretBackendName = 'keychain' | 'dpapi' | 'secret-tool' | 'file' | 'none';
+
+/** Minimal process runner, injectable so tests can fake `security` / `secret-tool` / PowerShell. */
+export type ExecFn = (
+  file: string,
+  args: string[],
+  opts: { input?: string; timeoutMs?: number },
+) => string;
+
+export interface SecretBackend {
+  readonly name: SecretBackendName;
+  /** Whether a secret written here is protected by the OS (not a plaintext file). */
+  readonly secure: boolean;
+  set(account: string, secret: string): boolean;
+  get(account: string): string | null;
+  delete(account: string): boolean;
+}
+
+export interface SecretStoreOptions {
+  platform?: NodeJS.Platform;
+  /** Directory that holds wilson state (default ~/.openaccountant). */
+  oaRoot?: string;
+  exec?: ExecFn;
+  env?: Record<string, string | undefined>;
+  /** Called once per store, the first time a secret lands in the plaintext file fallback. */
+  warn?: (message: string) => void;
+}
+
+export interface SetSecretOptions {
+  /**
+   * Refuse the plaintext-file fallback. For secrets whose whole point is to live apart from
+   * the data they protect (the database encryption key).
+   */
+  requireSecure?: boolean;
+}
+
+export interface SecretStore {
+  /** Backend that is tried first. */
+  readonly primary: SecretBackend;
+  set(account: string, secret: string, opts?: SetSecretOptions): boolean;
+  get(account: string): string | null;
+  delete(account: string): boolean;
+}
+
+const defaultExec: ExecFn = (file, args, opts) =>
+  execFileSync(file, args, {
+    input: opts.input,
+    encoding: 'utf-8',
+    stdio: 'pipe',
+    timeout: opts.timeoutMs,
+    windowsHide: true,
+  });
+
+/** Map an account name to a safe, reversible file name on every OS. */
+export function accountFileStem(account: string): string {
+  return account.replace(/[^A-Za-z0-9._-]/g, (c) =>
+    [...Buffer.from(c, 'utf-8')].map((b) => `%${b.toString(16).padStart(2, '0').toUpperCase()}`).join(''),
+  );
+}
+
+// ── macOS Keychain ──────────────────────────────────────────────────────────
+
+/** The original 0.9 implementation, kept call-for-call identical. */
+export function macKeychainBackend(exec: ExecFn = defaultExec): SecretBackend {
+  return {
+    name: 'keychain',
+    secure: true,
+    set(account, secret) {
+      try {
+        // Delete existing entry if it exists (ignore errors)
+        try {
+          exec('security', ['delete-generic-password', '-s', SERVICE, '-a', account], {});
+        } catch { /* entry may not exist */ }
+
+        exec('security', [
+          'add-generic-password', '-s', SERVICE, '-a', account, '-w', secret, '-U',
+        ], {});
+        return true;
+      } catch (err) {
+        logger.info('keychain:set:error', { account, error: String(err) });
+        return false;
+      }
+    },
+    get(account) {
+      try {
+        const result = exec('security', ['find-generic-password', '-s', SERVICE, '-a', account, '-w'], {});
+        return result.trim();
+      } catch {
+        return null;
+      }
+    },
+    delete(account) {
+      try {
+        exec('security', ['delete-generic-password', '-s', SERVICE, '-a', account], {});
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+// ── Windows DPAPI ───────────────────────────────────────────────────────────
+
+/**
+ * PowerShell programs. The secret travels base64 over stdin/stdout, never argv (process
+ * listings) and never through the console code page (which would mangle non-ASCII).
+ * Entropy binds the blobs to wilson so another DPAPI consumer can't decrypt them by accident.
+ */
+const PS_PRELUDE =
+  "$ErrorActionPreference='Stop';" +
+  'Add-Type -AssemblyName System.Security;' +
+  "$e=[Text.Encoding]::UTF8.GetBytes('openaccountant');" +
+  '$b=[Convert]::FromBase64String([Console]::In.ReadToEnd().Trim());';
+const PS_PROTECT =
+  PS_PRELUDE +
+  '$o=[Security.Cryptography.ProtectedData]::Protect($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser);' +
+  '[Console]::Out.Write([Convert]::ToBase64String($o))';
+const PS_UNPROTECT =
+  PS_PRELUDE +
+  '$o=[Security.Cryptography.ProtectedData]::Unprotect($b,$e,[Security.Cryptography.DataProtectionScope]::CurrentUser);' +
+  '[Console]::Out.Write([Convert]::ToBase64String($o))';
+
+function encodePs(script: string): string {
+  return Buffer.from(script, 'utf16le').toString('base64');
+}
+
+function runPowerShell(exec: ExecFn, script: string, inputB64: string): string {
+  return exec(
+    'powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodePs(script)],
+    { input: inputB64, timeoutMs: 30_000 },
+  ).trim();
+}
+
+export function windowsDpapiBackend(secretsDir: string, exec: ExecFn = defaultExec): SecretBackend {
+  const pathFor = (account: string) => join(secretsDir, `${accountFileStem(account)}.dpapi`);
+  return {
+    name: 'dpapi',
+    secure: true,
+    set(account, secret) {
+      try {
+        const blob = runPowerShell(exec, PS_PROTECT, Buffer.from(secret, 'utf-8').toString('base64'));
+        if (!blob) throw new Error('DPAPI returned no ciphertext');
+        ensurePrivateDir(secretsDir);
+        writeFileSync(pathFor(account), blob, { mode: 0o600 });
+        return true;
+      } catch (err) {
+        logger.info('keychain:dpapi:set:error', { account, error: String(err) });
+        return false;
+      }
+    },
+    get(account) {
+      const p = pathFor(account);
+      if (!existsSync(p)) return null;
+      try {
+        const out = runPowerShell(exec, PS_UNPROTECT, readFileSync(p, 'utf-8').trim());
+        return Buffer.from(out, 'base64').toString('utf-8');
+      } catch (err) {
+        logger.info('keychain:dpapi:get:error', { account, error: String(err) });
+        return null;
+      }
+    },
+    delete(account) {
+      const p = pathFor(account);
+      if (!existsSync(p)) return false;
+      rmSync(p, { force: true });
+      return true;
+    },
+  };
+}
+
+// ── Linux libsecret ─────────────────────────────────────────────────────────
+
+export function secretToolBackend(exec: ExecFn = defaultExec): SecretBackend {
+  const attrs = (account: string) => ['service', SERVICE, 'account', account];
+  // secret-tool missing (ENOENT) never gets better within a process; stop spawning it.
+  let missing = false;
+  const run = (args: string[], input?: string): string => {
+    if (missing) throw new Error('secret-tool not installed');
     try {
-      execFileSync('security', [
-        'delete-generic-password', '-s', SERVICE, '-a', account,
-      ], { stdio: 'pipe' });
-    } catch { /* entry may not exist */ }
+      return exec('secret-tool', args, { input, timeoutMs: 20_000 });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') missing = true;
+      throw err;
+    }
+  };
+  return {
+    name: 'secret-tool',
+    secure: true,
+    set(account, secret) {
+      try {
+        run(['store', '--label', `Open Accountant (${account})`, ...attrs(account)], secret);
+        return true;
+      } catch (err) {
+        logger.info('keychain:secret-tool:set:error', { account, error: String(err) });
+        return false;
+      }
+    },
+    get(account) {
+      try {
+        // lookup exits 1 when nothing matches. It only appends a newline when stdout is a
+        // TTY, so a piped result is the exact secret — don't trim (PEM keys end in \n).
+        const out = run(['lookup', ...attrs(account)]);
+        return out === '' ? null : out;
+      } catch {
+        return null;
+      }
+    },
+    delete(account) {
+      try {
+        run(['clear', ...attrs(account)]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
 
-    execFileSync('security', [
-      'add-generic-password', '-s', SERVICE, '-a', account, '-w', secret, '-U',
-    ], { stdio: 'pipe' });
-    return true;
-  } catch (err) {
-    logger.info('keychain:set:error', { account, error: String(err) });
-    return false;
+// ── Plaintext file fallback ─────────────────────────────────────────────────
+
+function ensurePrivateDir(dir: string): void {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
+}
+
+export function fileBackend(secretsDir: string): SecretBackend {
+  const pathFor = (account: string) => join(secretsDir, `${accountFileStem(account)}.secret`);
+  return {
+    name: 'file',
+    secure: false,
+    set(account, secret) {
+      try {
+        ensurePrivateDir(secretsDir);
+        const p = pathFor(account);
+        writeFileSync(p, secret, { mode: 0o600 });
+        // writeFileSync's mode only applies on create; tighten a pre-existing file too.
+        chmodSync(p, 0o600);
+        return true;
+      } catch (err) {
+        logger.info('keychain:file:set:error', { account, error: String(err) });
+        return false;
+      }
+    },
+    get(account) {
+      const p = pathFor(account);
+      if (!existsSync(p)) return null;
+      try {
+        return readFileSync(p, 'utf-8');
+      } catch {
+        return null;
+      }
+    },
+    delete(account) {
+      const p = pathFor(account);
+      if (!existsSync(p)) return false;
+      rmSync(p, { force: true });
+      return true;
+    },
+  };
+}
+
+const noneBackend: SecretBackend = {
+  name: 'none',
+  secure: false,
+  set: () => false,
+  get: () => null,
+  delete: () => false,
+};
+
+// ── Store ───────────────────────────────────────────────────────────────────
+
+function primaryFor(
+  platform: NodeJS.Platform,
+  forced: string | undefined,
+  secretsDir: string,
+  exec: ExecFn,
+): SecretBackend {
+  switch (forced) {
+    case 'keychain': return macKeychainBackend(exec);
+    case 'dpapi': return windowsDpapiBackend(secretsDir, exec);
+    case 'secret-tool': return secretToolBackend(exec);
+    case 'file': return fileBackend(secretsDir);
+    case 'none': return noneBackend;
   }
+  if (platform === 'darwin') return macKeychainBackend(exec);
+  if (platform === 'win32') return windowsDpapiBackend(secretsDir, exec);
+  if (platform === 'linux' || platform === 'freebsd' || platform === 'openbsd') return secretToolBackend(exec);
+  return fileBackend(secretsDir);
+}
+
+const defaultWarn = (message: string) => {
+  process.stderr.write(`\n[wilson] WARNING: ${message}\n`);
+};
+
+export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
+  const platform = opts.platform ?? osPlatform();
+  const env = opts.env ?? process.env;
+  const exec = opts.exec ?? defaultExec;
+  const secretsDir = join(opts.oaRoot ?? join(homedir(), '.openaccountant'), 'secrets');
+  const forced = env.OA_SECRET_BACKEND && env.OA_SECRET_BACKEND !== 'auto' ? env.OA_SECRET_BACKEND : undefined;
+  const primary = primaryFor(platform, forced, secretsDir, exec);
+  const warn = opts.warn ?? defaultWarn;
+
+  // macOS keeps its 0.9 contract exactly: Keychain or nothing. Forced backends and the
+  // insecure backends themselves get no second tier either.
+  const fallback: SecretBackend | null =
+    platform !== 'darwin' && !forced && primary.secure ? fileBackend(secretsDir) : null;
+
+  let warned = false;
+  const warnOnce = (backend: SecretBackend) => {
+    if (warned) return;
+    warned = true;
+    const why =
+      primary === backend
+        ? `OA_SECRET_BACKEND=${backend.name}`
+        : `the OS secret store (${primary.name}) is unavailable`;
+    const msg =
+      `Secrets are being stored in plaintext files under ${secretsDir} (permissions 0600) because ` +
+      `${why}. Anyone with access to your user account can read them.` +
+      (platform === 'linux' ? ' Install libsecret-tools (secret-tool) and a keyring to fix this.' : '');
+    logger.warn('keychain:insecure-fallback', { dir: secretsDir, primary: primary.name });
+    warn(msg);
+  };
+
+  return {
+    primary,
+    set(account, secret, setOpts = {}) {
+      if (primary.secure || !setOpts.requireSecure) {
+        if (primary.set(account, secret)) {
+          if (!primary.secure) warnOnce(primary);
+          // A stale plaintext copy from an earlier fallback must not outlive the secure one.
+          fallback?.delete(account);
+          return true;
+        }
+      }
+      if (!fallback || setOpts.requireSecure) {
+        if (platform !== 'darwin') logger.info('keychain:unavailable', { platform, account, backend: primary.name });
+        return false;
+      }
+      if (!fallback.set(account, secret)) return false;
+      warnOnce(fallback);
+      return true;
+    },
+    get(account) {
+      return primary.get(account) ?? fallback?.get(account) ?? null;
+    },
+    delete(account) {
+      const a = primary.delete(account);
+      const b = fallback?.delete(account) ?? false;
+      return a || b;
+    },
+  };
+}
+
+let defaultStore: SecretStore | null = null;
+
+function store(): SecretStore {
+  if (!defaultStore) defaultStore = createSecretStore();
+  return defaultStore;
+}
+
+/** Test hook: swap the process-wide store (null resets to a fresh default on next use). */
+export function _setSecretStoreForTesting(s: SecretStore | null): void {
+  defaultStore = s;
+}
+
+/** Name of the backend secrets are written to first on this machine. */
+export function secretBackendName(): SecretBackendName {
+  return store().primary.name;
 }
 
 /**
- * Retrieve a secret from the OS keychain.
+ * Store a secret in the OS secret store (see the module comment for the per-platform backend).
+ * Returns false when it could not be stored anywhere acceptable.
+ */
+export function setSecret(account: string, secret: string, opts?: SetSecretOptions): boolean {
+  return store().set(account, secret, opts);
+}
+
+/**
+ * Retrieve a secret from the OS secret store.
  */
 export function getSecret(account: string): string | null {
-  if (platform() !== 'darwin') return null;
-
-  try {
-    const result = execFileSync('security', [
-      'find-generic-password', '-s', SERVICE, '-a', account, '-w',
-    ], { stdio: 'pipe', encoding: 'utf-8' });
-    return result.trim();
-  } catch {
-    return null;
-  }
+  return store().get(account);
 }
 
 /**
- * Delete a secret from the OS keychain.
+ * Delete a secret from the OS secret store.
  */
 export function deleteSecret(account: string): boolean {
-  if (platform() !== 'darwin') return false;
-
-  try {
-    execFileSync('security', [
-      'delete-generic-password', '-s', SERVICE, '-a', account,
-    ], { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
+  return store().delete(account);
 }

@@ -31,7 +31,9 @@ export function getEncryptionKey(profileName: string): string | null {
  */
 export function initEncryptionKey(profileName: string): string | null {
   const key = randomBytes(32).toString('hex');
-  if (!setSecret(keyAccount(profileName), key)) {
+  // Never in the plaintext-file fallback: a key stored next to the database it encrypts
+  // protects nothing.
+  if (!setSecret(keyAccount(profileName), key, { requireSecure: true })) {
     return null;
   }
   return key;
