@@ -1,0 +1,160 @@
+name: Docker smoke
+
+# End-to-end check of the home-server image and docker-compose.yml on a clean
+# Linux runner: build, boot, healthcheck, the React dashboard + a JS asset,
+# login enforced on a 0.0.0.0 bind, and data surviving restart and recreate.
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker-compose.yml
+      - docker/**
+      - package.json
+      - bun.lock
+      - src/dashboard/**
+      - src/index.tsx
+      - .github/workflows/docker-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: smoke
+      WILSON_LAN_HOSTS: wilson.test
+      BASE: http://localhost:3141
+      PWFILE: /data/.openaccountant/profiles/default/initial-admin-password
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate compose files (both profiles)
+        run: |
+          docker compose config -q
+          docker compose --profile local-ai config -q
+          docker compose --profile local-ai config --services | sort | tr '\n' ' ' | grep -q 'ollama ollama-pull wilson'
+
+      - name: Build
+        run: docker compose build
+
+      - name: Up
+        run: docker compose up -d
+
+      - name: Wait for healthy
+        run: &wait |
+          for _ in $(seq 1 60); do
+            s=$(docker inspect -f '{{.State.Health.Status}}' smoke-wilson-1 2>/dev/null || echo missing)
+            echo "health: $s"
+            [ "$s" = healthy ] && exit 0
+            sleep 3
+          done
+          docker compose logs wilson
+          exit 1
+
+      - name: First boot created an admin, and the log never shows its password
+        run: |
+          PW=$(docker compose exec -T wilson cat "$PWFILE" | tr -d '\r\n')
+          test ${#PW} -ge 20
+          echo "::add-mask::$PW"
+          echo "PW=$PW" >> "$GITHUB_ENV"
+          docker compose logs wilson > boot.log 2>&1
+          cat boot.log
+          if grep -qF "$PW" boot.log; then echo "generated password leaked into the log"; exit 1; fi
+          grep -qF 'docker compose exec wilson cat' boot.log
+
+      - name: Dashboard serves the React UI and a JS asset
+        run: |
+          curl -fsS "$BASE/" -o index.html
+          grep -q '<title>Wilson Dashboard</title>' index.html
+          grep -q 'src="/webmcp-bridge.js"' index.html
+          ct=$(curl -fsS -o bridge.js -w '%{content_type}' "$BASE/webmcp-bridge.js")
+          echo "webmcp-bridge.js: $(wc -c < bridge.js) bytes, $ct"
+          echo "$ct" | grep -q javascript
+          test "$(wc -c < bridge.js)" -gt 10000
+
+      - name: Login is enforced on the 0.0.0.0 bind
+        run: |
+          curl -fsS "$BASE/api/auth/status" | tee status.json
+          grep -q '"authEnabled":true' status.json
+          grep -q '"userCount":1' status.json
+          # No token: data routes are refused.
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/transactions")" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/summary")" = 401
+          # Wrong password is refused.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"wrong-password"}' "$BASE/api/auth/login")" = 401
+          # Setup is closed: an admin exists (400), and on a LAN bind it is loopback-only anyway (403).
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' \
+            -d '{"username":"evil","password":"evil-password"}' "$BASE/api/auth/setup")
+          echo "setup: $code"; case "$code" in 400|403) ;; *) exit 1 ;; esac
+          # DNS-rebinding guard: unknown Host refused, WILSON_LAN_HOSTS name allowed.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: attacker.example:3141' "$BASE/")" = 421
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: wilson.test:3141' "$BASE/")" = 200
+
+      - name: Sign in, write data, and the password file is consumed
+        run: |
+          TOKEN=$(curl -fsS -H 'Content-Type: application/json' \
+            -d "{\"username\":\"admin\",\"password\":\"$PW\"}" "$BASE/api/auth/login" | jq -r .token)
+          test -n "$TOKEN" && test "$TOKEN" != null
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$BASE/api/transactions")" = 200
+          curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"username":"persist-check","password":"persist-check-pw","role":"viewer"}' "$BASE/api/auth/users"
+          if docker compose exec -T wilson test -e "$PWFILE"; then echo "password file still present after sign-in"; exit 1; fi
+
+      - name: Restart the container
+        run: docker compose restart wilson
+
+      - name: Wait for healthy (after restart)
+        run: *wait
+
+      - name: Data persisted across restart
+        run: &persisted |
+          TOKEN=$(curl -fsS -H 'Content-Type: application/json' \
+            -d "{\"username\":\"admin\",\"password\":\"$PW\"}" "$BASE/api/auth/login" | jq -r .token)
+          curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/auth/users" | tee users.json
+          jq -e 'map(.username) | index("persist-check") != null' users.json
+          curl -fsS "$BASE/api/auth/status" | grep -q '"authEnabled":true'
+
+      - name: Recreate the container (volume kept)
+        run: |
+          docker compose down
+          docker compose up -d
+
+      - name: Wait for healthy (after recreate)
+        run: *wait
+
+      - name: Data persisted across recreate
+        run: *persisted
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  # The release job pushes amd64 + arm64; prove both build (arm64 under QEMU). No push.
+  multi-arch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

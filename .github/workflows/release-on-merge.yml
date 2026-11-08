@@ -35,6 +35,9 @@ jobs:
     runs-on: ubuntu-latest
     # Push events only; skip release commits to prevent infinite loops
     if: ${{ github.event_name == 'push' && !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    outputs:
+      # Empty when no release was cut (bump=none); the binaries and docker jobs key off it.
+      version: ${{ steps.version.outputs.version }}
     steps:
       # The default GITHUB_TOKEN cannot bypass the main-branch ruleset, so the
       # release commit/tag are pushed with a token minted for the release-bot
@@ -239,3 +242,95 @@ jobs:
             --title "docs: update for Open Accountant CLI v${VERSION}" \
             --body-file /tmp/release-notes.md \
           || echo "::warning::Could not create docs issue — is DOCS_ISSUE_TOKEN configured?"
+
+  # Single-file executables + Claude Desktop extension, attached to the release
+  # cut above. A separate job so a failure here can never block npm publishing.
+  binaries:
+    needs: release
+    if: ${{ needs.release.outputs.version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Every target cross-compiles from Linux (Bun fetches each target's runtime).
+      - name: Build binaries
+        run: |
+          bun install --frozen-lockfile
+          bun run build:binaries
+          ls -la dist/bin
+
+      - name: Smoke-test the linux-x64 binary
+        run: |
+          test "$(dist/bin/wilson-linux-x64 --version)" = "${{ needs.release.outputs.version }}"
+          file dist/bin/wilson-windows-x64.exe | grep -q 'PE32+'
+
+      - name: Build Claude Desktop extension (when present)
+        run: |
+          if [ -f scripts/build-mcpb.ts ]; then
+            # Reads the binaries in dist/bin (linux ones too with --linux); needs network for bunx mcpb.
+            bun run build:mcpb --linux
+            cp dist/wilson.mcpb dist/bin/wilson.mcpb
+          else
+            echo "scripts/build-mcpb.ts not on this branch; skipping wilson.mcpb"
+          fi
+
+      # SHA256SUMS.txt lists the five binaries (+ wilson.mcpb when built), sha256sum format.
+      - name: Checksums and upload to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: dist/bin
+        run: |
+          shopt -s nullglob
+          assets=(wilson-* wilson.mcpb)
+          sha256sum "${assets[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          gh release upload "$TAG" "${assets[@]}" SHA256SUMS.txt --clobber
+
+  # Multi-arch image for home servers: ghcr.io/openaccountant/wilson:<version> and :latest.
+  docker:
+    needs: release
+    if: ${{ needs.release.outputs.version != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/openaccountant/wilson:${{ needs.release.outputs.version }}
+            ghcr.io/openaccountant/wilson:latest
+          labels: |
+            org.opencontainers.image.version=${{ needs.release.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
