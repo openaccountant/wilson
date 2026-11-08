@@ -19,18 +19,18 @@ describe('profile/context', () => {
   test('resolveProfile returns correct paths for default', () => {
     const paths = resolveProfile('default');
     expect(paths.name).toBe('default');
-    expect(paths.root).toEndWith('/profiles/default');
-    expect(paths.database).toEndWith('/profiles/default/data.db');
-    expect(paths.settings).toEndWith('/profiles/default/settings.json');
-    expect(paths.scratchpad).toEndWith('/profiles/default/scratchpad');
-    expect(paths.cache).toEndWith('/profiles/default/cache');
+    expect(paths.root).toEndWith(join('profiles', 'default'));
+    expect(paths.database).toEndWith(join('profiles', 'default', 'data.db'));
+    expect(paths.settings).toEndWith(join('profiles', 'default', 'settings.json'));
+    expect(paths.scratchpad).toEndWith(join('profiles', 'default', 'scratchpad'));
+    expect(paths.cache).toEndWith(join('profiles', 'default', 'cache'));
   });
 
   test('resolveProfile returns correct paths for named profile', () => {
     const paths = resolveProfile('business');
     expect(paths.name).toBe('business');
-    expect(paths.root).toEndWith('/profiles/business');
-    expect(paths.database).toEndWith('/profiles/business/data.db');
+    expect(paths.root).toEndWith(join('profiles', 'business'));
+    expect(paths.database).toEndWith(join('profiles', 'business', 'data.db'));
   });
 
   test('ensureProfileDir creates directory tree', () => {

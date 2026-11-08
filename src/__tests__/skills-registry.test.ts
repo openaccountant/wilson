@@ -83,7 +83,7 @@ describe('skills/registry', () => {
       metadataSpy = spyOn(skillLoader, 'extractSkillMetadata');
 
       existsSpy.mockImplementation((p: any) => {
-        const pathStr = String(p);
+        const pathStr = String(p).replace(/\\/g, '/'); // Windows separators -> /
         // The user skills directory exists
         if (pathStr.endsWith('.openaccountant/skills')) return true;
         // The category subdirectory exists (for recursion)
@@ -96,7 +96,7 @@ describe('skills/registry', () => {
       });
 
       readdirSpy.mockImplementation((dirPath: any, _opts?: any) => {
-        const pathStr = String(dirPath);
+        const pathStr = String(dirPath).replace(/\\/g, '/'); // Windows separators -> /
         if (pathStr.endsWith('.openaccountant/skills')) {
           return [{ name: 'personal', isDirectory: () => true, isFile: () => false }];
         }
@@ -145,7 +145,7 @@ describe('skills/registry', () => {
 
       const origExists = existsSpy.getMockImplementation() ?? fs.existsSync;
       existsSpy.mockImplementation((p: any) => {
-        const pathStr = String(p);
+        const pathStr = String(p).replace(/\\/g, '/'); // Windows separators -> /
         if (pathStr.includes('paid-test-skill') && pathStr.endsWith('SKILL.md')) return true;
         // For skills directories, ensure the project skills dir "exists"
         if (pathStr.endsWith('.openaccountant/skills')) return true;
@@ -155,7 +155,7 @@ describe('skills/registry', () => {
 
       // When scanning the project skills directory, return our fake paid skill dir entry
       readdirSpy.mockImplementation((dirPath: any, opts?: any) => {
-        const pathStr = String(dirPath);
+        const pathStr = String(dirPath).replace(/\\/g, '/'); // Windows separators -> /
         if (pathStr.endsWith('.openaccountant/skills')) {
           return [{ name: 'paid-test-skill', isDirectory: () => true, isFile: () => false }];
         }

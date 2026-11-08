@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,7 +67,7 @@ describe('build:hybrid enforces scripts/check-hybrid-build.ts', () => {
 });
 
 // scripts/ sits outside tsconfig's rootDir (src), so load it through a computed specifier.
-const gatePath = new URL('../../scripts/check-hybrid-build.ts', import.meta.url).pathname;
+const gatePath = fileURLToPath(new URL('../../scripts/check-hybrid-build.ts', import.meta.url));
 const { checkHybridBuild, mainThreadPart } = (await import(gatePath)) as {
   checkHybridBuild(input: { indexHtml: string; hybridJs: string; hybridEntries: string[] }): string[];
   mainThreadPart(hybridJs: string): string | null;

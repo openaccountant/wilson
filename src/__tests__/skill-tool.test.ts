@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { describe, expect, test, beforeEach, afterAll, spyOn } from 'bun:test';
 import { ensureTestProfile } from './helpers.js';
 import * as skillsIndex from '../skills/index.js';
@@ -139,7 +140,8 @@ describe('skillTool', () => {
     ]);
 
     const result = await skillTool.func({ skill: 'categorize-guide' });
-    expect(result).toContain('/home/user/skills/categorize/category-taxonomy.md');
+    // resolve(): on Windows the absolute path gains a drive letter and backslashes.
+    expect(result).toContain(resolve('/home/user/skills/categorize/category-taxonomy.md'));
     expect(result).not.toContain('./category-taxonomy.md');
   });
 
