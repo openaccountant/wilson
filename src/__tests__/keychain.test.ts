@@ -7,6 +7,7 @@ import {
   createSecretStore,
   type ExecFn,
 } from '../utils/keychain.js';
+import { POWERSHELL, windowsSystemBinary } from '../utils/windows-bin.js';
 
 interface Call { file: string; args: string[]; input?: string }
 
@@ -43,7 +44,9 @@ afterEach(() => {
   rmSync(oaRoot, { recursive: true, force: true });
 });
 
-const baseOpts = () => ({ oaRoot, env: {}, warn: (m: string) => warnings.push(m) });
+const PS_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+// powershellPath is injected so DPAPI tests run on any host; the resolver itself is tested below.
+const baseOpts = () => ({ oaRoot, env: {}, warn: (m: string) => warnings.push(m), powershellPath: PS_ABS });
 const secretsDir = () => join(oaRoot, 'secrets');
 
 describe('macOS keychain backend', () => {
@@ -193,7 +196,8 @@ describe('Windows DPAPI backend', () => {
   // test can check the plumbing (base64 over stdin, ciphertext file) without Windows.
   const fakeDpapi = () =>
     fakeExec(({ file, args, input }) => {
-      expect(file).toBe('powershell.exe');
+      // Absolute System32 path, never a bare name a planted exe could shadow.
+      expect(file).toBe(PS_ABS);
       const script = Buffer.from(args[args.indexOf('-EncodedCommand') + 1]!, 'base64').toString('utf16le');
       const bytes = Buffer.from(input!.trim(), 'base64');
       expect(script).toContain('ProtectedData');
@@ -225,12 +229,43 @@ describe('Windows DPAPI backend', () => {
     expect(store.get('plaid-item')).toBeNull();
   });
 
-  test('missing PowerShell falls back to the plaintext file, loudly', () => {
+  test('PowerShell present but failing to spawn falls back to the plaintext file, loudly', () => {
     const { exec } = fakeExec(() => enoent());
     const store = createSecretStore({ ...baseOpts(), platform: 'win32', exec });
     expect(store.set('plaid-item', 'tok')).toBe(true);
     expect(store.get('plaid-item')).toBe('tok');
     expect(warnings).toHaveLength(1);
+  });
+});
+
+describe('Windows PowerShell resolution (binary planting)', () => {
+  test('resolves under %SystemRoot%\\System32, never by bare name', () => {
+    const seen: string[] = [];
+    const p = windowsSystemBinary(POWERSHELL, { env: { SystemRoot: 'D:\\WINNT' }, exists: (x: string) => { seen.push(x); return true; } });
+    expect(p).toBe('D:\\WINNT\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+    expect(seen).toEqual([p!]);
+    expect(windowsSystemBinary(POWERSHELL, { env: {}, exists: () => true })).toBe(PS_ABS);
+  });
+
+  test('missing from System32: fail closed, no secret, no plaintext file, nothing spawned', () => {
+    const { exec, calls } = fakeExec(() => '');
+    const store = createSecretStore({ ...baseOpts(), platform: 'win32', exec, powershellPath: null });
+    expect(store.set('plaid-item', 'tok')).toBe(false);
+    expect(store.create('plaid-item', 'tok').status).toBe('failed');
+    expect(store.get('plaid-item')).toBeNull();
+    expect(calls).toHaveLength(0);
+    expect(existsSync(secretsDir())).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('not found');
+  });
+
+  test('the default store resolves PowerShell itself (absolute path) when none is injected', () => {
+    const { exec, calls } = fakeExec(() => Buffer.from('x').toString('base64'));
+    const { powershellPath: _drop, ...opts } = baseOpts();
+    const store = createSecretStore({ ...opts, platform: 'win32', exec, env: { SystemRoot: 'C:\\Windows' } });
+    store.set('a', 'b');
+    if (process.platform === 'win32') expect(calls[0]!.file).toBe(PS_ABS);
+    else expect(calls).toHaveLength(0); // no System32 on this host: closed, not a PATH lookup
   });
 });
 
@@ -274,7 +309,10 @@ describe('accountFileStem', () => {
 // The real thing, on the Windows CI runner: Windows PowerShell + DPAPI, no fakes.
 describe.skipIf(process.platform !== 'win32')('Windows DPAPI (real PowerShell)', () => {
   test('set / get / delete round-trip', () => {
-    const store = createSecretStore({ ...baseOpts(), platform: 'win32' });
+    // Default resolution: %SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe.
+    const { powershellPath: _drop, ...opts } = baseOpts();
+    const store = createSecretStore({ ...opts, env: { SystemRoot: process.env.SystemRoot }, platform: 'win32' });
+    expect(store.primary.brokenReason).toBeUndefined();
     const secret = `wilson-ci-${Date.now()}-ünïcödé`;
     expect(store.set('ci-roundtrip', secret)).toBe(true);
     expect(warnings).toEqual([]);

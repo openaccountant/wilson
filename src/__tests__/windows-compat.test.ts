@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { browserCommand } from '../utils/browser.js';
+import { WHERE, windowsSystemBinary } from '../utils/windows-bin.js';
 import { noticeUnencryptedOnce } from '../db/database.js';
 import { syncCrontab } from '../schedule/cron.js';
 import { DASHBOARD_ASSETS_DIR } from '../dashboard/server.js';
@@ -15,10 +16,21 @@ describe('browserCommand', () => {
     expect(browserCommand(url, 'linux')).toEqual(['xdg-open', [url]]);
   });
 
-  test('Windows avoids cmd so & in a query string survives', () => {
-    const [cmd, args] = browserCommand(url, 'win32');
-    expect(cmd).toBe('rundll32');
+  test('Windows avoids cmd (so & survives) and runs rundll32 by absolute System32 path', () => {
+    const [cmd, args] = browserCommand(url, 'win32', (rel) => windowsSystemBinary(rel, { env: {}, exists: () => true }))!;
+    expect(cmd).toBe('C:\\Windows\\System32\\rundll32.exe');
     expect(args).toEqual(['url.dll,FileProtocolHandler', url]);
+  });
+
+  test('Windows without System32 rundll32 opens nothing rather than search PATH', () => {
+    expect(browserCommand(url, 'win32', () => null)).toBeNull();
+  });
+
+  test('where.exe resolves under System32 too', () => {
+    expect(windowsSystemBinary(WHERE, { env: { SystemRoot: 'C:\\Windows' }, exists: () => true })).toBe(
+      'C:\\Windows\\System32\\where.exe',
+    );
+    expect(windowsSystemBinary(WHERE, { env: {}, exists: () => false })).toBeNull();
   });
 });
 

@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { homedir, platform as osPlatform } from 'os';
 import { join } from 'path';
 import { logger } from './logger.js';
+import { POWERSHELL, windowsSystemBinary } from './windows-bin.js';
 
 const SERVICE = 'openaccountant';
 
@@ -56,6 +57,11 @@ export interface SecretBackend {
   readonly name: SecretBackendName;
   /** Whether a secret written here is protected by the OS (not a plaintext file). */
   readonly secure: boolean;
+  /**
+   * Set when the backend can't work and must NOT be papered over by the plaintext fallback
+   * (e.g. Windows PowerShell missing from System32: something is wrong with the machine).
+   */
+  readonly brokenReason?: string;
   /** Create or replace. */
   set(account: string, secret: string): boolean;
   read(account: string): SecretRead;
@@ -74,6 +80,8 @@ export interface SecretStoreOptions {
   warn?: (message: string) => void;
   /** Per-call timeout for the default runner (default SECRET_EXEC_TIMEOUT_MS). */
   execTimeoutMs?: number;
+  /** Absolute path of Windows PowerShell; resolved under %SystemRoot%\\System32 by default. */
+  powershellPath?: string | null;
 }
 
 export interface SetSecretOptions {
@@ -218,24 +226,34 @@ function encodePs(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64');
 }
 
-function runPowerShell(exec: ExecFn, script: string, inputB64: string): string {
+function runPowerShell(exec: ExecFn, powershell: string | null, script: string, inputB64: string): string {
+  // Fail closed: no PATH lookup (a planted powershell.exe in the CWD would see the secret).
+  if (!powershell) throw Object.assign(new Error('Windows PowerShell not found'), { code: 'POWERSHELL_NOT_FOUND' });
   return exec(
-    'powershell.exe',
+    powershell,
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodePs(script)],
     { input: inputB64 },
   ).trim();
 }
 
-export function windowsDpapiBackend(secretsDir: string, exec: ExecFn = defaultExec): SecretBackend {
+export function windowsDpapiBackend(
+  secretsDir: string,
+  exec: ExecFn = defaultExec,
+  powershell: string | null = windowsSystemBinary(POWERSHELL),
+): SecretBackend {
   const pathFor = (account: string) => join(secretsDir, `${accountFileStem(account)}.dpapi`);
   const protect = (secret: string): string => {
-    const blob = runPowerShell(exec, PS_PROTECT, Buffer.from(secret, 'utf-8').toString('base64'));
+    const blob = runPowerShell(exec, powershell, PS_PROTECT, Buffer.from(secret, 'utf-8').toString('base64'));
     if (!blob) throw new Error('DPAPI returned no ciphertext');
     return blob;
   };
   return {
     name: 'dpapi',
     secure: true,
+    brokenReason: powershell
+      ? undefined
+      : `Windows PowerShell was not found at ${windowsSystemBinary(POWERSHELL, { exists: () => true })}. ` +
+        'Wilson will not run a powershell.exe from anywhere else, so secrets cannot be stored.',
     set(account, secret) {
       try {
         const blob = protect(secret);
@@ -251,7 +269,7 @@ export function windowsDpapiBackend(secretsDir: string, exec: ExecFn = defaultEx
       const p = pathFor(account);
       if (!existsSync(p)) return { status: 'not-found' };
       try {
-        const out = runPowerShell(exec, PS_UNPROTECT, readFileSync(p, 'utf-8').trim());
+        const out = runPowerShell(exec, powershell, PS_UNPROTECT, readFileSync(p, 'utf-8').trim());
         return { status: 'found', value: Buffer.from(out, 'base64').toString('utf-8') };
       } catch (err) {
         return { status: 'error', reason: `DPAPI unprotect of ${p}: ${describeExecError(err)}` };
@@ -418,16 +436,17 @@ function primaryFor(
   forced: string | undefined,
   secretsDir: string,
   exec: ExecFn,
+  powershell: () => string | null,
 ): SecretBackend {
   switch (forced) {
     case 'keychain': return macKeychainBackend(exec);
-    case 'dpapi': return windowsDpapiBackend(secretsDir, exec);
+    case 'dpapi': return windowsDpapiBackend(secretsDir, exec, powershell());
     case 'secret-tool': return secretToolBackend(exec);
     case 'file': return fileBackend(secretsDir);
     case 'none': return noneBackend;
   }
   if (platform === 'darwin') return macKeychainBackend(exec);
-  if (platform === 'win32') return windowsDpapiBackend(secretsDir, exec);
+  if (platform === 'win32') return windowsDpapiBackend(secretsDir, exec, powershell());
   if (platform === 'linux' || platform === 'freebsd' || platform === 'openbsd') return secretToolBackend(exec);
   return fileBackend(secretsDir);
 }
@@ -443,13 +462,23 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
     opts.exec ?? ((file, args, o) => defaultExec(file, args, { ...o, timeoutMs: o.timeoutMs ?? opts.execTimeoutMs }));
   const secretsDir = join(opts.oaRoot ?? join(homedir(), '.openaccountant'), 'secrets');
   const forced = env.OA_SECRET_BACKEND && env.OA_SECRET_BACKEND !== 'auto' ? env.OA_SECRET_BACKEND : undefined;
-  const primary = primaryFor(platform, forced, secretsDir, exec);
+  const powershell = () =>
+    opts.powershellPath !== undefined ? opts.powershellPath : windowsSystemBinary(POWERSHELL, { env });
+  const primary = primaryFor(platform, forced, secretsDir, exec, powershell);
   const warn = opts.warn ?? defaultWarn;
 
   // macOS: Keychain or nothing. Forced backends and the insecure backends themselves get no
   // second tier either.
   const fallback: SecretBackend | null =
-    platform !== 'darwin' && !forced && primary.secure ? fileBackend(secretsDir) : null;
+    platform !== 'darwin' && !forced && primary.secure && !primary.brokenReason ? fileBackend(secretsDir) : null;
+
+  let warnedBroken = false;
+  const warnBroken = () => {
+    if (!primary.brokenReason || warnedBroken) return;
+    warnedBroken = true;
+    logger.warn('keychain:backend-broken', { backend: primary.name });
+    warn(primary.brokenReason);
+  };
 
   let warned = false;
   const warnOnce = (backend: SecretBackend) => {
@@ -487,6 +516,7 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
           return true;
         }
       }
+      warnBroken();
       if (!fallback || setOpts.requireSecure) {
         if (platform !== 'darwin') logger.info('keychain:unavailable', { platform, account, backend: primary.name });
         return false;
@@ -501,6 +531,7 @@ export function createSecretStore(opts: SecretStoreOptions = {}): SecretStore {
         return { status: 'failed', reason: `${primary.name} is not a secure store` };
       }
       const c = primary.create(account, secret);
+      if (c.status === 'failed') warnBroken();
       if (c.status !== 'failed' || !fallback || setOpts.requireSecure) return c;
       const f = fallback.create(account, secret);
       if (f.status === 'created') warnOnce(fallback);

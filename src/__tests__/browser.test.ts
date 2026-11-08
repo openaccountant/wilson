@@ -42,14 +42,25 @@ describe('openBrowser', () => {
     else Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
   });
 
-  test('uses rundll32 on windows (cmd /c start would split URLs on &)', () => {
+  test('uses System32 rundll32 on windows (cmd /c start would split URLs on &)', () => {
+    const hostIsWindows = process.platform === 'win32';
     const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    execSpy = spyOn(childProcess, 'execFileSync').mockReturnValue(Buffer.from(''));
-    openBrowser('https://example.com');
-    expect(execSpy.mock.calls[0][0]).toBe('rundll32');
-    expect(execSpy.mock.calls[0][1]).toEqual(['url.dll,FileProtocolHandler', 'https://example.com']);
-    if (origPlatform) Object.defineProperty(process, 'platform', origPlatform);
-    else Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    try {
+      execSpy = spyOn(childProcess, 'execFileSync').mockReturnValue(Buffer.from(''));
+      const opened = openBrowser('https://example.com');
+      // On a real Windows host rundll32 resolves under System32; elsewhere there is no
+      // System32, so openBrowser fails closed without spawning anything.
+      if (hostIsWindows) {
+        expect(execSpy.mock.calls[0][0]).toMatch(/\\System32\\rundll32\.exe$/i);
+        expect(execSpy.mock.calls[0][1]).toEqual(['url.dll,FileProtocolHandler', 'https://example.com']);
+      } else {
+        expect(opened).toBe(false);
+        expect(execSpy).not.toHaveBeenCalled();
+      }
+    } finally {
+      if (origPlatform) Object.defineProperty(process, 'platform', origPlatform);
+      else Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+    }
   });
 });
