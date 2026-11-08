@@ -38,6 +38,11 @@ const engine = createPrelabelEngine({
     if (!res.ok) throw new Error(`config.json fetch failed: HTTP ${res.status}`);
     return sha256Hex(await res.arrayBuffer());
   },
+  // transformers.js caches every remote file under the request URL in this Cache Storage bucket.
+  cachedConfigSha: async (url) => {
+    const hit = await caches.match(url, { cacheName: 'transformers-cache' });
+    return hit ? sha256Hex(await hit.arrayBuffer()) : null;
+  },
   post: (msg: FromWorker) => scope.postMessage(msg),
 });
 
