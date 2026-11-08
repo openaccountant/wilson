@@ -39,7 +39,18 @@ export interface WorkerCategorizeOpts {
 
 export type MainToWorker =
   /** origin = window.location.origin (absolute: a blob worker has no usable relative base). */
-  | { t: 'init'; v: typeof HYBRID_PROTOCOL_VERSION; origin: string; model: WorkerModelConfig }
+  | {
+      t: 'init';
+      v: typeof HYBRID_PROTOCOL_VERSION;
+      origin: string;
+      model: WorkerModelConfig;
+      /**
+       * A MessagePort (transferred) serving the page's Cross-Origin Storage
+       * (cos-bridge.ts), for when COS exists on the page but not in the worker
+       * (the COS browser extension). Sent only when the model enables COS.
+       */
+      cosPort?: unknown;
+    }
   | { t: 'probe'; id: number }
   | { t: 'load'; id: number }
   | { t: 'bundleAnswer'; id: number; runId: number; query: string; bundleText: string; today: string }
@@ -297,7 +308,12 @@ export function isMainToWorker(x: unknown): x is MainToWorker {
   if (!isRecord(x)) return false;
   switch (x.t) {
     case 'init':
-      return x.v === HYBRID_PROTOCOL_VERSION && isStr(x.origin) && isModelConfig(x.model);
+      return (
+        x.v === HYBRID_PROTOCOL_VERSION &&
+        isStr(x.origin) &&
+        isModelConfig(x.model) &&
+        (x.cosPort === undefined || (typeof x.cosPort === 'object' && x.cosPort !== null))
+      );
     case 'probe':
     case 'load':
       return isNum(x.id);

@@ -55,6 +55,11 @@ Replaces the default store via Transformers.js `env.useCustomCache` + `env.custo
 - Call `getFileHandle(hash, opts)` (current spec name). Fall back to `requestFileHandle` (older polyfills, and what Transformers.js 4.3.2's built-in class calls).
 - Hash descriptor is `{ algorithm: 'SHA-256', value: <64 lowercase hex> }`.
 
+**Worker reach (page bridge, `cos-bridge.ts`):**
+- The cache runs in the model worker, but the COS browser extension only adds `navigator.crossOriginStorage` to the page.
+- When the model enables COS and the page has it, the page opens a MessageChannel, serves its COS on one end and transfers the other in the worker's `init` (`cosPort`).
+- The worker prefers native COS in its own scope, then the bridge. Only hash descriptors and Blobs cross the port; requests are validated page-side and time out after 120 s (the extension may be showing its permission prompt).
+
 **Write scope:**
 - Writes use `origins: '*'`. Weights are public Hub files.
 - Under the spec's availability gating, other sites only see the entry when the hash is on the Public Hash List. Same-site origins (every `localhost` port) see it by default. So Wilson's own ports share a copy even with no PHL entry.
@@ -129,4 +134,4 @@ Replaces the default store via Transformers.js `env.useCustomCache` + `env.custo
   - revision pins.
   - bench result shape.
 - A live check in Chrome on this Mac (localhost dashboard): load a catalog model cold, then warm. `stats()` shows it, `persist()` is reported, and the bench numbers render.
-- COS live check on tomayac's Chromium 159 build (`about://flags#cross-origin-storage`): two localhost ports share one download.
+- COS live check, with the Cross-Origin Storage extension on regular Chrome or tomayac's Chromium 159 build (`about://flags#cross-origin-storage`): two localhost ports share one download.

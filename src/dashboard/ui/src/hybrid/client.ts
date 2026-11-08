@@ -82,6 +82,7 @@ import {
   type ToolChoice,
 } from './openjev-route.js';
 import { IN_TAB_PREPARING_LABEL } from './load-progress.js';
+import { openPageCosBridge } from './cos-bridge.js';
 import {
   capabilityKey,
   classifyLoadFailure,
@@ -244,7 +245,7 @@ export function createHybridChat(opts: HybridOpts) {
         base || origin,
       );
     } else if (opts.createWorker) {
-      backendInstance = createWorkerBackend({ createWorker: opts.createWorker, origin });
+      backendInstance = createWorkerBackend({ createWorker: opts.createWorker, origin, cosBridge: () => openPageCosBridge() });
     } else backendInstance = null;
     return backendInstance;
   }

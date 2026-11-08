@@ -14,6 +14,8 @@
 
 import * as transformers from '@huggingface/transformers';
 import { createModelEngine, toWorkerError, type TransformersModule } from './model-engine.js';
+import { createCosBridgeClient, type BridgePort } from './cos-bridge.js';
+import type { CosLike } from './model-cache.js';
 import { runSubagentOnPort } from './subagent-runner.js';
 import type { PortLike } from '../store/mirror-port-protocol.js';
 import {
@@ -37,9 +39,15 @@ interface WorkerScope {
 
 const ctx = self as unknown as WorkerScope;
 
+/** The page's COS over a bridge port, when init carried one (the COS extension only reaches the page). */
+let bridgedCos: CosLike | null = null;
+let bridgePort: BridgePort | null = null;
+
 const engine = createModelEngine({
   // Static import above: the inlined worker bundle never needs a runtime chunk.
   loadTransformers: async () => transformers as unknown as TransformersModule,
+  // Native COS in the worker wins; otherwise the page's, over the bridge.
+  cos: () => (self.navigator as { crossOriginStorage?: CosLike } | undefined)?.crossOriginStorage ?? bridgedCos,
 });
 
 function send(msg: WorkerToMain): void {
@@ -74,6 +82,9 @@ async function handle(msg: MainToWorker): Promise<void> {
         return;
       }
       refusal = null;
+      closePort(bridgePort);
+      bridgePort = (msg.cosPort as BridgePort | undefined) ?? null;
+      bridgedCos = bridgePort ? createCosBridgeClient(bridgePort) : null;
       engine.setModel(msg.model, msg.origin);
       return;
     }

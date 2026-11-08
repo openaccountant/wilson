@@ -163,6 +163,12 @@ export interface WorkerBackendOpts {
   /** window.location.origin: absolute, because a blob worker has no usable relative base. */
   origin: string;
   timeoutMs?: Partial<Record<RpcKind, number>>;
+  /**
+   * Opens a page-side Cross-Origin Storage bridge (cos-bridge.ts openPageCosBridge)
+   * and returns the worker end to transfer in `init`. Called only when the model
+   * enables COS; null when the page has none.
+   */
+  cosBridge?: () => { port: unknown; close: () => void } | null;
 }
 
 export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
@@ -178,6 +184,13 @@ export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
   let runCounter = 0;
   /** The worker that finished a load; a respawned worker starts empty. */
   let loadedIn: WorkerLike | null = null;
+  /** The page end of the COS bridge sent with the last init; replaced on every init. */
+  let bridge: { port: unknown; close: () => void } | null = null;
+
+  function closeBridge(): void {
+    bridge?.close();
+    bridge = null;
+  }
 
   function clearCall(id: number): void {
     const t = timers.get(id);
@@ -208,6 +221,7 @@ export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
     progressCbs.clear();
     stepCbs.clear();
     table.rejectAll({ phase: 'protocol', message });
+    closeBridge();
     try {
       dead?.terminate();
     } catch {
@@ -217,8 +231,23 @@ export function createWorkerBackend(opts: WorkerBackendOpts): ModelBackend {
 
   function sendInit(w: WorkerLike): void {
     if (!model) return;
-    const init: MainToWorker = { t: 'init', v: HYBRID_PROTOCOL_VERSION, origin: opts.origin, model };
-    w.postMessage(init);
+    closeBridge();
+    if (model.crossOriginStorage === true && opts.cosBridge) {
+      try {
+        bridge = opts.cosBridge();
+      } catch {
+        bridge = null; // no MessageChannel or COS threw: the cache falls back to the Cache API
+      }
+    }
+    const init: MainToWorker = {
+      t: 'init',
+      v: HYBRID_PROTOCOL_VERSION,
+      origin: opts.origin,
+      model,
+      ...(bridge ? { cosPort: bridge.port } : {}),
+    };
+    if (bridge) w.postMessage(init, [bridge.port]);
+    else w.postMessage(init);
   }
 
   /** Throws if the Worker constructor does (CSP, enterprise policy). */
