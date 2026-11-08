@@ -4,6 +4,7 @@ import { traceStore } from '../utils/trace-store.js';
 import { startDashboardServer, stopDashboardServer } from './server.js';
 import { setInitialProfile, closeAll } from './db-manager.js';
 import { getActiveProfileName } from '../profile/index.js';
+import { runDashboardBootstrap } from './bootstrap.js';
 
 /**
  * Run the dashboard as a standalone server process.
@@ -16,6 +17,9 @@ export async function runStandalone(port?: number): Promise<void> {
   const db = initDatabase();
   logger.setDatabase(db);
   traceStore.setDatabase(db);
+
+  // Unattended first boot (Docker): admin account + default model from env. No-op without those variables.
+  await runDashboardBootstrap(db);
 
   const { server, url } = await startDashboardServer(db, port);
 
