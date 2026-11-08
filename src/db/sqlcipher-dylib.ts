@@ -13,7 +13,7 @@
  *   - Only effective on darwin: on Linux/Windows Bun links SQLite statically and
  *     `setCustomSQLite` is a silent no-op, so activation is verified by probe.
  */
-import { existsSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -47,6 +47,45 @@ export interface ResolveOptions {
   env?: Record<string, string | undefined>;
   home?: string;
   exists?: (path: string) => boolean;
+  /** Process architecture to match (default process.arch). */
+  arch?: string;
+  /** Architectures a Mach-O file contains (default: read its header). */
+  machOArchs?: (path: string) => string[];
+}
+
+const MACHO_CPU: Record<number, string> = { 0x01000007: 'x64', 0x0100000c: 'arm64' };
+
+/**
+ * Architectures in a Mach-O dylib, from its header: thin 64-bit (MH_MAGIC_64) or fat
+ * (FAT_MAGIC / FAT_MAGIC_64). [] when unreadable or not Mach-O.
+ */
+export function readMachOArchs(path: string): string[] {
+  let fd: number | null = null;
+  try {
+    fd = openSync(path, 'r');
+    const head = Buffer.alloc(8);
+    if (readSync(fd, head, 0, 8, 0) < 8) return [];
+    if (head.readUInt32LE(0) === 0xfeedfacf) {
+      const cpu = MACHO_CPU[head.readUInt32LE(4)];
+      return cpu ? [cpu] : [];
+    }
+    const magic = head.readUInt32BE(0);
+    if (magic !== 0xcafebabe && magic !== 0xcafebabf) return [];
+    const n = Math.min(head.readUInt32BE(4), 16);
+    const entry = magic === 0xcafebabf ? 32 : 20;
+    const table = Buffer.alloc(n * entry);
+    readSync(fd, table, 0, table.length, 8);
+    const out: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const cpu = MACHO_CPU[table.readUInt32BE(i * entry)];
+      if (cpu) out.push(cpu);
+    }
+    return out;
+  } catch {
+    return [];
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
 }
 
 /**
@@ -76,8 +115,15 @@ export function resolveSqlcipherDylibPath(opts: ResolveOptions = {}): string | n
   else if (platform === 'linux') candidates.push(...LINUX_CANDIDATES);
   else if (platform === 'win32') candidates.push(...windowsCandidates(env, opts.home ?? homedir()));
 
+  // On macOS the library is dlopen'ed at the first `new Database`, after setCustomSQLite has
+  // already succeeded — a wrong-architecture dylib (arm64 Homebrew under a Rosetta x64 binary)
+  // throws there, uncatchably late. So only accept a dylib built for this process.
+  const arch = opts.arch ?? process.arch;
+  const archsOf = opts.machOArchs ?? readMachOArchs;
+  const loadable = (p: string) => platform !== 'darwin' || archsOf(p).includes(arch);
+
   for (const candidate of candidates) {
-    if (candidate && exists(candidate)) return candidate;
+    if (candidate && exists(candidate) && loadable(candidate)) return candidate;
   }
   return null;
 }
