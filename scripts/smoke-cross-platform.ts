@@ -60,5 +60,14 @@ try {
 
   console.log('SMOKE OK');
 } finally {
-  rmSync(root, { recursive: true, force: true });
+  // bun:sqlite closes with sqlite3_close_v2: the file stays open until every prepared statement
+  // is finalized, which happens on GC. Windows refuses to delete an open file, so collect first,
+  // and report (not fail) if the handle still outlives close().
+  Bun.gc(true);
+  try {
+    rmSync(root, { recursive: true, force: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'EBUSY') throw err;
+    console.warn(`note: ${root} still locked after db.close() + GC; left behind`);
+  }
 }
