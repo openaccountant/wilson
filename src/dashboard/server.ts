@@ -61,6 +61,11 @@ import { isAgentPresent, revokeGrantsForUser } from '../mcp/store.js';
 import { runMcpMaintenance, runMcpMaintenanceAll, MAINTENANCE_INTERVAL_MS } from '../mcp/maintenance.js';
 import { appendRestExportAudit, appendRestWriteAudit } from '../mcp/audit.js';
 import { handlePrelabelRoute } from '../prelabel/routes.js';
+import { listOllamaModels } from '../utils/ollama.js';
+import { resolveProvider } from '../providers.js';
+import { getTaskModel } from '../model/task-models.js';
+
+const MODEL_TASKS = ['chat', 'categorization', 'entity-classification'] as const;
 
 const DEFAULT_PORT = 3141;
 
@@ -334,6 +339,7 @@ function trainingExportFlags(url: URL): ExportQualifyOptions {
 export async function startDashboardServer(db: Database, preferredPort?: number, options?: DashboardServerOptions) {
   const traceEmbed = options?.traceEmbed;
   const port = preferredPort ?? DEFAULT_PORT;
+  if (MODEL_TASKS.some((task) => resolveProvider(getTaskModel(task)).id === 'ollama')) void listOllamaModels();
 
   // The bind address is read once, here: a profile switch cannot change it.
   const hostname = options?.hostname ?? resolveBindHost();

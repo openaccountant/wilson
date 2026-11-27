@@ -6,10 +6,18 @@ interface OllamaModel {
   name: string;
   modified_at: string;
   size: number;
+  remote_model?: string;
+  remote_host?: string;
 }
 
 interface OllamaTagsResponse {
   models: OllamaModel[];
+}
+
+let remoteOllamaModels: ReadonlySet<string> = new Set();
+
+export function isRemoteOllamaModel(model: string): boolean {
+  return isOllamaModelInstalled(model.replace(/^ollama:/, ''), remoteOllamaModels);
 }
 
 /**
@@ -35,9 +43,9 @@ export async function listOllamaModels(): Promise<string[] | null> {
     }
 
     const data = (await response.json()) as OllamaTagsResponse;
-    return (data?.models ?? [])
-      .map((m) => m?.name)
-      .filter((n): n is string => typeof n === 'string');
+    const models = (data?.models ?? []).filter((m) => typeof m?.name === 'string');
+    remoteOllamaModels = new Set(models.filter((m) => m.remote_model || m.remote_host).map((m) => m.name));
+    return models.map((m) => m.name);
   } catch {
     // Ollama not running or unreachable
     return null;
