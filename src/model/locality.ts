@@ -15,6 +15,7 @@
  */
 
 import { getProviderById, resolveProvider, type ProviderDef } from '../providers.js';
+import { isRemoteOllamaModel } from '../utils/ollama.js';
 
 type Env = Record<string, string | undefined>;
 
@@ -97,7 +98,7 @@ export interface ModelLocality {
 /** Locality of a call to `model` (with or without its provider prefix) on provider `def`. */
 export function providerCallLocality(def: ProviderDef, model: string, env: Env = process.env): ModelLocality {
   if (!def.isLocal) return { provider: def, local: false, displayName: def.displayName };
-  if (def.id === 'ollama' && isOllamaCloudModel(model)) {
+  if (def.id === 'ollama' && (isOllamaCloudModel(model) || isRemoteOllamaModel(model))) {
     return { provider: def, local: false, displayName: `${def.displayName} Cloud` };
   }
   const base = localProviderBaseUrl(def.id, env);

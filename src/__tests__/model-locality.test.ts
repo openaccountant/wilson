@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   isLoopbackHost,
   isLoopbackUrl,
@@ -11,6 +11,11 @@ import {
 import { isChatProviderLocal } from '../dashboard/local-handoff.js';
 import { classifyProvider } from '../demo/privacy.js';
 import { buildModelTaskRows } from '../model/task-models.js';
+import { listOllamaModels } from '../utils/ollama.js';
+import { createTestDb } from './helpers.js';
+import { startDashboardServer, stopDashboardServer } from '../dashboard/server.js';
+import { setInitialProfile, closeAll } from '../dashboard/db-manager.js';
+import { setSetting } from '../utils/config.js';
 
 /**
  * The shared "does this call stay on this machine" rule behind the chat
@@ -193,5 +198,104 @@ describe('consumers use the shared rule', () => {
       expect(rows.find((r) => r.task === 'chat')?.execution).toBe('local');
       expect(rows.find((r) => r.task === 'categorization')?.execution).toBe('server');
     });
+  });
+});
+
+function serveTags(models: object[]) {
+  return spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) =>
+    String(input).endsWith('/api/tags')
+      ? new Response(JSON.stringify({ models }), { status: 200 })
+      : new Response('{}', { status: 404 })) as typeof fetch);
+}
+
+describe('an Ollama model the daemon proxies to a remote host', () => {
+  test('a cloud model copied under a plain name is not local once /api/tags is read', async () => {
+    const spy = serveTags([
+      { name: 'mine:latest', remote_model: 'gpt-oss:120b', remote_host: 'https://ollama.com:443' },
+      { name: 'llama3.2:latest' },
+    ]);
+    await listOllamaModels();
+    spy.mockRestore();
+    expect(modelLocality('ollama:mine', {})).toMatchObject({ local: false, displayName: 'Ollama Cloud' });
+    expect(isModelLocal('ollama:mine:latest', LOOPBACK)).toBe(false);
+    expect(isModelLocal('ollama:llama3.2', LOOPBACK)).toBe(true);
+    withOllamaBaseUrl(undefined, () => {
+      expect(isChatProviderLocal({ provider: 'ollama', model: 'ollama:mine' })).toBe(false);
+      expect(classifyProvider('ollama', 'mine')).toBe('cloud');
+    });
+  });
+
+  test('remote_model or remote_host alone marks a model remote', async () => {
+    const spy = serveTags([
+      { name: 'only-model:7b', remote_model: 'glm-4.6' },
+      { name: 'only-host:7b', remote_host: 'https://ollama.com:443' },
+    ]);
+    await listOllamaModels();
+    spy.mockRestore();
+    expect(isModelLocal('ollama:only-model:7b', LOOPBACK)).toBe(false);
+    expect(isModelLocal('ollama:only-host:7b', LOOPBACK)).toBe(false);
+  });
+
+  test('a failed /api/tags read keeps the last answer', async () => {
+    const seed = serveTags([{ name: 'kept:latest', remote_host: 'https://ollama.com:443' }]);
+    await listOllamaModels();
+    seed.mockRestore();
+    const down = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+    expect(await listOllamaModels()).toBeNull();
+    down.mockRestore();
+    expect(isModelLocal('ollama:kept', LOOPBACK)).toBe(false);
+  });
+
+  async function startWithModel(provider: string, modelId: string) {
+    const db = createTestDb();
+    setInitialProfile('test', db);
+    setSetting('provider', provider);
+    setSetting('modelId', modelId);
+    return (await startDashboardServer(db, 0)).server;
+  }
+
+  function stop(server: Awaited<ReturnType<typeof startWithModel>>) {
+    stopDashboardServer(server);
+    setSetting('provider', undefined);
+    setSetting('modelId', undefined);
+    closeAll();
+  }
+
+  test('the dashboard reads /api/tags when it starts, so a saved copied model is flagged before anyone opens Settings', async () => {
+    const spy = serveTags([{ name: 'saved-copy:latest', remote_host: 'https://ollama.com:443' }]);
+    const server = await startWithModel('ollama', 'ollama:saved-copy');
+    try {
+      for (let i = 0; i < 50 && isModelLocal('ollama:saved-copy', LOOPBACK); i++) await Bun.sleep(5);
+      expect(isModelLocal('ollama:saved-copy', LOOPBACK)).toBe(false);
+    } finally {
+      stop(server);
+      spy.mockRestore();
+    }
+  });
+
+  test('a task pinned to an Ollama model is enough for the startup read, even with a cloud chat model', async () => {
+    const spy = serveTags([{ name: 'pinned-copy:latest', remote_host: 'https://ollama.com:443' }]);
+    setSetting('modelOverride.categorization', 'ollama:pinned-copy');
+    const server = await startWithModel('openai', 'gpt-4.1');
+    try {
+      for (let i = 0; i < 50 && isModelLocal('ollama:pinned-copy', LOOPBACK); i++) await Bun.sleep(5);
+      expect(isModelLocal('ollama:pinned-copy', LOOPBACK)).toBe(false);
+    } finally {
+      setSetting('modelOverride.categorization', undefined);
+      stop(server);
+      spy.mockRestore();
+    }
+  });
+
+  test('a dashboard with no Ollama model configured sends no /api/tags request when it starts', async () => {
+    const spy = serveTags([]);
+    const server = await startWithModel('openai', 'gpt-4.1');
+    try {
+      await Bun.sleep(50);
+      expect(spy.mock.calls.filter(([input]) => String(input).endsWith('/api/tags'))).toEqual([]);
+    } finally {
+      stop(server);
+      spy.mockRestore();
+    }
   });
 });
